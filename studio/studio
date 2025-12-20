@@ -1,0 +1,18 @@
+#!/bin/bash
+# Studio Agent Wrapper Script
+# Makes Studio agents accessible from anywhere on your system
+
+STUDIO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Activate virtual environment if it exists
+if [ -d "$STUDIO_DIR/.venv" ]; then
+    source "$STUDIO_DIR/.venv/bin/activate"
+fi
+
+# Load environment variables
+if [ -f "$STUDIO_DIR/.env" ]; then
+    export $(cat "$STUDIO_DIR/.env" | grep -v '^#' | xargs)
+fi
+
+# Run the CLI
+python3 "$STUDIO_DIR/studio_cli.py" "$@"

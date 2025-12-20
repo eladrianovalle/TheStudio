@@ -1,0 +1,11 @@
+steel_man_task:
+  description: >
+    Take the initial idea: {game_idea} and present its strongest possible form.
+    Pre-emptively solve obvious problems.
+  expected_output: "A high-conviction proposal document."
+
+attack_task:
+  description: >
+    Review the proposal. Identify 3 fatal flaws even in this 'best case' version.
+    You must end your response with either 'VERDICT: APPROVED' or 'VERDICT: REJECTED'.
+  expected_output: "A critical redline report ending with a VERDICT."
