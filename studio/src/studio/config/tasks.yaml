@@ -9,3 +9,32 @@ attack_task:
     Review the proposal. Identify 3 fatal flaws even in this 'best case' version.
     You must end your response with either 'VERDICT: APPROVED' or 'VERDICT: REJECTED'.
   expected_output: "A critical redline report ending with a VERDICT."
+
+studio_vision_task:
+  description: >
+    Treat the Studio itself as the product. Synthesize the objective: {objective}
+    and paint the strongest, most inspiring version of Studio that could exist within
+    current constraints. Highlight the user promise, critical capabilities, and how it
+    supercharges a solo dev with boundless creativity.
+  expected_output: >
+    An inspiring north-star brief that frames Studio as the ultimate solo-dev copilot,
+    including a headline vision, 3 signature capabilities, and a motivating narrative.
+
+studio_constraints_task:
+  description: >
+    Stress-test the Studio vision against brutally practical limits: budget ceiling {budget_cap},
+    available time, maintenance burden, model/API costs, vendor risk, and ops toil.
+    Surface concrete blockers, attack hidden costs, and demand scrappy alternatives that keep
+    the tool free or extremely cheap to run at all times.
+  expected_output: >
+    A cost-and-risk deconstruction including a table of threat vectors, mitigation ideas,
+    and a sharpened definition of "always available, nearly free" in practice.
+
+studio_integration_task:
+  description: >
+    Merge the inspiration and the constraints into a pragmatic execution plan that other projects
+    can import immediately. Define reusable hooks, automation, observability, and upgrade loops.
+    Show how Studio propagates insights back into every repo while keeping spend tiny.
+  expected_output: >
+    A prioritized roadmap (0-2 weeks, 1-2 months, aspirational) with integration steps, ownership,
+    and concrete suggestions for low-cost infra, caching, or local-first patterns.

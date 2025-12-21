@@ -2,6 +2,37 @@
 
 A **centralized multi-agent AI system** designed to provide reusable, specialized agents that can be integrated into any project within your Windsurf workspace. This Studio uses a "Steel Man vs. Contrarian" debate pattern to rigorously evaluate ideas across multiple phases (Market, Design, Tech).
 
+## 🔧 Troubleshooting
+
+### Common Issues
+
+**"ModuleNotFoundError: No module named 'fastapi_sso'" or similar**
+- This is expected in Solo Mode and doesn't affect functionality
+- The subprocess isolation prevents these errors from crashing your runs
+- If you need full litellm proxy features, install optional dependencies: `uv pip install -e ".[proxy]"`
+
+**"RuntimeError: can't register atexit after shutdown"**
+- This is a known litellm/apscheduler issue during Python shutdown
+- Solo Mode's subprocess isolation prevents this from affecting your workflow
+- Your results are still captured and saved even if this error occurs
+
+**Crew execution times out**
+- Default timeout is 10 minutes per phase
+- For complex analyses, the crew may need more time
+- Check `output/{phase}/` for partial results even if timeout occurs
+
+**API key errors**
+- Ensure `GEMINI_API_KEY` is set in your environment or `.env` file
+- Verify the key is valid and has sufficient quota
+- Check the preflight error message for specific remediation steps
+
+### Stability Features
+
+1. **Preflight Checks**: Validates critical dependencies before execution
+2. **Subprocess Isolation**: Prevents crashes from affecting parent process
+3. **Graceful Error Handling**: Captures and saves partial results on failure
+4. **Automatic Retries**: (Coming soon) Retry logic for transient API failures
+
 ## 🎯 Core Concept
 
 The Studio acts as a **shared service** that other projects can import and use. Instead of recreating agents for each project, you define them once here and invoke them from anywhere.
@@ -52,6 +83,53 @@ crewai run
 ```
 
 This runs the default market analysis on a sample game idea.
+
+**Output:** All crew runs automatically save structured markdown reports to `output/{phase}/{phase}_TIMESTAMP.md` with:
+- Input parameters
+- Full crew discussion and analysis
+- Final verdict (for non-studio phases)
+- Success/failure status
+
+Check the `output/` directory after each run for readable reports.
+
+### 🛡️ Solo Mode (Default)
+
+Studio runs in **Solo Mode** by default, optimizing for lightweight local development:
+
+- **Subprocess Isolation**: Crew execution runs in an isolated subprocess to prevent litellm crashes from affecting your workflow
+- **Minimal Dependencies**: Disables heavy litellm proxy/logging features that aren't needed for local runs
+- **Crash Protection**: Even if litellm encounters shutdown errors, your results are captured and saved
+- **Clean Output**: Suppresses unnecessary warnings for a cleaner terminal experience
+
+**To disable Solo Mode** (if you need full litellm features):
+```bash
+export STUDIO_SOLO_MODE=false
+```
+
+**To install optional proxy dependencies** (for advanced litellm features):
+```bash
+uv pip install -e ".[proxy]"
+```
+
+### 📊 Rate Limit Monitoring & Cascade Fallbacks
+
+The Studio “cascade” always tries your best cloud model first (Gemini by default), falls back to Groq, and only then taps the local Ollama model as a last resort. Each rung in the ladder is guarded by telemetry so unstable providers cool off before the next crew iteration:
+
+1. **Headroom tracking** – Every LiteLLM response is parsed for `x-ratelimit-*` headers. Once a model drops under `STUDIO_RATE_LIMIT_WARN_RATIO` (default `0.2`), Studio prints a warning and marks it “low headroom.” Low-headroom models get deprioritized but aren’t completely blocked.
+2. **Cooldowns on 429s** – A `429 Too Many Requests` or `retry-after` header triggers `ModelManager` to cool that model for at least `COOLDOWN_MIN_SECONDS` (default 5s) or the provider-supplied duration. During cooldown, the cascade advances to the next candidate.
+3. **Overheat guarding** – Repeated 5xx/temperature errors mark the model “overheated” for `STUDIO_OVERHEAT_COOLDOWN_SECONDS` (default 45s). You can tune which HTTP codes count via `STUDIO_OVERHEAT_STATUS_CODES` (comma-separated list).
+4. **Ollama health checks** – Before Studio switches to the local fallback it pings `STUDIO_OLLAMA_BASE_URL` (`/api/tags` + `/api/version`). Missing models or unreachable daemons are logged and the fallback is temporarily marked overheated so we don’t loop on a broken local install. The probe timeout is configurable via `STUDIO_OLLAMA_HEALTH_TIMEOUT` (seconds).
+5. **Structured telemetry** – Every run returns `rate_limits` and `model_strategy` blobs in the CLI/JSON output so you can see which candidate was chosen, which models are cooling, and how much quota remains.
+
+**Cascade ordering tips**
+
+- `STUDIO_MODEL_PRIORITY` → strict order (e.g., `gemini-2.5-pro,groq/mixtral-8x7b,ollama/llama3.1:8b`)
+- `STUDIO_MODEL_CANDIDATES` → fallback list if no explicit priority
+- `STUDIO_MODEL` → primary when neither list is set
+- `STUDIO_MODEL_FALLBACK` → appended after the above lists
+- `STUDIO_OLLAMA_MODEL` → always appended last (defaults to `ollama/llama3.1:8b`)
+
+This ensures the agents “think” with the strongest possible model while automatically downgrading through Groq and finally the local Ollama instance whenever cloud quota or stability is an issue.
 
 ## 📦 Using Studio in Other Projects
 
@@ -133,6 +211,16 @@ Each phase has an **Advocate** (steel-mans the idea) and a **Contrarian** (finds
 - **Contrarian**: Senior SRE - Identifies performance and compatibility issues
 - **Output**: Technical feasibility verdict
 
+### Studio Phase (Meta Workflow)
+- **Advocate**: Studio Workflow Producer - Crafts a north-star vision for Studio itself
+- **Contrarian**: Bootstrapped Reality Auditor - Pressure-tests costs, scope, and ops burden
+- **Integrator**: Systems Integrator & Ops Lead - Blends ambition + constraints into a roadmap
+- **Input Variables**:
+  - `STUDIO_PHASE=studio`
+  - `STUDIO_OBJECTIVE` – your current Studio improvement goal
+  - `STUDIO_BUDGET_CAP` – hard monthly/annual spend ceiling (e.g., `$0-20/mo`)
+- **Output**: Vision brief, constraint analysis, and integration roadmap focused on “always-on, nearly free” usage across every project.
+
 ## 🔧 Customization
 
 ### Adding New Phases
@@ -181,6 +269,9 @@ Modify `src/studio/config/tasks.yaml` to change how agents interact.
 |----------|----------|-------------|
 | `GEMINI_API_KEY` | Yes | Google Gemini API key |
 | `MODEL` | No | Model name (default: gemini-2.5-flash) |
+| `STUDIO_PHASE` | No | Set to `studio` to run the self-improvement crew |
+| `STUDIO_OBJECTIVE` | No | Objective statement for the studio phase |
+| `STUDIO_BUDGET_CAP` | No | Human-readable budget ceiling (e.g., `$0-20/mo`) |
 | `GOOGLE_CLOUD_PROJECT` | No | For Vertex AI integration |
 | `CREWAI_TRACING_ENABLED` | No | Enable execution tracing |
 

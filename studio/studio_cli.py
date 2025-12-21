@@ -15,6 +15,7 @@ studio_path = Path(__file__).parent / 'src'
 sys.path.insert(0, str(studio_path))
 
 from studio.crew import StudioCrew
+from studio.iteration import run_iterative_kickoff
 
 
 def evaluate(game_idea: str, phase: str = 'market', output_format: str = 'text') -> dict:
@@ -30,18 +31,29 @@ def evaluate(game_idea: str, phase: str = 'market', output_format: str = 'text')
         dict with result and verdict
     """
     try:
-        crew = StudioCrew(phase=phase)
-        result = crew.crew().kickoff(inputs={'game_idea': game_idea})
-        result_str = str(result)
-        
-        verdict = 'APPROVED' if 'APPROVED' in result_str else 'REJECTED'
+        max_iterations = os.environ.get("STUDIO_MAX_ITERATIONS")
+
+        def crew_factory():
+            return StudioCrew(phase=phase).crew()
+
+        iteration_result = run_iterative_kickoff(
+            crew_factory=crew_factory,
+            phase=phase,
+            base_inputs={'game_idea': game_idea},
+            max_iterations=max_iterations,
+        )
         
         return {
             'success': True,
             'phase': phase,
             'game_idea': game_idea,
-            'verdict': verdict,
-            'result': result_str
+            'verdict': iteration_result['verdict'],
+            'result': iteration_result['result'],
+            'iterations_run': iteration_result['iterations_run'],
+            'accepted': iteration_result['accepted'],
+            'limit_reached': iteration_result['limit_reached'],
+            'max_iterations': iteration_result['max_iterations'],
+            'history': iteration_result['history'],
         }
     except Exception as e:
         return {

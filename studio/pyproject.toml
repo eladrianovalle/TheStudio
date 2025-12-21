@@ -5,12 +5,18 @@ description = "studio using crewAI"
 authors = [{ name = "Your Name", email = "you@example.com" }]
 requires-python = ">=3.10,<3.14"
 dependencies = [
-    "apscheduler>=3.11.1",
-    "crewai[google-genai,tools]==1.7.2",
-    "fastapi>=0.125.0",
+    "crewai[google-genai]==1.7.2",
     "langchain-google-genai>=3.2.0",
+    "email-validator>=2.2.0",
     "litellm>=1.75.3",
-    "uvicorn>=0.38.0",
+    "requests>=2.32.0",
+]
+
+[project.optional-dependencies]
+proxy = [
+    "litellm[proxy]>=1.75.3",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
 ]
 
 [project.scripts]
