@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 PHASE_DETAILS = {
     "market": {
@@ -79,6 +80,21 @@ INDEX_HEADER = [
     "| --- | --- | --- | --- | --- | --- |",
 ]
 
+def get_studio_root() -> Path:
+    env_override = os.environ.get("STUDIO_ROOT")
+    if env_override:
+        override_path = Path(env_override).expanduser()
+        return override_path if override_path.is_absolute() else override_path.resolve()
+    return Path(__file__).resolve().parent
+
+
+def get_output_root() -> Path:
+    return get_studio_root() / "output"
+
+
+def get_knowledge_log_path() -> Path:
+    return get_studio_root() / "knowledge" / "run_log.md"
+
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -140,6 +156,64 @@ def write_index(entries: List[Dict], index_path: Path) -> None:
 
     index_path.parent.mkdir(parents=True, exist_ok=True)
     index_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _ensure_summary_path(meta: Dict, run_dir: Path) -> Path:
+    summary_path = meta.get("summary_path")
+    if summary_path:
+        return Path(summary_path)
+    summary_file = run_dir / "summary.md"
+    meta["summary_path"] = summary_file.as_posix()
+    return summary_file
+
+
+def _validate_artifacts(phase: str, run_dir: Path, summary_path: Path) -> Tuple[int, List[str]]:
+    errors: List[str] = []
+    advocate_files = sorted(run_dir.glob("advocate_*.md"))
+    if not advocate_files:
+        errors.append("Missing advocate outputs (advocate_*.md).")
+
+    contrarian_files = sorted(run_dir.glob("contrarian_*.md"))
+    if phase != "studio" and not contrarian_files:
+        errors.append("Missing contrarian outputs (contrarian_*.md).")
+
+    if phase == "studio":
+        integrator_file = run_dir / "integrator.md"
+        if not integrator_file.exists():
+            errors.append("Missing integrator roadmap (integrator.md).")
+
+    if not summary_path.exists():
+        errors.append(f"Missing summary file at {summary_path}.")
+
+    if errors:
+        raise FileNotFoundError(
+            "Finalize aborted due to missing artifacts:\n- " + "\n- ".join(errors)
+        )
+
+    return len(advocate_files), [file.name for file in advocate_files]
+
+
+def _append_run_log(meta: Dict) -> None:
+    log_path = get_knowledge_log_path()
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    if not log_path.exists():
+        log_path.write_text("# Studio Run Log\n\n", encoding="utf-8")
+
+    summary_path = meta.get("summary_path", "")
+    summary_cell = (
+        summary_path if not summary_path else f"[summary]({summary_path})"
+    )
+    lines = [
+        f"## {meta['run_id']} ({meta['phase']}) – {meta.get('status', 'PENDING')}",
+        f"- Created: {meta.get('created_display', meta.get('created_iso', ''))}",
+        f"- Verdict: {meta.get('verdict', 'N/A')}",
+        f"- Iterations: {meta.get('iterations_run', 'N/A')}",
+        f"- Hours: {meta.get('hours', 'N/A')} | Cost: {meta.get('cost', 'N/A')}",
+        f"- Summary: {summary_cell}",
+        "",
+    ]
+    with log_path.open("a", encoding="utf-8") as log_file:
+        log_file.write("\n".join(lines))
 
 
 def build_instruction_doc(meta: Dict, run_dir: Path) -> str:
@@ -247,8 +321,9 @@ def prepare_run(args: argparse.Namespace) -> str:
     now = utc_now()
     timestamp_slug = now.strftime("%Y%m%d_%H%M%S")
     run_id = f"run_{phase}_{timestamp_slug}"
-    run_dir = Path("output") / phase / run_id
+    run_dir = get_output_root() / phase / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
+    run_dir_abs = run_dir.resolve()
 
     meta = {
         "run_id": run_id,
@@ -267,20 +342,21 @@ def prepare_run(args: argparse.Namespace) -> str:
     instructions = build_instruction_doc(meta, run_dir)
     instructions_path = run_dir / "instructions.md"
     instructions_path.write_text(instructions, encoding="utf-8")
+    instructions_abs_path = instructions_path.resolve()
 
     write_json(run_dir / "run.json", meta)
     rebuild_index()
 
     print(f"Prepared {run_id} ({phase})")
-    print(f"- Run directory: {run_dir}")
-    print(f"- Instructions: {instructions_path}")
+    print(f"- Run directory: {run_dir_abs}")
+    print(f"- Instructions: {instructions_abs_path}")
     return run_id
 
 
 def finalize_run(args: argparse.Namespace) -> None:
     phase = args.phase.lower()
     run_id = args.run_id
-    run_dir = Path("output") / phase / run_id
+    run_dir = get_output_root() / phase / run_id
     meta_path = run_dir / "run.json"
     if not meta_path.exists():
         raise FileNotFoundError(f"Could not find metadata for {run_id} at {meta_path}")
@@ -289,22 +365,28 @@ def finalize_run(args: argparse.Namespace) -> None:
     meta["status"] = args.status.upper()
     if args.summary:
         meta["summary_path"] = args.summary
-    elif not meta.get("summary_path"):
-        meta["summary_path"] = (run_dir / "summary.md").as_posix()
+    summary_path = _ensure_summary_path(meta, run_dir)
+
+    iterations_count, _ = _validate_artifacts(phase, run_dir, summary_path)
+
     if args.verdict:
         meta["verdict"] = args.verdict.upper()
-    if args.iterations_run is not None:
-        meta["iterations_run"] = args.iterations_run
+    meta["iterations_run"] = args.iterations_run if args.iterations_run is not None else iterations_count
+    if args.hours is not None:
+        meta["hours"] = args.hours
+    if args.cost is not None:
+        meta["cost"] = args.cost
     meta["updated_iso"] = utc_now().isoformat(timespec="seconds")
 
     write_json(meta_path, meta)
     rebuild_index()
+    _append_run_log(meta)
 
     print(f"Finalized {run_id} ({phase}) → {meta['status']}")
 
 
 def rebuild_index() -> None:
-    base_output = Path("output")
+    base_output = get_output_root()
     entries = collect_runs(base_output)
     write_index(entries, base_output / "index.md")
 
@@ -366,6 +448,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--iterations-run",
         type=int,
         help="Number of iterations executed.",
+    )
+    finalize_parser.add_argument(
+        "--hours",
+        type=float,
+        help="Optional hours spent on this run.",
+    )
+    finalize_parser.add_argument(
+        "--cost",
+        type=float,
+        help="Optional cost (in USD) attributed to this run.",
     )
 
     return parser

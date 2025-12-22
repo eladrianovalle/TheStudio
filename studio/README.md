@@ -203,11 +203,13 @@ From any project in your workspace, just ask:
    python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
      finalize --phase market \
      --run-id run_market_<timestamp> \
-     --status completed --verdict APPROVED
+     --status completed --verdict APPROVED \
+     --hours 0.8 --cost 0
    ```
    (Include `--iterations-run N` or custom verdicts if needed.)
 
 Every run now has predictable artifacts (`advocate_n.md`, `contrarian_n.md`, `implementation.md`, `summary.md`) plus a discoverable entry in `output/index.md`, making it easy for Cascade to continue work from any repo.
+`finalize` also appends an entry to `knowledge/run_log.md`, giving the team a chronological feed of Studio insights with optional hours/cost tracking.
 
 **Benefits:**
 - **Zero API cost** – uses your existing Windsurf subscription
@@ -215,8 +217,9 @@ Every run now has predictable artifacts (`advocate_n.md`, `contrarian_n.md`, `im
 - **No rate limits** – no per-minute caps like free API tiers
 - **Cross-project access** – works from any repo in your workspace
 - **Consistent packaging** – `run_phase.py` automates instructions, directories, and indexing
+- **Insight propagation** – knowledge log + index keep the rest of the workspace aligned
 
-See `studio/prompts/cascade_workflow.md` and the new [Shoestring Preset](./docs/SHOESTRING_PRESET.md) for full workflow details and zero-cost setup tips.
+See `studio/prompts/cascade_workflow.md`, `knowledge/run_log.md`, and the new [Shoestring Preset](./docs/SHOESTRING_PRESET.md) for full workflow details and zero-cost setup tips.
 
 ### Method 2: CLI (For Automation/Batch Runs)
 

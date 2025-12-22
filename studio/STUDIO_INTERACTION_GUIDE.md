@@ -25,15 +25,37 @@ Central reference for working with the Game Studio multi-agent crew from Cascade
    ```
 4. Reload your shell (`source ~/.zshrc`) and verify with `studio list-phases`.@/Users/orcpunk/Repos/_TheGameStudio/studio/README.md#61-135 @/Users/orcpunk/Repos/_TheGameStudio/studio/docs/WINDSURF_USAGE.md#11-33
 
-## 3. Core Commands (Cascade or Terminal)
+## 3. Cascade-First Workflow (Recommended)
+
+1. **Prepare the run (any repo):**
+   ```bash
+   python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+     prepare --phase design \
+     --text "Describe your idea here"
+   ```
+   This generates `output/<phase>/run_<phase>_<timestamp>/instructions.md`, updates the run index, and tells Cascade exactly where to save artifacts.
+2. **Execute via Cascade:** Paste the instructions into Windsurf chat and roleplay Advocate → Contrarian (→ Implementer/Integrator) per the workflow. Save each output to the paths listed in the instructions.
+3. **Finalize & log:**
+   ```bash
+   python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+     finalize --phase design \
+     --run-id run_design_<timestamp> \
+     --status completed --verdict APPROVED \
+     --hours 0.75 --cost 0
+   ```
+   `finalize` validates artifacts, auto-counts iterations, updates `output/index.md`, and appends an entry to `knowledge/run_log.md`.
+
+See `docs/SHOESTRING_PRESET.md` for the full zero-cost recipe and troubleshooting tips.
+
+## 4. Legacy CLI Commands (fallback only)
 
 | Goal | Command |
 | --- | --- |
-| Evaluate a single phase | `studio evaluate "Idea description" --phase [market|design|tech] [--format json]` |
+| Evaluate a single phase | `studio evaluate "Idea" --phase [market|design|tech|studio]` |
 | Run full Market → Design → Tech pipeline | `studio pipeline "Idea description"` |
 | Discover available phases | `studio list-phases` |
 
-Cascade usage pattern: “Use the Studio agents to evaluate `<idea>` in `<phase>`.” Cascade runs the CLI and streams the markdown verdict back into chat.@/Users/orcpunk/Repos/_TheGameStudio/studio/studio_cli.py#91-175 @/Users/orcpunk/Repos/_TheGameStudio/studio/docs/WINDSURF_USAGE.md#34-124
+Use these only when scripting/automation is required; otherwise stick to the Cascade-first path so artifacts stay consistent.
 
 ### Input Guidelines
 
@@ -45,7 +67,7 @@ Cascade usage pattern: “Use the Studio agents to evaluate `<idea>` in `<phase>
 - CLI prints agent debate + verdict; `studio_cli` also surfaces `success`, `phase`, and `verdict` when invoked with `--format json`.@/Users/orcpunk/Repos/_TheGameStudio/studio/studio_cli.py#20-88
 - Report files live under `output/{phase}/` for historical review or sharing.@/Users/orcpunk/Repos/_TheGameStudio/studio/README.md#87-93
 
-## 4. Running from Other Python Projects
+## 5. Running from Other Python Projects
 
 ```python
 import sys
@@ -61,13 +83,13 @@ print(result)
 
 Stop the manual pipeline when a phase returns `REJECTED` to save tokens/time.@/Users/orcpunk/Repos/_TheGameStudio/studio/README.md#140-280
 
-## 5. Environment & Stability Notes
+## 6. Environment & Stability Notes
 
 - Required API env vars depend on `STUDIO_MODEL`; Gemini defaults to `GEMINI_API_KEY`.@/Users/orcpunk/Repos/_TheGameStudio/studio/src/studio/crew.py#16-41
 - Preflight check enforces optional dependencies (e.g., `email_validator`). Install missing modules if errors surface before agent kickoff.@/Users/orcpunk/Repos/_TheGameStudio/studio/src/studio/crew.py#12-54
 - Solo Mode (default) runs crews in a sandboxed subprocess for resilience; disable by setting `STUDIO_SOLO_MODE=false` only if you need full liteLLM proxy features.@/Users/orcpunk/Repos/_TheGameStudio/studio/README.md#95-113
 
-## 6. Suggested Workflow for Idea Evaluations
+## 7. Suggested Workflow for Idea Evaluations
 
 1. Draft an input blurb (genre, platform, player fantasy, constraints).
 2. Decide scope:
@@ -76,7 +98,7 @@ Stop the manual pipeline when a phase returns `REJECTED` to save tokens/time.@/U
 3. Ask Cascade to run the command or execute it locally.
 4. Review the markdown verdict in chat and the saved file; iterate before escalating to the next phase.
 
-## 7. Extending the Studio
+## 8. Extending the Studio
 
 - Add or edit agents in `src/studio/config/agents.yaml` and tasks in `src/studio/config/tasks.yaml` to customize roles or add new phases.
 - Switch LLM providers by adjusting `STUDIO_MODEL` and supplying the matching API key (`GROQ_API_KEY`, `OPENAI_API_KEY`, etc.).@/Users/orcpunk/Repos/_TheGameStudio/studio/README.md#205-236 @/Users/orcpunk/Repos/_TheGameStudio/studio/src/studio/crew.py#20-53

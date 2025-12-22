@@ -31,6 +31,46 @@ studio list-phases
 
 You should see the available phases.
 
+### 3. Quick Cascade Command Snippet (Recommended)
+
+When you want Cascade to run a Studio phase, start by preparing the run folder:
+```bash
+python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+  prepare --phase market \
+  --text "Describe your idea here"
+```
+- Cascade will then use the generated `instructions.md` to roleplay Advocate/Contrarian inside chat.
+- After saving artifacts, finish with:
+  ```bash
+  python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+    finalize --phase market \
+    --run-id run_market_<timestamp> \
+    --status completed --verdict APPROVED \
+    --hours 0.8 --cost 0
+  ```
+This ensures every run is packaged under `output/{phase}/run_*`, logged in `output/index.md`, and tracked in `knowledge/run_log.md` no matter which project triggered it.
+
+### 4. Add a Windsurf Command Palette Action (Optional but Handy)
+
+Make the prepare step a single palette action so you never need to type the command again:
+
+1. In Windsurf press **⌘⇧P** (or **Ctrl+Shift+P**) and run **“Cascade: Configure Command Palette Actions”**.
+2. Add the following entry inside the JSON array (adjust the absolute path if your repo lives elsewhere):
+   ```json
+   {
+     "title": "Studio: Prepare Run Folder",
+     "description": "Generate instructions + output folder for any Studio phase.",
+     "inputs": [
+       { "name": "phase", "placeholder": "market / design / tech / studio" },
+       { "name": "idea_or_objective", "placeholder": "What should Studio work on?" },
+       { "name": "max_iterations", "placeholder": "Advocate↔Contrarian loops (default 3)", "default": "3" }
+     ],
+     "command": "python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py prepare --phase {{phase}} --text \"{{idea_or_objective}}\" --max-iterations {{max_iterations}}"
+   }
+   ```
+3. Invoke the palette again and type “Studio: Prepare Run Folder”. Windsurf will prompt for the phase, idea/objective, and iteration cap, then run the helper script for you.
+4. After Cascade finishes the agent loop and artifacts are saved, run the finalize command (or add another palette action mirroring `run_phase.py finalize`).
+
 ## 💬 Using Studio from Windsurf Cascade
 
 ### From Any Project
