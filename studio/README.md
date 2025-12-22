@@ -43,6 +43,8 @@ The Studio acts as a **shared service** that other projects can import and use. 
 - **Centralized Configuration**: Update agent behavior in one place
 - **Phase-Based Workflows**: Market → Design → Tech evaluation pipeline
 - **Debate-Driven Quality**: Advocate vs. Contrarian pattern ensures thorough analysis
+- **Iterative Refinement**: Contrarian rejections force advocate revisions with specific feedback
+- **Implementation Phase**: After approval, agents generate concrete artifacts (specs, code, docs)
 
 ## 🏗️ Architecture
 
@@ -131,22 +133,100 @@ The Studio “cascade” always tries your best cloud model first (Gemini by def
 
 This ensures the agents “think” with the strongest possible model while automatically downgrading through Groq and finally the local Ollama instance whenever cloud quota or stability is an issue.
 
+### 🔄 Iterative Refinement & Implementation Workflow
+
+Studio implements a **steel-man vs. contrarian** pattern with true iterative refinement:
+
+**Refinement Loop (Debate Phase)**
+1. **Advocate** strengthens the idea into its best possible form
+2. **Contrarian** attacks the strengthened version, outputs `VERDICT: APPROVED` or `VERDICT: REJECTED`
+3. **If REJECTED**: The contrarian's critique is fed back to the advocate for the next iteration
+4. **If APPROVED**: Move to implementation phase
+
+**Implementation Phase (After Approval)**
+
+Once a concept is approved, Studio automatically triggers an **implementation phase** where specialized agents generate concrete deliverables:
+
+- **Market Phase** → Market Research Analyst produces:
+  - Target audience profile
+  - Competitor analysis table
+  - Unique value proposition
+  - Go-to-market strategy
+  - Success metrics (KPIs)
+
+- **Design Phase** → Game Design Documenter produces:
+  - Core gameplay loop diagram
+  - Player progression system
+  - Key game mechanics with rules
+  - UI/UX wireframe descriptions
+  - Technical constraints checklist
+
+- **Tech Phase** → Technical Architect produces:
+  - System architecture diagram
+  - Technology stack with justifications
+  - File structure and module organization
+  - Key algorithms/data structures
+  - Starter code scaffold (index.html, main.js, package.json)
+
+**Control Iteration Limits**
+```bash
+export STUDIO_MAX_ITERATIONS=5  # Default: 3
+```
+
+This ensures agents don't just debate—they **produce actionable artifacts** you can immediately use in your project.
+
 ## 📦 Using Studio in Other Projects
 
-### Method 1: Windsurf/Cascade (Recommended for Conversations)
+### Method 1: Cascade-Driven Workflow (Recommended - Zero Cost)
 
-**Talk to your Studio agents from any project in Windsurf!**
+**Run Studio agents directly through Cascade using your Windsurf subscription!**
 
-1. **One-time setup** - Add to your `~/.zshrc`:
+From any project in your workspace, just ask:
+
+> "Run Studio market phase on: A bite-sized puzzle roguelike for web"
+
+> "Run Studio design phase on: Cozy farming sim with time travel mechanics"
+
+> "Run Studio studio phase on: Critique the Studio tool and identify improvements"
+
+#### Standard flow with `run_phase.py`
+1. **Prepare the run** (from anywhere):
+   ```bash
+   python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+     prepare --phase market \
+     --text "A bite-sized puzzle roguelike for web"
+   ```
+   This creates `output/market/run_market_<timestamp>/` with `instructions.md` tailored to Cascade and records the run in `output/index.md`.
+2. **Have Cascade execute the instructions** inside Windsurf chat. Each iteration’s Advocate/Contrarian/Implementer output should be saved inside the run folder named by step 1.
+3. **Finalize the run** so the index stays current:
+   ```bash
+   python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+     finalize --phase market \
+     --run-id run_market_<timestamp> \
+     --status completed --verdict APPROVED
+   ```
+   (Include `--iterations-run N` or custom verdicts if needed.)
+
+Every run now has predictable artifacts (`advocate_n.md`, `contrarian_n.md`, `implementation.md`, `summary.md`) plus a discoverable entry in `output/index.md`, making it easy for Cascade to continue work from any repo.
+
+**Benefits:**
+- **Zero API cost** – uses your existing Windsurf subscription
+- **Best available model** – whatever you have selected in Windsurf
+- **No rate limits** – no per-minute caps like free API tiers
+- **Cross-project access** – works from any repo in your workspace
+- **Consistent packaging** – `run_phase.py` automates instructions, directories, and indexing
+
+See `studio/prompts/cascade_workflow.md` and the new [Shoestring Preset](./docs/SHOESTRING_PRESET.md) for full workflow details and zero-cost setup tips.
+
+### Method 2: CLI (For Automation/Batch Runs)
+
+If you have API credits configured, use the CLI:
+
 ```bash
 export PATH="/Users/orcpunk/Repos/_TheGameStudio/studio:$PATH"
 ```
 
-2. **Use from any project** - Just ask Cascade:
-
-> "Use Studio to evaluate this game idea: A 3D stealth horror roguelike"
-
-> "Run my concept through all Studio phases: A cozy farming sim with time travel"
+Then from any project:
 
 > "Check the technical feasibility using Studio: A multiplayer card battler"
 

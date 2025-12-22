@@ -36,10 +36,19 @@ def evaluate(game_idea: str, phase: str = 'market', output_format: str = 'text')
         def crew_factory():
             return StudioCrew(phase=phase).crew()
 
+        base_inputs = {'game_idea': game_idea}
+        if phase == "studio":
+            base_inputs.update(
+                {
+                    'objective': game_idea,
+                    'budget_cap': os.environ.get("STUDIO_BUDGET_CAP", "$200/month & <10 dev hours/week"),
+                }
+            )
+
         iteration_result = run_iterative_kickoff(
             crew_factory=crew_factory,
             phase=phase,
-            base_inputs={'game_idea': game_idea},
+            base_inputs=base_inputs,
             max_iterations=max_iterations,
         )
         
@@ -123,7 +132,7 @@ Examples:
     eval_parser = subparsers.add_parser('evaluate', help='Evaluate a single phase')
     eval_parser.add_argument('game_idea', help='Game concept to evaluate')
     eval_parser.add_argument('--phase', default='market', 
-                            choices=['market', 'design', 'tech'],
+                            choices=['market', 'design', 'tech', 'studio'],
                             help='Evaluation phase (default: market)')
     eval_parser.add_argument('--format', default='text',
                             choices=['text', 'json'],

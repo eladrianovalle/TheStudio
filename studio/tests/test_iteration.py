@@ -1,3 +1,5 @@
+from unittest import mock
+
 import pytest
 
 from studio.iteration import run_iterative_kickoff, _safe_max_iterations
@@ -28,12 +30,14 @@ def test_iterates_until_approved_before_cap():
         "Improved plan!\nVERDICT: APPROVED",
     ]
     factory = CrewFactory(responses)
-    result = run_iterative_kickoff(
-        crew_factory=factory,
-        phase="market",
-        base_inputs={"game_idea": "Test"},
-        max_iterations=5,
-    )
+    
+    with mock.patch("studio.iteration._run_implementation_phase", return_value=None):
+        result = run_iterative_kickoff(
+            crew_factory=factory,
+            phase="market",
+            base_inputs={"game_idea": "Test"},
+            max_iterations=5,
+        )
 
     assert result["verdict"] == "APPROVED"
     assert result["iterations_run"] == 2
@@ -73,3 +77,57 @@ def test_respects_iteration_cap_and_flags_limit():
 )
 def test_safe_max_iterations_defaults_to_three(raw, expected):
     assert _safe_max_iterations(raw) == expected
+
+
+def test_implementation_phase_runs_after_approval():
+    """Test that implementation phase runs after approval and adds to history."""
+    responses = [
+        "Great idea!\nVERDICT: APPROVED",
+    ]
+    factory = CrewFactory(responses)
+    
+    mock_impl_result = "## Market Implementation\n\n1. Target Audience: Gamers aged 18-35\n2. Competitors: Game A, Game B"
+    
+    with mock.patch("studio.iteration._run_implementation_phase", return_value=mock_impl_result):
+        result = run_iterative_kickoff(
+            crew_factory=factory,
+            phase="market",
+            base_inputs={"game_idea": "Test"},
+            max_iterations=5,
+        )
+    
+    assert result["accepted"] is True
+    assert result["iterations_run"] == 2  # 1 approval + 1 implementation
+    assert result["verdict"] == "IMPLEMENTATION"
+    assert len(result["history"]) == 2
+    assert result["history"][0]["verdict"] == "APPROVED"
+    assert result["history"][1]["verdict"] == "IMPLEMENTATION"
+    assert mock_impl_result in result["result"]
+
+
+def test_feedback_loop_passes_rejection_to_advocate():
+    """Test that rejection feedback is passed to the next iteration."""
+    responses = [
+        "Fatal flaw: No monetization.\nVERDICT: REJECTED",
+        "Added monetization!\nVERDICT: APPROVED",
+    ]
+    factory = CrewFactory(responses)
+    
+    with mock.patch("studio.iteration._run_implementation_phase", return_value=None):
+        result = run_iterative_kickoff(
+            crew_factory=factory,
+            phase="design",
+            base_inputs={"game_idea": "Test"},
+            max_iterations=5,
+        )
+    
+    assert result["accepted"] is True
+    assert result["iterations_run"] == 2
+    assert len(result["history"]) == 2
+    
+    # Verify the first iteration was rejected
+    assert result["history"][0]["verdict"] == "REJECTED"
+    assert "Fatal flaw" in result["history"][0]["result"]
+    
+    # Verify the second iteration was approved
+    assert result["history"][1]["verdict"] == "APPROVED"

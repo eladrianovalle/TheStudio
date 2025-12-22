@@ -2,13 +2,25 @@ steel_man_task:
   description: >
     Take the initial idea: {game_idea} and present its strongest possible form.
     Pre-emptively solve obvious problems.
-  expected_output: "A high-conviction proposal document."
+    
+    {previous_feedback}
+    
+    If this is a revision (iteration > 1), address the contrarian's previous concerns directly.
+  expected_output: "A high-conviction proposal document that addresses previous feedback if provided."
 
 attack_task:
   description: >
-    Review the proposal. Identify 3 fatal flaws even in this 'best case' version.
-    You must end your response with either 'VERDICT: APPROVED' or 'VERDICT: REJECTED'.
-  expected_output: "A critical redline report ending with a VERDICT."
+    Review the proposal. Identify fatal flaws even in this 'best case' version.
+    
+    This is iteration {iteration} of {max_iterations}.
+    
+    If you find fatal flaws:
+    - Respond with 'VERDICT: REJECTED' followed by numbered fatal flaws
+    - Be specific about what needs to change
+    
+    If the proposal survives scrutiny:
+    - Respond with 'VERDICT: APPROVED' followed by your reasoning
+  expected_output: "A critical analysis ending with 'VERDICT: APPROVED' or 'VERDICT: REJECTED' with specific reasoning."
 
 studio_vision_task:
   description: >
@@ -38,3 +50,48 @@ studio_integration_task:
   expected_output: >
     A prioritized roadmap (0-2 weeks, 1-2 months, aspirational) with integration steps, ownership,
     and concrete suggestions for low-cost infra, caching, or local-first patterns.
+
+market_implementation_task:
+  description: >
+    The market analysis has been APPROVED. Now generate concrete deliverables:
+    
+    APPROVED CONCEPT: {approved_concept}
+    
+    Produce:
+    1. Target audience profile (demographics, psychographics, pain points)
+    2. Competitor analysis table (3-5 competitors with strengths/weaknesses)
+    3. Unique value proposition statement
+    4. Go-to-market strategy (3 distribution channels with tactics)
+    5. Success metrics (3 KPIs to track)
+  expected_output: >
+    A structured markdown document with all 5 deliverables, ready to use as a product brief.
+
+design_implementation_task:
+  description: >
+    The design has been APPROVED. Now generate concrete deliverables:
+    
+    APPROVED DESIGN: {approved_concept}
+    
+    Produce:
+    1. Core gameplay loop diagram (text-based flowchart)
+    2. Player progression system (levels, unlocks, or skill trees)
+    3. Key game mechanics (3-5 mechanics with rules)
+    4. UI/UX wireframe descriptions (main screens)
+    5. Technical constraints checklist (performance, scope, dependencies)
+  expected_output: >
+    A structured game design document with diagrams and specifications.
+
+tech_implementation_task:
+  description: >
+    The technical architecture has been APPROVED. Now generate concrete deliverables:
+    
+    APPROVED ARCHITECTURE: {approved_concept}
+    
+    Produce:
+    1. System architecture diagram (text-based)
+    2. Technology stack with justifications
+    3. File structure and module organization
+    4. Key algorithms or data structures
+    5. Starter code scaffold (index.html, main.js, package.json)
+  expected_output: >
+    A technical specification document plus starter code files ready to copy-paste.
