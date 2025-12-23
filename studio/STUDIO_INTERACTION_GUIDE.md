@@ -1,106 +1,132 @@
 # Studio Interaction Guide
 
-Central reference for working with the Game Studio multi-agent crew from Cascade, the terminal, or other local projects.
+Single source of truth for running Studio via Windsurf/Cascade. The legacy CLI, LiteLLM runtime, and direct Python APIs have been removed—everything now flows through `run_phase.py` plus Cascade chat.
 
-## 1. What the Studio Does
+---
 
-- Centralized crew of advocate + contrarian agents (and an integrator for the Studio meta-phase) that evaluate ideas across Market → Design → Tech workflows using the steel-man vs. attack pattern.@/Users/orcpunk/Repos/_TheGameStudio/studio/README.md#36-193
-- Every run saves a structured markdown report to `output/{phase}/{phase}_TIMESTAMP.md` containing the inputs, debate transcript, verdict, and status.@/Users/orcpunk/Repos/_TheGameStudio/studio/README.md#87-93
+## 1. What’s Required
 
-## 2. One-Time Setup
-
-1. Install dependencies inside `studio/`:
+1. **Studio root** – keep this repo cloned at a predictable path (default assumed: `/Users/orcpunk/Repos/_TheGameStudio/studio`). If you move it, export `STUDIO_ROOT` so the helper script knows where to write output:
    ```bash
-   pip install uv
-   crewai install
+   export STUDIO_ROOT="/absolute/path/to/studio"
    ```
-2. Create `.env` with API credentials:
-   ```bash
-   GEMINI_API_KEY=your_api_key_here
-   MODEL=gemini-2.5-flash
-   ```
-3. (Recommended) Add Studio CLI to your PATH so Cascade can invoke it from any workspace:
-   ```bash
-   export PATH="/Users/orcpunk/Repos/_TheGameStudio/studio:$PATH"
-   ```
-4. Reload your shell (`source ~/.zshrc`) and verify with `studio list-phases`.@/Users/orcpunk/Repos/_TheGameStudio/studio/README.md#61-135 @/Users/orcpunk/Repos/_TheGameStudio/studio/docs/WINDSURF_USAGE.md#11-33
+2. **Bridge doc per dependent repo** – copy [`docs/STUDIO_BRIDGE_TEMPLATE.md`](./docs/STUDIO_BRIDGE_TEMPLATE.md) into every project that relies on Studio (e.g., `docs/studio-bridge.md`). Fill in:
+   - Studio location (and `STUDIO_ROOT` if overridden).
+   - Canonical docs Cascade must read before each run.
+   - Prompt stub instructing Cascade to reference the bridge doc + canon and to echo the run folder path created by `run_phase.py`.
+3. **Optional shortcuts** – add command palette entries or shell aliases that wrap the `run_phase.py prepare/finalize` commands (examples in `docs/WINDSURF_USAGE.md`).
 
-## 3. Cascade-First Workflow (Recommended)
+No additional dependencies or API keys are required because the agents execute inside Windsurf.
 
-1. **Prepare the run (any repo):**
-   ```bash
-   python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
-     prepare --phase design \
-     --text "Describe your idea here"
-   ```
-   This generates `output/<phase>/run_<phase>_<timestamp>/instructions.md`, updates the run index, and tells Cascade exactly where to save artifacts.
-2. **Execute via Cascade:** Paste the instructions into Windsurf chat and roleplay Advocate → Contrarian (→ Implementer/Integrator) per the workflow. Save each output to the paths listed in the instructions.
-3. **Finalize & log:**
-   ```bash
-   python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
-     finalize --phase design \
-     --run-id run_design_<timestamp> \
-     --status completed --verdict APPROVED \
-     --hours 0.75 --cost 0
-   ```
-   `finalize` validates artifacts, auto-counts iterations, updates `output/index.md`, and appends an entry to `knowledge/run_log.md`.
+---
 
-See `docs/SHOESTRING_PRESET.md` for the full zero-cost recipe and troubleshooting tips.
+## 2. Standard Cascade Workflow
 
-## 4. Legacy CLI Commands (fallback only)
+### Step 1 – Prepare
 
-| Goal | Command |
-| --- | --- |
-| Evaluate a single phase | `studio evaluate "Idea" --phase [market|design|tech|studio]` |
-| Run full Market → Design → Tech pipeline | `studio pipeline "Idea description"` |
-| Discover available phases | `studio list-phases` |
-
-Use these only when scripting/automation is required; otherwise stick to the Cascade-first path so artifacts stay consistent.
-
-### Input Guidelines
-
-- Minimum required key: `game_idea` (rich descriptions yield better debates).@/Users/orcpunk/Repos/_TheGameStudio/studio/docs/API.md#172-200
-- Include platform, mechanics, constraints when possible; the crew will reference them directly in steel-man and attack tasks.
-
-### Output Interpretation
-
-- CLI prints agent debate + verdict; `studio_cli` also surfaces `success`, `phase`, and `verdict` when invoked with `--format json`.@/Users/orcpunk/Repos/_TheGameStudio/studio/studio_cli.py#20-88
-- Report files live under `output/{phase}/` for historical review or sharing.@/Users/orcpunk/Repos/_TheGameStudio/studio/README.md#87-93
-
-## 5. Running from Other Python Projects
-
-```python
-import sys
-sys.path.append('/Users/orcpunk/Repos/_TheGameStudio/studio/src')
-
-from studio.crew import StudioCrew
-
-result = StudioCrew(phase='design').crew().kickoff(
-    inputs={'game_idea': 'Your concept'}
-)
-print(result)
+```bash
+python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+  prepare --phase <market|design|tech|studio> \
+  --text "Describe the objective or idea" \
+  --max-iterations 3 \
+  --budget "$0-20/mo"            # studio phase only
 ```
 
-Stop the manual pipeline when a phase returns `REJECTED` to save tokens/time.@/Users/orcpunk/Repos/_TheGameStudio/studio/README.md#140-280
+Outputs:
+- `output/<phase>/run_<phase>_<timestamp>/instructions.md`
+- `run.json` metadata seeded with status = `PENDING`
+- `output/index.md` entry pointing at the new run folder
 
-## 6. Environment & Stability Notes
+### Step 2 – Execute inside Windsurf
 
-- Required API env vars depend on `STUDIO_MODEL`; Gemini defaults to `GEMINI_API_KEY`.@/Users/orcpunk/Repos/_TheGameStudio/studio/src/studio/crew.py#16-41
-- Preflight check enforces optional dependencies (e.g., `email_validator`). Install missing modules if errors surface before agent kickoff.@/Users/orcpunk/Repos/_TheGameStudio/studio/src/studio/crew.py#12-54
-- Solo Mode (default) runs crews in a sandboxed subprocess for resilience; disable by setting `STUDIO_SOLO_MODE=false` only if you need full liteLLM proxy features.@/Users/orcpunk/Repos/_TheGameStudio/studio/README.md#95-113
+1. Paste `instructions.md` into Cascade.
+2. Follow the loop spelled out inside the file:
+   - Save Advocate responses to `advocate_<n>.md`.
+   - Save Contrarian responses to `contrarian_<n>.md` (skip for studio phase).
+   - After approval (or immediately for studio phase), write the implementation/integrator deliverable.
+   - Summarize the entire session inside `summary.md`.
+3. Mention the run folder path frequently so later instructions can reopen it.
 
-## 7. Suggested Workflow for Idea Evaluations
+### Step 3 – Finalize
 
-1. Draft an input blurb (genre, platform, player fantasy, constraints).
-2. Decide scope:
-   - Quick check → `market` phase.
-   - Production readiness → run `pipeline`.
-3. Ask Cascade to run the command or execute it locally.
-4. Review the markdown verdict in chat and the saved file; iterate before escalating to the next phase.
+```bash
+python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+  finalize --phase <phase> \
+  --run-id run_<phase>_<timestamp> \
+  --status completed \
+  --verdict APPROVED \
+  --hours 0.8 \
+  --cost 0 \
+  --iterations-run 2         # optional override
+```
 
-## 8. Extending the Studio
+`finalize` will refuse to run if required artifacts are missing. Once it succeeds you can reference:
+- `output/index.md` – sortable table of every run.
+- `knowledge/run_log.md` – long-form history with summary links.
 
-- Add or edit agents in `src/studio/config/agents.yaml` and tasks in `src/studio/config/tasks.yaml` to customize roles or add new phases.
-- Switch LLM providers by adjusting `STUDIO_MODEL` and supplying the matching API key (`GROQ_API_KEY`, `OPENAI_API_KEY`, etc.).@/Users/orcpunk/Repos/_TheGameStudio/studio/README.md#205-236 @/Users/orcpunk/Repos/_TheGameStudio/studio/src/studio/crew.py#20-53
+---
 
-Keep this guide up to date as workflows evolve so Cascade always has a canonical reference when orchestrating the Studio crew.
+## 3. Artifact Expectations
+
+| Phase | Required files | Notes |
+| --- | --- | --- |
+| `market`, `design`, `tech` | `advocate_<n>.md`, `contrarian_<n>.md`, `implementation.md`, `summary.md` | Implementation file is created **after** the first APPROVED verdict. |
+| `studio` | `advocate_1.md`, `contrarian_1.md`, `integrator.md`, `summary.md` | Studio phase runs exactly one Advocate → Contrarian pass before the Integrator consolidates. |
+
+Additional files are welcome (screenshots, charts, etc.) as long as they live inside the run folder.
+
+---
+
+## 4. Role Manifests & Custom Experts
+
+Even though Studio no longer instantiates crews directly, you can still describe preferred experts for each repo via `studio.manifest.json`. Cascade should read this file before improvising prompts so the correct personas show up in its answers.
+
+Example (drop next to your bridge doc):
+
+```jsonc
+{
+  "phases": {
+    "market": {
+      "advocate": {
+        "role": "LiveOps Growth Hacker",
+        "goal": "Steel-man the pitch for retention-first F2P loops."
+      },
+      "contrarian": {
+        "role": "Monetization Skeptic",
+        "goal": "Find pricing/burn traps before we spend a dollar."
+      }
+    },
+    "studio": {
+      "integrator": {
+        "role": "Principal Tools PM",
+        "goal": "Ship the cheapest Cascade workflow that still scales."
+      }
+    }
+  }
+}
+```
+
+Treat the manifest as configuration Cascade must ingest (mention it in your prompts or command palette entries).
+
+---
+
+## 5. Troubleshooting & Tips
+
+- **Missing artifacts on finalize:** ensure `summary.md` and the iteration files exist. `finalize` prints the exact checklist it enforces.
+- **Wrong output directory:** set/export `STUDIO_ROOT` before calling `run_phase.py` or add `--env STUDIO_ROOT=/path` when using Cascade command palette entries.
+- **Keeping context fresh:** every repo should log notable runs at the bottom of its bridge doc (date, run_id, takeaway). Cascade can then reopen the folder immediately.
+- **Iterating quickly:** rerun `prepare` whenever the brief changes meaningfully; multiple runs per phase are fine. `output/index.md` keeps them organized.
+
+---
+
+## 6. Documentation Contract
+
+1. README + this guide must be updated for every workflow change.
+2. Dependent bridge docs must be updated in lockstep.
+3. When referencing Studio in conversation with Cascade, cite:
+   ```
+   See docs/studio-bridge.md for canon + workflow.
+   Prepare via run_phase.py, then paste instructions.md back here.
+   ```
+
+Staying disciplined here keeps every repo interoperable without guessing which workflow is active.

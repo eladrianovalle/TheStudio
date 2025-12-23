@@ -9,6 +9,7 @@ import os
 import argparse
 import json
 from pathlib import Path
+from typing import Optional
 
 # Add studio to path
 studio_path = Path(__file__).parent / 'src'
@@ -18,7 +19,12 @@ from studio.crew import StudioCrew
 from studio.iteration import run_iterative_kickoff
 
 
-def evaluate(game_idea: str, phase: str = 'market', output_format: str = 'text') -> dict:
+def evaluate(
+    game_idea: str,
+    phase: str = 'market',
+    output_format: str = 'text',
+    manifest: Optional[str] = None,
+) -> dict:
     """
     Evaluate a game idea using Studio agents.
     
@@ -26,15 +32,18 @@ def evaluate(game_idea: str, phase: str = 'market', output_format: str = 'text')
         game_idea: The game concept to evaluate
         phase: Evaluation phase (market, design, tech)
         output_format: Output format (text, json)
+        manifest: Optional path to a project-specific Studio manifest
     
     Returns:
         dict with result and verdict
     """
     try:
         max_iterations = os.environ.get("STUDIO_MAX_ITERATIONS")
+        if manifest:
+            os.environ["STUDIO_MANIFEST"] = manifest
 
         def crew_factory():
-            return StudioCrew(phase=phase).crew()
+            return StudioCrew(phase=phase, manifest_path=manifest).crew()
 
         base_inputs = {'game_idea': game_idea}
         if phase == "studio":
@@ -73,13 +82,18 @@ def evaluate(game_idea: str, phase: str = 'market', output_format: str = 'text')
         }
 
 
-def pipeline(game_idea: str, output_format: str = 'text') -> dict:
+def pipeline(
+    game_idea: str,
+    output_format: str = 'text',
+    manifest: Optional[str] = None,
+) -> dict:
     """
     Run full evaluation pipeline (all phases).
     
     Args:
         game_idea: The game concept to evaluate
         output_format: Output format (text, json)
+        manifest: Optional path to a project-specific Studio manifest
     
     Returns:
         dict with results from all phases
@@ -92,7 +106,7 @@ def pipeline(game_idea: str, output_format: str = 'text') -> dict:
         print(f"Running {phase.upper()} phase...", file=sys.stderr)
         print(f"{'='*60}\n", file=sys.stderr)
         
-        phase_result = evaluate(game_idea, phase, output_format)
+        phase_result = evaluate(game_idea, phase, output_format, manifest)
         results[phase] = phase_result
         
         if not phase_result.get('success', False):
@@ -137,6 +151,8 @@ Examples:
     eval_parser.add_argument('--format', default='text',
                             choices=['text', 'json'],
                             help='Output format (default: text)')
+    eval_parser.add_argument('--manifest',
+                            help='Path to a project-specific studio.manifest.json file')
     
     # Pipeline command
     pipeline_parser = subparsers.add_parser('pipeline', help='Run full evaluation pipeline')
@@ -144,6 +160,8 @@ Examples:
     pipeline_parser.add_argument('--format', default='text',
                                 choices=['text', 'json'],
                                 help='Output format (default: text)')
+    pipeline_parser.add_argument('--manifest',
+                                help='Path to a project-specific studio.manifest.json file')
     
     # List phases command
     list_parser = subparsers.add_parser('list-phases', help='List available phases')
@@ -151,7 +169,7 @@ Examples:
     args = parser.parse_args()
     
     if args.command == 'evaluate':
-        result = evaluate(args.game_idea, args.phase, args.format)
+        result = evaluate(args.game_idea, args.phase, args.format, args.manifest)
         
         if args.format == 'json':
             print(json.dumps(result, indent=2))
@@ -167,7 +185,7 @@ Examples:
                 sys.exit(1)
     
     elif args.command == 'pipeline':
-        result = pipeline(args.game_idea, args.format)
+        result = pipeline(args.game_idea, args.format, args.manifest)
         
         if args.format == 'json':
             print(json.dumps(result, indent=2))

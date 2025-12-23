@@ -2,53 +2,53 @@
 
 ## 🚀 One-Time Setup
 
-Add to `~/.zshrc`:
-```bash
-export PATH="/Users/orcpunk/Repos/_TheGameStudio/studio:$PATH"
-```
+- Keep Studio checked out at `/Users/orcpunk/Repos/_TheGameStudio/studio` (or export `STUDIO_ROOT="/abs/path"` if different).
+- Copy the bridge template into each repo that uses Studio (`docs/studio-bridge.md`) and fill in canon + instructions.
+- Optionally add a Windsurf command palette action for `run_phase.py prepare` (snippet in [WINDSURF_USAGE.md](./docs/WINDSURF_USAGE.md)).
 
-Then: `source ~/.zshrc`
+No PATH edits or API keys are required—the models run inside Cascade.
 
-## 💬 Talk to Studio from Any Project
+## 💬 Standard Flow (per phase)
 
-Open any project in Windsurf and ask Cascade:
+1. **Prepare** (from any terminal/repo):
+   ```bash
+   python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+     prepare --phase <market|design|tech|studio> \
+     --text "Describe your idea or objective" \
+     --max-iterations 3
+   ```
+   Copy the emitted `run_id`, run directory, and instructions path.
+2. **Cascade execution**:
+   - Open Windsurf chat and paste the instructions.
+   - Save each Advocate/Contrarian output to the provided files (`advocate_1.md`, `contrarian_1.md`, etc.).
+   - Produce `implementation.md` (non-studio) or `integrator.md` (studio) once approved.
+   - Summarize in `summary.md`.
+3. **Finalize**:
+   ```bash
+   python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+     finalize --phase <phase> \
+     --run-id <run_id> \
+     --status completed --verdict APPROVED \
+     --hours 0.8 --cost 0
+   ```
+   This enforces the artifact checklist and refreshes `output/index.md` + `knowledge/run_log.md`.
 
-### Market Validation
-> "Use Studio to evaluate: A 3D stealth horror roguelike"
+## 🎯 Quick Prompts for Cascade
 
-### Design Validation  
-> "Run Studio design phase on: A puzzle platformer with portal mechanics"
+- “Use Studio (market phase) on: **A 3D stealth horror roguelike**. Instructions in `output/market/run_market_…/instructions.md`.”
+- “Run Studio design phase for **A puzzle platformer with portal mechanics**. Save artifacts to the prepared run folder, then summarize the verdict.”
+- “Carry out Studio tech phase on **A multiplayer card battler**. After completion, remind me to run finalize.”
+- “Self-critique Studio (studio phase). Use the manifest + bridge doc canon before responding.”
 
-### Tech Validation
-> "Check technical feasibility using Studio: A multiplayer card battler"
+Always mention the bridge doc and run directory path so Cascade reloads the right context.
 
-### Full Pipeline
-> "Run this through all Studio phases: A cozy farming sim with time travel"
+## 🗂️ Required Artifacts (per run)
 
-## 📋 Direct Commands
+| Phase | Files |
+| --- | --- |
+| Market/Design/Tech | `advocate_<n>.md`, `contrarian_<n>.md`, `implementation.md`, `summary.md` |
+| Studio | `advocate_1.md`, `contrarian_1.md`, `integrator.md`, `summary.md` |
 
-```bash
-# Single phase
-studio evaluate "Your idea" --phase market
-studio evaluate "Your idea" --phase design
-studio evaluate "Your idea" --phase tech
+## 📖 More Detail
 
-# Full pipeline
-studio pipeline "Your idea"
-
-# List phases
-studio list-phases
-
-# JSON output
-studio evaluate "Your idea" --phase market --format json
-```
-
-## 🎯 What Each Phase Does
-
-- **Market**: Is there demand? Will it sell?
-- **Design**: Is the gameplay fun? Is scope reasonable?
-- **Tech**: Can we build it? Will it perform?
-
-## 📖 Full Documentation
-
-See [WINDSURF_USAGE.md](./docs/WINDSURF_USAGE.md) for complete guide with examples.
+See [WINDSURF_USAGE.md](./docs/WINDSURF_USAGE.md) for deep-dive setup, sample prompts, and optional Windsurf shortcuts.

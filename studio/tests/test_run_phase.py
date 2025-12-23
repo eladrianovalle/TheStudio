@@ -37,11 +37,17 @@ def _finalize_args(**overrides):
     return SimpleNamespace(**defaults)
 
 
-def test_prepare_and_finalize_creates_index_and_log(tmp_path, monkeypatch):
+def _configure_tmp_studio(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("STUDIO_ROOT", str(tmp_path))
+    return Path(tmp_path)
+
+
+def test_prepare_and_finalize_creates_index_and_log(tmp_path, monkeypatch):
+    studio_root = _configure_tmp_studio(tmp_path, monkeypatch)
 
     run_id = run_phase.prepare_run(_prepare_args())
-    run_dir = Path("output") / "market" / run_id
+    run_dir = studio_root / "output" / "market" / run_id
 
     assert run_dir.exists()
     assert (run_dir / "instructions.md").exists()
@@ -57,19 +63,19 @@ def test_prepare_and_finalize_creates_index_and_log(tmp_path, monkeypatch):
     assert meta["iterations_run"] == 1
     assert meta["hours"] == 1.25
 
-    index_contents = Path("output/index.md").read_text(encoding="utf-8")
+    index_contents = (studio_root / "output/index.md").read_text(encoding="utf-8")
     assert run_id in index_contents
 
-    log_contents = Path("knowledge/run_log.md").read_text(encoding="utf-8")
+    log_contents = (studio_root / "knowledge/run_log.md").read_text(encoding="utf-8")
     assert run_id in log_contents
     assert "Hours: 1.25" in log_contents
 
 
 def test_finalize_requires_required_artifacts(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
+    studio_root = _configure_tmp_studio(tmp_path, monkeypatch)
 
     run_id = run_phase.prepare_run(_prepare_args(phase="design"))
-    run_dir = Path("output") / "design" / run_id
+    run_dir = studio_root / "output" / "design" / run_id
 
     # Only summary exists; advocate/contrarian missing
     (run_dir / "summary.md").write_text("Summary only", encoding="utf-8")

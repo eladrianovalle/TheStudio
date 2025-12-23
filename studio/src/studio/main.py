@@ -187,6 +187,7 @@ def _run_crew_subprocess(phase: str, inputs: dict, solo_mode: bool) -> dict:
 
 
 def run():
+    raise_runtime_removed("studio.main")
     phase = os.environ.get("STUDIO_PHASE", "market").lower()
     solo_mode = _apply_solo_mode()
     health = _run_health_checks()
@@ -209,10 +210,10 @@ def run():
             )
         }
 
-    print(f"--- 🟢 ENTERING {phase.upper()} ROOM ---")
+    print(f"--- {phase.upper()} ROOM ---")
     if solo_mode:
-        print("🪄 Solo Mode active (litellm proxy/logging isolated in subprocess)")
-    print(f"🩺 Health Check → Model: {health['model']} | API Key: {'OK' if health['api_key_present'] else 'N/A'}")
+        print(" Solo Mode active (litellm proxy/logging isolated in subprocess)")
+    print(f" Health Check → Model: {health['model']} | API Key: {'OK' if health['api_key_present'] else 'N/A'}")
 
     # Run crew in subprocess for crash isolation
     result_data = _run_crew_subprocess(phase, inputs, solo_mode)
@@ -221,15 +222,15 @@ def run():
         result = result_data["result"]
         output_file = _save_output(phase, result, inputs, success=True)
         
-        print("\n\n--- 🏆 FINAL OUTPUT ---")
+        print("\n\n--- FINAL OUTPUT ---")
         print(result)
-        print(f"\n📄 Report saved to: {output_file}")
+        print(f"\n Report saved to: {output_file}")
         if result_data.get("attempt", 1) > 1:
             print(f"(Completed after {result_data['attempt']} attempts)")
 
         if phase != "studio":
             verdict = result_data.get("verdict") or extract_verdict(str(result))
-            print(f"\n=== ✅ STUDIO VERDICT: {verdict} ===")
+            print(f"\n=== STUDIO VERDICT: {verdict} ===")
     else:
         error_msg = result_data.get("error", "Unknown error")
         error_trace = result_data.get("traceback", "No traceback available")
@@ -243,7 +244,7 @@ def run():
             f"Stderr output:\n```\n{stderr}\n```"
         )
         output_file = _save_output(phase, error_report, inputs, success=False)
-        print(f"\n💥 Studio run aborted. Detailed error saved to {output_file}")
+        print(f"\n Studio run aborted. Detailed error saved to {output_file}")
         print(f"Error: {error_msg}")
         sys.exit(1)
 
