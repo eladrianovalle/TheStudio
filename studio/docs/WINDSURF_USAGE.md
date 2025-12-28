@@ -31,6 +31,8 @@ python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
   --text "Describe the idea, objective, or question" \
   --max-iterations 3 \
   --budget "$0-20/mo"     # studio phase only
+  --role-pack studio_core # studio phase optional
+  --roles +qa -marketing  # studio phase overrides
 ```
 
 What you get:
@@ -44,9 +46,11 @@ Copy the emitted `run_id` and folder path—Cascade will reference them verbatim
 
 1. Paste `instructions.md` into chat (include the absolute path and mention the bridge doc/canon).
 2. Follow the loop described in the instructions:
-   - Save Advocate output to `advocate_<n>.md`.
-   - Save Contrarian output to `contrarian_<n>.md` (studio phase skips contrarian loops after the first pass).
-   - Once approved (or immediately for studio phase), complete `implementation.md` or `integrator.md`.
+   - Save Advocate output to `advocate_<n>.md` (non-studio) or per-role files like `advocate--design--01.md`.
+   - Save Contrarian output to `contrarian_<n>.md` (non-studio) or `contrarian--design--01.md`.
+   - Once approved:
+     - Non-studio → complete `implementation.md`.
+     - Studio → run the Integrator duel sections inside `integrator.md` (`### Integrator Advocate`, `### Integrator Contrarian`, `### Integrated Plan`).
    - Write `summary.md` capturing the inputs, iterations, verdict, and next actions.
 3. Keep Cascade aware of the run folder path so future prompts can reopen the artifacts without re-searching.
 
@@ -112,7 +116,7 @@ Example prompts:
 | Phase | Files | Notes |
 | --- | --- | --- |
 | Market / Design / Tech | `advocate_<n>.md`, `contrarian_<n>.md`, `implementation.md`, `summary.md` | Implementation is produced after the first APPROVED verdict. |
-| Studio | `advocate_1.md`, `contrarian_1.md`, `integrator.md`, `summary.md` | Exact loop is Advocate → Contrarian → Integrator (no implementation file). |
+| Studio | `advocate--<role>--<n>.md`, `contrarian--<role>--<n>.md`, `integrator.md` (with duel sections), `summary.md` | Each invited role completes its own Advocate↔Contrarian loop. Integrator runs a capped duel before finalizing. |
 
 You can add extra context files (screenshots, charts, code samples) as long as they live inside the run folder.
 

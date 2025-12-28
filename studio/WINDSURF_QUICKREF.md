@@ -15,13 +15,17 @@ No PATH edits or API keys are required—the models run inside Cascade.
    python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
      prepare --phase <market|design|tech|studio> \
      --text "Describe your idea or objective" \
-     --max-iterations 3
+     --max-iterations 3 \
+     --role-pack studio_core \        # studio only, optional
+     --roles +qa -marketing           # studio only, optional overrides
    ```
    Copy the emitted `run_id`, run directory, and instructions path.
 2. **Cascade execution**:
    - Open Windsurf chat and paste the instructions.
-   - Save each Advocate/Contrarian output to the provided files (`advocate_1.md`, `contrarian_1.md`, etc.).
-   - Produce `implementation.md` (non-studio) or `integrator.md` (studio) once approved.
+   - Save each Advocate/Contrarian output to the provided files:
+     - Non-studio → `advocate_<n>.md`, `contrarian_<n>.md`.
+     - Studio → `advocate--<role>--<n>.md`, `contrarian--<role>--<n>.md` (per the Role Menu).
+   - Produce `implementation.md` (non-studio) or run the integrator duel inside `integrator.md` (studio) once approved.
    - Summarize in `summary.md`.
 3. **Finalize**:
    ```bash
@@ -47,7 +51,7 @@ Always mention the bridge doc and run directory path so Cascade reloads the righ
 | Phase | Files |
 | --- | --- |
 | Market/Design/Tech | `advocate_<n>.md`, `contrarian_<n>.md`, `implementation.md`, `summary.md` |
-| Studio | `advocate_1.md`, `contrarian_1.md`, `integrator.md`, `summary.md` |
+| Studio | `advocate--<role>--<n>.md`, `contrarian--<role>--<n>.md`, `integrator.md` (with Integrator duel sections), `summary.md` |
 
 ## 📖 More Detail
 

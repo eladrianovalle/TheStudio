@@ -10,6 +10,20 @@ Key goals:
 
 ---
 
+## 🧱 Studio Role Packs & Role Menu
+
+- **Manifest (`studio.manifest.json`)** defines every discipline (title, focuses, prompt doc, deliverables, escalation cues).
+- **Role packs (`role_packs/*.json`)** are curated pod presets (e.g., `studio_core` = marketing + product + design + art + engineering + QA). Downstream repos do *not* fork them; they only supply `--roles +foo -bar`.
+- **Instructions** now include a Role Menu table linking to prompt docs and file names (e.g., `advocate--design--02.md`).
+- **Finalize** validates that each invited role produced both advocate/contrarian artifacts and records missing pods inside `run.json["studio_roles"]["missing"]`.
+- **Integrator duel** is captured inside `integrator.md` with `### Integrator Advocate`, `### Integrator Contrarian (VERDICT)`, and `### Integrated Plan`.
+
+When in doubt, run:
+```bash
+python run_phase.py prepare --phase studio --text "..." --role-pack studio_core
+```
+and adjust attendees via `--roles +qa -marketing`.
+
 ## ✨ What’s in the box?
 
 | Path | Purpose |
@@ -41,11 +55,21 @@ There is **no** CLI, LiteLLM proxy, Gemini integration, or Python API entrypoint
    - `output/market/run_market_20251223_170045/instructions.md`
    - `run.json` metadata + empty artifact placeholders
    - `output/index.md` updated with the new run ID
-4. **Execute inside Windsurf/Cascade**:
+4. **(Studio phase only)** If you want multiple disciplines in the room, add:
+   ```bash
+   python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+     prepare --phase studio \
+     --text "Self-critique Studio" \
+     --role-pack studio_core --roles +qa -marketing
+   ```
+   - `--role-pack` pulls a preset pod from `role_packs/`.
+   - `--roles` lets you include/exclude roles (`+role`/`-role`) without editing instructions.
+   - Instructions will list a **Role Menu** with per-role file targets like `advocate--design--01.md`.
+5. **Execute inside Windsurf/Cascade**:
    - Paste the instructions into chat.
    - For each iteration, save files exactly where the instructions specify (`advocate_1.md`, `contrarian_1.md`, etc.).
    - Generate `summary.md` (and `implementation.md` for non-studio phases).
-5. **Finalize** once artifacts are in place:
+6. **Finalize** once artifacts are in place:
    ```bash
    python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
      finalize --phase market \
@@ -90,6 +114,15 @@ output/
       implementation.md   # non-studio phases
       summary.md
       run.json
+  studio/
+    run_studio_20251223_230322/
+      instructions.md
+      advocate--marketing--01.md
+      contrarian--marketing--01.md
+      ... (per-role files)
+      integrator.md
+      summary.md
+      run.json
 ```
 
 `run.json` fields:
@@ -103,8 +136,36 @@ output/
 | `status` / `verdict` | Filled in when finalized. |
 | `iterations_run`, `hours`, `cost` | Auto-tracked or provided on finalize. |
 | `summary_path` | Resolved path to `summary.md` (auto-set if blank). |
+| `studio_roles` | Studio-only metadata: `{pack, overrides, invited, completed, missing}`. |
 
 Use these files as the single source of truth when referencing decisions or continuing work.
+
+---
+
+## 🧹 Automatic Cleanup Policy
+
+Studio now enforces run retention automatically so repos stay lightweight:
+
+1. **Time-to-live:** runs older than **30 days** are purged before creating new ones.
+2. **Storage budget:** total run storage under a given `STUDIO_ROOT` is capped at **900 MB**. When the cap is exceeded, the oldest remaining runs are deleted until usage falls below the limit.
+
+Controls live in `config/studio_settings.toml`:
+
+```toml
+[cleanup]
+ttl_days = 30
+size_limit_mb = 900
+```
+
+During `python run_phase.py prepare …`, cleanup runs automatically (unless you pass `--skip-cleanup`). Helpful flags/env vars:
+
+| Option | Purpose |
+| --- | --- |
+| `--skip-cleanup` / `STUDIO_SKIP_CLEANUP=1` | Bypass the cleanup pass (rare; only when experimenting). |
+| `--cleanup-dry-run` / `STUDIO_CLEANUP_DRY_RUN=1` | Log what would be deleted without touching files. |
+| `python run_phase.py cleanup [--dry-run]` | Manually invoke cleanup on demand (e.g., cron, CI). |
+
+Every invocation prints how many runs were scanned, which ones were deleted (TTL vs. budget), and total bytes reclaimed so you can monitor behavior. If you need a different TTL/size cap per repo, check the TOML file in with project-specific values.
 
 ---
 

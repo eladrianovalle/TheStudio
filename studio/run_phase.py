@@ -14,7 +14,25 @@ import os
 import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Sequence, Tuple
+
+from cleanup import (
+    cleanup_runs,
+    format_bytes,
+    load_cleanup_settings,
+)
+from run_phase_roles import (
+    RoleConfigError,
+    RoleDetails,
+    build_role_details,
+    collect_role_artifacts,
+    default_role_pack_name,
+    load_manifest,
+    load_role_pack,
+    normalize_role_filename,
+    parse_iteration_from_filename,
+    resolve_role_list,
+)
 
 PHASE_DETAILS = {
     "market": {
@@ -65,10 +83,10 @@ PHASE_DETAILS = {
     "studio": {
         "advocate": "Studio Workflow Producer — articulate the inspiring yet actionable vision.",
         "contrarian": "Bootstrapped Reality Auditor — interrogate costs, scope, and maintenance burden.",
-        "integrator": "Systems Integrator & Ops Lead — merge inspiration + constraints into a pragmatic upgrade plan.",
+        "integrator": "Systems Integrator & Ops Lead — merge inspiration + constraints into a pragmatic upgrade plan after approval.",
         "notes": (
-            "Studio phase has no verdict loop—run Advocate ➜ Contrarian, then produce the Integrator roadmap. "
-            "Still finish with summary + packaging."
+            "Iterate like every other phase until the Contrarian issues VERDICT: APPROVED. "
+            "Then hand off to the Integrator for the roadmap before summarizing."
         ),
     },
 }
@@ -79,6 +97,9 @@ INDEX_HEADER = [
     "| Run ID | Phase | Created (UTC) | Status | Input | Summary |",
     "| --- | --- | --- | --- | --- | --- |",
 ]
+
+CLEANUP_SKIP_ENV = "STUDIO_SKIP_CLEANUP"
+CLEANUP_DRY_ENV = "STUDIO_CLEANUP_DRY_RUN"
 
 def get_studio_root() -> Path:
     env_override = os.environ.get("STUDIO_ROOT")
@@ -158,6 +179,42 @@ def write_index(entries: List[Dict], index_path: Path) -> None:
     index_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _log_cleanup_report(report) -> None:
+    if report.total_runs == 0:
+        print("Cleanup: no prior runs detected.")
+        return
+
+    print(
+        f"Cleanup: scanned {report.total_runs} runs "
+        f"({format_bytes(report.total_size_bytes)})"
+    )
+    if report.deletions:
+        reason_counts = report.reasons_summary()
+        reason_str = ", ".join(f"{k}={v}" for k, v in sorted(reason_counts.items()))
+        verb = "Would remove" if report.dry_run else "Removed"
+        print(
+            f"- {verb} {len(report.deletions)} runs "
+            f"({format_bytes(report.freed_bytes)}) [{reason_str}]"
+        )
+    else:
+        print("- No deletions required.")
+    if report.errors:
+        for msg in report.errors:
+            print(f"- Cleanup warning: {msg}")
+
+
+def _maybe_run_cleanup(*, dry_run: bool = False) -> None:
+    studio_root = get_studio_root()
+    output_root = get_output_root()
+    settings = load_cleanup_settings(studio_root)
+    report = cleanup_runs(output_root, settings, dry_run=dry_run)
+    _log_cleanup_report(report)
+
+
 def _ensure_summary_path(meta: Dict, run_dir: Path) -> Path:
     summary_path = meta.get("summary_path")
     if summary_path:
@@ -167,20 +224,55 @@ def _ensure_summary_path(meta: Dict, run_dir: Path) -> Path:
     return summary_file
 
 
-def _validate_artifacts(phase: str, run_dir: Path, summary_path: Path) -> Tuple[int, List[str]]:
+def _validate_artifacts(
+    phase: str, run_dir: Path, summary_path: Path, meta: Dict | None = None
+) -> Tuple[int, List[str], List[str], List[str]]:
     errors: List[str] = []
-    advocate_files = sorted(run_dir.glob("advocate_*.md"))
-    if not advocate_files:
-        errors.append("Missing advocate outputs (advocate_*.md).")
-
-    contrarian_files = sorted(run_dir.glob("contrarian_*.md"))
-    if phase != "studio" and not contrarian_files:
-        errors.append("Missing contrarian outputs (contrarian_*.md).")
+    completed_roles: List[str] = []
+    missing_roles: List[str] = []
 
     if phase == "studio":
+        studio_meta = (meta or {}).get("studio_roles") or {}
+        invited_roles = studio_meta.get("invited") or []
+        if not invited_roles:
+            errors.append(
+                "run.json is missing invited Studio roles. Re-run prepare after updating studio.manifest.json."
+            )
+        max_iteration = 0
+        for role in invited_roles:
+            advocate_files = collect_role_artifacts(run_dir, role, "advocate")
+            contrarian_files = collect_role_artifacts(run_dir, role, "contrarian")
+            if not advocate_files or not contrarian_files:
+                missing_roles.append(role)
+                continue
+            completed_roles.append(role)
+            role_iterations = max(
+                [parse_iteration_from_filename(path.name) for path in contrarian_files],
+                default=0,
+            )
+            max_iteration = max(max_iteration, role_iterations or len(contrarian_files))
+
+        if not completed_roles:
+            errors.append(
+                "No Studio role produced both advocate and contrarian artifacts. "
+                "Ensure at least one invited role completes the loop."
+            )
+
         integrator_file = run_dir / "integrator.md"
         if not integrator_file.exists():
             errors.append("Missing integrator roadmap (integrator.md).")
+
+        iterations_value = max_iteration or 0
+    else:
+        advocate_files = sorted(run_dir.glob("advocate_*.md"))
+        if not advocate_files:
+            errors.append("Missing advocate outputs (advocate_*.md).")
+
+        contrarian_files = sorted(run_dir.glob("contrarian_*.md"))
+        if not contrarian_files:
+            errors.append("Missing contrarian outputs (contrarian_*.md).")
+
+        iterations_value = len(advocate_files)
 
     if not summary_path.exists():
         errors.append(f"Missing summary file at {summary_path}.")
@@ -190,7 +282,11 @@ def _validate_artifacts(phase: str, run_dir: Path, summary_path: Path) -> Tuple[
             "Finalize aborted due to missing artifacts:\n- " + "\n- ".join(errors)
         )
 
-    return len(advocate_files), [file.name for file in advocate_files]
+    advocate_names = []
+    if phase != "studio":
+        advocate_names = [file.name for file in advocate_files]  # type: ignore[name-defined]
+
+    return iterations_value, advocate_names, completed_roles, missing_roles
 
 
 def _append_run_log(meta: Dict) -> None:
@@ -216,7 +312,9 @@ def _append_run_log(meta: Dict) -> None:
         log_file.write("\n".join(lines))
 
 
-def build_instruction_doc(meta: Dict, run_dir: Path) -> str:
+def build_instruction_doc(
+    meta: Dict, run_dir: Path, studio_roles: Sequence[RoleDetails] | None = None
+) -> str:
     phase = meta["phase"]
     info = PHASE_DETAILS[phase]
     rel_dir = run_dir.as_posix()
@@ -230,18 +328,36 @@ def build_instruction_doc(meta: Dict, run_dir: Path) -> str:
     ]
     if phase == "studio":
         base_section.append(f"- **Budget Cap:** {meta['budget_cap']}")
+        studio_info = meta.get("studio_roles") or {}
+        pack = studio_info.get("pack", "n/a")
+        overrides = studio_info.get("overrides") or []
+        overrides_display = ", ".join(overrides) if overrides else "none"
+        base_section.append(f"- **Role pack:** {pack} (overrides: {overrides_display})")
     base_section.extend(
         [
             f"- **Created:** {meta['created_display']} (UTC)",
             "- **Artifacts:**",
-            f"  - Advocate outputs → `{rel_dir}/advocate_<iteration>.md`",
-            f"  - Contrarian outputs → `{rel_dir}/contrarian_<iteration>.md`",
         ]
     )
+    if phase == "studio":
+        base_section.append(
+            "  - Advocate outputs → per-role files like "
+            f"`{rel_dir}/advocate--marketing--<iteration>.md` (see Role Menu)"
+        )
+        base_section.append(
+            "  - Contrarian outputs → per-role files like "
+            f"`{rel_dir}/contrarian--marketing--<iteration>.md`"
+        )
+    else:
+        base_section.append(f"  - Advocate outputs → `{rel_dir}/advocate_<iteration>.md`")
+        base_section.append(f"  - Contrarian outputs → `{rel_dir}/contrarian_<iteration>.md`")
     if phase != "studio":
         base_section.append(f"  - Implementation → `{rel_dir}/implementation.md` (after approval)")
     else:
-        base_section.append(f"  - Integrator/Roadmap → `{rel_dir}/integrator.md`")
+        base_section.append(
+            "  - Integrator/Roadmap → "
+            f"`{rel_dir}/integrator.md` (after approval; include integrator duel sections)"
+        )
     base_section.append(f"  - Summary → `{rel_dir}/summary.md`")
 
     roles_section = [
@@ -264,6 +380,9 @@ def build_instruction_doc(meta: Dict, run_dir: Path) -> str:
         roles_section.extend([f"- {item}" for item in impl["deliverables"]])
     else:
         roles_section.append(f"- **Integrator:** {info['integrator']}")
+        roles_section.append(
+            "- Integrator runs its own capped duel (Advocate vs. Contrarian) inside `integrator.md` once the pods approve."
+        )
 
     loop_section = [
         "",
@@ -273,21 +392,76 @@ def build_instruction_doc(meta: Dict, run_dir: Path) -> str:
         "2. Run the Advocate prompt, save to `advocate_<n>.md`.",
         "3. Run the Contrarian prompt using that advocate file, save to `contrarian_<n>.md`.",
     ]
+    loop_section.extend(
+        [
+            "4. If the contrarian verdict is `VERDICT: REJECTED` and you still have iterations left, feed the rejection back into the Advocate and repeat.",
+        ]
+    )
     if phase != "studio":
-        loop_section.extend(
-            [
-                "4. If contrarian verdict is `VERDICT: REJECTED` and you still have iterations left, feed the rejection back into the Advocate and repeat.",
-                "5. As soon as a contrarian returns `VERDICT: APPROVED`, move to the Implementer checklist.",
-            ]
+        loop_section.append(
+            "5. As soon as a contrarian returns `VERDICT: APPROVED`, move to the Implementer checklist."
         )
     else:
-        loop_section.extend(
-            [
-                "4. After the first Advocate/Contrarian pass, operate as the Integrator to merge inspiration + constraints into a roadmap (`integrator.md`).",
-            ]
+        loop_section.append(
+            "5. Once the contrarian returns `VERDICT: APPROVED`, operate as the Integrator to merge inspiration + constraints into a roadmap (`integrator.md`)."
         )
     loop_section.append("")
     loop_section.append(f"**Notes:** {info['notes']}")
+
+    role_menu_section: List[str] = []
+    if phase == "studio" and studio_roles:
+        role_menu_section.extend(
+            [
+                "",
+                "## Role Menu",
+                "",
+                "| Role | Advocate focus | Contrarian focus | Deliverables | Files | Prompt |",
+                "| --- | --- | --- | --- | --- | --- |",
+            ]
+        )
+        for details in studio_roles:
+            slug = details.name.replace(" ", "-")
+            deliverables_text = "<br>".join(details.deliverables) or "-"
+            files_text = "<br>".join(
+                [
+                    f"`{normalize_role_filename(details.name, 1, 'advocate')}`",
+                    f"`{normalize_role_filename(details.name, 1, 'contrarian')}`",
+                ]
+            )
+            prompt_link = details.prompt_doc or "-"
+            if details.prompt_doc:
+                prompt_link = f"[{slug}]({details.prompt_doc})"
+            role_menu_section.append(
+                f"| {details.title} | {details.advocate_focus} | {details.contrarian_focus} | "
+                f"{deliverables_text} | {files_text} | {prompt_link} |"
+            )
+
+        if any(details.escalate_on for details in studio_roles):
+            role_menu_section.extend(
+                [
+                    "",
+                    "### Escalation cues",
+                    "",
+                ]
+            )
+            for details in studio_roles:
+                if details.escalate_on:
+                    cues = "; ".join(details.escalate_on)
+                    role_menu_section.append(f"- **{details.title}:** {cues}")
+
+    integrator_duel_section: List[str] = []
+    if phase == "studio":
+        integrator_duel_section.extend(
+            [
+                "",
+                "## Integrator Duel (after approval)",
+                "",
+                "1. Inside `integrator.md`, add `### Integrator Advocate` summarizing the fused plan.",
+                "2. Add `### Integrator Contrarian` critiquing feasibility, ops risk, and sequencing. End with `VERDICT: APPROVED/REJECTED`.",
+                "3. If REJECTED, adjust with one additional mini-iteration (max 2 total) before continuing.",
+                "4. Close with `### Integrated Plan` that synthesizes both perspectives and lists next steps.",
+            ]
+        )
 
     finalize_snippet = textwrap.dedent(
         f"""
@@ -307,7 +481,19 @@ def build_instruction_doc(meta: Dict, run_dir: Path) -> str:
         "- `finalize` will update `output/index.md` so other projects can discover this run.",
     ]
 
-    return textwrap.dedent("\n".join(base_section + roles_section + loop_section + summary_section)).strip() + "\n"
+    return (
+        textwrap.dedent(
+            "\n".join(
+                base_section
+                + roles_section
+                + loop_section
+                + role_menu_section
+                + integrator_duel_section
+                + summary_section
+            )
+        ).strip()
+        + "\n"
+    )
 
 
 def prepare_run(args: argparse.Namespace) -> str:
@@ -318,12 +504,40 @@ def prepare_run(args: argparse.Namespace) -> str:
     if not text:
         raise ValueError("Input text cannot be empty.")
 
+    skip_cleanup = getattr(args, "skip_cleanup", False) or _env_flag(CLEANUP_SKIP_ENV)
+    cleanup_dry = getattr(args, "cleanup_dry_run", False) or _env_flag(CLEANUP_DRY_ENV)
+    if not skip_cleanup:
+        _maybe_run_cleanup(dry_run=cleanup_dry)
+
     now = utc_now()
     timestamp_slug = now.strftime("%Y%m%d_%H%M%S")
     run_id = f"run_{phase}_{timestamp_slug}"
     run_dir = get_output_root() / phase / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
     run_dir_abs = run_dir.resolve()
+
+    studio_role_meta: Dict | None = None
+    studio_role_details: List[RoleDetails] | None = None
+    if phase == "studio":
+        studio_root = get_studio_root()
+        manifest = load_manifest(studio_root)
+        try:
+            pack_name = args.role_pack or default_role_pack_name(manifest)
+            pack_data = load_role_pack(studio_root, pack_name)
+            overrides = list(args.roles or [])
+            invited_roles = resolve_role_list(manifest, pack_data, overrides)
+            if not invited_roles:
+                raise RoleConfigError(
+                    "Studio role selection resolved to zero roles. Adjust the pack or overrides."
+                )
+            studio_role_details = build_role_details(manifest, invited_roles)
+            studio_role_meta = {
+                "pack": pack_name,
+                "overrides": overrides,
+                "invited": invited_roles,
+            }
+        except RoleConfigError as exc:
+            raise RuntimeError(f"Studio role configuration error: {exc}") from exc
 
     meta = {
         "run_id": run_id,
@@ -338,8 +552,10 @@ def prepare_run(args: argparse.Namespace) -> str:
         "verdict": "",
         "iterations_run": None,
     }
+    if studio_role_meta:
+        meta["studio_roles"] = studio_role_meta
 
-    instructions = build_instruction_doc(meta, run_dir)
+    instructions = build_instruction_doc(meta, run_dir, studio_role_details)
     instructions_path = run_dir / "instructions.md"
     instructions_path.write_text(instructions, encoding="utf-8")
     instructions_abs_path = instructions_path.resolve()
@@ -367,11 +583,20 @@ def finalize_run(args: argparse.Namespace) -> None:
         meta["summary_path"] = args.summary
     summary_path = _ensure_summary_path(meta, run_dir)
 
-    iterations_count, _ = _validate_artifacts(phase, run_dir, summary_path)
+    (
+        iterations_count,
+        advocate_files,
+        completed_roles,
+        missing_roles,
+    ) = _validate_artifacts(phase, run_dir, summary_path, meta)
 
     if args.verdict:
         meta["verdict"] = args.verdict.upper()
     meta["iterations_run"] = args.iterations_run if args.iterations_run is not None else iterations_count
+    if phase == "studio":
+        studio_meta = meta.setdefault("studio_roles", {})
+        studio_meta["completed"] = completed_roles
+        studio_meta["missing"] = missing_roles
     if args.hours is not None:
         meta["hours"] = args.hours
     if args.cost is not None:
@@ -418,6 +643,26 @@ def build_parser() -> argparse.ArgumentParser:
         default=3,
         help="Iteration cap for Advocate/Contrarian loop.",
     )
+    prepare_parser.add_argument(
+        "--role-pack",
+        help="Studio-only: role pack preset to load (defaults to manifest setting).",
+    )
+    prepare_parser.add_argument(
+        "--roles",
+        nargs="*",
+        default=None,
+        help="Studio-only: role overrides like +qa or -marketing.",
+    )
+    prepare_parser.add_argument(
+        "--skip-cleanup",
+        action="store_true",
+        help="Skip the automatic cleanup pass that enforces age/size budgets.",
+    )
+    prepare_parser.add_argument(
+        "--cleanup-dry-run",
+        action="store_true",
+        help="Preview cleanup deletions without removing any files.",
+    )
 
     finalize_parser = subparsers.add_parser("finalize", help="Mark an existing run as completed and refresh index.")
     finalize_parser.add_argument(
@@ -460,6 +705,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional cost (in USD) attributed to this run.",
     )
 
+    cleanup_parser = subparsers.add_parser(
+        "cleanup", help="Manually enforce cleanup thresholds."
+    )
+    cleanup_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report what would be deleted without removing files.",
+    )
+
     return parser
 
 
@@ -471,6 +725,9 @@ def main() -> None:
         prepare_run(args)
     elif args.command == "finalize":
         finalize_run(args)
+    elif args.command == "cleanup":
+        dry_run = getattr(args, "dry_run", False)
+        _maybe_run_cleanup(dry_run=dry_run or _env_flag(CLEANUP_DRY_ENV))
     else:
         parser.error("Unknown command")
 

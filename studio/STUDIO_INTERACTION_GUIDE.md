@@ -30,6 +30,10 @@ python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
   --text "Describe the objective or idea" \
   --max-iterations 3 \
   --budget "$0-20/mo"            # studio phase only
+  --role-pack studio_core        # studio phase optional
+  --roles +qa -marketing         # studio phase optional overrides
+  --skip-cleanup                 # optional: bypass cleanup
+  --cleanup-dry-run              # optional: preview cleanup deletions
 ```
 
 Outputs:
@@ -41,9 +45,11 @@ Outputs:
 
 1. Paste `instructions.md` into Cascade.
 2. Follow the loop spelled out inside the file:
-   - Save Advocate responses to `advocate_<n>.md`.
-   - Save Contrarian responses to `contrarian_<n>.md` (skip for studio phase).
-   - After approval (or immediately for studio phase), write the implementation/integrator deliverable.
+   - Save Advocate responses to `advocate_<n>.md` (non-studio) or per-role files like `advocate--design--02.md`.
+   - Save Contrarian responses to `contrarian_<n>.md` (non-studio) or `contrarian--design--02.md`.
+   - After approval:
+     - Non-studio → write `implementation.md`.
+     - Studio → run the Integrator duel sections inside `integrator.md` (`### Integrator Advocate`, `### Integrator Contrarian`, `### Integrated Plan`).
    - Summarize the entire session inside `summary.md`.
 3. Mention the run folder path frequently so later instructions can reopen it.
 
@@ -66,47 +72,56 @@ python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
 
 ---
 
+## 3.5 Automatic Cleanup Policy
+
+To keep repositories lean, Studio enforces dual cleanup rules every time you run `prepare` (and via the dedicated command below):
+
+1. **Time-to-live:** delete runs older than 30 days.
+2. **Size cap:** keep total storage under 900 MB; if exceeded, delete the oldest remaining runs until under budget.
+
+Configuration lives in `config/studio_settings.toml` with defaults:
+
+```toml
+[cleanup]
+ttl_days = 30
+size_limit_mb = 900
+```
+
+Useful flags/env vars:
+
+| Flag / Env | What it does |
+| --- | --- |
+| `--skip-cleanup` / `STUDIO_SKIP_CLEANUP=1` | Skip cleanup for a single invocation (use sparingly). |
+| `--cleanup-dry-run` / `STUDIO_CLEANUP_DRY_RUN=1` | Print which runs would be removed without deleting them. |
+| `python run_phase.py cleanup [--dry-run]` | Run cleanup manually (ideal for cron/CI). |
+
+Every cleanup pass logs the number of scanned runs, deletions grouped by reason (TTL vs. budget), and total bytes reclaimed so you can monitor it during Cascade sessions.
+
+---
+
 ## 3. Artifact Expectations
 
 | Phase | Required files | Notes |
 | --- | --- | --- |
 | `market`, `design`, `tech` | `advocate_<n>.md`, `contrarian_<n>.md`, `implementation.md`, `summary.md` | Implementation file is created **after** the first APPROVED verdict. |
-| `studio` | `advocate_1.md`, `contrarian_1.md`, `integrator.md`, `summary.md` | Studio phase runs exactly one Advocate → Contrarian pass before the Integrator consolidates. |
+| `studio` | `advocate--<role>--<n>.md`, `contrarian--<role>--<n>.md`, `integrator.md`, `summary.md` | Each invited role (from the Role Menu) produces its own advocate/contrarian loop. Integrator runs a capped duel inside `integrator.md`. |
 
 Additional files are welcome (screenshots, charts, etc.) as long as they live inside the run folder.
 
 ---
 
-## 4. Role Manifests & Custom Experts
+## 4. Role Manifests, Packs & Custom Experts
 
-Even though Studio no longer instantiates crews directly, you can still describe preferred experts for each repo via `studio.manifest.json`. Cascade should read this file before improvising prompts so the correct personas show up in its answers.
+- `studio.manifest.json` now defines per-role personas (title, focuses, deliverables, `docs/role_prompts/...`).
+- `role_packs/*.json` contain curated sets (e.g., `studio_core`). Downstream repos use `--role-pack` plus `--roles +foo -bar` rather than editing packs directly.
+- Instructions list a **Role Menu** so Cascade knows which artifacts to write and where to find extended prompts.
+- Finalize records which roles completed/missed deliverables inside `run.json["studio_roles"]`.
 
-Example (drop next to your bridge doc):
-
-```jsonc
-{
-  "phases": {
-    "market": {
-      "advocate": {
-        "role": "LiveOps Growth Hacker",
-        "goal": "Steel-man the pitch for retention-first F2P loops."
-      },
-      "contrarian": {
-        "role": "Monetization Skeptic",
-        "goal": "Find pricing/burn traps before we spend a dollar."
-      }
-    },
-    "studio": {
-      "integrator": {
-        "role": "Principal Tools PM",
-        "goal": "Ship the cheapest Cascade workflow that still scales."
-      }
-    }
-  }
-}
-```
-
-Treat the manifest as configuration Cascade must ingest (mention it in your prompts or command palette entries).
+When introducing a new discipline:
+1. Extend `studio.manifest.json`.
+2. Add/update prompt docs under `docs/role_prompts/`.
+3. Update/introduce a `role_packs/*.json` entry.
+4. Mention the manifest + pack in downstream bridge docs so Cascade reloads them before each run.
 
 ---
 

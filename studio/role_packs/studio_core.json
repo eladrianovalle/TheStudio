@@ -1,0 +1,12 @@
+{
+  "name": "studio_core",
+  "description": "Default Studio pod covering GTM, product, experiential design, art, engineering, and QA/launch readiness.",
+  "roles": [
+    "marketing",
+    "product",
+    "design",
+    "art",
+    "engineering",
+    "qa"
+  ]
+}

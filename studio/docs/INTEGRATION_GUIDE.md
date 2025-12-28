@@ -31,7 +31,10 @@ No other setup is required—Zero dependencies, zero API keys, zero services.
 python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
   prepare --phase <market|design|tech|studio> \
   --text "Describe the idea or question" \
-  --max-iterations 3
+  --max-iterations 3 \
+  --budget "$0-20/mo" \
+  --role-pack studio_core \
+  --roles +qa -marketing
 ```
 
 **Inputs you can override**
@@ -42,13 +45,16 @@ python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
 | `--text` | The prompt/brief you want evaluated. |
 | `--budget` | Only used by the studio phase (default `$0-20/mo`). |
 | `--max-iterations` | Advocate↔Contrarian loops (default 3). |
+| `--role-pack` | Studio-only pod presets stored in `role_packs/*.json`. |
+| `--roles` | Studio-only overrides: `+role` to add, `-role` to drop from the selected pack. |
 
 **Outputs (always absolute paths)**  
 ```
 output/<phase>/run_<phase>_<timestamp>/
   instructions.md        # what to paste into Cascade
   run.json               # metadata
-  (empty placeholders for advocate_*.md, etc.)
+  advocate_<n>.md / contrarian_<n>.md / implementation.md (non-studio)
+  advocate--<role>--<n>.md / contrarian--<role>--<n>.md / integrator.md (studio)
 ```
 
 Capture the printed `run_id` and `instructions.md` path—your prompts to Cascade should reference them directly.
@@ -58,8 +64,11 @@ Capture the printed `run_id` and `instructions.md` path—your prompts to Cascad
 Use the prompt stub in your bridge doc. Remind Cascade to:
 1. Read the bridge doc to understand canon + expectations.
 2. Open the `instructions.md` file.
-3. Save artifacts (`advocate_*.md`, `contrarian_*.md`, implementation/integrator, `summary.md`) in the run folder.
-4. Tell you when it’s finished so you can run finalize.
+3. Follow the **Role Menu** in instructions:
+   - Non-studio phases → write `advocate_<n>.md`, `contrarian_<n>.md`, then `implementation.md`.
+   - Studio phase → write `advocate--<role>--NN.md` / `contrarian--<role>--NN.md` for every invited role until each contrarian returns `VERDICT: APPROVED`, then run the Integrator duel sections (`### Integrator Advocate`, `### Integrator Contrarian (VERDICT)`, `### Integrated Plan`) inside `integrator.md`.
+4. Summarize the run in `summary.md` and flag any missing roles in `roles_needed.md` (optional) before you finalize.
+5. Tell you when it’s finished so you can run finalize.
 
 ### Step C – Finalize + log
 
@@ -71,7 +80,7 @@ python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
   --hours 0.5 --cost 0
 ```
 
-Finalize will fail with a checklist if required files are missing (see README). Once it passes, `output/index.md` and `knowledge/run_log.md` include this run and downstream teams can find it instantly.
+Finalize will fail with a checklist if required files are missing (see README). For Studio phase it also reports which roles never produced both advocate and contrarian files—close those loops or note a follow-up before calling the run complete. Once finalize passes, `output/index.md` and `knowledge/run_log.md` include this run and downstream teams can find it instantly.
 
 ---
 

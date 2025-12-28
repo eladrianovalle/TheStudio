@@ -27,11 +27,15 @@ Only two commands exist:
 | `--text "..."` | ✅ | – | Idea, objective, or question you want Studio to tackle. |
 | `--max-iterations N` | ❌ | `3` | How many Advocate↔Contrarian loops Cascade should run before stopping. |
 | `--budget "$0-20/mo"` | ❌ | `$0-20/mo` | Only used by the `studio` phase to remind Cascade of spending limits. |
+| `--role-pack PACK` | ❌ | Manifest default | Studio-only: selects a curated pod from `role_packs/`. |
+| `--roles [+role|-role ...]` | ❌ | `None` | Studio-only: include/exclude roles relative to the selected pack. |
 
 **Output files (all under `output/<phase>/run_<phase>_<timestamp>/`):**
 - `instructions.md`
 - `run.json` (see schema below)
-- Empty placeholders for artifacts (`advocate_*.md`, `contrarian_*.md`, `implementation.md` or `integrator.md`, `summary.md`)
+- Empty placeholders for artifacts:
+  - Non-studio phases → `advocate_<n>.md`, `contrarian_<n>.md`, `implementation.md`, `summary.md`
+  - Studio phase → `advocate--<role>--<n>.md`, `contrarian--<role>--<n>.md`, `integrator.md`, `summary.md`
 
 `prepare` also regenerates `output/index.md` so downstream repos can discover the pending run immediately.
 
@@ -76,7 +80,7 @@ No API keys, LiteLLM settings, or third-party credentials are required anymore.
 | Phase | Required files |
 | --- | --- |
 | `market`, `design`, `tech` | `advocate_<n>.md`, `contrarian_<n>.md`, `implementation.md`, `summary.md` |
-| `studio` | `advocate_1.md`, `contrarian_1.md`, `integrator.md`, `summary.md` |
+| `studio` | `advocate--<role>--<n>.md`, `contrarian--<role>--<n>.md`, `integrator.md` (with duel sections), `summary.md` |
 
 `finalize` ensures these files exist inside the run directory. You can add extra context (screenshots, spreadsheets, etc.) so long as they live in the same folder.
 
@@ -101,6 +105,7 @@ Every run directory contains a `run.json` created by `prepare` and updated by `f
 | `iterations_run` | int or null | Auto-counted from artifacts unless overridden. |
 | `hours` | float or null | Optional metadata set by finalize. |
 | `cost` | float or null | Optional metadata set by finalize. |
+| `studio_roles` | object or null | Studio-only metadata: `{ "pack": str, "overrides": list[str], "invited": list[str], "completed": list[str], "missing": list[str] }`. |
 | `updated_iso` | string (optional) | Added by finalize to record the last change timestamp. |
 
 You can safely parse this JSON for dashboards, scripts, or audits.
@@ -111,10 +116,13 @@ You can safely parse this JSON for dashboards, scripts, or audits.
 
 Generated instructions follow a consistent layout:
 
-1. **Header** — phase, run directory, input text, iteration cap, creation timestamp.
-2. **Agent Roles** — Advocate, Contrarian, and (for non-studio phases) Implementer deliverables; Studio phase lists the Integrator.
-3. **Iteration Loop** — numbered steps for Advocate/Contrarian exchanges and implementation hand-off.
-4. **Summary & Packaging** — reminders to fill out `summary.md` and run the finalize command.
+1. **Header** — phase, run directory, input text, iteration cap, creation timestamp, budget, and (for Studio) role pack + overrides.
+2. **Artifacts list** — file destinations. Studio instructions highlight per-role filenames.
+3. **Agent Roles** — Advocate, Contrarian, Implementer (non-studio) or Integrator (studio).
+4. **Iteration Loop** — numbered steps for Advocate/Contrarian exchanges. Studio loop points to the Integrator duel hand-off after approval.
+5. **Role Menu** (Studio only) — table describing each invited role, deliverables, file naming, and links to `docs/role_prompts/*.md`.
+6. **Integrator Duel** (Studio only) — explains `### Integrator Advocate`, `### Integrator Contrarian (VERDICT)`, and `### Integrated Plan` sections inside `integrator.md`.
+7. **Summary & Packaging** — reminders to fill out `summary.md` and run the finalize command.
 
 Cascade should paste this file into chat verbatim so it knows where to save each artifact.
 

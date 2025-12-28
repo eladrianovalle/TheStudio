@@ -1,0 +1,7 @@
+# Studio global settings
+
+[cleanup]
+# Remove runs older than this many days.
+ttl_days = 30
+# Maximum total storage (in megabytes) that Studio run artifacts may consume.
+size_limit_mb = 900

@@ -1,350 +1,137 @@
-# Studio Architecture
+# Studio Architecture (Cascade Edition)
 
-## Overview
+Studio is no longer a long-running runtime or CrewAI service. The entire system now revolves around producing structured instructions, running them inside Windsurf/Cascade, and packaging artifacts so every project can reuse the results. This document explains how the pieces fit together in the Cascade-only world.
 
-The Studio is a **centralized multi-agent system** built on CrewAI that provides reusable AI agents for evaluating ideas, designs, and technical implementations. It uses a debate-driven pattern where specialized agents argue for and against concepts to surface insights.
+---
 
-## Design Philosophy
-
-### 1. Centralization
-All agents are defined in one place, making them:
-- Easy to maintain and update
-- Consistent across all projects
-- Version-controlled and auditable
-
-### 2. Phase-Based Evaluation
-Ideas progress through distinct phases:
-```
-Market Phase → Design Phase → Tech Phase
-```
-
-Each phase has its own specialized agents that understand domain-specific concerns.
-
-### 3. Debate-Driven Quality
-Every phase uses two agents:
-- **Advocate**: Steel-mans the idea (presents strongest possible case)
-- **Contrarian**: Attacks the idea (finds critical flaws)
-
-This ensures balanced, thorough evaluation.
-
-## System Components
-
-### Core Classes
-
-#### `StudioCrew` (`src/studio/crew.py`)
-The main orchestrator class that:
-- Initializes LLM configuration
-- Loads phase-specific agents from YAML
-- Defines task execution patterns
-- Manages crew assembly and execution
-
-```python
-@CrewBase
-class StudioCrew():
-    agents_config = 'config/agents.yaml'
-    tasks_config = 'config/tasks.yaml'
-    
-    def __init__(self, phase='market'):
-        self.phase = phase
-        self.google_llm = LLM(model="gemini-2.5-flash", api_key=api_key)
-```
-
-**Key Features:**
-- Phase-agnostic design (works with any phase defined in YAML)
-- Automatic agent loading via `{phase}_advocate` and `{phase}_contrarian` naming
-- Shared LLM configuration across all agents
-
-### Configuration Files
-
-#### `config/agents.yaml`
-Defines agent personalities, roles, and expertise:
-
-```yaml
-market_advocate:
-  role: "Market Growth Strategist"
-  goal: "Steel-man the game idea {game_idea} into a high-virality Steam hook."
-  backstory: "You specialize in indie trends and 'screenshot-ability'."
-```
-
-**Structure:**
-- `{phase}_{role}` naming convention
-- `role`: Agent's job title/identity
-- `goal`: What the agent tries to achieve
-- `backstory`: Context that shapes agent behavior
-
-#### `config/tasks.yaml`
-Defines task patterns and expected outputs:
-
-```yaml
-steel_man_task:
-  description: >
-    Take the initial idea: {game_idea} and present its strongest possible form.
-  expected_output: "A high-conviction proposal document."
-```
-
-**Structure:**
-- Generic task definitions (not phase-specific)
-- Input variables via `{variable_name}` syntax
-- Clear output expectations
-
-### Execution Flow
+## 1. High-Level Flow
 
 ```
-1. Project calls StudioCrew(phase='market')
-   ↓
-2. StudioCrew.__init__() loads agents for 'market' phase
-   ↓
-3. crew() method assembles agents and tasks
-   ↓
-4. kickoff(inputs) starts execution
-   ↓
-5. Advocate runs steel_man_task
-   ↓
-6. Contrarian runs attack_task (sees advocate's output)
-   ↓
-7. Final verdict returned to calling project
+run_phase.py prepare
+        ↓
+output/<phase>/run_<phase>_<timestamp>/instructions.md
+        ↓
+Windsurf/Cascade executes Advocate ↔ Contrarian loops
+        ↓
+Artifacts saved back into the run folder
+        ↓
+run_phase.py finalize
+        ↓
+output/index.md + knowledge/run_log.md updated
 ```
 
-## Integration Patterns
+All intelligence lives inside Cascade conversations. Studio’s job is to keep the prompts, roles, artifacts, and logs organized.
 
-### Pattern 1: Direct Import (Development)
+---
 
-Best for: Local development, same workspace
+## 2. Core Components
 
-```python
-import sys
-sys.path.append('/path/to/studio/src')
-from studio.crew import StudioCrew
+| Component | Purpose |
+| --- | --- |
+| `run_phase.py` | CLI entrypoint for `prepare` and `finalize`. Generates instructions, enforces artifact checklists, and keeps indexes current. |
+| `run_phase_roles.py` | Helper module that loads `studio.manifest.json`, applies role packs, and normalizes per-role filenames. |
+| `studio.manifest.json` | Declarative description of phase-level personas plus Studio role definitions (title, focuses, deliverables, prompt doc, escalation cues). |
+| `role_packs/*.json` | Curated sets of Studio roles (e.g., `studio_core`). Operators pick a pack, then add/remove roles with CLI flags. |
+| `docs/role_prompts/*.md` | Long-form prompts for each role. Instructions link to these files rather than inlining pages of text. |
+| `output/` | Run folders containing instructions, advocate/contrarian artifacts, integrator plans, summaries, and metadata. |
+| `knowledge/run_log.md` | Append-only log of finalized runs for easy reference across repos. |
 
-result = StudioCrew(phase='market').crew().kickoff(inputs={'game_idea': 'concept'})
+No other services, runtimes, or APIs exist.
+
+---
+
+## 3. Prepare Command Path
+
+1. Operator runs `python run_phase.py prepare --phase ...`.
+2. `run_phase.py` loads the manifest and, for Studio phase:
+   - Determines which role pack to use (default or `--role-pack`).
+   - Applies `--roles +foo -bar` overrides through `run_phase_roles.resolve_role_list`.
+   - Builds `RoleDetails` objects with titles, deliverables, prompt links, and escalation cues.
+3. `run_phase.py` writes:
+   - `instructions.md` including header, artifact checklist, Agent Roles, Iteration Loop, **Role Menu**, and **Integrator Duel** guidance.
+   - `run.json` with metadata plus `studio_roles = {pack, overrides, invited}` when applicable.
+   - Empty artifact placeholders (per-role filenames for Studio).
+4. `output/index.md` is regenerated immediately so other repos know a run is pending.
+
+---
+
+## 4. Execute Inside Cascade
+
+Cascade reads `instructions.md`, the bridge doc, and any prompt docs linked from the Role Menu. Operators ensure:
+
+- Every invited role produces matching `advocate--<role>--NN.md` and `contrarian--<role>--NN.md` files until the role’s contrarian issues `VERDICT: APPROVED`.
+- For Studio, once all necessary contrarians approve, the Integrator performs a capped duel inside `integrator.md` with three sections:
+  1. `### Integrator Advocate`
+  2. `### Integrator Contrarian (VERDICT: …)`
+  3. `### Integrated Plan`
+- All summaries land in `summary.md`.
+
+No automation runs outside of Cascade; the instructions are simply executed as a structured conversation.
+
+---
+
+## 5. Finalize Command Path
+
+1. Operator runs `python run_phase.py finalize --phase ... --run-id ...`.
+2. `run_phase.py` looks up `run.json`, ensures `summary.md` exists, and calls `_validate_artifacts`.
+3. `_validate_artifacts` logic:
+   - Non-Studio phases: glob `advocate_<n>.md` / `contrarian_<n>.md` / `implementation.md`.
+   - Studio phase: iterate through the invited roles stored in `run.json["studio_roles"]["invited"]`, using `collect_role_artifacts` to confirm both advocate and contrarian files exist. Missing roles are recorded.
+   - Verify `integrator.md` and `summary.md`.
+4. Finalize updates `run.json` with status, verdict, hours, cost, iterations, and for Studio: `completed` + `missing` role lists.
+5. `output/index.md` and `knowledge/run_log.md` are refreshed, giving downstream repos searchable entries with summary links.
+
+---
+
+## 6. Role Packs & Manifest
+
+- **Manifest** defines the authoritative personas. Each role entry includes:
+  - `title`
+  - `advocate_focus` / `contrarian_focus`
+  - `deliverables`
+  - `escalate_on`
+  - `prompt_doc` (Markdown file inside `docs/role_prompts/`)
+- **Role packs** enforce consistent combinations. Example `studio_core` includes marketing, product, design, art, engineering, and QA.
+- Operators select a pack via `--role-pack` and tweak attendance with `--roles +qa -marketing`. This keeps instructions concise while maintaining a single source of truth.
+
+---
+
+## 7. Files & Artifacts
+
+```
+output/
+  <phase>/
+    run_<phase>_<timestamp>/
+      instructions.md
+      run.json
+      advocate_<n>.md / contrarian_<n>.md / implementation.md (non-studio)
+      advocate--<role>--<n>.md / contrarian--<role>--<n>.md / integrator.md (studio)
+      summary.md
 ```
 
-**Pros:**
-- No installation needed
-- Easy to modify and test
-- Direct access to source
+Indexes:
+- `output/index.md` – table view
+- `knowledge/run_log.md` – chronological log with verdicts, hours, and summary links
 
-**Cons:**
-- Path management required
-- Not portable across machines
+---
 
-### Pattern 2: Editable Install (Recommended)
+## 8. Extending Studio
 
-Best for: Active development, multiple projects
+| Need | How to Extend |
+| --- | --- |
+| New Studio role | Update `studio.manifest.json` + add a prompt doc + include it in a role pack. |
+| Alternate role pack per repo | Check `role_packs/*.json` into the shared repo; downstream bridge docs specify which pack to use via CLI flags. |
+| New phase | Add entries to `PHASE_DETAILS` in `run_phase.py`, define deliverables, and update docs/tests accordingly. |
+| Automation | Wrap `run_phase.py prepare/finalize` in repo-specific scripts or Windsurf command palette entries. |
 
-```bash
-pip install -e /path/to/studio
-```
+No direct imports or service layers are required—just CLI calls and Markdown artifacts.
 
-```python
-from studio.crew import StudioCrew
-result = StudioCrew(phase='design').crew().kickoff(inputs={'game_idea': 'concept'})
-```
+---
 
-**Pros:**
-- Clean imports
-- Changes reflected immediately
-- Works across projects
+## 9. Source of Truth
 
-**Cons:**
-- Requires pip install step
-- Virtual environment considerations
+1. Code: `run_phase.py`, `run_phase_roles.py`, manifest, role packs.
+2. Docs: README, STUDIO_INTERACTION_GUIDE, WINDSURF_USAGE, WINDSURF_QUICKREF, STUDIO_BRIDGE_TEMPLATE, API, INTEGRATION_GUIDE, AGENTS_REFERENCE, ARCHITECTURE (this file).
+3. Outputs: `output/index.md`, `knowledge/run_log.md`.
 
-### Pattern 3: API Service (Production)
-
-Best for: Production, remote access, microservices
-
-```python
-# In studio/api.py (you would create this)
-from fastapi import FastAPI
-from studio.crew import StudioCrew
-
-app = FastAPI()
-
-@app.post("/evaluate/{phase}")
-async def evaluate(phase: str, game_idea: str):
-    result = StudioCrew(phase=phase).crew().kickoff(
-        inputs={'game_idea': game_idea}
-    )
-    return {"result": str(result)}
-```
-
-**Pros:**
-- Language-agnostic (any project can call via HTTP)
-- Centralized execution
-- Scalable
-
-**Cons:**
-- Requires service management
-- Network overhead
-- More complex setup
-
-## Data Flow
-
-### Input Processing
-```
-External Project Input
-    ↓
-StudioCrew(phase='X')
-    ↓
-Load {phase}_advocate & {phase}_contrarian from YAML
-    ↓
-Inject inputs into task descriptions
-    ↓
-Execute tasks sequentially
-```
-
-### Output Structure
-```
-Advocate Output (Steel Man)
-    ↓
-Passed to Contrarian as context
-    ↓
-Contrarian Output (Attack + Verdict)
-    ↓
-Returned to calling project
-```
-
-## Extensibility
-
-### Adding New Phases
-
-1. **Define agents** in `config/agents.yaml`:
-```yaml
-prototype_advocate:
-  role: "Rapid Prototyper"
-  goal: "Create a minimal playable prototype plan"
-  backstory: "Expert in MVP development"
-
-prototype_contrarian:
-  role: "Quality Gatekeeper"
-  goal: "Ensure prototype won't create technical debt"
-  backstory: "Senior architect focused on maintainability"
-```
-
-2. **Use immediately** (no code changes needed):
-```python
-result = StudioCrew(phase='prototype').crew().kickoff(inputs={'game_idea': 'concept'})
-```
-
-The `StudioCrew` class automatically discovers and loads agents based on phase name.
-
-### Adding New Task Patterns
-
-Modify `config/tasks.yaml` to create new interaction patterns:
-
-```yaml
-brainstorm_task:
-  description: "Generate 10 variations of: {game_idea}"
-  expected_output: "List of 10 distinct variations"
-
-filter_task:
-  description: "Rank the variations by feasibility"
-  expected_output: "Ranked list with justifications"
-```
-
-Then add corresponding `@task` methods to `StudioCrew`.
-
-### Custom LLM Providers
-
-The Studio uses CrewAI's `LLM` class, which supports:
-- Google Gemini (current)
-- OpenAI GPT models
-- Anthropic Claude
-- Azure OpenAI
-- Local models via Ollama
-
-Change in `crew.py`:
-```python
-# OpenAI
-self.llm = LLM(model="gpt-4", api_key=openai_key)
-
-# Anthropic
-self.llm = LLM(model="claude-3-opus-20240229", api_key=anthropic_key)
-
-# Local
-self.llm = LLM(model="ollama/llama2")
-```
-
-## Performance Considerations
-
-### Token Usage
-- Each phase uses 2 agents (Advocate + Contrarian)
-- Sequential execution means Contrarian sees full Advocate output
-- Typical token usage: 2,000-5,000 tokens per phase
-- Cost: ~$0.01-0.05 per evaluation (with Gemini Flash)
-
-### Execution Time
-- Market phase: 30-60 seconds
-- Design phase: 45-90 seconds
-- Tech phase: 60-120 seconds
-- Total pipeline: 2-5 minutes
-
-### Optimization Strategies
-1. **Parallel phases**: Run independent phases concurrently
-2. **Caching**: Cache results for identical inputs
-3. **Streaming**: Use streaming responses for faster perceived performance
-4. **Model selection**: Use Flash for speed, Pro for quality
-
-## Security Considerations
-
-### API Key Management
-- Never commit `.env` files
-- Use environment variables
-- Consider secret management services (AWS Secrets Manager, etc.)
-
-### Input Validation
-- Sanitize user inputs before passing to agents
-- Set token limits to prevent abuse
-- Implement rate limiting for API service pattern
-
-### Output Filtering
-- Review agent outputs before displaying to end users
-- Implement content moderation if needed
-- Log all interactions for audit trails
-
-## Monitoring & Debugging
-
-### Enable Tracing
-```bash
-# In .env
-CREWAI_TRACING_ENABLED=true
-```
-
-### Verbose Output
-```python
-StudioCrew(phase='market').crew().kickoff(inputs=inputs)
-# Already set to verbose=True in crew definition
-```
-
-### Replay Executions
-```bash
-crewai replay <execution_id>
-```
-
-## Future Enhancements
-
-### Potential Additions
-1. **Agent Memory**: Persist learnings across evaluations
-2. **Tool Integration**: Give agents access to web search, code analysis, etc.
-3. **Multi-Model Support**: Use different models for different phases
-4. **Async Execution**: Non-blocking agent operations
-5. **Result Caching**: Store and reuse previous evaluations
-6. **Agent Training**: Fine-tune agents on domain-specific data
-
-### Scalability Path
-```
-Current: Single-machine, synchronous
-    ↓
-Next: API service with queue
-    ↓
-Future: Distributed agent execution
-    ↓
-Advanced: Multi-tenant SaaS platform
-```
-
-## Related Documentation
-
-- **[INTEGRATION_GUIDE.md](./INTEGRATION_GUIDE.md)** - Step-by-step integration examples
-- **[AGENTS_REFERENCE.md](./AGENTS_REFERENCE.md)** - Complete agent documentation
-- **[API.md](./API.md)** - API reference for service pattern
+Whenever the workflow changes, update all of the above in one commit. Studio deliberately has no hidden runtime—everything is visible, reproducible, and Cascade-first.
