@@ -32,6 +32,7 @@ python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
   --budget "$0-20/mo"            # studio phase only
   --role-pack studio_core        # studio phase optional
   --roles +qa -marketing         # studio phase optional overrides
+  --scopes .studio/scopes.toml   # optional: scope-based iteration allocation
   --skip-cleanup                 # optional: bypass cleanup
   --cleanup-dry-run              # optional: preview cleanup deletions
 ```
@@ -70,6 +71,21 @@ python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
 - `output/index.md` – sortable table of every run.
 - `knowledge/run_log.md` – long-form history with summary links.
 
+### Step 4 – Validate (Optional)
+
+```bash
+python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+  validate --phase <phase> \
+  --run-id run_<phase>_<timestamp> \
+  --config .studio/validation.toml  # optional: custom config
+```
+
+Validates run outputs:
+- **Discussion phase**: Document completeness, consistency, format, verdict
+- **Implementation phase**: Code checks (pytest, mypy, ruff)
+
+See **[docs/VALIDATION_GUIDE.md](./docs/VALIDATION_GUIDE.md)** for detailed usage.
+
 ---
 
 ## 3.5 Automatic Cleanup Policy
@@ -100,6 +116,53 @@ Every cleanup pass logs the number of scanned runs, deletions grouped by reason 
 ---
 
 ## 3. Artifact Expectations
+
+| Phase | Required files | Notes |
+| --- | --- | --- |
+| `market`, `design`, `tech` | `advocate_<n>.md`, `contrarian_<n>.md`, `implementation.md`, `summary.md` | Implementation file is created **after** the first APPROVED verdict. |
+| `studio` | `advocate--<role>--<n>.md`, `contrarian--<role>--<n>.md`, `integrator.md`, `summary.md` | Each invited role (from the Role Menu) produces its own advocate/contrarian loop. Integrator runs a capped duel inside `integrator.md`. |
+
+Additional files are welcome (screenshots, charts, etc.) as long as they live inside the run folder.
+
+---
+
+## 5. Role Manifests, Packs & Custom Experts
+
+- `studio.manifest.json` now defines per-role personas (title, focuses, deliverables, `docs/role_prompts/...`).
+- `role_packs/*.json` contain curated sets (e.g., `studio_core`). Downstream repos use `--role-pack` plus `--roles +foo -bar` rather than editing packs directly.
+- Instructions list a **Role Menu** so Cascade knows which artifacts to write and where to find extended prompts.
+- Finalize records which roles completed/missed deliverables inside `run.json["studio_roles"]`.
+
+When introducing a new discipline:
+1. Extend `studio.manifest.json`.
+2. Add/update prompt docs under `docs/role_prompts/`.
+3. Update/introduce a `role_packs/*.json` entry.
+4. Mention the manifest + pack in downstream bridge docs so Cascade reloads them before each run.
+
+---
+
+## 5. Troubleshooting & Tips
+
+- **Missing artifacts on finalize:** ensure `summary.md` and the iteration files exist. `finalize` prints the exact checklist it enforces.
+- **Wrong output directory:** set/export `STUDIO_ROOT` before calling `run_phase.py` or add `--env STUDIO_ROOT=/path` when using Cascade command palette entries.
+- **Keeping context fresh:** every repo should log notable runs at the bottom of its bridge doc (date, run_id, takeaway). Cascade can then reopen the folder immediately.
+- **Iterating quickly:** rerun `prepare` whenever the brief changes meaningfully; multiple runs per phase are fine. `output/index.md` keeps them organized.
+
+---
+
+## 6. Documentation Contract
+
+1. README + this guide must be updated for every workflow change.
+2. Dependent bridge docs must be updated in lockstep.
+3. When referencing Studio in conversation with Cascade, cite:
+   ```
+   See docs/studio-bridge.md for canon + workflow.
+   Prepare via run_phase.py, then paste instructions.md back here.
+   ```
+
+Staying disciplined here keeps every repo interoperable without guessing which workflow is active.
+
+## 4. Artifact Expectations
 
 | Phase | Required files | Notes |
 | --- | --- | --- |
