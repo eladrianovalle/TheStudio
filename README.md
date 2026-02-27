@@ -1,4 +1,4 @@
-# The Game Studio (Cascade Edition)
+# The Studio (Cascade Edition)
 
 Studio is now a **single-purpose instruction generator** for Windsurf/Cascade. Instead of hosting its own runtime, the repo prepares structured advocate/contrarian debates that you execute inside Cascade chat, then packages the results so every project can reference them later.
 
