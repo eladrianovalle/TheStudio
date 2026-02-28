@@ -24,6 +24,18 @@ python run_phase.py prepare --phase studio --text "..." --role-pack studio_core
 ```
 and adjust attendees via `--roles +qa -marketing`.
 
+## 🧪 Test-Driven Development Discipline
+
+**All tech phase implementations must follow test-driven discipline:**
+
+- Define testable requirements in the advocate phase
+- Write test specifications before implementation
+- Write test code that initially fails
+- Implement code to pass the tests
+- Include verification instructions
+
+Tech implementations without tests are incomplete. See **[docs/TEST_DRIVEN_GUIDE.md](./studio/docs/TEST_DRIVEN_GUIDE.md)** for the complete workflow, examples, and quality standards.
+
 ## ✨ What’s in the box?
 
 | Path | Purpose |

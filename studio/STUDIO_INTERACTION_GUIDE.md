@@ -122,10 +122,22 @@ Every cleanup pass logs the number of scanned runs, deletions grouped by reason 
 
 | Phase | Required files | Notes |
 | --- | --- | --- |
-| `market`, `design`, `tech` | `advocate_<n>.md`, `contrarian_<n>.md`, `implementation.md`, `summary.md` | Implementation file is created **after** the first APPROVED verdict. |
+| `market`, `design` | `advocate_<n>.md`, `contrarian_<n>.md`, `implementation.md`, `summary.md` | Implementation file is created **after** the first APPROVED verdict. |
+| `tech` | `advocate_<n>.md`, `contrarian_<n>.md`, `implementation.md`, `summary.md`, `tests/` | **Test-driven discipline required.** Implementation must include test specifications, test code, and implementation code. See [TEST_DRIVEN_GUIDE.md](./docs/TEST_DRIVEN_GUIDE.md). |
 | `studio` | `advocate--<role>--<n>.md`, `contrarian--<role>--<n>.md`, `integrator.md`, `summary.md` | Each invited role (from the Role Menu) produces its own advocate/contrarian loop. Integrator runs a capped duel inside `integrator.md`. |
 
 Additional files are welcome (screenshots, charts, etc.) as long as they live inside the run folder.
+
+### Test-Driven Development for Tech Phase
+
+**All tech implementations must follow test-driven discipline:**
+1. Define testable requirements in advocate phase
+2. Write test specifications before implementation
+3. Write test code that initially fails
+4. Implement code to pass tests
+5. Include verification instructions
+
+See **[docs/TEST_DRIVEN_GUIDE.md](./docs/TEST_DRIVEN_GUIDE.md)** for complete workflow and examples.
 
 ---
 
