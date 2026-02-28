@@ -1,1 +1,56 @@
+# Studio Repository .gitignore
+# Simple directory-based approach to prevent accidental commits
+
+# ============================================================================
+# NEVER COMMIT - Working Directories
+# ============================================================================
+# Studio run outputs (all phases)
+studio/output/
+
+# Scratch/working files
+.scratch/
+.private/
+temp/
+tmp/
+
+# Personal knowledge/notes
+studio/knowledge/
+
+# ============================================================================
+# NEVER COMMIT - Sensitive Patterns
+# ============================================================================
+# Environment and secrets
+*.env.local
+.env.*
+*secret*
+*credential*
+
+# ============================================================================
+# NEVER COMMIT - Build Artifacts & System Files
+# ============================================================================
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+*.egg-info/
+dist/
+build/
+
+# System files
+.DS_Store
 *.dmg
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# ============================================================================
+# NOTES
+# ============================================================================
+# - Use .scratch/ for temporary working files
+# - Use .private/ for sensitive local data
+# - All studio/output/ contents are automatically excluded
+# - All studio/knowledge/ contents are automatically excluded

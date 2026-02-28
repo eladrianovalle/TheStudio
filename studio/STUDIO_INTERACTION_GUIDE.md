@@ -6,7 +6,7 @@ Single source of truth for running Studio via Windsurf/Cascade. The legacy CLI, 
 
 ## 1. What’s Required
 
-1. **Studio root** – keep this repo cloned at a predictable path (default assumed: `/Users/orcpunk/Repos/_TheGameStudio/studio`). If you move it, export `STUDIO_ROOT` so the helper script knows where to write output:
+1. **Studio root** – keep this repo cloned at a predictable path. If you move it, export `STUDIO_ROOT` so the helper script knows where to write output:
    ```bash
    export STUDIO_ROOT="/absolute/path/to/studio"
    ```
@@ -25,7 +25,7 @@ No additional dependencies or API keys are required because the agents execute i
 ### Step 1 – Prepare
 
 ```bash
-python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+python $STUDIO_ROOT/run_phase.py \
   prepare --phase <market|design|tech|studio> \
   --text "Describe the objective or idea" \
   --max-iterations 3 \

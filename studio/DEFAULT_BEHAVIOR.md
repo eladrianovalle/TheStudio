@@ -20,7 +20,7 @@ python run_phase.py prepare --phase tech --text "Build feature" --max-iterations
 
 **Output**:
 ```
-Loaded scopes config: /Users/orcpunk/Repos/_TheGameStudio/studio/.studio/scopes.toml
+Loaded scopes config: $STUDIO_ROOT/.studio/scopes.toml
 - Total iteration budget: 5
   - high_level: 2 iterations
   - implementation: 1 iterations
