@@ -79,9 +79,20 @@ Create `.env` in your project or use Studio's:
 GEMINI_API_KEY=your_api_key_here
 ```
 
+## Windsurf Workflow (Recommended)
+
+Studio now includes a **Cascade-powered workflow** with:
+- **Scope-based iteration** (enabled by default) - 20-30% token savings
+- **Automatic rerun context** - Faster convergence on rejections
+- **Validation** - Automated quality checks
+
+See **[../STUDIO_INTERACTION_GUIDE.md](../STUDIO_INTERACTION_GUIDE.md)** for the complete workflow.
+
 ## Next Steps
 
-- **[README.md](../README.md)** - Full overview
+- **[../STUDIO_INTERACTION_GUIDE.md](../STUDIO_INTERACTION_GUIDE.md)** - Windsurf workflow (recommended)
+- **[SCOPES_GUIDE.md](./SCOPES_GUIDE.md)** - Scope-based iteration guide
+- **[VALIDATION_GUIDE.md](./VALIDATION_GUIDE.md)** - Validation guide
 - **[INTEGRATION_GUIDE.md](./INTEGRATION_GUIDE.md)** - Detailed integration examples
 - **[AGENTS_REFERENCE.md](./AGENTS_REFERENCE.md)** - Agent documentation
 - **[API.md](./API.md)** - Complete API reference

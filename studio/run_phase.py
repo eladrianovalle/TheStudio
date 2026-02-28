@@ -541,6 +541,15 @@ def prepare_run(args: argparse.Namespace) -> str:
     timestamp_slug = now.strftime("%Y%m%d_%H%M%S")
     run_id = f"run_{phase}_{timestamp_slug}"
     run_dir = get_output_root() / phase / run_id
+    
+    # Check for concurrent run collision BEFORE creating directory
+    if run_dir.exists():
+        raise RuntimeError(
+            f"Run directory {run_id} already exists. "
+            f"This may be due to concurrent prepare commands or a timestamp collision. "
+            f"Wait 1 second and retry, or use a different phase/text combination."
+        )
+    
     run_dir.mkdir(parents=True, exist_ok=False)
     run_dir_abs = run_dir.resolve()
 
@@ -567,31 +576,60 @@ def prepare_run(args: argparse.Namespace) -> str:
         except RoleConfigError as exc:
             raise RuntimeError(f"Studio role configuration error: {exc}") from exc
     
-    # Load scopes configuration if provided
+    # Load scopes configuration
+    # Default: use .studio/scopes.toml if it exists
+    # Override: use --scopes path if provided
+    # Disable: use --no-scopes flag
     scopes_config = None
     scopes_allocations = None
     scopes_meta: Dict | None = None
-    if args.scopes:
-        scopes_path = Path(args.scopes)
-        if not scopes_path.is_absolute():
-            scopes_path = get_studio_root() / scopes_path
-        try:
-            scopes_config = load_scopes_config(scopes_path)
-            scopes_allocations = allocate_iterations(scopes_config, args.max_iterations)
-            scopes_meta = {
-                "config_path": scopes_path.as_posix(),
-                "scopes": [
-                    {"name": s.name, "focus": s.focus, "allocated_iterations": scopes_allocations[s.name]}
-                    for s in scopes_config.scopes
-                ],
-                "total_iterations": sum(scopes_allocations.values()),
-            }
-            print(f"Loaded scopes config: {scopes_path}")
-            print(f"- Total iteration budget: {scopes_meta['total_iterations']}")
-            for scope_info in scopes_meta['scopes']:
-                print(f"  - {scope_info['name']}: {scope_info['allocated_iterations']} iterations")
-        except (FileNotFoundError, ValueError) as exc:
-            raise RuntimeError(f"Scopes configuration error: {exc}") from exc
+    
+    # Check if scopes should be disabled
+    use_scopes = not getattr(args, 'no_scopes', False)
+    
+    if use_scopes:
+        # Determine scopes path
+        if args.scopes:
+            scopes_path = Path(args.scopes)
+            if not scopes_path.is_absolute():
+                scopes_path = get_studio_root() / scopes_path
+        else:
+            # Default to .studio/scopes.toml if it exists
+            default_scopes = get_studio_root() / ".studio" / "scopes.toml"
+            scopes_path = default_scopes if default_scopes.exists() else None
+        
+        if scopes_path:
+            try:
+                scopes_config = load_scopes_config(scopes_path)
+                scopes_allocations = allocate_iterations(scopes_config, args.max_iterations)
+                scopes_meta = {
+                    "config_path": scopes_path.as_posix(),
+                    "scopes": [
+                        {"name": s.name, "focus": s.focus, "allocated_iterations": scopes_allocations[s.name]}
+                        for s in scopes_config.scopes
+                    ],
+                    "total_iterations": sum(scopes_allocations.values()),
+                }
+                print(f"Loaded scopes config: {scopes_path}")
+                print(f"- Total iteration budget: {scopes_meta['total_iterations']}")
+                for scope_info in scopes_meta['scopes']:
+                    print(f"  - {scope_info['name']}: {scope_info['allocated_iterations']} iterations")
+            except FileNotFoundError as exc:
+                raise RuntimeError(
+                    f"Scopes configuration file not found: {exc}\n\n"
+                    f"To fix:\n"
+                    f"1. Create .studio/scopes.toml with scope definitions, or\n"
+                    f"2. Use --no-scopes to disable scope-based iteration, or\n"
+                    f"3. See docs/SCOPES_GUIDE.md for examples"
+                ) from exc
+            except ValueError as exc:
+                raise RuntimeError(
+                    f"Invalid scopes configuration: {exc}\n\n"
+                    f"To fix:\n"
+                    f"1. Check TOML syntax in your scopes config\n"
+                    f"2. Ensure all scopes have 'focus' and 'max_iterations' fields\n"
+                    f"3. See docs/SCOPES_GUIDE.md for valid examples"
+                ) from exc
 
     meta = {
         "run_id": run_id,
@@ -605,12 +643,19 @@ def prepare_run(args: argparse.Namespace) -> str:
         "summary_path": "",
         "verdict": "",
         "iterations_run": None,
+        "tokens": {
+            "total_input": 0,
+            "total_output": 0,
+            "total": 0,
+            "cost_usd": 0.0,
+            "tracked": False  # Set to True when token tracking is used
+        },
     }
     if studio_role_meta:
         meta["studio_roles"] = studio_role_meta
     if scopes_meta:
         meta["scopes"] = scopes_meta
-
+    
     instructions = build_instruction_doc(meta, run_dir, studio_role_details, scopes_config, scopes_allocations)
     instructions_path = run_dir / "instructions.md"
     instructions_path.write_text(instructions, encoding="utf-8")
@@ -622,6 +667,14 @@ def prepare_run(args: argparse.Namespace) -> str:
     print(f"Prepared {run_id} ({phase})")
     print(f"- Run directory: {run_dir_abs}")
     print(f"- Instructions: {instructions_abs_path}")
+    
+    # Contextual hints for feature discovery
+    if scopes_meta:
+        print(f"\n💡 Tip: Scopes are active. Work through {scopes_meta['scopes'][0]['name']} scope first.")
+    else:
+        print(f"\n💡 Tip: Want to optimize iteration budgets? Create .studio/scopes.toml")
+        print(f"   See: docs/SCOPES_GUIDE.md")
+    
     return run_id
 
 
@@ -664,6 +717,19 @@ def finalize_run(args: argparse.Namespace) -> None:
     _append_run_log(meta)
 
     print(f"Finalized {run_id} ({phase}) → {meta['status']}")
+    
+    # Contextual hints for next steps
+    if meta['status'] == 'COMPLETED' and meta.get('verdict') == 'APPROVED':
+        print(f"\n💡 Next steps:")
+        print(f"   1. Validate outputs: python run_phase.py validate --run-id {run_id}")
+        print(f"   2. Review summary: {run_dir}/summary.md")
+        if phase != 'studio':
+            print(f"   3. Implement recommendations from the run")
+    elif meta['status'] == 'COMPLETED' and meta.get('verdict') == 'REJECTED':
+        print(f"\n💡 Run was rejected. Consider:")
+        print(f"   1. Review rejection reasons in contrarian files")
+        print(f"   2. Prepare a rerun with revised approach")
+        print(f"   3. Rerun will automatically inject failure context")
 
 
 def rebuild_index() -> None:
@@ -713,7 +779,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--scopes",
         type=Path,
         default=None,
-        help="Path to scopes TOML config for scope-based iteration allocation.",
+        help="Path to scopes TOML config (default: .studio/scopes.toml if exists).",
+    )
+    prepare_parser.add_argument(
+        "--no-scopes",
+        action="store_true",
+        help="Disable scope-based iteration (skip default .studio/scopes.toml).",
     )
     prepare_parser.add_argument(
         "--skip-cleanup",

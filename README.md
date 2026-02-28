@@ -82,6 +82,13 @@ There is **no** CLI, LiteLLM proxy, Gemini integration, or Python API entrypoint
    - Count iterations automatically.
    - Refresh `output/index.md`.
    - Append an entry to `knowledge/run_log.md`.
+7. **Validate** (optional but recommended):
+   ```bash
+   python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+     validate --phase market \
+     --run-id run_market_20251223_170045
+   ```
+   Validates document quality and code (if implementation phase).
 
 That’s the whole loop.
 
@@ -142,9 +149,9 @@ Use these files as the single source of truth when referencing decisions or cont
 
 ---
 
-## 🧹 Automatic Cleanup Policy
+## 🎯 New: Concentric-Iteration Strategy (v2.0)
 
-Studio now enforces run retention automatically so repos stay lightweight:
+Studio now implements a **concentric-iteration strategy** (narrowing scope across iterations) with patterns inspired by agent-gauntlet:
 
 1. **Time-to-live:** runs older than **30 days** are purged before creating new ones.
 2. **Storage budget:** total run storage under a given `STUDIO_ROOT` is capped at **900 MB**. When the cap is exceeded, the oldest remaining runs are deleted until usage falls below the limit.

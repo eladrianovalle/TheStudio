@@ -33,6 +33,9 @@ class ValidationResult:
 class DocumentValidator:
     """Validator for Studio discussion phase documents."""
     
+    # File size limit for validation (1MB)
+    MAX_FILE_SIZE = 1_000_000  # 1MB in bytes
+    
     def check_completeness(self, doc_path: Path, required_sections: List[str]) -> ValidationResult:
         """
         Check if document contains all required sections.
@@ -48,6 +51,17 @@ class DocumentValidator:
             return ValidationResult(
                 passed=False,
                 issues=[f"Document not found: {doc_path}"]
+            )
+        
+        # Check file size before reading
+        file_size = doc_path.stat().st_size
+        if file_size > self.MAX_FILE_SIZE:
+            return ValidationResult(
+                passed=False,
+                issues=[
+                    f"File too large for validation: {file_size:,} bytes (limit: {self.MAX_FILE_SIZE:,} bytes)",
+                    f"Large files may cause performance issues. Consider splitting into smaller documents."
+                ]
             )
         
         content = doc_path.read_text(encoding="utf-8")
@@ -94,6 +108,15 @@ class DocumentValidator:
             return ValidationResult(
                 passed=False,
                 issues=[f"Contrarian document not found: {contrarian_path}"]
+            )
+        
+        # Check file sizes
+        advocate_size = advocate_path.stat().st_size
+        contrarian_size = contrarian_path.stat().st_size
+        if advocate_size > self.MAX_FILE_SIZE or contrarian_size > self.MAX_FILE_SIZE:
+            return ValidationResult(
+                passed=False,
+                issues=[f"One or more files too large for validation (limit: {self.MAX_FILE_SIZE:,} bytes)"]
             )
         
         advocate_content = advocate_path.read_text(encoding="utf-8")

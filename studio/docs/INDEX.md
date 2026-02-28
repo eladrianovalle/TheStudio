@@ -14,6 +14,12 @@ Complete documentation for the centralized Studio agent system.
 - **[AGENTS_REFERENCE.md](./AGENTS_REFERENCE.md)** - Complete agent documentation
 - **[API.md](./API.md)** - API reference for programmatic use
 
+### Workflow Features
+- **[SCOPES_GUIDE.md](./SCOPES_GUIDE.md)** - Scope-based iteration allocation (default)
+- **[VALIDATION_GUIDE.md](./VALIDATION_GUIDE.md)** - Document and code validation
+- **[../STUDIO_INTERACTION_GUIDE.md](../STUDIO_INTERACTION_GUIDE.md)** - Complete workflow guide
+- **[../DEFAULT_BEHAVIOR.md](../DEFAULT_BEHAVIOR.md)** - Default behaviors and customization
+
 ## 🎯 Choose Your Path
 
 ### I want to use Studio in another project

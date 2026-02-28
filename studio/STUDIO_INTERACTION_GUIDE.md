@@ -32,10 +32,13 @@ python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
   --budget "$0-20/mo"            # studio phase only
   --role-pack studio_core        # studio phase optional
   --roles +qa -marketing         # studio phase optional overrides
-  --scopes .studio/scopes.toml   # optional: scope-based iteration allocation
+  --scopes custom-scopes.toml    # optional: override default scopes
+  --no-scopes                    # optional: disable scopes entirely
   --skip-cleanup                 # optional: bypass cleanup
   --cleanup-dry-run              # optional: preview cleanup deletions
 ```
+
+**Note**: Scope-based iteration is **enabled by default** if `.studio/scopes.toml` exists. Use `--no-scopes` to disable.
 
 Outputs:
 - `output/<phase>/run_<phase>_<timestamp>/instructions.md`
@@ -126,7 +129,13 @@ Additional files are welcome (screenshots, charts, etc.) as long as they live in
 
 ---
 
-## 5. Role Manifests, Packs & Custom Experts
+## 5. Validation (Optional)
+
+See Step 4 in workflow above and **[docs/VALIDATION_GUIDE.md](./docs/VALIDATION_GUIDE.md)**.
+
+---
+
+## 6. Role Manifests, Packs & Custom Experts
 
 - `studio.manifest.json` now defines per-role personas (title, focuses, deliverables, `docs/role_prompts/...`).
 - `role_packs/*.json` contain curated sets (e.g., `studio_core`). Downstream repos use `--role-pack` plus `--roles +foo -bar` rather than editing packs directly.
