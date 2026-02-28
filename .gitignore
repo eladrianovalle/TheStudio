@@ -7,6 +7,9 @@
 # Studio run outputs (all phases)
 studio/output/
 
+# Studio input files (may contain sensitive analysis)
+studio/input/
+
 # Scratch/working files
 .scratch/
 .private/
@@ -20,10 +23,14 @@ studio/knowledge/
 # NEVER COMMIT - Sensitive Patterns
 # ============================================================================
 # Environment and secrets
+.env
+*.env
 *.env.local
 .env.*
 *secret*
 *credential*
+*api-key*
+*apikey*
 
 # ============================================================================
 # NEVER COMMIT - Build Artifacts & System Files
@@ -37,6 +44,10 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+.venv/
+venv/
+env/
+*.lock
 
 # System files
 .DS_Store
