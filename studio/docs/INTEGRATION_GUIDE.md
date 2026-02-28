@@ -10,8 +10,8 @@ This doc explains how to integrate Studio into other repos now that the only sup
    - Copy [`docs/STUDIO_BRIDGE_TEMPLATE.md`](./STUDIO_BRIDGE_TEMPLATE.md) into your repo (e.g., `docs/studio-bridge.md`).  
    - Fill in Project summary, Studio location, canon table, and the Cascade prompt stub.
 2. **Record Studio path**  
-   - Prefer referencing `/Users/orcpunk/Repos/_TheGameStudio/studio`.  
-   - If contributors keep it elsewhere, document how to set `STUDIO_ROOT`.
+   - Use `$STUDIO_ROOT` environment variable.  
+   - Document the expected path or how to set `STUDIO_ROOT`.
 3. **Define canon**  
    - List the docs/data required for useful runs.  
    - Keep it updated so Cascade can reload context without guesswork.
@@ -28,7 +28,7 @@ No other setup is required—Zero dependencies, zero API keys, zero services.
 ### Step A – Prepare from your repo
 
 ```bash
-python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+python $STUDIO_ROOT/run_phase.py \
   prepare --phase <market|design|tech|studio> \
   --text "Describe the idea or question" \
   --max-iterations 3 \
@@ -73,7 +73,7 @@ Use the prompt stub in your bridge doc. Remind Cascade to:
 ### Step C – Finalize + log
 
 ```bash
-python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+python $STUDIO_ROOT/run_phase.py \
   finalize --phase <phase> \
   --run-id run_<phase>_<timestamp> \
   --status completed --verdict APPROVED \
@@ -92,7 +92,7 @@ Finalize will fail with a checklist if required files are missing (see README). 
 #!/usr/bin/env bash
 set -euo pipefail
 
-STUDIO_ROOT="${STUDIO_ROOT:-/Users/orcpunk/Repos/_TheGameStudio/studio}"
+STUDIO_ROOT="${STUDIO_ROOT:-/path/to/studio}"
 
 python "$STUDIO_ROOT/run_phase.py" \
   prepare \
@@ -107,7 +107,7 @@ python "$STUDIO_ROOT/run_phase.py" \
 #!/usr/bin/env bash
 set -euo pipefail
 
-STUDIO_ROOT="${STUDIO_ROOT:-/Users/orcpunk/Repos/_TheGameStudio/studio}"
+STUDIO_ROOT="${STUDIO_ROOT:-/path/to/studio}"
 
 python "$STUDIO_ROOT/run_phase.py" \
   finalize \

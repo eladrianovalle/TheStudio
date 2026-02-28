@@ -1,0 +1,17 @@
+# Studio Scopes Configuration Example
+#
+# This file defines scope-based iteration allocation for Studio runs.
+# Scopes allow you to spend more iterations on high-level decisions (cheap to change)
+# and fewer on low-level polish (expensive to change).
+
+[scopes.high_level]
+focus = "Architecture, plans, strategic decisions"
+max_iterations = 3
+
+[scopes.implementation]
+focus = "Detailed design, API contracts, core implementation"
+max_iterations = 2
+
+[scopes.polish]
+focus = "Documentation, final review, minor refinements"
+max_iterations = 1

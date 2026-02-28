@@ -22,6 +22,8 @@ def _prepare_args(**overrides):
         "max_iterations": 2,
         "role_pack": None,
         "roles": None,
+        "scopes": None,
+        "no_scopes": False,
     }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)

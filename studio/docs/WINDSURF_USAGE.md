@@ -6,7 +6,7 @@ Studio no longer exposes a CLI runtime, LiteLLM proxy, or direct Python API. Eve
 
 ## 1. Prerequisites
 
-- Keep Studio cloned at a predictable path (examples below use `/Users/orcpunk/Repos/_TheGameStudio/studio`). If your path differs, either:
+- Keep Studio cloned at a predictable path. Set `STUDIO_ROOT` environment variable:
   - Pass the absolute path when calling `python /path/to/run_phase.py …`, or
   - Export `STUDIO_ROOT="/absolute/path/to/studio"` so the script picks it up automatically.
 - Each dependent repo must include a bridge doc (copy `docs/STUDIO_BRIDGE_TEMPLATE.md`) that:
@@ -26,7 +26,7 @@ No API keys or Python dependencies are needed—the actual agent reasoning happe
 Run from any repo/terminal:
 
 ```bash
-python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+python $STUDIO_ROOT/run_phase.py \
   prepare --phase <market|design|tech|studio> \
   --text "Describe the idea, objective, or question" \
   --max-iterations 3 \
@@ -57,7 +57,7 @@ Copy the emitted `run_id` and folder path—Cascade will reference them verbatim
 ### Step C – Finalize
 
 ```bash
-python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+python $STUDIO_ROOT/run_phase.py \
   finalize --phase <phase> \
   --run-id run_<phase>_<timestamp> \
   --status completed \
@@ -89,7 +89,7 @@ python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
     { "name": "idea_or_objective", "placeholder": "What should Studio work on?" },
     { "name": "max_iterations", "placeholder": "Adv↔Con loops (default 3)", "default": "3" }
   ],
-  "command": "python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py prepare --phase {{phase}} --text \"{{idea_or_objective}}\" --max-iterations {{max_iterations}}"
+  "command": "python $STUDIO_ROOT/run_phase.py prepare --phase {{phase}} --text \"{{idea_or_objective}}\" --max-iterations {{max_iterations}}"
 }
 ```
 

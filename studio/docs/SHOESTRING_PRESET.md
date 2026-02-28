@@ -24,7 +24,7 @@ This preset is the canonical zero-cost workflow for running Studio entirely thro
    ```
 3. **Expose helper script anywhere:**
    ```bash
-   alias studio-run="python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py"
+   alias studio-run="python $STUDIO_ROOT/run_phase.py"
    ```
 4. **Optional local fallback:** install and start Ollama if you want fully offline execution.
 

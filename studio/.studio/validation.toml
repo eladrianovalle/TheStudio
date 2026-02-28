@@ -1,0 +1,55 @@
+# Studio Validation Configuration
+#
+# Defines validation rules for discussion and implementation phases.
+# Discussion phase validates documents (advocate/contrarian outputs).
+# Implementation phase validates code (integrator/implementation outputs).
+
+# Market Phase Validation
+[market_phase.discussion]
+required_sections = [
+    "Target Audience",
+    "Competitors",
+    "Unique Value Proposition",
+    "Go-to-Market Plan",
+    "Success Metrics"
+]
+
+# Design Phase Validation
+[design_phase.discussion]
+required_sections = [
+    "Gameplay Loop",
+    "Progression System",
+    "Key Mechanics",
+    "UI/UX",
+    "Technical Constraints"
+]
+
+# Tech Phase Validation
+[tech_phase.discussion]
+required_sections = [
+    "Architecture",
+    "Technology Stack",
+    "File Structure",
+    "Performance",
+    "Deployment"
+]
+
+[tech_phase.implementation]
+# Code checks to run (deterministic)
+checks = ["pytest", "mypy", "ruff"]
+# Timeout for each check in seconds
+timeout = 60
+
+# Studio Phase Validation
+[studio_phase.discussion]
+required_sections = [
+    "Current State",
+    "Proposed Changes",
+    "Implementation Plan",
+    "Success Criteria",
+    "Risks"
+]
+
+[studio_phase.implementation]
+checks = ["pytest", "mypy", "ruff"]
+timeout = 60

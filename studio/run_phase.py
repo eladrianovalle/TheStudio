@@ -33,6 +33,18 @@ from run_phase_roles import (
     parse_iteration_from_filename,
     resolve_role_list,
 )
+from scopes import (
+    allocate_iterations,
+    generate_scope_instructions,
+    load_scopes_config,
+)
+from rerun import (
+    detect_rerun_mode,
+    generate_rerun_instructions,
+    load_rejection_context,
+)
+from validators.document_validator import DocumentValidator
+from validators.code_validator import CodeValidator
 
 PHASE_DETAILS = {
     "market": {
@@ -313,7 +325,8 @@ def _append_run_log(meta: Dict) -> None:
 
 
 def build_instruction_doc(
-    meta: Dict, run_dir: Path, studio_roles: Sequence[RoleDetails] | None = None
+    meta: Dict, run_dir: Path, studio_roles: List[RoleDetails] | None = None,
+    scopes_config=None, scopes_allocations: Dict[str, int] | None = None
 ) -> str:
     phase = meta["phase"]
     info = PHASE_DETAILS[phase]
@@ -359,6 +372,19 @@ def build_instruction_doc(
             f"`{rel_dir}/integrator.md` (after approval; include integrator duel sections)"
         )
     base_section.append(f"  - Summary → `{rel_dir}/summary.md`")
+
+    # Add scope instructions if scopes are configured
+    scope_section: List[str] = []
+    if scopes_config and scopes_allocations:
+        scope_instructions = generate_scope_instructions(scopes_config, scopes_allocations)
+        scope_section.append(scope_instructions)
+    
+    # Add rerun context if previous rejections exist
+    rerun_section: List[str] = []
+    if detect_rerun_mode(run_dir):
+        rerun_instructions = generate_rerun_instructions(run_dir)
+        rerun_section.append(rerun_instructions)
+        rerun_section.append("")
 
     roles_section = [
         "",
@@ -485,6 +511,8 @@ def build_instruction_doc(
         textwrap.dedent(
             "\n".join(
                 base_section
+                + scope_section
+                + rerun_section
                 + roles_section
                 + loop_section
                 + role_menu_section
@@ -513,6 +541,15 @@ def prepare_run(args: argparse.Namespace) -> str:
     timestamp_slug = now.strftime("%Y%m%d_%H%M%S")
     run_id = f"run_{phase}_{timestamp_slug}"
     run_dir = get_output_root() / phase / run_id
+    
+    # Check for concurrent run collision BEFORE creating directory
+    if run_dir.exists():
+        raise RuntimeError(
+            f"Run directory {run_id} already exists. "
+            f"This may be due to concurrent prepare commands or a timestamp collision. "
+            f"Wait 1 second and retry, or use a different phase/text combination."
+        )
+    
     run_dir.mkdir(parents=True, exist_ok=False)
     run_dir_abs = run_dir.resolve()
 
@@ -538,6 +575,61 @@ def prepare_run(args: argparse.Namespace) -> str:
             }
         except RoleConfigError as exc:
             raise RuntimeError(f"Studio role configuration error: {exc}") from exc
+    
+    # Load scopes configuration
+    # Default: use .studio/scopes.toml if it exists
+    # Override: use --scopes path if provided
+    # Disable: use --no-scopes flag
+    scopes_config = None
+    scopes_allocations = None
+    scopes_meta: Dict | None = None
+    
+    # Check if scopes should be disabled
+    use_scopes = not getattr(args, 'no_scopes', False)
+    
+    if use_scopes:
+        # Determine scopes path
+        if args.scopes:
+            scopes_path = Path(args.scopes)
+            if not scopes_path.is_absolute():
+                scopes_path = get_studio_root() / scopes_path
+        else:
+            # Default to .studio/scopes.toml if it exists
+            default_scopes = get_studio_root() / ".studio" / "scopes.toml"
+            scopes_path = default_scopes if default_scopes.exists() else None
+        
+        if scopes_path:
+            try:
+                scopes_config = load_scopes_config(scopes_path)
+                scopes_allocations = allocate_iterations(scopes_config, args.max_iterations)
+                scopes_meta = {
+                    "config_path": scopes_path.as_posix(),
+                    "scopes": [
+                        {"name": s.name, "focus": s.focus, "allocated_iterations": scopes_allocations[s.name]}
+                        for s in scopes_config.scopes
+                    ],
+                    "total_iterations": sum(scopes_allocations.values()),
+                }
+                print(f"Loaded scopes config: {scopes_path}")
+                print(f"- Total iteration budget: {scopes_meta['total_iterations']}")
+                for scope_info in scopes_meta['scopes']:
+                    print(f"  - {scope_info['name']}: {scope_info['allocated_iterations']} iterations")
+            except FileNotFoundError as exc:
+                raise RuntimeError(
+                    f"Scopes configuration file not found: {exc}\n\n"
+                    f"To fix:\n"
+                    f"1. Create .studio/scopes.toml with scope definitions, or\n"
+                    f"2. Use --no-scopes to disable scope-based iteration, or\n"
+                    f"3. See docs/SCOPES_GUIDE.md for examples"
+                ) from exc
+            except ValueError as exc:
+                raise RuntimeError(
+                    f"Invalid scopes configuration: {exc}\n\n"
+                    f"To fix:\n"
+                    f"1. Check TOML syntax in your scopes config\n"
+                    f"2. Ensure all scopes have 'focus' and 'max_iterations' fields\n"
+                    f"3. See docs/SCOPES_GUIDE.md for valid examples"
+                ) from exc
 
     meta = {
         "run_id": run_id,
@@ -551,11 +643,20 @@ def prepare_run(args: argparse.Namespace) -> str:
         "summary_path": "",
         "verdict": "",
         "iterations_run": None,
+        "tokens": {
+            "total_input": 0,
+            "total_output": 0,
+            "total": 0,
+            "cost_usd": 0.0,
+            "tracked": False  # Set to True when token tracking is used
+        },
     }
     if studio_role_meta:
         meta["studio_roles"] = studio_role_meta
-
-    instructions = build_instruction_doc(meta, run_dir, studio_role_details)
+    if scopes_meta:
+        meta["scopes"] = scopes_meta
+    
+    instructions = build_instruction_doc(meta, run_dir, studio_role_details, scopes_config, scopes_allocations)
     instructions_path = run_dir / "instructions.md"
     instructions_path.write_text(instructions, encoding="utf-8")
     instructions_abs_path = instructions_path.resolve()
@@ -566,6 +667,14 @@ def prepare_run(args: argparse.Namespace) -> str:
     print(f"Prepared {run_id} ({phase})")
     print(f"- Run directory: {run_dir_abs}")
     print(f"- Instructions: {instructions_abs_path}")
+    
+    # Contextual hints for feature discovery
+    if scopes_meta:
+        print(f"\n💡 Tip: Scopes are active. Work through {scopes_meta['scopes'][0]['name']} scope first.")
+    else:
+        print(f"\n💡 Tip: Want to optimize iteration budgets? Create .studio/scopes.toml")
+        print(f"   See: docs/SCOPES_GUIDE.md")
+    
     return run_id
 
 
@@ -608,6 +717,19 @@ def finalize_run(args: argparse.Namespace) -> None:
     _append_run_log(meta)
 
     print(f"Finalized {run_id} ({phase}) → {meta['status']}")
+    
+    # Contextual hints for next steps
+    if meta['status'] == 'COMPLETED' and meta.get('verdict') == 'APPROVED':
+        print(f"\n💡 Next steps:")
+        print(f"   1. Validate outputs: python run_phase.py validate --run-id {run_id}")
+        print(f"   2. Review summary: {run_dir}/summary.md")
+        if phase != 'studio':
+            print(f"   3. Implement recommendations from the run")
+    elif meta['status'] == 'COMPLETED' and meta.get('verdict') == 'REJECTED':
+        print(f"\n💡 Run was rejected. Consider:")
+        print(f"   1. Review rejection reasons in contrarian files")
+        print(f"   2. Prepare a rerun with revised approach")
+        print(f"   3. Rerun will automatically inject failure context")
 
 
 def rebuild_index() -> None:
@@ -652,6 +774,17 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="*",
         default=None,
         help="Studio-only: role overrides like +qa or -marketing.",
+    )
+    prepare_parser.add_argument(
+        "--scopes",
+        type=Path,
+        default=None,
+        help="Path to scopes TOML config (default: .studio/scopes.toml if exists).",
+    )
+    prepare_parser.add_argument(
+        "--no-scopes",
+        action="store_true",
+        help="Disable scope-based iteration (skip default .studio/scopes.toml).",
     )
     prepare_parser.add_argument(
         "--skip-cleanup",
@@ -714,7 +847,130 @@ def build_parser() -> argparse.ArgumentParser:
         help="Report what would be deleted without removing files.",
     )
 
+    validate_parser = subparsers.add_parser(
+        "validate", help="Validate Studio run outputs (documents and/or code)."
+    )
+    validate_parser.add_argument(
+        "--phase",
+        required=True,
+        choices=sorted(PHASE_DETAILS.keys()),
+        help="Phase the run belongs to.",
+    )
+    validate_parser.add_argument(
+        "--run-id",
+        required=True,
+        help="Run identifier to validate.",
+    )
+    validate_parser.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help="Path to validation config TOML (default: .studio/validation.toml).",
+    )
+
     return parser
+
+
+def validate_run(args: argparse.Namespace) -> None:
+    """Validate Studio run outputs."""
+    import tomllib
+    
+    phase = args.phase.lower()
+    run_id = args.run_id
+    run_dir = get_output_root() / phase / run_id
+    
+    if not run_dir.exists():
+        raise FileNotFoundError(f"Run directory not found: {run_dir}")
+    
+    # Load validation config
+    config_path = args.config
+    if not config_path:
+        config_path = get_studio_root() / ".studio" / "validation.toml"
+    
+    if not config_path.exists():
+        print(f"Warning: Validation config not found at {config_path}")
+        print("Using default validation rules.")
+        config = {}
+    else:
+        with open(config_path, "rb") as f:
+            config = tomllib.load(f)
+    
+    # Validate discussion phase (documents)
+    print(f"\n{'='*60}")
+    print(f"Validating {run_id} ({phase} phase)")
+    print(f"{'='*60}\n")
+    
+    doc_validator = DocumentValidator()
+    
+    # Get required sections from config
+    discussion_key = f"{phase}_phase.discussion"
+    required_sections = config.get(discussion_key, {}).get("required_sections", [])
+    
+    print("## Discussion Phase Validation\n")
+    
+    if required_sections:
+        print(f"Checking for required sections: {', '.join(required_sections)}\n")
+    
+    # Validate all documents in run
+    result = doc_validator.validate_run(run_dir, phase)
+    
+    if result.passed:
+        print("✓ All document checks PASSED")
+    else:
+        print("✗ Document validation FAILED")
+        print("\nIssues:")
+        for issue in result.issues:
+            print(f"  - {issue}")
+    
+    if result.warnings:
+        print("\nWarnings:")
+        for warning in result.warnings:
+            print(f"  ⚠ {warning}")
+    
+    # Check for implementation artifacts (code validation)
+    impl_key = f"{phase}_phase.implementation"
+    if impl_key in config:
+        print("\n## Implementation Phase Validation\n")
+        
+        impl_config = config[impl_key]
+        checks = impl_config.get("checks", [])
+        timeout = impl_config.get("timeout", 60)
+        
+        if checks:
+            code_validator = CodeValidator(timeout=timeout)
+            
+            # Look for implementation.md or integrator.md
+            impl_file = run_dir / "implementation.md"
+            integrator_file = run_dir / "integrator.md"
+            
+            if not impl_file.exists() and not integrator_file.exists():
+                print("⚠ No implementation artifacts found (implementation.md or integrator.md)")
+                print("  Skipping code validation.")
+            else:
+                print(f"Running code checks: {', '.join(checks)}\n")
+                
+                # Run checks on project directory (assume run_dir contains code)
+                check_results = code_validator.validate_implementation(run_dir, checks)
+                
+                passed_count = sum(1 for r in check_results if r.passed)
+                total_count = len(check_results)
+                
+                print(f"Results: {passed_count}/{total_count} checks passed\n")
+                
+                for check_result in check_results:
+                    if check_result.passed:
+                        print(f"  ✓ {check_result.check_name} - PASSED ({check_result.duration_seconds:.2f}s)")
+                    else:
+                        print(f"  ✗ {check_result.check_name} - FAILED ({check_result.duration_seconds:.2f}s)")
+                        # Show first few lines of error
+                        error_lines = check_result.output.split('\n')[:5]
+                        for line in error_lines:
+                            if line.strip():
+                                print(f"      {line}")
+    
+    print(f"\n{'='*60}")
+    print("Validation complete")
+    print(f"{'='*60}\n")
 
 
 def main() -> None:
@@ -728,6 +984,8 @@ def main() -> None:
     elif args.command == "cleanup":
         dry_run = getattr(args, "dry_run", False)
         _maybe_run_cleanup(dry_run=dry_run or _env_flag(CLEANUP_DRY_ENV))
+    elif args.command == "validate":
+        validate_run(args)
     else:
         parser.error("Unknown command")
 
