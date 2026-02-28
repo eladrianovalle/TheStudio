@@ -8,7 +8,7 @@ Copy this into every non-Studio repo that depends on the centralized agents. It 
 - **Latest status link:** `<link to canonical roadmap/issue>` so agents can grab recency quickly.
 
 ## 2. Studio Location & Access
-- Studio root: `/Users/orcpunk/Repos/_TheGameStudio/studio` (export `STUDIO_ROOT` if you keep it somewhere else).
+- Studio root: Set via `STUDIO_ROOT` environment variable (e.g., `export STUDIO_ROOT="/path/to/studio"`).
 - All interactions happen through `python $STUDIO_ROOT/run_phase.py …` plus Cascade chat; there is no CLI runtime or API service.
 - This repo’s commands should always reference absolute paths so Cascade can copy/paste safely.
 
@@ -44,20 +44,20 @@ Mandatory elements:
 Run these from **this** repo (or via Windsurf command palette entries):
 ```bash
 # Prepare instructions + run folder (studio example)
-python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+python $STUDIO_ROOT/run_phase.py \
   prepare --phase studio \
   --text "<objective>" \
   --role-pack studio_core \
-  --roles +qa -marketing \
+  --budget "$0-20/mo" \
   --max-iterations 3
 
 # Prepare (non-studio example)
-python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+python $STUDIO_ROOT/run_phase.py \
   prepare --phase design \
   --text "<objective>"
 
 # Finalize after Cascade saves artifacts
-python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+python $STUDIO_ROOT/run_phase.py \
   finalize --phase <phase> \
   --run-id <run_id> \
   --status completed --verdict APPROVED --hours 0.8 --cost 0

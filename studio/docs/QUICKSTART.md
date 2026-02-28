@@ -13,7 +13,9 @@ A **centralized agent system** that you can use across all your projects in Wind
 ```python
 # In any project file
 import sys
-sys.path.append('/Users/orcpunk/Repos/_TheGameStudio/studio/src')
+import os
+studio_root = os.environ.get('STUDIO_ROOT', '/path/to/studio')
+sys.path.append(f'{studio_root}/src')
 
 from studio.crew import StudioCrew
 
@@ -27,7 +29,7 @@ print(result)
 
 ```bash
 # One-time setup in your project
-pip install -e /Users/orcpunk/Repos/_TheGameStudio/studio
+pip install -e $STUDIO_ROOT
 ```
 
 ```python

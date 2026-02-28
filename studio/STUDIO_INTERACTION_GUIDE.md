@@ -60,7 +60,7 @@ Outputs:
 ### Step 3 – Finalize
 
 ```bash
-python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+python $STUDIO_ROOT/run_phase.py \
   finalize --phase <phase> \
   --run-id run_<phase>_<timestamp> \
   --status completed \
@@ -77,7 +77,7 @@ python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
 ### Step 4 – Validate (Optional)
 
 ```bash
-python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+python $STUDIO_ROOT/run_phase.py \
   validate --phase <phase> \
   --run-id run_<phase>_<timestamp> \
   --config .studio/validation.toml  # optional: custom config

@@ -118,7 +118,7 @@ Examples:
 
 ## Output File Structure
 
-All outputs go to `_TheGameStudio/studio/output/{phase}/`:
+All outputs go to `Studio/output/{phase}/`:
 
 ```
 output/
@@ -149,6 +149,6 @@ Override by specifying in your request:
 
 ## Cross-Project Access
 
-This workflow is accessible from any project in the Windsurf workspace. Just ask Cascade to run a Studio phase—it will read this file and the YAML configs from `_TheGameStudio/studio/`.
+This workflow is accessible from any project in the Windsurf workspace. Just ask Cascade to run a Studio phase—it will read this file and the YAML configs from the Studio repository.
 
 No API keys required. No rate limits. Uses your Windsurf subscription.

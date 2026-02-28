@@ -2,7 +2,7 @@
 
 ## 🚀 One-Time Setup
 
-- Keep Studio checked out at `/Users/orcpunk/Repos/_TheGameStudio/studio` (or export `STUDIO_ROOT="/abs/path"` if different).
+- Set `STUDIO_ROOT` environment variable to your Studio path (e.g., `export STUDIO_ROOT="/path/to/studio"`).
 - Copy the bridge template into each repo that uses Studio (`docs/studio-bridge.md`) and fill in canon + instructions.
 - Optionally add a Windsurf command palette action for `run_phase.py prepare` (snippet in [WINDSURF_USAGE.md](./docs/WINDSURF_USAGE.md)).
 
@@ -12,7 +12,7 @@ No PATH edits or API keys are required—the models run inside Cascade.
 
 1. **Prepare** (from any terminal/repo):
    ```bash
-   python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+   python $STUDIO_ROOT/run_phase.py \
      prepare --phase <market|design|tech|studio> \
      --text "Describe your idea or objective" \
      --max-iterations 3 \
@@ -29,7 +29,7 @@ No PATH edits or API keys are required—the models run inside Cascade.
    - Summarize in `summary.md`.
 3. **Finalize**:
    ```bash
-   python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+   python $STUDIO_ROOT/run_phase.py \
      finalize --phase <phase> \
      --run-id <run_id> \
      --status completed --verdict APPROVED \

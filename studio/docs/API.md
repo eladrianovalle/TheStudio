@@ -67,7 +67,7 @@ Only two commands exist:
 Set it once to avoid hard-coding absolute paths in other repos:
 
 ```bash
-export STUDIO_ROOT="/Users/orcpunk/Repos/_TheGameStudio/studio"
+export STUDIO_ROOT="/path/to/studio"
 python $STUDIO_ROOT/run_phase.py prepare --phase market --text "..."
 ```
 
@@ -170,7 +170,7 @@ While the CLI is the supported interface, you can import `run_phase.py` if you n
 import importlib.util
 from pathlib import Path
 
-script = Path("/Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py")
+script = Path(os.environ.get('STUDIO_ROOT', '/path/to/studio') + "/run_phase.py")
 spec = importlib.util.spec_from_file_location("run_phase", script)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)

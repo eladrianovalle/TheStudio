@@ -40,14 +40,14 @@ There is **no** CLI, LiteLLM proxy, Gemini integration, or Python API entrypoint
 
 ## 🚀 Zero-Setup Quick Start
 
-1. **Clone** this repo somewhere long-lived (e.g., `/Users/orcpunk/Repos/_TheGameStudio/studio`).
-2. **(Optional)** Set `STUDIO_ROOT` if you keep the repo elsewhere:
+1. **Clone** this repo somewhere long-lived.
+2. **(Optional)** Set `STUDIO_ROOT` if needed:
    ```bash
    export STUDIO_ROOT="/absolute/path/to/studio"
    ```
 3. **Prepare a run** from any other repo or terminal:
    ```bash
-   python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+   python $STUDIO_ROOT/run_phase.py \
      prepare --phase market \
      --text "A cozy farming sim with time travel"
    ```
@@ -57,7 +57,7 @@ There is **no** CLI, LiteLLM proxy, Gemini integration, or Python API entrypoint
    - `output/index.md` updated with the new run ID
 4. **(Studio phase only)** If you want multiple disciplines in the room, add:
    ```bash
-   python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+   python $STUDIO_ROOT/run_phase.py \
      prepare --phase studio \
      --text "Self-critique Studio" \
      --role-pack studio_core --roles +qa -marketing
@@ -71,7 +71,7 @@ There is **no** CLI, LiteLLM proxy, Gemini integration, or Python API entrypoint
    - Generate `summary.md` (and `implementation.md` for non-studio phases).
 6. **Finalize** once artifacts are in place:
    ```bash
-   python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+   python $STUDIO_ROOT/run_phase.py \
      finalize --phase market \
      --run-id run_market_20251223_170045 \
      --status completed --verdict APPROVED \
@@ -84,7 +84,7 @@ There is **no** CLI, LiteLLM proxy, Gemini integration, or Python API entrypoint
    - Append an entry to `knowledge/run_log.md`.
 7. **Validate** (optional but recommended):
    ```bash
-   python /Users/orcpunk/Repos/_TheGameStudio/studio/run_phase.py \
+   python $STUDIO_ROOT/run_phase.py \
      validate --phase market \
      --run-id run_market_20251223_170045
    ```

@@ -5,7 +5,7 @@ Quick reference for where to put files to avoid accidental commits.
 ## Directory Structure
 
 ```
-_TheGameStudio/
+Studio/
 ├── .scratch/          # Temporary working files (NEVER COMMITTED)
 ├── .private/          # Sensitive data (NEVER COMMITTED)
 ├── studio/
