@@ -6,6 +6,7 @@
 # ============================================================================
 # Studio run outputs (all phases)
 studio/output/
+.studio/
 
 # Studio input files (may contain sensitive analysis)
 studio/input/

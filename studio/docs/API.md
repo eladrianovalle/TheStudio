@@ -10,12 +10,14 @@ The Studio project now exposes exactly one supported interface: `run_phase.py`. 
 python /path/to/studio/run_phase.py <command> [options]
 ```
 
-Only two commands exist:
+Supported commands:
 
 | Command | Description |
 | --- | --- |
-| `prepare` | Creates a new run directory, instructions.md, and updates `output/index.md`. |
-| `finalize` | Validates artifacts, updates `run.json`, refreshes the index, and appends to `knowledge/run_log.md`. |
+| `prepare` | Creates a new run directory, instructions.md, and updates the active output index. |
+| `finalize` | Validates artifacts, updates `run.json`, refreshes the active index, and appends to the active run log. |
+| `cleanup` | Manually enforces run retention budgets (age + total size). |
+| `validate` | Runs validators for a prepared/finalized run using validation config. |
 
 ---
 
@@ -28,16 +30,24 @@ Only two commands exist:
 | `--max-iterations N` | ❌ | `3` | How many Advocate↔Contrarian loops Cascade should run before stopping. |
 | `--budget "$0-20/mo"` | ❌ | `$0-20/mo` | Only used by the `studio` phase to remind Cascade of spending limits. |
 | `--role-pack PACK` | ❌ | Manifest default | Studio-only: selects a curated pod from `role_packs/`. |
-| `--roles [+role|-role ...]` | ❌ | `None` | Studio-only: include/exclude roles relative to the selected pack. |
+| `--roles [+role|-role ...]` | ❌ | `None` | Studio-only: include/exclude roles relative to the selected pack. Supports `--roles +product +engineering +qa` and repeated flags (`--roles=+product --roles=+engineering --roles=+qa`). Use `-role` only when you explicitly need to remove a role. |
+| `--scopes PATH` | ❌ | `.studio/scopes.toml` if present | Optional scopes config for iteration budget allocation. |
+| `--no-scopes` | ❌ | `False` | Disable scope-based allocation for this run. |
+| `--skip-cleanup` | ❌ | `False` | Skip automatic retention cleanup before preparing the run. |
+| `--cleanup-dry-run` | ❌ | `False` | Preview cleanup candidates without deleting files. |
 
-**Output files (all under `output/<phase>/run_<phase>_<timestamp>/`):**
+**Output files (under the active output root):**
+- Studio-local execution: `<studio>/output/<phase>/run_<phase>_<timestamp>/`
+- External-repo execution: `<origin_repo>/.studio/output/<phase>/run_<phase>_<timestamp>/`
+
+Inside each run directory:
 - `instructions.md`
 - `run.json` (see schema below)
 - Empty placeholders for artifacts:
   - Non-studio phases → `advocate_<n>.md`, `contrarian_<n>.md`, `implementation.md`, `summary.md`
   - Studio phase → `advocate--<role>--<n>.md`, `contrarian--<role>--<n>.md`, `integrator.md`, `summary.md`
 
-`prepare` also regenerates `output/index.md` so downstream repos can discover the pending run immediately.
+`prepare` also regenerates `<active_output_root>/index.md` so downstream repos can discover pending runs immediately.
 
 ---
 
@@ -63,12 +73,22 @@ Only two commands exist:
 | Variable | Description |
 | --- | --- |
 | `STUDIO_ROOT` | Optional override pointing to the Studio repo. If unset, `run_phase.py` uses its own directory. |
+| `STUDIO_ARTIFACT_ROOT` | Optional override for where artifacts/logs are written. If unset, Studio writes to repo-local `.studio/` when run outside Studio, otherwise Studio root `output/` + `knowledge/`. |
+| `STUDIO_SKIP_CLEANUP` | Optional flag (`1/true/yes/on`) to skip automatic cleanup before `prepare`. |
+| `STUDIO_CLEANUP_DRY_RUN` | Optional flag (`1/true/yes/on`) to preview cleanup deletions without removing files. |
 
 Set it once to avoid hard-coding absolute paths in other repos:
 
 ```bash
 export STUDIO_ROOT="/path/to/studio"
 python $STUDIO_ROOT/run_phase.py prepare --phase market --text "..."
+```
+
+Pin artifact location explicitly when running from shared environments:
+
+```bash
+export STUDIO_ARTIFACT_ROOT="/absolute/path/to/target/repo"
+python $STUDIO_ROOT/run_phase.py prepare --phase studio --text "..."
 ```
 
 No API keys, LiteLLM settings, or third-party credentials are required anymore.
@@ -128,7 +148,7 @@ Cascade should paste this file into chat verbatim so it knows where to save each
 
 ---
 
-## 6. `output/index.md`
+## 6. Active `index.md`
 
 Markdown table of every run. Columns:
 
@@ -141,11 +161,15 @@ Markdown table of every run. Columns:
 | `Input` | Sanitized version of the `--text` argument. |
 | `Summary` | Auto-linked if `summary_path` exists, otherwise `_pending_`. |
 
+Path depends on artifact root:
+- Studio-local: `<studio>/output/index.md`
+- External-repo: `<repo>/.studio/output/index.md`
+
 Any automation that needs to list past runs should read this file or regenerate it by calling `run_phase.rebuild_index()`.
 
 ---
 
-## 7. `knowledge/run_log.md`
+## 7. Active `run_log.md`
 
 Append-only markdown log created by finalize. Each entry looks like:
 
@@ -159,6 +183,10 @@ Append-only markdown log created by finalize. Each entry looks like:
 ```
 
 Use it to brief stakeholders or link into downstream repos’ release notes.
+
+Path depends on artifact root:
+- Studio-local: `<studio>/knowledge/run_log.md`
+- External-repo: `<repo>/.studio/knowledge/run_log.md`
 
 ---
 

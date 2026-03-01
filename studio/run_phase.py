@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
@@ -115,21 +116,69 @@ INDEX_HEADER = [
 
 CLEANUP_SKIP_ENV = "STUDIO_SKIP_CLEANUP"
 CLEANUP_DRY_ENV = "STUDIO_CLEANUP_DRY_RUN"
+ARTIFACT_ROOT_ENV = "STUDIO_ARTIFACT_ROOT"
+
+PREPARE_OPTION_FLAGS = {
+    "--phase",
+    "--text",
+    "--budget",
+    "--max-iterations",
+    "--role-pack",
+    "--roles",
+    "--scopes",
+    "--no-scopes",
+    "--skip-cleanup",
+    "--cleanup-dry-run",
+}
+
+SUBCOMMANDS = {"prepare", "finalize", "cleanup", "validate"}
+
+
+def _resolve_env_path(value: str) -> Path:
+    path = Path(value).expanduser()
+    return path if path.is_absolute() else (Path.cwd() / path).resolve()
+
+
+def _is_within(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
 
 def get_studio_root() -> Path:
     env_override = os.environ.get("STUDIO_ROOT")
     if env_override:
-        override_path = Path(env_override).expanduser()
-        return override_path if override_path.is_absolute() else override_path.resolve()
+        return _resolve_env_path(env_override)
     return Path(__file__).resolve().parent
 
 
+def get_artifact_root() -> Path:
+    env_override = os.environ.get(ARTIFACT_ROOT_ENV)
+    if env_override:
+        return _resolve_env_path(env_override)
+
+    studio_root = get_studio_root().resolve()
+    cwd = Path.cwd().resolve()
+    if cwd == studio_root or _is_within(cwd, studio_root):
+        return studio_root
+    return cwd
+
+
 def get_output_root() -> Path:
-    return get_studio_root() / "output"
+    artifact_root = get_artifact_root().resolve()
+    studio_root = get_studio_root().resolve()
+    if artifact_root == studio_root:
+        return studio_root / "output"
+    return artifact_root / ".studio" / "output"
 
 
 def get_knowledge_log_path() -> Path:
-    return get_studio_root() / "knowledge" / "run_log.md"
+    artifact_root = get_artifact_root().resolve()
+    studio_root = get_studio_root().resolve()
+    if artifact_root == studio_root:
+        return studio_root / "knowledge" / "run_log.md"
+    return artifact_root / ".studio" / "knowledge" / "run_log.md"
 
 
 def utc_now() -> datetime:
@@ -741,6 +790,56 @@ def rebuild_index() -> None:
     write_index(entries, base_output / "index.md")
 
 
+def _normalize_prepare_roles_tokens(argv: Sequence[str]) -> List[str]:
+    normalized: List[str] = []
+    index = 0
+    while index < len(argv):
+        token = argv[index]
+
+        if token.startswith("--roles="):
+            normalized.append(token)
+            index += 1
+            continue
+
+        if token != "--roles":
+            normalized.append(token)
+            index += 1
+            continue
+
+        index += 1
+        collected: List[str] = []
+        while index < len(argv):
+            candidate = argv[index]
+            if candidate.startswith("--") and candidate in PREPARE_OPTION_FLAGS:
+                break
+            if candidate.startswith("--") and candidate not in PREPARE_OPTION_FLAGS:
+                break
+            if candidate in SUBCOMMANDS:
+                break
+            collected.append(candidate)
+            index += 1
+
+        for role in collected:
+            normalized.append(f"--roles={role}")
+
+    return normalized
+
+
+def _normalize_cli_args(argv: Sequence[str]) -> List[str]:
+    if not argv:
+        return []
+    if argv[0] != "prepare":
+        return list(argv)
+    return _normalize_prepare_roles_tokens(argv)
+
+
+def parse_cli_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = build_parser()
+    raw_args = list(argv) if argv is not None else sys.argv[1:]
+    normalized_args = _normalize_cli_args(raw_args)
+    return parser.parse_args(normalized_args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Studio Cascade run helper.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -774,9 +873,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     prepare_parser.add_argument(
         "--roles",
-        nargs="*",
+        action="append",
         default=None,
-        help="Studio-only: role overrides like +qa or -marketing.",
+        help=(
+            "Studio-only: role overrides like +qa or -marketing. "
+            "You can pass them as '--roles +qa -marketing' or repeated '--roles=+qa --roles=-marketing'."
+        ),
     )
     prepare_parser.add_argument(
         "--scopes",
@@ -977,8 +1079,7 @@ def validate_run(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    parser = build_parser()
-    args = parser.parse_args()
+    args = parse_cli_args()
 
     if args.command == "prepare":
         prepare_run(args)
@@ -990,7 +1091,7 @@ def main() -> None:
     elif args.command == "validate":
         validate_run(args)
     else:
-        parser.error("Unknown command")
+        raise ValueError("Unknown command")
 
 
 if __name__ == "__main__":

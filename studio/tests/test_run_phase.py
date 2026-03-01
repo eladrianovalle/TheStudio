@@ -47,6 +47,7 @@ def _finalize_args(**overrides):
 def _configure_tmp_studio(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("STUDIO_ROOT", str(tmp_path))
+    monkeypatch.setenv("STUDIO_ARTIFACT_ROOT", str(tmp_path))
     _seed_manifest(tmp_path)
     return Path(tmp_path)
 
@@ -154,3 +155,42 @@ def test_finalize_requires_required_artifacts(tmp_path, monkeypatch):
                 cost=None,
             )
         )
+
+
+def test_parse_cli_args_normalizes_prepare_roles_tokens():
+    args = run_phase.parse_cli_args(
+        [
+            "prepare",
+            "--phase",
+            "studio",
+            "--text",
+            "Role selection check",
+            "--roles",
+            "+product",
+            "+engineering",
+            "+qa",
+            "-marketing",
+            "--max-iterations",
+            "3",
+        ]
+    )
+
+    assert args.command == "prepare"
+    assert args.roles == ["+product", "+engineering", "+qa", "-marketing"]
+
+
+def test_output_root_defaults_to_origin_repo_when_running_outside_studio(tmp_path, monkeypatch):
+    studio_root = tmp_path / "studio"
+    studio_root.mkdir()
+    project_root = tmp_path / "game_repo"
+    project_root.mkdir()
+
+    monkeypatch.setenv("STUDIO_ROOT", str(studio_root))
+    monkeypatch.delenv("STUDIO_ARTIFACT_ROOT", raising=False)
+    monkeypatch.chdir(project_root)
+
+    output_root = run_phase.get_output_root()
+    knowledge_path = run_phase.get_knowledge_log_path()
+
+    assert output_root == project_root / ".studio" / "output"
+    assert knowledge_path == project_root / ".studio" / "knowledge" / "run_log.md"

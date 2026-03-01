@@ -14,8 +14,12 @@ Copy this into every non-Studio repo that depends on the centralized agents. It 
 
 ## 3. Environment Expectations
 - No API keys are required—the debate happens inside Windsurf/Cascade.
-- Runs always save artifacts under `$STUDIO_ROOT/output/{phase}/run_*`. Reference those absolute paths when citing results inside `<PROJECT_NAME>` docs, tickets, or PRs.
-- Ensure local contributors have permission to write to the Studio repo (shared volume, git submodule, etc.).
+- Artifact roots depend on where you run commands:
+  - From `<PROJECT_NAME>` repo (default): `<PROJECT_NAME>/.studio/output/{phase}/run_*`
+  - From Studio repo: `$STUDIO_ROOT/output/{phase}/run_*`
+  - Optional explicit override: `STUDIO_ARTIFACT_ROOT=/absolute/path/to/project`
+- Reference absolute run paths when citing results inside `<PROJECT_NAME>` docs, tickets, or PRs.
+- Ensure local contributors have permission to write to whichever artifact root is active.
 
 ## 4. Canonical Project Inputs
 List the artifacts that count as **canon** for this project so Studio has the full picture. Update whenever the authoritative source moves.
@@ -69,7 +73,7 @@ If `STUDIO_ROOT` is set, the helper script reads it automatically; otherwise adj
 2. **Choose roles** – decide which role pack + overrides apply (or stick with defaults).
 3. **Prepare** – run `run_phase.py prepare …` and capture the emitted `run_id`, instructions path, role menu, and artifact checklist.
 4. **Execute via Cascade** – follow the Advocate ↔ Contrarian loop per invited role, then run the Integrator duel (studio) or implementer checklist (other phases). Save artifacts to the provided run directory.
-5. **Finalize** – run `run_phase.py finalize …` so `output/index.md` + `knowledge/run_log.md` stay current. Address any “missing role” warnings before calling the run complete.
+5. **Finalize** – run `run_phase.py finalize …` so the active artifact root index/log stay current (`<active_output_root>/index.md` + `<active_knowledge_root>/run_log.md`). Address any “missing role” warnings before calling the run complete.
 6. **Reference back** – link the generated summary/implementation markdown inside `<PROJECT_NAME>` issues/notes for traceability.
 
 ## 8. Maintenance

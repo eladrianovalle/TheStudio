@@ -16,8 +16,9 @@ This doc explains how to integrate Studio into other repos now that the only sup
    - List the docs/data required for useful runs.  
    - Keep it updated so Cascade can reload context without guesswork.
 4. **Decide where runs live**  
-   - All artifacts live inside the Studio repo under `output/<phase>/run_*`.  
-   - Link those artifacts back into your project issues/notes when citing them.
+   - If you run from your project repo, artifacts default to `<project>/.studio/output/<phase>/run_*`.  
+   - If you run inside Studio, artifacts stay in `<studio>/output/<phase>/run_*`.  
+   - You can force a target repo with `STUDIO_ARTIFACT_ROOT=/absolute/path/to/repo`.
 
 No other setup is required—Zero dependencies, zero API keys, zero services.
 
@@ -34,7 +35,7 @@ python $STUDIO_ROOT/run_phase.py \
   --max-iterations 3 \
   --budget "$0-20/mo" \
   --role-pack studio_core \
-  --roles +qa -marketing
+  --roles +product +engineering +qa
 ```
 
 **Inputs you can override**
@@ -48,9 +49,16 @@ python $STUDIO_ROOT/run_phase.py \
 | `--role-pack` | Studio-only pod presets stored in `role_packs/*.json`. |
 | `--roles` | Studio-only overrides: `+role` to add, `-role` to drop from the selected pack. |
 
+`--roles` supports both styles:
+- `--roles +product +engineering +qa`
+- `--roles=+product --roles=+engineering --roles=+qa`
+
+Use `-role` tokens only when you explicitly need to remove a role from the selected pack.
+
 **Outputs (always absolute paths)**  
 ```
-output/<phase>/run_<phase>_<timestamp>/
+<origin_repo>/.studio/output/<phase>/run_<phase>_<timestamp>/   # default when run outside Studio
+<studio>/output/<phase>/run_<phase>_<timestamp>/                # when run inside Studio
   instructions.md        # what to paste into Cascade
   run.json               # metadata
   advocate_<n>.md / contrarian_<n>.md / implementation.md (non-studio)
@@ -80,7 +88,7 @@ python $STUDIO_ROOT/run_phase.py \
   --hours 0.5 --cost 0
 ```
 
-Finalize will fail with a checklist if required files are missing (see README). For Studio phase it also reports which roles never produced both advocate and contrarian files—close those loops or note a follow-up before calling the run complete. Once finalize passes, `output/index.md` and `knowledge/run_log.md` include this run and downstream teams can find it instantly.
+Finalize will fail with a checklist if required files are missing (see README). For Studio phase it also reports which roles never produced both advocate and contrarian files—close those loops or note a follow-up before calling the run complete. Once finalize passes, the active artifact root gets refreshed indexes/logs (`<active_output_root>/index.md`, `<active_knowledge_root>/run_log.md`).
 
 ---
 
@@ -128,7 +136,7 @@ Commit these helpers to dependent repos if you want reproducible ergonomics; oth
 | Need | Approach |
 | --- | --- |
 | Run Studio on every feature branch | Include “Prepare Studio run” in your PR checklist; attach run folder + summary link in PR template. |
-| Slack/Teams share-outs | Link to `output/<phase>/run_*/summary.md`. Cascade can paste highlights into chat if you give it the path. |
+| Slack/Teams share-outs | Link to `<artifact_root>/output/<phase>/run_*/summary.md` (or `<repo>/.studio/output/...` when run outside Studio). Cascade can paste highlights into chat if you give it the path. |
 | Command palette entries | Use the JSON snippet from `WINDSURF_USAGE.md` to register prepare/finalize commands so teammates don’t need shell access. |
 | Rehydrating context | Add a section to each repo’s bridge doc summarizing recent run IDs and verdicts so Cascade can jump straight in. |
 
@@ -140,7 +148,7 @@ Commit these helpers to dependent repos if you want reproducible ergonomics; oth
 | --- | --- |
 | Team member doesn’t have Studio cloned | Add it as a git submodule or document a “clone + set STUDIO_ROOT” onboarding step. |
 | Cascade forgets to save artifacts | Update the bridge prompt stub to explicitly say “save outputs to `<run_dir>/advocate_1.md` etc.” and remind Cascade after each iteration. |
-| Run folders piling up | Use `output/index.md` to prune stale runs or create a clean-up task that archives old directories (never delete active ones). |
+| Run folders piling up | Use `.studio/output/index.md` (project-local) or `output/index.md` (Studio-local) to prune stale runs or create a clean-up task that archives old directories (never delete active ones). |
 | Need a different expert voice | Add/override roles via `studio.manifest.json` in your repo and remind Cascade to read it. |
 
 ---

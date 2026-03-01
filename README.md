@@ -6,14 +6,14 @@ Key goals:
 
 1. **Cascade-only workflow** – no Gemini, LiteLLM, or CLI runtime required.
 2. **Deterministic packaging** – every phase run creates a folder with instructions, iteration transcripts, summary, and metadata.
-3. **Cross-project visibility** – `output/index.md` and `knowledge/run_log.md` stay up to date so any repo can pick up the latest context.
+3. **Cross-project visibility** – every artifact root gets its own `output/index.md` and `knowledge/run_log.md` so any repo can pick up the latest context.
 
 ---
 
 ## 🧱 Studio Role Packs & Role Menu
 
 - **Manifest (`studio.manifest.json`)** defines every discipline (title, focuses, prompt doc, deliverables, escalation cues).
-- **Role packs (`role_packs/*.json`)** are curated pod presets (e.g., `studio_core` = marketing + product + design + art + engineering + QA). Downstream repos do *not* fork them; they only supply `--roles +foo -bar`.
+- **Role packs (`role_packs/*.json`)** are curated pod presets (e.g., `studio_core` = marketing + product + design + art + engineering + QA). Downstream repos do *not* fork them; they supply `--roles` overrides (typically `+product +engineering +qa`, with optional `-role` removals when needed).
 - **Instructions** now include a Role Menu table linking to prompt docs and file names (e.g., `advocate--design--02.md`).
 - **Finalize** validates that each invited role produced both advocate/contrarian artifacts and records missing pods inside `run.json["studio_roles"]["missing"]`.
 - **Integrator duel** is captured inside `integrator.md` with `### Integrator Advocate`, `### Integrator Contrarian (VERDICT)`, and `### Integrated Plan`.
@@ -22,7 +22,7 @@ When in doubt, run:
 ```bash
 python run_phase.py prepare --phase studio --text "..." --role-pack studio_core
 ```
-and adjust attendees via `--roles +qa -marketing`.
+and add attendees via `--roles +product +engineering +qa`.
 
 ## 🧪 Test-Driven Development Discipline
 
@@ -41,8 +41,8 @@ Tech implementations without tests are incomplete. See **[docs/TEST_DRIVEN_GUIDE
 | Path | Purpose |
 | --- | --- |
 | `run_phase.py` | Primary entrypoint. Creates instructions + folders (`prepare`) and finalizes runs after Cascade finishes (`finalize`). |
-| `output/` | Auto-generated artifacts grouped by phase: `output/<phase>/run_<phase>_<timestamp>/…`. |
-| `knowledge/run_log.md` | Chronological feed of finalized runs with verdict, hours, cost, and summary links. |
+| `output/` or `.studio/output/` | Auto-generated artifacts grouped by phase (`<artifact_root>/output/<phase>/run_<phase>_<timestamp>/…`). |
+| `knowledge/run_log.md` or `.studio/knowledge/run_log.md` | Chronological feed of finalized runs with verdict, hours, cost, and summary links. |
 | `docs/` | Guides for Cascade usage, bridge templates, presets, and architecture notes. |
 | `studio.manifest.json` (optional) | Example of per-repo role overrides for advocates/contrarians. |
 
@@ -64,18 +64,19 @@ There is **no** CLI, LiteLLM proxy, Gemini integration, or Python API entrypoint
      --text "A cozy farming sim with time travel"
    ```
    Output:
-   - `output/market/run_market_20251223_170045/instructions.md`
+   - `.studio/output/market/run_market_20251223_170045/instructions.md` (when run outside Studio)
    - `run.json` metadata + empty artifact placeholders
-   - `output/index.md` updated with the new run ID
+   - `.studio/output/index.md` updated with the new run ID
 4. **(Studio phase only)** If you want multiple disciplines in the room, add:
    ```bash
    python $STUDIO_ROOT/run_phase.py \
      prepare --phase studio \
      --text "Self-critique Studio" \
-     --role-pack studio_core --roles +qa -marketing
+     --role-pack studio_core --roles +product +engineering +qa
    ```
    - `--role-pack` pulls a preset pod from `role_packs/`.
    - `--roles` lets you include/exclude roles (`+role`/`-role`) without editing instructions.
+   - You can pass role overrides either as `--roles +product +engineering +qa` or repeated `--roles=+product --roles=+engineering --roles=+qa`.
    - Instructions will list a **Role Menu** with per-role file targets like `advocate--design--01.md`.
 5. **Execute inside Windsurf/Cascade**:
    - Paste the instructions into chat.
@@ -92,8 +93,8 @@ There is **no** CLI, LiteLLM proxy, Gemini integration, or Python API entrypoint
    Finalize will:
    - Validate required artifacts are present.
    - Count iterations automatically.
-   - Refresh `output/index.md`.
-   - Append an entry to `knowledge/run_log.md`.
+   - Refresh `<active_output_root>/index.md`.
+   - Append an entry to `<active_knowledge_root>/run_log.md`.
 7. **Validate** (optional but recommended):
    ```bash
    python $STUDIO_ROOT/run_phase.py \
@@ -103,6 +104,21 @@ There is **no** CLI, LiteLLM proxy, Gemini integration, or Python API entrypoint
    Validates document quality and code (if implementation phase).
 
 That’s the whole loop.
+
+---
+
+## 🧭 Artifact Root Behavior (Cross-Repo Safety)
+
+- If you run `run_phase.py` **inside this Studio repo**, artifacts stay in `studio/output` and `studio/knowledge`.
+- If you run it from a **different repo**, artifacts now default to that repo under:
+  - `.studio/output/<phase>/run_*`
+  - `.studio/knowledge/run_log.md`
+- You can override artifact placement explicitly with:
+  ```bash
+  export STUDIO_ARTIFACT_ROOT="/absolute/path/to/host-repo"
+  ```
+
+This keeps generated docs/working files with the repo that requested the run, while still using centralized Studio prompts and role packs.
 
 ---
 
@@ -119,12 +135,10 @@ That’s the whole loop.
 
 All automation, scripting, or CI integrations should call `run_phase.py` rather than importing Python modules.
 
----
-
 ## 🗂️ Run Directory Anatomy
 
 ```
-output/
+.studio/output/                         # when run from another repo
   market/
     run_market_20251223_170045/
       instructions.md
@@ -156,6 +170,8 @@ output/
 | `iterations_run`, `hours`, `cost` | Auto-tracked or provided on finalize. |
 | `summary_path` | Resolved path to `summary.md` (auto-set if blank). |
 | `studio_roles` | Studio-only metadata: `{pack, overrides, invited, completed, missing}`. |
+
+When you run from inside the Studio repo, the same structure appears under `studio/output/` and `studio/knowledge/`.
 
 Use these files as the single source of truth when referencing decisions or continuing work.
 
@@ -223,7 +239,7 @@ Reference material:
 
 - Keep `run_phase.py` small, deterministic, and bash-friendly so Cascade can quote it verbatim.
 - If you need custom behavior (new phases, deliverable templates, manifest defaults), update `PHASE_DETAILS` in `run_phase.py` and the related docs simultaneously.
-- When adding data to `output/` or `knowledge/`, ensure paths remain relative to `STUDIO_ROOT` so other repos can reference them safely.
+- When adding data to `output/` or `knowledge/`, ensure paths remain relative to the active artifact root (`STUDIO_ROOT` when running in Studio, or `<origin_repo>/.studio` when running elsewhere) so other repos can reference them safely.
 
 ---
 

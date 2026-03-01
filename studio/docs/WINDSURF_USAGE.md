@@ -32,13 +32,17 @@ python $STUDIO_ROOT/run_phase.py \
   --max-iterations 3 \
   --budget "$0-20/mo"     # studio phase only
   --role-pack studio_core # studio phase optional
-  --roles +qa -marketing  # studio phase overrides
+  --roles +product +engineering +qa  # studio phase overrides
 ```
 
+`--roles` also supports repeated flags when needed:
+`--roles=+product --roles=+engineering --roles=+qa`
+
 What you get:
-- `output/<phase>/run_<phase>_<timestamp>/instructions.md`
+- `<origin_repo>/.studio/output/<phase>/run_<phase>_<timestamp>/instructions.md` (default when run outside Studio)
+- `<studio>/output/<phase>/run_<phase>_<timestamp>/instructions.md` (when run inside Studio)
 - `run.json` metadata (status=PENDING, timestamps, iteration cap, etc.)
-- `output/index.md` refreshed with the new run
+- Active output index refreshed (`<active_output_root>/index.md`)
 
 Copy the emitted `run_id` and folder path—Cascade will reference them verbatim.
 
@@ -70,7 +74,7 @@ python $STUDIO_ROOT/run_phase.py \
 `finalize` will:
 - Verify required artifacts exist (advocate/contrarian files, implementation/integrator, summary).
 - Count iterations automatically if you omit `--iterations-run`.
-- Update `run.json`, `output/index.md`, and `knowledge/run_log.md`.
+- Update `run.json`, `<active_output_root>/index.md`, and `<active_knowledge_root>/run_log.md`.
 - Abort with a clear checklist if something is missing—fix the files and re-run finalize.
 
 ---
@@ -105,7 +109,7 @@ When chatting with Cascade, always mention:
 3. The goal/phases to cover.
 
 Example prompts:
-- “Use Studio market phase on: **A 3D stealth horror roguelike**. Instructions: `/Users/.../output/market/run_market_20251223_170045/instructions.md`. Save artifacts in that folder, then summarize verdict.”
+- “Use Studio market phase on: **A 3D stealth horror roguelike**. Instructions: `/Users/.../.studio/output/market/run_market_20251223_170045/instructions.md`. Save artifacts in that folder, then summarize verdict.”
 - “Run Studio design phase using canon from docs/studio-bridge.md. Run folder prepared already—check `run_design_20251223_171210`.”
 - “Do a Studio self-critique (studio phase). Manifest + canon listed in this repo’s bridge doc; run folder instructions attached below.”
 
@@ -138,7 +142,7 @@ You can add extra context files (screenshots, charts, code samples) as long as t
    python run_phase.py finalize --phase market --run-id run_market_20251223_170045 --status completed --verdict APPROVED --hours 0.8 --cost 0
    ```
 4. Reference the run:
-   - Bridge doc in the originating repo links to `output/market/run_market_20251223_170045/summary.md`.
+   - Bridge doc in the originating repo links to `.studio/output/market/run_market_20251223_170045/summary.md` (or `output/...` if run from Studio root).
    - Later phases can reopen the same folder or spawn a new run with updated goals.
 
 ---
@@ -148,8 +152,8 @@ You can add extra context files (screenshots, charts, code samples) as long as t
 | Issue | Fix |
 | --- | --- |
 | `finalize` complains about missing files | Ensure Advocate/Contrarian/Implementation (or Integrator) + `summary.md` exist in the run directory named in the error. |
-| Wrong directory written | Set `STUDIO_ROOT` before running prepare/finalize or pass absolute paths. |
-| Need to rerun with new brief | Run `prepare` again; multiple runs per phase are encouraged. Use `output/index.md` to keep them straight. |
+| Wrong directory written | Set `STUDIO_ARTIFACT_ROOT` explicitly (or run from the target repo root) before running prepare/finalize. |
+| Need to rerun with new brief | Run `prepare` again; multiple runs per phase are encouraged. Use `.studio/output/index.md` (external repo) or `output/index.md` (Studio repo) to keep them straight. |
 | Cascade forgets canon | Update the bridge doc prompt stub to explicitly say “See docs/studio-bridge.md for canon + workflow.” Mention it in every prompt. |
 
 ---
@@ -161,4 +165,4 @@ You can add extra context files (screenshots, charts, code samples) as long as t
 - [STUDIO_BRIDGE_TEMPLATE.md](./STUDIO_BRIDGE_TEMPLATE.md) – copy into dependent repos.
 - [API.md](./API.md) – schema for `run_phase.py` arguments, metadata files, and output index.
 
-Keep all of these documents aligned whenever the workflow changes—Studio has no other entrypoint anymore.*** End Patch
+Keep all of these documents aligned whenever the workflow changes—Studio has no other entrypoint anymore.

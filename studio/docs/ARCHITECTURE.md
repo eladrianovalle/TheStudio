@@ -9,7 +9,7 @@ Studio is no longer a long-running runtime or CrewAI service. The entire system 
 ```
 run_phase.py prepare
         ↓
-output/<phase>/run_<phase>_<timestamp>/instructions.md
+<active_output_root>/<phase>/run_<phase>_<timestamp>/instructions.md
         ↓
 Windsurf/Cascade executes Advocate ↔ Contrarian loops
         ↓
@@ -17,7 +17,7 @@ Artifacts saved back into the run folder
         ↓
 run_phase.py finalize
         ↓
-output/index.md + knowledge/run_log.md updated
+<active_output_root>/index.md + <active_knowledge_root>/run_log.md updated
 ```
 
 All intelligence lives inside Cascade conversations. Studio’s job is to keep the prompts, roles, artifacts, and logs organized.
@@ -33,8 +33,8 @@ All intelligence lives inside Cascade conversations. Studio’s job is to keep t
 | `studio.manifest.json` | Declarative description of phase-level personas plus Studio role definitions (title, focuses, deliverables, prompt doc, escalation cues). |
 | `role_packs/*.json` | Curated sets of Studio roles (e.g., `studio_core`). Operators pick a pack, then add/remove roles with CLI flags. |
 | `docs/role_prompts/*.md` | Long-form prompts for each role. Instructions link to these files rather than inlining pages of text. |
-| `output/` | Run folders containing instructions, advocate/contrarian artifacts, integrator plans, summaries, and metadata. |
-| `knowledge/run_log.md` | Append-only log of finalized runs for easy reference across repos. |
+| Active output root (`output/` or `.studio/output/`) | Run folders containing instructions, advocate/contrarian artifacts, integrator plans, summaries, and metadata. |
+| Active knowledge log (`knowledge/run_log.md` or `.studio/knowledge/run_log.md`) | Append-only log of finalized runs for easy reference across repos. |
 
 No other services, runtimes, or APIs exist.
 
@@ -45,13 +45,14 @@ No other services, runtimes, or APIs exist.
 1. Operator runs `python run_phase.py prepare --phase ...`.
 2. `run_phase.py` loads the manifest and, for Studio phase:
    - Determines which role pack to use (default or `--role-pack`).
-   - Applies `--roles +foo -bar` overrides through `run_phase_roles.resolve_role_list`.
+   - Applies `--roles` overrides through `run_phase_roles.resolve_role_list`.
+     - Examples: `--roles +product +engineering +qa` or repeated flags `--roles=+product --roles=+engineering --roles=+qa`.
    - Builds `RoleDetails` objects with titles, deliverables, prompt links, and escalation cues.
 3. `run_phase.py` writes:
    - `instructions.md` including header, artifact checklist, Agent Roles, Iteration Loop, **Role Menu**, and **Integrator Duel** guidance.
    - `run.json` with metadata plus `studio_roles = {pack, overrides, invited}` when applicable.
    - Empty artifact placeholders (per-role filenames for Studio).
-4. `output/index.md` is regenerated immediately so other repos know a run is pending.
+4. The active index (`<active_output_root>/index.md`) is regenerated immediately so other repos know a run is pending.
 
 ---
 
@@ -79,7 +80,7 @@ No automation runs outside of Cascade; the instructions are simply executed as a
    - Studio phase: iterate through the invited roles stored in `run.json["studio_roles"]["invited"]`, using `collect_role_artifacts` to confirm both advocate and contrarian files exist. Missing roles are recorded.
    - Verify `integrator.md` and `summary.md`.
 4. Finalize updates `run.json` with status, verdict, hours, cost, iterations, and for Studio: `completed` + `missing` role lists.
-5. `output/index.md` and `knowledge/run_log.md` are refreshed, giving downstream repos searchable entries with summary links.
+5. The active index/log (`<active_output_root>/index.md` and `<active_knowledge_root>/run_log.md`) are refreshed, giving downstream repos searchable entries with summary links.
 
 ---
 
@@ -92,14 +93,14 @@ No automation runs outside of Cascade; the instructions are simply executed as a
   - `escalate_on`
   - `prompt_doc` (Markdown file inside `docs/role_prompts/`)
 - **Role packs** enforce consistent combinations. Example `studio_core` includes marketing, product, design, art, engineering, and QA.
-- Operators select a pack via `--role-pack` and tweak attendance with `--roles +qa -marketing`. This keeps instructions concise while maintaining a single source of truth.
+- Operators select a pack via `--role-pack` and tweak attendance with `--roles` additions/removals. This keeps instructions concise while maintaining a single source of truth.
 
 ---
 
 ## 7. Files & Artifacts
 
 ```
-output/
+<active_output_root>/
   <phase>/
     run_<phase>_<timestamp>/
       instructions.md
@@ -110,8 +111,8 @@ output/
 ```
 
 Indexes:
-- `output/index.md` – table view
-- `knowledge/run_log.md` – chronological log with verdicts, hours, and summary links
+- `<active_output_root>/index.md` – table view
+- `<active_knowledge_root>/run_log.md` – chronological log with verdicts, hours, and summary links
 
 ---
 
@@ -132,6 +133,6 @@ No direct imports or service layers are required—just CLI calls and Markdown a
 
 1. Code: `run_phase.py`, `run_phase_roles.py`, manifest, role packs.
 2. Docs: README, STUDIO_INTERACTION_GUIDE, WINDSURF_USAGE, WINDSURF_QUICKREF, STUDIO_BRIDGE_TEMPLATE, API, INTEGRATION_GUIDE, AGENTS_REFERENCE, ARCHITECTURE (this file).
-3. Outputs: `output/index.md`, `knowledge/run_log.md`.
+3. Outputs: `<active_output_root>/index.md`, `<active_knowledge_root>/run_log.md`.
 
 Whenever the workflow changes, update all of the above in one commit. Studio deliberately has no hidden runtime—everything is visible, reproducible, and Cascade-first.

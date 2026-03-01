@@ -75,7 +75,7 @@ Contrarians must always end with `VERDICT: APPROVED` or `VERDICT: REJECTED`. Fin
    - Keep `prompt_doc` paths in sync with `docs/role_prompts/`.
 2. **Adjust role packs (`role_packs/*.json`)**  
    - Create additional packs (e.g., `liveops_hotfix.json` or `monetization_review.json`).  
-   - Operators select them via `--role-pack` and override attendance with `--roles +foo -bar`.
+   - Operators select them via `--role-pack` and override attendance with `--roles` tokens (typically additions like `+product +engineering +qa`; use `-role` only when you need to remove one).
 3. **Document changes**  
    - Update README, Interaction Guide, API, and Bridge Template whenever roles or packs shift.  
    - Mention the new pack in downstream bridge docs so Cascade loads it explicitly.

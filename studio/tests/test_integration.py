@@ -57,6 +57,7 @@ max_iterations = 1
         
         # Monkeypatch STUDIO_ROOT
         monkeypatch.setenv("STUDIO_ROOT", str(studio_root))
+        monkeypatch.setenv("STUDIO_ARTIFACT_ROOT", str(studio_root))
         
         yield studio_root
 
