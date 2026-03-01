@@ -47,6 +47,53 @@ from rerun import (
 from validators.document_validator import DocumentValidator
 from validators.code_validator import CodeValidator
 
+
+def get_storage_stats() -> dict:
+    """Get simple storage statistics for user awareness."""
+    try:
+        from cleanup import _collect_runs
+        output_root = get_output_root()
+        runs = _collect_runs(output_root)
+        
+        if not runs:
+            return {
+                "total_size_mb": 0,
+                "file_count": 0,
+                "oldest_artifact_days": 0,
+                "cleanup_suggested": False
+            }
+        
+        total_size_bytes = sum(run.size_bytes for run in runs)
+        total_size_mb = total_size_bytes / (1024 * 1024)
+        
+        # Find oldest artifact
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        oldest_run = min(runs, key=lambda run: run.created_at)
+        oldest_age_days = (now - oldest_run.created_at).days
+        
+        # Suggest cleanup if storage is getting large or old
+        cleanup_suggested = (
+            total_size_mb > 50 or  # More than 50MB
+            oldest_age_days > 45   # Files older than 45 days
+        )
+        
+        return {
+            "total_size_mb": round(total_size_mb, 1),
+            "file_count": len(runs),
+            "oldest_artifact_days": oldest_age_days,
+            "cleanup_suggested": cleanup_suggested
+        }
+    except Exception:
+        # If anything goes wrong, return safe defaults
+        return {
+            "total_size_mb": 0,
+            "file_count": 0,
+            "oldest_artifact_days": 0,
+            "cleanup_suggested": False
+        }
+
+
 PHASE_DETAILS = {
     "market": {
         "advocate": "Market Growth Strategist — steel-man the idea into a high-virality Steam hook.",
@@ -708,6 +755,10 @@ def prepare_run(args: argparse.Namespace) -> str:
     if scopes_meta:
         meta["scopes"] = scopes_meta
     
+    # Add storage information for user awareness
+    storage_stats = get_storage_stats()
+    meta["storage"] = storage_stats
+    
     instructions = build_instruction_doc(meta, run_dir, studio_role_details, scopes_config, scopes_allocations)
     instructions_path = run_dir / "instructions.md"
     instructions_path.write_text(instructions, encoding="utf-8")
@@ -726,6 +777,13 @@ def prepare_run(args: argparse.Namespace) -> str:
     else:
         print(f"\n💡 Tip: Want to optimize iteration budgets? Create .studio/scopes.toml")
         print(f"   See: docs/SCOPES_GUIDE.md")
+    
+    # Storage awareness hint
+    if storage_stats.get("cleanup_suggested", False):
+        print(f"\n🧹 Storage Tip: You have {storage_stats['total_size_mb']}MB of Studio artifacts")
+        print(f"   (oldest: {storage_stats['oldest_artifact_days']} days ago). Consider cleanup:")
+        print(f"   python run_phase.py cleanup --dry-run  # Preview what would be deleted")
+        print(f"   python run_phase.py cleanup           # Execute cleanup")
     
     return run_id
 

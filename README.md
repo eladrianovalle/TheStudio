@@ -192,6 +192,36 @@ ttl_days = 30
 size_limit_mb = 900
 ```
 
+## 🧹 Storage Management
+
+Studio includes automatic storage monitoring and cleanup:
+
+- **Storage Awareness**: Every run includes storage statistics in `run.json`
+- **Smart Suggestions**: Cleanup suggested when >50MB or files older than 45 days
+- **Manual Control**: Preview cleanup with `--dry-run` before executing
+
+### Storage Information
+Each `run.json` includes current storage stats:
+```json
+{
+  "storage": {
+    "total_size_mb": 0.3,
+    "file_count": 10,
+    "oldest_artifact_days": 0,
+    "cleanup_suggested": false
+  }
+}
+```
+
+### Cleanup Commands
+```bash
+# Preview what would be deleted
+python run_phase.py cleanup --dry-run
+
+# Execute cleanup
+python run_phase.py cleanup
+```
+
 During `python run_phase.py prepare …`, cleanup runs automatically (unless you pass `--skip-cleanup`). Helpful flags/env vars:
 
 | Option | Purpose |
