@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Studio Cascade workflow helpers"
 authors = [{ name = "Your Name", email = "you@example.com" }]
 requires-python = ">=3.10,<3.14"
-dependencies = []
+dependencies = [
+    "tiktoken>=0.5.1,<0.6"
+]
 
 [build-system]
 requires = ["hatchling"]

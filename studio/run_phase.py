@@ -759,6 +759,45 @@ def prepare_run(args: argparse.Namespace) -> str:
     storage_stats = get_storage_stats()
     meta["storage"] = storage_stats
     
+    # Add Studio budget information
+    try:
+        import sys
+        sys.path.append(str(Path(__file__).parent))
+        from studio_budget_tracker import StudioBudgetTracker
+        budget_tracker = StudioBudgetTracker()
+        
+        # Get current project from directory
+        current_project = Path.cwd().name
+        
+        # Estimate run cost
+        estimated_run = budget_tracker.estimate_run_cost(
+            phase=phase,
+            iterations=meta.get("max_iterations", 3),
+            scopes=[s["name"] for s in scopes_meta.get("scopes", [])] if scopes_meta else ["high_level"]
+        )
+        estimated_run.project = current_project
+        
+        # Check budget status
+        budget_status = budget_tracker.check_project_budget(current_project, estimated_run)
+        alerts = budget_tracker.check_budget_alerts(budget_status)
+        trend_summary = budget_tracker.analyze_budget_trends()
+        
+        meta["studio_budget"] = {
+            "estimated_cost": estimated_run.estimated_cost_usd,
+            "estimated_tokens": estimated_run.estimated_tokens,
+            "project": current_project,
+            "budget_status": budget_status,
+            "alerts": alerts,
+            "trend_summary": trend_summary,
+        }
+        
+    except ImportError as e:
+        # Studio budget tracker not available
+        pass
+    except Exception as e:
+        # Error getting budget data, but don't fail the run
+        pass
+    
     instructions = build_instruction_doc(meta, run_dir, studio_role_details, scopes_config, scopes_allocations)
     instructions_path = run_dir / "instructions.md"
     instructions_path.write_text(instructions, encoding="utf-8")
@@ -784,6 +823,42 @@ def prepare_run(args: argparse.Namespace) -> str:
         print(f"   (oldest: {storage_stats['oldest_artifact_days']} days ago). Consider cleanup:")
         print(f"   python run_phase.py cleanup --dry-run  # Preview what would be deleted")
         print(f"   python run_phase.py cleanup           # Execute cleanup")
+    
+    # Studio budget awareness hint
+    studio_budget = meta.get("studio_budget", {})
+    if studio_budget:
+        estimated_cost = studio_budget.get("estimated_cost", 0)
+        estimated_tokens = studio_budget.get("estimated_tokens", 0)
+        budget_status = studio_budget.get("budget_status", {})
+        
+        print(f"\n💸 Studio Budget Estimate: ${estimated_cost:.2f} ({estimated_tokens:,} tokens)")
+        
+        # Show budget status
+        monthly_status = budget_status.get("monthly", {})
+        if monthly_status.get("status") == "exceeded":
+            print(f"   ❌ Monthly budget exceeded by ${abs(monthly_status.get('remaining', 0)):.2f}")
+        elif monthly_status.get("status") == "warning":
+            print(f"   ⚠️  Monthly budget: ${monthly_status.get('remaining', 0):.2f} remaining")
+        else:
+            print(f"   ✅ Monthly budget: ${monthly_status.get('remaining', 0):.2f} remaining")
+        
+        # Show recommendations
+        recommendations = budget_status.get("recommendations", [])
+        if recommendations:
+            print(f"   💡 Recommendations:")
+            for rec in recommendations[:3]:  # Show top 3
+                print(f"      {rec}")
+
+        if studio_budget.get("alerts"):
+            print(f"   ⚠️  Alerts:")
+            for alert in studio_budget["alerts"][:3]:
+                print(f"      {alert}")
+
+        trends = studio_budget.get("trend_summary") or {}
+        if trends.get("days_analyzed", 0) > 0:
+            print(
+                f"   📈 {trends['days_analyzed']}-day avg: ${trends['daily_average']:.2f}/day (proj ${trends['monthly_projection']:.2f}/month)"
+            )
     
     return run_id
 
@@ -821,6 +896,66 @@ def finalize_run(args: argparse.Namespace) -> None:
     if args.cost is not None:
         meta["cost"] = args.cost
     meta["updated_iso"] = utc_now().isoformat(timespec="seconds")
+
+    # Post-run budget validation (best effort, studio phase only)
+    studio_budget_meta = meta.get("studio_budget")
+    if studio_budget_meta and studio_budget_meta.get("estimated_cost"):
+        try:
+            import sys
+            sys.path.append(str(Path(__file__).parent))
+            from studio_budget_tracker import (  # type: ignore
+                StudioBudgetTracker,
+                StudioRunCost,
+                validate_budget_estimate,
+            )
+
+            budget_tracker = StudioBudgetTracker()
+
+            try:
+                validation = validate_budget_estimate(
+                    run_dir,
+                    studio_budget_meta["estimated_cost"],
+                )
+                studio_budget_meta["validation"] = validation
+                meta["studio_budget"] = studio_budget_meta
+
+                print("\n💸 Budget Validation:")
+                print(f"   Original estimate: ${validation['original_estimate']:.2f}")
+                print(f"   Output-based estimate: ${validation['estimated_total_cost']:.2f}")
+                variance = validation.get("variance_percent")
+                if variance is not None:
+                    delta = "higher" if variance > 0 else "lower"
+                    print(f"   Variance: {abs(variance):.1f}% {delta} than estimate")
+                print(f"   Note: {validation['note']}")
+            except ImportError:
+                print("\n⚠️  Budget validation unavailable (tiktoken not installed).")
+            except Exception as exc:
+                print(f"\n⚠️  Budget validation failed: {exc}")
+
+            try:
+                scopes_meta = meta.get("scopes") or {}
+                scopes = []
+                if isinstance(scopes_meta, dict):
+                    scopes = [s.get("name") for s in scopes_meta.get("scopes", []) if isinstance(s, dict)]
+                if not scopes:
+                    scopes = ["high_level"]
+
+                run_cost = StudioRunCost(
+                    run_id=run_id,
+                    phase=phase,
+                    project=studio_budget_meta.get("project", Path.cwd().name),
+                    timestamp=utc_now().isoformat(timespec="seconds"),
+                    estimated_tokens=studio_budget_meta.get("estimated_tokens", 0),
+                    estimated_cost_usd=studio_budget_meta.get("estimated_cost", 0.0),
+                    iterations=meta.get("iterations_run") or meta.get("max_iterations", 1),
+                    scopes=scopes,
+                    complexity_score=1.0,
+                )
+                budget_tracker.record_run_usage(run_cost)
+            except Exception as exc:
+                print(f"\n⚠️  Failed to record budget usage: {exc}")
+        except ImportError:
+            print("\n⚠️  Studio budget tracker unavailable; skipping validation & usage recording.")
 
     write_json(meta_path, meta)
     rebuild_index()
@@ -1031,6 +1166,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to validation config TOML (default: .studio/validation.toml).",
     )
 
+    # Add Studio budget commands
+    budget_init_parser = subparsers.add_parser(
+        "budget-init", help="Initialize Studio budget for a project."
+    )
+    budget_init_parser.add_argument(
+        "--project",
+        type=str,
+        default=None,
+        help="Project name (default: current directory name).",
+    )
+    budget_init_parser.add_argument(
+        "--monthly-budget",
+        type=float,
+        required=True,
+        help="Monthly budget in USD.",
+    )
+
+    budget_status_parser = subparsers.add_parser(
+        "budget-status", help="Show Studio budget status across all projects."
+    )
+
+    usage_parser = subparsers.add_parser(
+        "usage", help="Show current Studio usage summary."
+    )
+
     return parser
 
 
@@ -1136,6 +1296,109 @@ def validate_run(args: argparse.Namespace) -> None:
     print(f"{'='*60}\n")
 
 
+def cmd_usage(args: argparse.Namespace) -> None:
+    """Show current Studio usage summary."""
+    try:
+        from studio_budget_tracker import get_studio_budget_status
+        status = get_studio_budget_status()
+        
+        print(f"� Studio Usage Summary")
+        print(f"======================")
+        print(f"Total Monthly Budget: ${status.total_monthly_budget:.2f}")
+        print(f"Spent This Month: ${status.total_spent_this_month:.2f}")
+        print(f"Remaining: ${status.total_remaining:.2f}")
+        print(f"Budget Used: {(status.total_spent_this_month / status.total_monthly_budget * 100):.1f}%")
+        
+        if status.project_breakdown:
+            print(f"\n📊 Project Breakdown:")
+            for project, breakdown in status.project_breakdown.items():
+                status_emoji = "✅"
+                if breakdown["percent_used"] >= 100:
+                    status_emoji = "❌"
+                elif breakdown["percent_used"] >= 80:
+                    status_emoji = "⚠️"
+                
+                print(f"   {status_emoji} {project}: ${breakdown['spent']:.2f} of ${breakdown['budget']:.2f} ({breakdown['percent_used']:.1f}%)")
+        
+    except ImportError:
+        print("❌ Studio budget tracker not available")
+        return
+
+
+def cmd_budget_init(args: argparse.Namespace) -> None:
+    """Initialize Studio budget for a project."""
+    try:
+        from studio_budget_tracker import StudioBudgetTracker
+    except ImportError:
+        print("❌ Studio budget tracker not available")
+        return
+    
+    project_name = getattr(args, 'project', None) or Path.cwd().name
+    monthly_budget = getattr(args, 'monthly_budget', 0.0)
+    
+    if monthly_budget <= 0:
+        print("❌ Monthly budget must be greater than 0")
+        return
+    
+    tracker = StudioBudgetTracker()
+    budget = tracker.initialize_project_budget(project_name, monthly_budget)
+    
+    print(f"✅ Initialized Studio budget for project: {project_name}")
+    print(f"   Monthly Budget: ${budget.monthly_budget_usd:.2f}")
+    print(f"   Daily Budget: ${budget.daily_budget_usd:.2f}")
+    print(f"   Phase Allocations:")
+    for phase, percentage in budget.phase_allocations.items():
+        phase_budget = budget.monthly_budget_usd * percentage
+        print(f"     {phase}: {percentage*100:.0f}% (${phase_budget:.2f})")
+    print(f"   Scope Allocations:")
+    for scope, percentage in budget.scope_allocations.items():
+        print(f"     {scope}: {percentage*100:.0f}%")
+
+
+def cmd_budget_status(args: argparse.Namespace) -> None:
+    """Show Studio budget status across all projects."""
+    try:
+        from studio_budget_tracker import get_studio_budget_status
+    except ImportError:
+        print("❌ Studio budget tracker not available")
+        return
+    
+    status = get_studio_budget_status()
+    
+    print(f"💸 Studio Budget Status")
+    print(f"=======================")
+    print(f"Total Monthly Budget: ${status.total_monthly_budget:.2f}")
+    print(f"Spent This Month: ${status.total_spent_this_month:.2f}")
+    print(f"Remaining: ${status.total_remaining:.2f}")
+    print(f"Budget Used: {(status.total_spent_this_month / status.total_monthly_budget * 100):.1f}%")
+    
+    if status.project_breakdown:
+        print(f"\n📊 Project Breakdown:")
+        for project, breakdown in status.project_breakdown.items():
+            status_emoji = "✅"
+            if breakdown["percent_used"] >= 100:
+                status_emoji = "❌"
+            elif breakdown["percent_used"] >= 80:
+                status_emoji = "⚠️"
+            
+            print(f"   {status_emoji} {project}:")
+            print(f"     Budget: ${breakdown['budget']:.2f}")
+            print(f"     Spent: ${breakdown['spent']:.2f}")
+            print(f"     Remaining: ${breakdown['remaining']:.2f}")
+            print(f"     Used: {breakdown['percent_used']:.1f}%")
+    
+    if status.daily_usage_trend:
+        print(f"\n📈 Daily Usage (Last 7 days):")
+        for day in status.daily_usage_trend[:5]:  # Show last 5 days
+            date_str = datetime.fromisoformat(day['date']).strftime('%m-%d')
+            print(f"   {date_str}: ${day['spent']:.2f} ({day['runs']} runs)")
+    
+    if status.recommendations:
+        print(f"\n💡 Recommendations:")
+        for rec in status.recommendations:
+            print(f"   {rec}")
+
+
 def main() -> None:
     args = parse_cli_args()
 
@@ -1148,6 +1411,12 @@ def main() -> None:
         _maybe_run_cleanup(dry_run=dry_run or _env_flag(CLEANUP_DRY_ENV))
     elif args.command == "validate":
         validate_run(args)
+    elif args.command == "usage":
+        cmd_usage(args)
+    elif args.command == "budget-init":
+        cmd_budget_init(args)
+    elif args.command == "budget-status":
+        cmd_budget_status(args)
     else:
         raise ValueError("Unknown command")
 
