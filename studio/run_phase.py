@@ -2,9 +2,9 @@
 """
 Studio run instruction helper.
 
-Prepares per-phase Cascade instructions, creates run directories, and keeps
+Prepares per-phase instructions, creates run directories, and keeps
 output/index.md in sync so every Studio request can be executed agentically
-through Cascade (no CLI round trips required).
+by any AI assistant (Claude Code, Windsurf/Cascade, etc.).
 """
 from __future__ import annotations
 
@@ -448,7 +448,7 @@ def build_instruction_doc(
     info = PHASE_DETAILS[phase]
     rel_dir = run_dir.as_posix()
     base_section = [
-        f"# Studio Cascade Instructions — {meta['run_id']}",
+        f"# Studio Instructions — {meta['run_id']}",
         "",
         f"- **Phase:** {phase.title()}",
         f"- **Run directory:** `{rel_dir}`",
@@ -641,6 +641,121 @@ def build_instruction_doc(
     )
 
 
+def _resolve_studio_roles(args: argparse.Namespace) -> Tuple[Dict | None, List[RoleDetails] | None]:
+    """Resolve studio-phase role configuration from CLI args.
+
+    Returns (role_meta_dict, role_details_list) or (None, None) for non-studio phases.
+    """
+    if args.phase.lower() != "studio":
+        return None, None
+
+    studio_root = get_studio_root()
+    manifest = load_manifest(studio_root)
+    try:
+        pack_name = args.role_pack or default_role_pack_name(manifest)
+        pack_data = load_role_pack(studio_root, pack_name)
+        overrides = list(args.roles or [])
+        invited_roles = resolve_role_list(manifest, pack_data, overrides)
+        if not invited_roles:
+            raise RoleConfigError(
+                "Studio role selection resolved to zero roles. Adjust the pack or overrides."
+            )
+        role_details = build_role_details(manifest, invited_roles)
+        role_meta: Dict = {
+            "pack": pack_name,
+            "overrides": overrides,
+            "invited": invited_roles,
+        }
+        return role_meta, role_details
+    except RoleConfigError as exc:
+        raise RuntimeError(f"Studio role configuration error: {exc}") from exc
+
+
+def _resolve_scopes(args: argparse.Namespace):
+    """Resolve scope-based iteration config from CLI args.
+
+    Returns (scopes_config, scopes_allocations, scopes_meta) — all None if disabled.
+    """
+    if getattr(args, 'no_scopes', False):
+        return None, None, None
+
+    # Determine scopes path
+    if args.scopes:
+        scopes_path = Path(args.scopes)
+        if not scopes_path.is_absolute():
+            scopes_path = get_studio_root() / scopes_path
+    else:
+        default_scopes = get_studio_root() / ".studio" / "scopes.toml"
+        scopes_path = default_scopes if default_scopes.exists() else None
+
+    if not scopes_path:
+        return None, None, None
+
+    try:
+        config = load_scopes_config(scopes_path)
+        allocations = allocate_iterations(config, args.max_iterations)
+        meta: Dict = {
+            "config_path": scopes_path.as_posix(),
+            "scopes": [
+                {"name": s.name, "focus": s.focus, "allocated_iterations": allocations[s.name]}
+                for s in config.scopes
+            ],
+            "total_iterations": sum(allocations.values()),
+        }
+        print(f"Loaded scopes config: {scopes_path}")
+        print(f"- Total iteration budget: {meta['total_iterations']}")
+        for scope_info in meta['scopes']:
+            print(f"  - {scope_info['name']}: {scope_info['allocated_iterations']} iterations")
+        return config, allocations, meta
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            f"Scopes configuration file not found: {exc}\n\n"
+            f"To fix:\n"
+            f"1. Create .studio/scopes.toml with scope definitions, or\n"
+            f"2. Use --no-scopes to disable scope-based iteration, or\n"
+            f"3. See docs/SCOPES_GUIDE.md for examples"
+        ) from exc
+    except ValueError as exc:
+        raise RuntimeError(
+            f"Invalid scopes configuration: {exc}\n\n"
+            f"To fix:\n"
+            f"1. Check TOML syntax in your scopes config\n"
+            f"2. Ensure all scopes have 'focus' and 'max_iterations' fields\n"
+            f"3. See docs/SCOPES_GUIDE.md for valid examples"
+        ) from exc
+
+
+def _build_run_meta(
+    phase: str,
+    text: str,
+    now: datetime,
+    run_id: str,
+    args: argparse.Namespace,
+    studio_role_meta: Dict | None,
+    scopes_meta: Dict | None,
+) -> Dict:
+    """Build the run metadata dictionary."""
+    meta: Dict = {
+        "run_id": run_id,
+        "phase": phase,
+        "input": text,
+        "budget_cap": args.budget if phase == "studio" else "",
+        "max_iterations": args.max_iterations,
+        "created_iso": now.isoformat(timespec="seconds"),
+        "created_display": now.strftime("%Y-%m-%d %H:%M"),
+        "status": "PENDING",
+        "summary_path": "",
+        "verdict": "",
+        "iterations_run": None,
+    }
+    if studio_role_meta:
+        meta["studio_roles"] = studio_role_meta
+    if scopes_meta:
+        meta["scopes"] = scopes_meta
+    meta["storage"] = get_storage_stats()
+    return meta
+
+
 def prepare_run(args: argparse.Namespace) -> str:
     phase = args.phase.lower()
     if phase not in PHASE_DETAILS:
@@ -658,118 +773,21 @@ def prepare_run(args: argparse.Namespace) -> str:
     timestamp_slug = now.strftime("%Y%m%d_%H%M%S")
     run_id = f"run_{phase}_{timestamp_slug}"
     run_dir = get_output_root() / phase / run_id
-    
-    # Check for concurrent run collision BEFORE creating directory
+
     if run_dir.exists():
         raise RuntimeError(
             f"Run directory {run_id} already exists. "
             f"This may be due to concurrent prepare commands or a timestamp collision. "
             f"Wait 1 second and retry, or use a different phase/text combination."
         )
-    
+
     run_dir.mkdir(parents=True, exist_ok=False)
     run_dir_abs = run_dir.resolve()
 
-    studio_role_meta: Dict | None = None
-    studio_role_details: List[RoleDetails] | None = None
-    if phase == "studio":
-        studio_root = get_studio_root()
-        manifest = load_manifest(studio_root)
-        try:
-            pack_name = args.role_pack or default_role_pack_name(manifest)
-            pack_data = load_role_pack(studio_root, pack_name)
-            overrides = list(args.roles or [])
-            invited_roles = resolve_role_list(manifest, pack_data, overrides)
-            if not invited_roles:
-                raise RoleConfigError(
-                    "Studio role selection resolved to zero roles. Adjust the pack or overrides."
-                )
-            studio_role_details = build_role_details(manifest, invited_roles)
-            studio_role_meta = {
-                "pack": pack_name,
-                "overrides": overrides,
-                "invited": invited_roles,
-            }
-        except RoleConfigError as exc:
-            raise RuntimeError(f"Studio role configuration error: {exc}") from exc
-    
-    # Load scopes configuration
-    # Default: use .studio/scopes.toml if it exists
-    # Override: use --scopes path if provided
-    # Disable: use --no-scopes flag
-    scopes_config = None
-    scopes_allocations = None
-    scopes_meta: Dict | None = None
-    
-    # Check if scopes should be disabled
-    use_scopes = not getattr(args, 'no_scopes', False)
-    
-    if use_scopes:
-        # Determine scopes path
-        if args.scopes:
-            scopes_path = Path(args.scopes)
-            if not scopes_path.is_absolute():
-                scopes_path = get_studio_root() / scopes_path
-        else:
-            # Default to .studio/scopes.toml if it exists
-            default_scopes = get_studio_root() / ".studio" / "scopes.toml"
-            scopes_path = default_scopes if default_scopes.exists() else None
-        
-        if scopes_path:
-            try:
-                scopes_config = load_scopes_config(scopes_path)
-                scopes_allocations = allocate_iterations(scopes_config, args.max_iterations)
-                scopes_meta = {
-                    "config_path": scopes_path.as_posix(),
-                    "scopes": [
-                        {"name": s.name, "focus": s.focus, "allocated_iterations": scopes_allocations[s.name]}
-                        for s in scopes_config.scopes
-                    ],
-                    "total_iterations": sum(scopes_allocations.values()),
-                }
-                print(f"Loaded scopes config: {scopes_path}")
-                print(f"- Total iteration budget: {scopes_meta['total_iterations']}")
-                for scope_info in scopes_meta['scopes']:
-                    print(f"  - {scope_info['name']}: {scope_info['allocated_iterations']} iterations")
-            except FileNotFoundError as exc:
-                raise RuntimeError(
-                    f"Scopes configuration file not found: {exc}\n\n"
-                    f"To fix:\n"
-                    f"1. Create .studio/scopes.toml with scope definitions, or\n"
-                    f"2. Use --no-scopes to disable scope-based iteration, or\n"
-                    f"3. See docs/SCOPES_GUIDE.md for examples"
-                ) from exc
-            except ValueError as exc:
-                raise RuntimeError(
-                    f"Invalid scopes configuration: {exc}\n\n"
-                    f"To fix:\n"
-                    f"1. Check TOML syntax in your scopes config\n"
-                    f"2. Ensure all scopes have 'focus' and 'max_iterations' fields\n"
-                    f"3. See docs/SCOPES_GUIDE.md for valid examples"
-                ) from exc
+    studio_role_meta, studio_role_details = _resolve_studio_roles(args)
+    scopes_config, scopes_allocations, scopes_meta = _resolve_scopes(args)
+    meta = _build_run_meta(phase, text, now, run_id, args, studio_role_meta, scopes_meta)
 
-    meta = {
-        "run_id": run_id,
-        "phase": phase,
-        "input": text,
-        "budget_cap": args.budget if phase == "studio" else "",
-        "max_iterations": args.max_iterations,
-        "created_iso": now.isoformat(timespec="seconds"),
-        "created_display": now.strftime("%Y-%m-%d %H:%M"),
-        "status": "PENDING",
-        "summary_path": "",
-        "verdict": "",
-        "iterations_run": None,
-    }
-    if studio_role_meta:
-        meta["studio_roles"] = studio_role_meta
-    if scopes_meta:
-        meta["scopes"] = scopes_meta
-    
-    # Add storage information for user awareness
-    storage_stats = get_storage_stats()
-    meta["storage"] = storage_stats
-    
     instructions = build_instruction_doc(meta, run_dir, studio_role_details, scopes_config, scopes_allocations)
     instructions_path = run_dir / "instructions.md"
     instructions_path.write_text(instructions, encoding="utf-8")
@@ -781,21 +799,20 @@ def prepare_run(args: argparse.Namespace) -> str:
     print(f"Prepared {run_id} ({phase})")
     print(f"- Run directory: {run_dir_abs}")
     print(f"- Instructions: {instructions_abs_path}")
-    
-    # Contextual hints for feature discovery
+
     if scopes_meta:
         print(f"\n💡 Tip: Scopes are active. Work through {scopes_meta['scopes'][0]['name']} scope first.")
     else:
         print(f"\n💡 Tip: Want to optimize iteration budgets? Create .studio/scopes.toml")
         print(f"   See: docs/SCOPES_GUIDE.md")
-    
-    # Storage awareness hint
+
+    storage_stats = meta.get("storage", {})
     if storage_stats.get("cleanup_suggested", False):
         print(f"\n🧹 Storage Tip: You have {storage_stats['total_size_mb']}MB of Studio artifacts")
         print(f"   (oldest: {storage_stats['oldest_artifact_days']} days ago). Consider cleanup:")
         print(f"   python run_phase.py cleanup --dry-run  # Preview what would be deleted")
         print(f"   python run_phase.py cleanup           # Execute cleanup")
-    
+
     return run_id
 
 
@@ -908,7 +925,7 @@ def parse_cli_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Studio Cascade run helper.")
+    parser = argparse.ArgumentParser(description="Studio run helper.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     prepare_parser = subparsers.add_parser("prepare", help="Create a new run_id and instructions.")

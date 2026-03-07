@@ -1,6 +1,6 @@
 # Studio Migration Plan
 
-Status: **In Progress — Milestone 1 (Test Foundation)**
+Status: **In Progress — Milestone 3 (Claude Code MVP)**
 
 ## Goal
 Create a shared-core Studio with Claude Code and Windsurf as equal execution peers. Fix bugs, remove dead weight, build test foundation, then implement Claude Code native execution.
@@ -26,20 +26,22 @@ Create a shared-core Studio with Claude Code and Windsurf as equal execution pee
 - [x] T0.16 Fix doc contradictions (scopes auto-load, tech artifacts, "no CLI" claim, Cascade-only branding, stale artifact links)
 - [x] T0.17 Consolidate redundant doc content (assistant-agnostic language, removed duplicate cleanup/workflow sections, fixed artifact tables)
 
-### M1: Test Foundation
-- [ ] T1.1 Create `tests/conftest.py` with shared fixtures
-- [ ] T1.2 Unit tests for `run_phase_roles.py`
-- [ ] T1.3 Unit tests for rerun critical paths
-- [ ] T1.4 Fix placeholder tests
-- [ ] T1.5 E2E test (CLI subprocess)
-- [ ] T1.6 Remove/relax flaky benchmark assertions (test file deleted with budget tracker)
-- [ ] T1.7 Validator blind spot tests
+### M1: Test Foundation — COMPLETE
+- [x] T1.1 Create `tests/conftest.py` with shared fixtures
+- [x] T1.2 Unit tests for `run_phase_roles.py` (35 tests)
+- [x] T1.3 Unit tests for rerun critical paths (3 studio-phase tests added)
+- [x] T1.4 Fix placeholder tests (refactored to shared fixtures)
+- [x] T1.5 E2E test (CLI subprocess, 6 tests)
+- [x] T1.6 Remove/relax flaky benchmark assertions (test file deleted with budget tracker)
+- [x] T1.7 Validator blind spot tests (5 tests added)
+- **Result: 127 tests passing**
 
-### M2: Extract Shared Core
-- [ ] T2.1 Extract `parse_verdict()` utility
-- [ ] T2.2 Make instruction generation backend-agnostic
-- [ ] T2.3 Refactor `prepare_run` into composable functions
-- [ ] T2.4 Define execution interface contracts
+### M2: Extract Shared Core — COMPLETE
+- [x] T2.1 Extract `parse_verdict()` utility (already done as `verdict.py` in M0)
+- [x] T2.2 Make instruction generation backend-agnostic (removed "Cascade" from titles, docstrings, parser)
+- [x] T2.3 Refactor `prepare_run` into composable functions (`_resolve_studio_roles`, `_resolve_scopes`, `_build_run_meta`)
+- [x] T2.4 Define execution interface contracts (`execution_contract.py` with `RunContext`, `RunArtifacts`, lifecycle docs)
+- **Result: 132 tests passing**
 
 ### M3: Claude Code MVP (single-phase)
 - [ ] T3.1 Create `.claude/commands/run-phase.md`

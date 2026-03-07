@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Tests for rerun mode detection and failure context injection."""
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -13,13 +12,6 @@ from rerun import (
     generate_rerun_instructions,
     load_rejection_context,
 )
-
-
-@pytest.fixture
-def temp_run_dir():
-    """Create a temporary run directory."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        yield Path(tmpdir)
 
 
 def test_rejection_context_format_for_prompt():
@@ -378,3 +370,33 @@ Please revise the proposal to address these fundamental issues.
     instructions = generate_rerun_instructions(temp_run_dir)
     assert "Rerun Mode Detected" in instructions
     assert "horizontal scalability" in instructions
+
+
+def test_detect_rerun_mode_with_studio_role_files(temp_run_dir):
+    """Test rerun detection works with studio-phase contrarian--role--N.md files."""
+    (temp_run_dir / "contrarian--marketing--01.md").write_text("VERDICT: REJECTED\n\n1. Bad idea")
+    assert detect_rerun_mode(temp_run_dir) is True
+
+
+def test_find_latest_rejection_studio_role_files(temp_run_dir):
+    """Test finding rejection across studio-phase files when role=None."""
+    (temp_run_dir / "contrarian--marketing--01.md").write_text("VERDICT: REJECTED\n\n1. Bad idea")
+    (temp_run_dir / "contrarian--design--01.md").write_text("VERDICT: APPROVED")
+
+    result = find_latest_rejection(temp_run_dir)
+    assert result is not None
+    assert "marketing" in result.name
+
+
+def test_load_rejection_context_studio_phase(temp_run_dir):
+    """Test loading rejection context from studio-phase files with role filter."""
+    (temp_run_dir / "contrarian--engineering--02.md").write_text(
+        "VERDICT: REJECTED\n\n1. Architecture too complex\n2. No monitoring plan"
+    )
+    (temp_run_dir / "contrarian--marketing--01.md").write_text("VERDICT: APPROVED")
+
+    context = load_rejection_context(temp_run_dir, role="engineering")
+    assert context is not None
+    assert context.role == "engineering"
+    assert context.iteration == 2
+    assert len(context.reasons) >= 1
