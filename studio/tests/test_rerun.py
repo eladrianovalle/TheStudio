@@ -11,7 +11,6 @@ from rerun import (
     extract_rejection_reasons,
     find_latest_rejection,
     generate_rerun_instructions,
-    inject_context_into_prompt,
     load_rejection_context,
 )
 
@@ -299,55 +298,6 @@ def test_load_rejection_context_no_rejection(temp_run_dir):
     assert context is None
 
 
-def test_inject_context_into_prompt_with_context():
-    """Test injecting context into advocate prompt."""
-    base_prompt = """
-# Advocate Prompt
-
-Your task is to propose a solution.
-
-## Deliverables
-
-- Proposal document
-- Implementation plan
-"""
-    
-    context = RejectionContext(
-        iteration=1,
-        role=None,
-        reasons=["Missing cost analysis", "No timeline provided"],
-        full_text="..."
-    )
-    
-    modified = inject_context_into_prompt(base_prompt, context)
-    
-    assert "Previous iteration was REJECTED" in modified
-    assert "Missing cost analysis" in modified
-    assert "No timeline provided" in modified
-    assert "## Deliverables" in modified  # Original content preserved
-    # Context should be injected before deliverables
-    context_pos = modified.find("Previous iteration")
-    deliverables_pos = modified.find("## Deliverables")
-    assert context_pos < deliverables_pos
-
-
-def test_inject_context_into_prompt_no_context():
-    """Test that prompt is unchanged when no context provided."""
-    base_prompt = "# Advocate Prompt\n\nYour task..."
-    
-    modified = inject_context_into_prompt(base_prompt, None)
-    assert modified == base_prompt
-
-
-def test_inject_context_into_prompt_empty_reasons():
-    """Test that prompt is unchanged when context has no reasons."""
-    base_prompt = "# Advocate Prompt\n\nYour task..."
-    context = RejectionContext(iteration=1, role=None, reasons=[], full_text="...")
-    
-    modified = inject_context_into_prompt(base_prompt, context)
-    assert modified == base_prompt
-
-
 def test_generate_rerun_instructions_with_rejection(temp_run_dir):
     """Test generating rerun instructions with rejection context."""
     rejection_content = """
@@ -428,30 +378,3 @@ Please revise the proposal to address these fundamental issues.
     instructions = generate_rerun_instructions(temp_run_dir)
     assert "Rerun Mode Detected" in instructions
     assert "horizontal scalability" in instructions
-    
-    # Step 4: Inject context into advocate prompt
-    base_prompt = """
-# Tech Advocate Prompt
-
-Propose a technical architecture for the system.
-
-## Deliverables
-
-- Architecture diagram
-- Technology stack
-- Implementation plan
-"""
-    
-    modified_prompt = inject_context_into_prompt(base_prompt, context)
-    
-    # Verify context is injected
-    assert "Previous iteration was REJECTED" in modified_prompt
-    assert "horizontal scalability" in modified_prompt
-    assert "database migration" in modified_prompt
-    
-    # Verify original content preserved
-    assert "## Deliverables" in modified_prompt
-    assert "Architecture diagram" in modified_prompt
-    
-    # Verify injection order (context before deliverables)
-    assert modified_prompt.index("REJECTED") < modified_prompt.index("## Deliverables")
