@@ -21,7 +21,7 @@
 - **[STUDIO_BRIDGE_TEMPLATE.md](./STUDIO_BRIDGE_TEMPLATE.md)** - Bridge doc template for downstream repos
 
 ## Execution Guides
-- **[WINDSURF_USAGE.md](./WINDSURF_USAGE.md)** - Windsurf/Cascade execution workflow
+- **[WINDSURF_USAGE.md](./WINDSURF_USAGE.md)** - Windsurf/Cascade-specific execution workflow
 
 ## Available Phases
 

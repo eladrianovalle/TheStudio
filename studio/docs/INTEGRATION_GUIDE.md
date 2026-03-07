@@ -1,6 +1,6 @@
-# Integration Guide (Cascade-Only)
+# Integration Guide
 
-This doc explains how to integrate Studio into other repos now that the only supported workflow is: `run_phase.py` → Windsurf/Cascade chat → finalize/log. There is no importable Python API, CLI runtime, or hosted service. Treat Studio as a shared instructions generator plus artifact log.
+This doc explains how to integrate Studio into other repos. The workflow is: `run_phase.py` → AI assistant execution → finalize/log. There is no importable Python API or hosted service. Treat Studio as a shared instructions generator plus artifact log.
 
 ---
 
@@ -20,7 +20,7 @@ This doc explains how to integrate Studio into other repos now that the only sup
    - If you run inside Studio, artifacts stay in `<studio>/output/<phase>/run_*`.  
    - You can force a target repo with `STUDIO_ARTIFACT_ROOT=/absolute/path/to/repo`.
 
-No other setup is required—Zero dependencies, zero API keys, zero services.
+No other setup is required — zero API keys, zero services.
 
 ---
 
@@ -131,7 +131,7 @@ Commit these helpers to dependent repos if you want reproducible ergonomics; oth
 
 ---
 
-## 4. Automation Ideas (Still Cascade-First)
+## 4. Automation Ideas
 
 | Need | Approach |
 | --- | --- |
@@ -147,7 +147,7 @@ Commit these helpers to dependent repos if you want reproducible ergonomics; oth
 | Problem | Fix |
 | --- | --- |
 | Team member doesn’t have Studio cloned | Add it as a git submodule or document a “clone + set STUDIO_ROOT” onboarding step. |
-| Cascade forgets to save artifacts | Update the bridge prompt stub to explicitly say “save outputs to `<run_dir>/advocate_1.md` etc.” and remind Cascade after each iteration. |
+| Assistant forgets to save artifacts | Update the bridge prompt stub to explicitly say “save outputs to `<run_dir>/advocate_1.md` etc.” and remind the assistant after each iteration. |
 | Run folders piling up | Use `.studio/output/index.md` (project-local) or `output/index.md` (Studio-local) to prune stale runs or create a clean-up task that archives old directories (never delete active ones). |
 | Need a different expert voice | Add/override roles via `studio.manifest.json` in your repo and remind Cascade to read it. |
 
@@ -161,4 +161,4 @@ Commit these helpers to dependent repos if you want reproducible ergonomics; oth
 - [API.md](./API.md) – command/JSON schema for `run_phase.py`, metadata, and logs.
 - [STUDIO_BRIDGE_TEMPLATE.md](./STUDIO_BRIDGE_TEMPLATE.md) – copy/paste contract for every repo.
 
-Keep these documents synchronized whenever the workflow changes—there is no hidden API anymore.
+Keep these documents synchronized whenever the workflow changes.

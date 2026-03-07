@@ -1,6 +1,6 @@
-# Agents Reference (Cascade Edition)
+# Agents Reference
 
-Studio no longer spins up its own agents. Instead, we describe every persona in Markdown/JSON so Windsurf/Cascade can roleplay them deterministically during the prepare → execute → finalize loop. Use this file to understand what each phase expects and how to extend or override roles safely.
+Studio no longer spins up its own agents. Instead, we describe every persona in Markdown/JSON so an AI assistant (Claude Code, Windsurf/the assistant, etc.) can roleplay them deterministically during the prepare → execute → finalize loop. Use this file to understand what each phase expects and how to extend or override roles safely.
 
 ---
 
@@ -53,7 +53,7 @@ Each invited role writes `advocate--<role>--NN.md` and `contrarian--<role>--NN.m
 
 - `run_phase.py prepare --phase studio` renders a **Role Menu** listing every invited role, deliverables, filenames, and a link to its prompt doc (`docs/role_prompts/<role>.md`).
 - Prompt docs hold the long-form guidance that used to clog instructions. Update them whenever you change a role’s responsibilities.
-- Escalation cues in the manifest tell Cascade when to invite additional roles (e.g., Marketing escalates Legal when policies are at risk).
+- Escalation cues in the manifest tell the assistant when to invite additional roles (e.g., Marketing escalates Legal when policies are at risk).
 
 ---
 
@@ -61,7 +61,8 @@ Each invited role writes `advocate--<role>--NN.md` and `contrarian--<role>--NN.m
 
 | Phase | Advocate Files | Contrarian Files | Post-approval artifact |
 | --- | --- | --- | --- |
-| Market/Design/Tech | `advocate_<n>.md` | `contrarian_<n>.md` | `implementation.md` |
+| Market/Design | `advocate_<n>.md` | `contrarian_<n>.md` | `summary.md` (discussion phases) |
+| Tech | `advocate_<n>.md` | `contrarian_<n>.md` | `implementation.md` (with tests) |
 | Studio | `advocate--<role>--<n>.md` | `contrarian--<role>--<n>.md` | `integrator.md` (with duel sections) |
 
 Contrarians must always end with `VERDICT: APPROVED` or `VERDICT: REJECTED`. Finalize will flag missing files per role and record `completed`/`missing` lists in `run.json["studio_roles"]`.
@@ -78,7 +79,7 @@ Contrarians must always end with `VERDICT: APPROVED` or `VERDICT: REJECTED`. Fin
    - Operators select them via `--role-pack` and override attendance with `--roles` tokens (typically additions like `+product +engineering +qa`; use `-role` only when you need to remove one).
 3. **Document changes**  
    - Update README, Interaction Guide, API, and Bridge Template whenever roles or packs shift.  
-   - Mention the new pack in downstream bridge docs so Cascade loads it explicitly.
+   - Mention the new pack in downstream bridge docs so the assistant loads it explicitly.
 
 Because everything is declarative, there’s no hidden CrewAI config to edit—just JSON + Markdown.
 
@@ -86,11 +87,11 @@ Because everything is declarative, there’s no hidden CrewAI config to edit—j
 
 ## 5. Best Practices for Operators
 
-1. **Always cite Role Menu entries** when asking Cascade to write artifacts (“Use the Marketing role definition from instructions”).  
+1. **Always cite Role Menu entries** when asking the assistant to write artifacts (“Use the Marketing role definition from instructions”).  
 2. **Loop until VERDICT: APPROVED** per role; avoid skipping contrarian passes because finalize will block completion.  
 3. **Use `roles_needed.md` (optional)** to track escalations when a contrarian says “bring Security in.” You can schedule a follow-up run with `--roles +security`.  
 4. **Summaries should list confidence per role** (e.g., `marketing_confidence: 0.7`) so downstream readers know which pods need follow-up.  
-5. **Keep prompt docs concise but specific**. Point to canonical examples, KPIs, and failure modes. Cascade will reference them verbatim.
+5. **Keep prompt docs concise but specific**. Point to canonical examples, KPIs, and failure modes. the assistant will reference them verbatim.
 
 ---
 
@@ -98,7 +99,7 @@ Because everything is declarative, there’s no hidden CrewAI config to edit—j
 
 | Issue | Fix |
 | --- | --- |
-| Contrarian forgets VERDICT | Remind Cascade mid-run; instructions require it. If missing, add a short follow-up prompt to capture `VERDICT: ...` and append to the same file. |
+| Contrarian forgets VERDICT | Remind the assistant mid-run; instructions require it. If missing, add a short follow-up prompt to capture `VERDICT: ...` and append to the same file. |
 | Role pack missing expected expert | Update the pack JSON or call `prepare` with `--roles +<role>`. |
 | Finalize says roles are missing | Inspect `run.json["studio_roles"]["missing"]` for the guilty roles. Either add the artifacts or document why they’re intentionally absent before re-running finalize. |
 | Prompt doc drift | Every manifest change should ship with updated `docs/role_prompts/*.md` and doc references. |

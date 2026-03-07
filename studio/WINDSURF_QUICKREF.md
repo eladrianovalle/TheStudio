@@ -50,7 +50,8 @@ Always mention the bridge doc and run directory path so Cascade reloads the righ
 
 | Phase | Files |
 | --- | --- |
-| Market/Design/Tech | `advocate_<n>.md`, `contrarian_<n>.md`, `implementation.md`, `summary.md` |
+| Market/Design | `advocate_<n>.md`, `contrarian_<n>.md`, `summary.md` |
+| Tech | `advocate_<n>.md`, `contrarian_<n>.md`, `implementation.md`, `summary.md` |
 | Studio | `advocate--<role>--<n>.md`, `contrarian--<role>--<n>.md`, `integrator.md` (with Integrator duel sections), `summary.md` |
 
 ## 📖 More Detail

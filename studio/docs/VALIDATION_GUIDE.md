@@ -475,4 +475,3 @@ checks = ["pytest"]  # Only run pytest, skip mypy and ruff
 
 - [STUDIO_INTERACTION_GUIDE.md](../STUDIO_INTERACTION_GUIDE.md) - Standard Studio workflow
 - [SCOPES_GUIDE.md](./SCOPES_GUIDE.md) - Scope-based iteration allocation
-- [IMPLEMENTATION_PLAN.md](../output/studio/run_studio_20260227_174319/IMPLEMENTATION_PLAN.md) - Full implementation details

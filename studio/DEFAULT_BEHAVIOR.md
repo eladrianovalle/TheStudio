@@ -1,8 +1,8 @@
 # Studio Default Behavior
 
-## Scope-Based Iteration (Enabled by Default)
+## Scope-Based Iteration (Auto-Loaded if Config Exists)
 
-As of 2026-02-27, Studio **automatically uses scope-based iteration** for all runs if `.studio/scopes.toml` exists.
+If `.studio/scopes.toml` exists, Studio automatically uses scope-based iteration. If the file doesn't exist, standard iteration is used. Pass `--no-scopes` to disable even when the file is present.
 
 ### Why Default?
 

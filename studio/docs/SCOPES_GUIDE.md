@@ -399,5 +399,4 @@ python run_phase.py prepare \
 ## See Also
 
 - [STUDIO_INTERACTION_GUIDE.md](../STUDIO_INTERACTION_GUIDE.md) - Standard Studio workflow
-- [IMPLEMENTATION_PLAN.md](../output/studio/run_studio_20260227_174319/IMPLEMENTATION_PLAN.md) - Full scopes implementation plan
 - [README.md](../README.md) - Studio overview

@@ -1,6 +1,6 @@
 # API Reference (run_phase.py)
 
-The Studio project now exposes exactly one supported interface: `run_phase.py`. This script prepares instructions, validates artifacts, and keeps indexes/logs up to date so Windsurf/Cascade runs stay reproducible. This document describes the command-line contract, JSON schema, and file formats you can rely on when integrating Studio into other repositories or tooling.
+Studio exposes exactly one supported interface: `run_phase.py`. This script prepares instructions, validates artifacts, and keeps indexes/logs up to date so runs stay reproducible across any AI assistant (Claude Code, Windsurf/Cascade, etc.). This document describes the command-line contract, JSON schema, and file formats you can rely on when integrating Studio into other repositories or tooling.
 
 ---
 
@@ -28,7 +28,7 @@ Supported commands:
 | `--phase {market,design,tech,studio}` | ✅ | – | Studio phase to run. Controls artifact checklist and instruction copy. |
 | `--text "..."` | ✅ | – | Idea, objective, or question you want Studio to tackle. |
 | `--max-iterations N` | ❌ | `3` | How many Advocate↔Contrarian loops Cascade should run before stopping. |
-| `--budget "$0-20/mo"` | ❌ | `$0-20/mo` | Only used by the `studio` phase to remind Cascade of spending limits. |
+| `--budget "$0-20/mo"` | ❌ | `$0-20/mo` | Advisory note printed in instructions (not enforced). Primarily used by `studio` phase. |
 | `--role-pack PACK` | ❌ | Manifest default | Studio-only: selects a curated pod from `role_packs/`. |
 | `--roles [+role|-role ...]` | ❌ | `None` | Studio-only: include/exclude roles relative to the selected pack. Supports `--roles +product +engineering +qa` and repeated flags (`--roles=+product --roles=+engineering --roles=+qa`). Use `-role` only when you explicitly need to remove a role. |
 | `--scopes PATH` | ❌ | `.studio/scopes.toml` if present | Optional scopes config for iteration budget allocation. |
@@ -44,7 +44,7 @@ Inside each run directory:
 - `instructions.md`
 - `run.json` (see schema below)
 - Empty placeholders for artifacts:
-  - Non-studio phases → `advocate_<n>.md`, `contrarian_<n>.md`, `implementation.md`, `summary.md`
+  - Non-studio phases → `advocate_<n>.md`, `contrarian_<n>.md`, `summary.md` (plus `implementation.md` for tech phase)
   - Studio phase → `advocate--<role>--<n>.md`, `contrarian--<role>--<n>.md`, `integrator.md`, `summary.md`
 
 `prepare` also regenerates `<active_output_root>/index.md` so downstream repos can discover pending runs immediately.
@@ -91,7 +91,7 @@ export STUDIO_ARTIFACT_ROOT="/absolute/path/to/target/repo"
 python $STUDIO_ROOT/run_phase.py prepare --phase studio --text "..."
 ```
 
-No API keys, LiteLLM settings, or third-party credentials are required anymore.
+No API keys or third-party credentials are required.
 
 ---
 
@@ -99,7 +99,8 @@ No API keys, LiteLLM settings, or third-party credentials are required anymore.
 
 | Phase | Required files |
 | --- | --- |
-| `market`, `design`, `tech` | `advocate_<n>.md`, `contrarian_<n>.md`, `implementation.md`, `summary.md` |
+| `market`, `design` | `advocate_<n>.md`, `contrarian_<n>.md`, `summary.md` |
+| `tech` | `advocate_<n>.md`, `contrarian_<n>.md`, `summary.md`, `implementation.md` (with tests) |
 | `studio` | `advocate--<role>--<n>.md`, `contrarian--<role>--<n>.md`, `integrator.md` (with duel sections), `summary.md` |
 
 `finalize` ensures these files exist inside the run directory. You can add extra context (screenshots, spreadsheets, etc.) so long as they live in the same folder.
@@ -144,7 +145,7 @@ Generated instructions follow a consistent layout:
 6. **Integrator Duel** (Studio only) — explains `### Integrator Advocate`, `### Integrator Contrarian (VERDICT)`, and `### Integrated Plan` sections inside `integrator.md`.
 7. **Summary & Packaging** — reminders to fill out `summary.md` and run the finalize command.
 
-Cascade should paste this file into chat verbatim so it knows where to save each artifact.
+The assistant should read this file to know where to save each artifact.
 
 ---
 
@@ -234,4 +235,4 @@ Stick to the CLI whenever possible so scripts remain simple and Cascade can quot
 - [STUDIO_BRIDGE_TEMPLATE.md](./STUDIO_BRIDGE_TEMPLATE.md) – copy into every dependent repo.
 - [INTEGRATION_GUIDE.md](./INTEGRATION_GUIDE.md) – repo-level onboarding checklist and helper scripts.
 
-These docs, together with `run_phase.py`, define the entire Studio API surface. Anything that reintroduces a direct runtime must update all of them in lockstep.
+These docs, together with `run_phase.py`, define the entire Studio API surface.
