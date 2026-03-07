@@ -191,7 +191,19 @@ def get_studio_root() -> Path:
     return Path(__file__).resolve().parent
 
 
+_artifact_root_override: Path | None = None
+
+
+def set_artifact_root(path: Path | None) -> None:
+    """Set an explicit artifact root (used by --artifact-root CLI flag)."""
+    global _artifact_root_override
+    _artifact_root_override = path
+
+
 def get_artifact_root() -> Path:
+    if _artifact_root_override is not None:
+        return _artifact_root_override.resolve()
+
     env_override = os.environ.get(ARTIFACT_ROOT_ENV)
     if env_override:
         return _resolve_env_path(env_override)
@@ -593,10 +605,11 @@ def build_instruction_doc(
             ]
         )
 
+    studio_root_abs = get_studio_root().resolve()
     finalize_snippet = textwrap.dedent(
         f"""
         ```
-        python run_phase.py finalize --phase {phase} --run-id {meta['run_id']} --status completed --verdict <APPROVED|REJECTED|N/A>
+        python "{studio_root_abs}/run_phase.py" finalize --phase {phase} --run-id {meta['run_id']} --status completed --verdict <APPROVED|REJECTED|N/A>
         ```
         """
     ).strip()
@@ -743,6 +756,41 @@ def _build_run_meta(
     return meta
 
 
+def _scaffold_external_repo(artifact_root: Path) -> None:
+    """Create .studio/ structure and bridge doc in an external repo on first use."""
+    studio_dir = artifact_root / ".studio"
+    if studio_dir.exists():
+        return
+
+    studio_dir.mkdir(parents=True, exist_ok=True)
+    (studio_dir / "output").mkdir(exist_ok=True)
+    knowledge_dir = studio_dir / "knowledge"
+    knowledge_dir.mkdir(exist_ok=True)
+
+    # Copy bridge template if no bridge doc exists
+    bridge_candidates = [
+        artifact_root / "docs" / "studio-bridge.md",
+        artifact_root / "studio-bridge.md",
+    ]
+    if not any(c.exists() for c in bridge_candidates):
+        template_path = get_studio_root() / "docs" / "STUDIO_BRIDGE_TEMPLATE.md"
+        if template_path.exists():
+            dest = artifact_root / "docs" / "studio-bridge.md"
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            template = template_path.read_text(encoding="utf-8")
+            # Inject the Studio root path into the template
+            studio_root_str = str(get_studio_root().resolve())
+            template = template.replace(
+                'export STUDIO_ROOT="/path/to/studio"',
+                f'export STUDIO_ROOT="{studio_root_str}"',
+            )
+            dest.write_text(template, encoding="utf-8")
+            print(f"  Created bridge doc: {dest}")
+            print(f"  Fill in the canon table and project summary.")
+
+    print(f"  Initialized .studio/ in {artifact_root}")
+
+
 def prepare_run(args: argparse.Namespace) -> str:
     phase = args.phase.lower()
     if phase not in PHASE_DETAILS:
@@ -750,6 +798,12 @@ def prepare_run(args: argparse.Namespace) -> str:
     text = args.text.strip()
     if not text:
         raise ValueError("Input text cannot be empty.")
+
+    # Auto-scaffold external repos on first use
+    artifact_root = get_artifact_root().resolve()
+    studio_root = get_studio_root().resolve()
+    if artifact_root != studio_root:
+        _scaffold_external_repo(artifact_root)
 
     skip_cleanup = getattr(args, "skip_cleanup", False) or _env_flag(CLEANUP_SKIP_ENV)
     cleanup_dry = getattr(args, "cleanup_dry_run", False) or _env_flag(CLEANUP_DRY_ENV)
@@ -911,6 +965,15 @@ def parse_cli_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(normalized_args)
 
 
+def _add_artifact_root_arg(subparser: argparse.ArgumentParser) -> None:
+    subparser.add_argument(
+        "--artifact-root",
+        type=Path,
+        default=None,
+        help="Override where artifacts are written. Defaults to cwd (external repo) or Studio root.",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Studio run helper.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -972,6 +1035,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Preview cleanup deletions without removing any files.",
     )
+    _add_artifact_root_arg(prepare_parser)
 
     finalize_parser = subparsers.add_parser("finalize", help="Mark an existing run as completed and refresh index.")
     finalize_parser.add_argument(
@@ -1013,6 +1077,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         help="Optional cost (in USD) attributed to this run.",
     )
+    _add_artifact_root_arg(finalize_parser)
 
     cleanup_parser = subparsers.add_parser(
         "cleanup", help="Manually enforce cleanup thresholds."
@@ -1022,6 +1087,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Report what would be deleted without removing files.",
     )
+    _add_artifact_root_arg(cleanup_parser)
 
     validate_parser = subparsers.add_parser(
         "validate", help="Validate Studio run outputs (documents and/or code)."
@@ -1043,6 +1109,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Path to validation config TOML (default: .studio/validation.toml).",
     )
+    _add_artifact_root_arg(validate_parser)
 
     return parser
 
@@ -1149,6 +1216,11 @@ def validate_run(args: argparse.Namespace) -> None:
 
 def main() -> None:
     args = parse_cli_args()
+
+    # Apply --artifact-root override before any command runs
+    artifact_root = getattr(args, "artifact_root", None)
+    if artifact_root is not None:
+        set_artifact_root(artifact_root)
 
     if args.command == "prepare":
         prepare_run(args)

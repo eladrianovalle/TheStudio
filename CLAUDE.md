@@ -84,8 +84,4 @@ Four phases: `market`, `design`, `tech`, `studio`. Each has distinct advocate/co
 - **Test-driven discipline** is mandatory for tech phase implementations.
 - **Documentation contract**: changes to workflow must update README, STUDIO_INTERACTION_GUIDE.md, and affected bridge docs simultaneously.
 - **Working directories**: `.scratch/` for temp files, `.private/` for sensitive data — both gitignored. Never commit `studio/output/` or `studio/knowledge/`.
-- Cross-repo usage: when run outside this repo, artifacts go to `<other-repo>/.studio/output/`. Override with `STUDIO_ARTIFACT_ROOT` env var.
-
-## Migration Status
-
-See `STUDIO_MIGRATION_PLAN.md` for the active plan to build Claude Code native execution alongside Windsurf support.
+- Cross-repo usage: when run outside this repo, artifacts go to `<repo>/.studio/output/`. First run auto-scaffolds `.studio/` and a bridge doc. Override with `--artifact-root` flag or `STUDIO_ARTIFACT_ROOT` env var. Priority: flag > env > cwd detection.

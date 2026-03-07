@@ -15,9 +15,13 @@ You are executing a Studio phase run. Follow these steps exactly:
 
 Run the prepare command to create a run directory and instructions:
 
+Determine the Studio root path. If this repo contains a `studio/run_phase.py`, use that. Otherwise check `$STUDIO_ROOT`. Then run:
+
 ```bash
-cd studio && python run_phase.py prepare $ARGUMENTS --no-scopes
+python "$STUDIO_ROOT/run_phase.py" prepare $ARGUMENTS --no-scopes
 ```
+
+If running from a repo that is NOT the Studio repo itself, artifacts will automatically land in the current repo under `.studio/output/`. A bridge doc will be created on first use.
 
 Note the run_id and run directory path from the output.
 
@@ -65,7 +69,7 @@ Write a summary of the entire run (inputs, iterations, verdict, key recommendati
 ### Step 6: Finalize
 
 ```bash
-cd studio && python run_phase.py finalize --phase {phase} --run-id {run_id} --status completed --verdict {APPROVED|REJECTED}
+python "$STUDIO_ROOT/run_phase.py" finalize --phase {phase} --run-id {run_id} --status completed --verdict {APPROVED|REJECTED}
 ```
 
 ## Key Rules

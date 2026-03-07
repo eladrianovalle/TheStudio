@@ -23,10 +23,12 @@ class TestSlashCommand:
         self.content = COMMAND_FILE.read_text()
 
     def test_command_references_prepare(self):
-        assert "run_phase.py prepare" in self.content
+        assert "run_phase.py" in self.content
+        assert "prepare" in self.content
 
     def test_command_references_finalize(self):
-        assert "run_phase.py finalize" in self.content
+        assert "run_phase.py" in self.content
+        assert "finalize" in self.content
 
     def test_command_references_agent_separation(self):
         """The command must instruct separate Agent invocations."""
@@ -218,7 +220,8 @@ class TestInstructionContent:
         run_dir = studio_root / "output" / "tech" / run_id
         instructions = (run_dir / "instructions.md").read_text()
 
-        assert "run_phase.py finalize" in instructions
+        assert "run_phase.py" in instructions
+        assert "finalize --phase tech" in instructions
         assert run_id in instructions
 
 

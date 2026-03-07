@@ -65,9 +65,42 @@ Iteration 2:
 
 If a previous run in the same phase was REJECTED, the prepare step automatically injects that rejection context into the new run's instructions. The advocate sees what failed last time and must address those concerns.
 
+## Cross-Repo Usage
+
+Studio can be invoked from any external repository. Artifacts land in the calling repo, not in Studio.
+
+### Setup
+
+1. Set `STUDIO_ROOT` in your shell profile or `.env`:
+   ```bash
+   export STUDIO_ROOT="/absolute/path/to/TheGameStudio/studio"
+   ```
+
+2. Run any Studio command from your repo. On first use, Studio auto-creates:
+   - `.studio/output/` and `.studio/knowledge/` directories
+   - `docs/studio-bridge.md` — pre-filled with your `STUDIO_ROOT` path
+
+3. Optionally copy slash commands for convenience:
+   ```bash
+   mkdir -p .claude/commands
+   # See studio/docs/BRIDGE_COMMANDS_TEMPLATE.md for command templates
+   ```
+
+### Explicit artifact routing
+
+Use `--artifact-root` to force artifacts to a specific location:
+```bash
+python "$STUDIO_ROOT/run_phase.py" prepare --phase market --text "..." --artifact-root /path/to/target
+```
+
+Or set `STUDIO_ARTIFACT_ROOT` as an environment variable.
+
+Priority: `--artifact-root` flag > `STUDIO_ARTIFACT_ROOT` env > cwd-based detection.
+
 ## Artifacts
 
-All outputs go to `studio/output/<phase>/run_<phase>_<timestamp>/`:
+When running from the Studio repo, outputs go to `studio/output/<phase>/run_<phase>_<timestamp>/`.
+When running from an external repo, outputs go to `<repo>/.studio/output/<phase>/run_<phase>_<timestamp>/`.
 
 ```
 run_market_20260307_143022/
@@ -87,12 +120,12 @@ If you prefer manual control over the process:
 
 ```bash
 # 1. Prepare
-cd studio && python run_phase.py prepare --phase market --text "your idea"
+python "$STUDIO_ROOT/run_phase.py" prepare --phase market --text "your idea"
 
 # 2. Execute advocate/contrarian manually (read instructions.md for prompts)
 
 # 3. Finalize
-cd studio && python run_phase.py finalize --phase market --run-id run_market_... --status completed --verdict APPROVED
+python "$STUDIO_ROOT/run_phase.py" finalize --phase market --run-id run_market_... --status completed --verdict APPROVED
 ```
 
 ## Studio Phase (Multi-Role)
