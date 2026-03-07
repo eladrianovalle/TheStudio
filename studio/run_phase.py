@@ -605,11 +605,10 @@ def build_instruction_doc(
             ]
         )
 
-    studio_root_abs = get_studio_root().resolve()
     finalize_snippet = textwrap.dedent(
         f"""
         ```
-        python "{studio_root_abs}/run_phase.py" finalize --phase {phase} --run-id {meta['run_id']} --status completed --verdict <APPROVED|REJECTED|N/A>
+        python "{get_studio_root()}/run_phase.py" finalize --phase {phase} --run-id {meta['run_id']} --status completed --verdict <APPROVED|REJECTED|N/A>
         ```
         """
     ).strip()
@@ -756,7 +755,7 @@ def _build_run_meta(
     return meta
 
 
-def _scaffold_external_repo(artifact_root: Path) -> None:
+def _scaffold_external_repo(artifact_root: Path, studio_root: Path) -> None:
     """Create .studio/ structure and bridge doc in an external repo on first use."""
     studio_dir = artifact_root / ".studio"
     if studio_dir.exists():
@@ -764,8 +763,7 @@ def _scaffold_external_repo(artifact_root: Path) -> None:
 
     studio_dir.mkdir(parents=True, exist_ok=True)
     (studio_dir / "output").mkdir(exist_ok=True)
-    knowledge_dir = studio_dir / "knowledge"
-    knowledge_dir.mkdir(exist_ok=True)
+    (studio_dir / "knowledge").mkdir(exist_ok=True)
 
     # Copy bridge template if no bridge doc exists
     bridge_candidates = [
@@ -773,16 +771,14 @@ def _scaffold_external_repo(artifact_root: Path) -> None:
         artifact_root / "studio-bridge.md",
     ]
     if not any(c.exists() for c in bridge_candidates):
-        template_path = get_studio_root() / "docs" / "STUDIO_BRIDGE_TEMPLATE.md"
+        template_path = studio_root / "docs" / "STUDIO_BRIDGE_TEMPLATE.md"
         if template_path.exists():
             dest = artifact_root / "docs" / "studio-bridge.md"
             dest.parent.mkdir(parents=True, exist_ok=True)
             template = template_path.read_text(encoding="utf-8")
-            # Inject the Studio root path into the template
-            studio_root_str = str(get_studio_root().resolve())
             template = template.replace(
                 'export STUDIO_ROOT="/path/to/studio"',
-                f'export STUDIO_ROOT="{studio_root_str}"',
+                f'export STUDIO_ROOT="{studio_root}"',
             )
             dest.write_text(template, encoding="utf-8")
             print(f"  Created bridge doc: {dest}")
@@ -800,10 +796,10 @@ def prepare_run(args: argparse.Namespace) -> str:
         raise ValueError("Input text cannot be empty.")
 
     # Auto-scaffold external repos on first use
-    artifact_root = get_artifact_root().resolve()
-    studio_root = get_studio_root().resolve()
+    artifact_root = get_artifact_root()
+    studio_root = get_studio_root()
     if artifact_root != studio_root:
-        _scaffold_external_repo(artifact_root)
+        _scaffold_external_repo(artifact_root, studio_root)
 
     skip_cleanup = getattr(args, "skip_cleanup", False) or _env_flag(CLEANUP_SKIP_ENV)
     cleanup_dry = getattr(args, "cleanup_dry_run", False) or _env_flag(CLEANUP_DRY_ENV)

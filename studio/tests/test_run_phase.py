@@ -135,8 +135,7 @@ def test_output_root_defaults_to_origin_repo_when_running_outside_studio(tmp_pat
     monkeypatch.delenv("STUDIO_ARTIFACT_ROOT", raising=False)
     monkeypatch.chdir(project_root)
 
-    # Reset any leftover override from previous tests
-    run_phase.set_artifact_root(None)
+    monkeypatch.setattr(run_phase, "_artifact_root_override", None)
 
     output_root = run_phase.get_output_root()
     knowledge_path = run_phase.get_knowledge_log_path()
@@ -155,13 +154,10 @@ def test_artifact_root_cli_override(tmp_path, monkeypatch):
     monkeypatch.setenv("STUDIO_ROOT", str(studio_root))
     monkeypatch.setenv("STUDIO_ARTIFACT_ROOT", str(tmp_path / "should_be_ignored"))
     monkeypatch.chdir(studio_root)  # cwd inside studio — would normally route to studio
+    monkeypatch.setattr(run_phase, "_artifact_root_override", explicit_root)
 
-    run_phase.set_artifact_root(explicit_root)
-    try:
-        output_root = run_phase.get_output_root()
-        assert output_root == explicit_root / ".studio" / "output"
-    finally:
-        run_phase.set_artifact_root(None)
+    output_root = run_phase.get_output_root()
+    assert output_root == explicit_root / ".studio" / "output"
 
 
 def test_cross_repo_prepare_creates_artifacts_in_caller_repo(tmp_path, monkeypatch):
@@ -178,27 +174,24 @@ def test_cross_repo_prepare_creates_artifacts_in_caller_repo(tmp_path, monkeypat
     monkeypatch.setenv("STUDIO_ROOT", str(studio_root))
     monkeypatch.delenv("STUDIO_ARTIFACT_ROOT", raising=False)
     monkeypatch.chdir(game_repo)
-    run_phase.set_artifact_root(None)
+    monkeypatch.setattr(run_phase, "_artifact_root_override", None)
 
-    try:
-        run_id = run_phase.prepare_run(make_prepare_args(phase="market", text="Test cross-repo"))
+    run_id = run_phase.prepare_run(make_prepare_args(phase="market", text="Test cross-repo"))
 
-        # Artifacts should be in game_repo, NOT studio
-        run_dir = game_repo / ".studio" / "output" / "market" / run_id
-        assert run_dir.exists(), f"Expected run dir at {run_dir}"
-        assert (run_dir / "instructions.md").exists()
-        assert (run_dir / "run.json").exists()
+    # Artifacts should be in game_repo, NOT studio
+    run_dir = game_repo / ".studio" / "output" / "market" / run_id
+    assert run_dir.exists(), f"Expected run dir at {run_dir}"
+    assert (run_dir / "instructions.md").exists()
+    assert (run_dir / "run.json").exists()
 
-        # Studio's own output should NOT have this run
-        studio_output = studio_root / "output" / "market" / run_id
-        assert not studio_output.exists(), "Artifacts should NOT be in Studio repo"
+    # Studio's own output should NOT have this run
+    studio_output = studio_root / "output" / "market" / run_id
+    assert not studio_output.exists(), "Artifacts should NOT be in Studio repo"
 
-        # Index should be in game_repo
-        index_path = game_repo / ".studio" / "output" / "index.md"
-        assert index_path.exists()
-        assert run_id in index_path.read_text()
-    finally:
-        run_phase.set_artifact_root(None)
+    # Index should be in game_repo
+    index_path = game_repo / ".studio" / "output" / "index.md"
+    assert index_path.exists()
+    assert run_id in index_path.read_text()
 
 
 def test_cross_repo_scaffold_creates_bridge_doc(tmp_path, monkeypatch):
@@ -222,23 +215,20 @@ def test_cross_repo_scaffold_creates_bridge_doc(tmp_path, monkeypatch):
     monkeypatch.setenv("STUDIO_ROOT", str(studio_root))
     monkeypatch.delenv("STUDIO_ARTIFACT_ROOT", raising=False)
     monkeypatch.chdir(game_repo)
-    run_phase.set_artifact_root(None)
+    monkeypatch.setattr(run_phase, "_artifact_root_override", None)
 
-    try:
-        run_phase.prepare_run(make_prepare_args(phase="market", text="Scaffold test"))
+    run_phase.prepare_run(make_prepare_args(phase="market", text="Scaffold test"))
 
-        # .studio/ should exist
-        assert (game_repo / ".studio").is_dir()
-        assert (game_repo / ".studio" / "output").is_dir()
-        assert (game_repo / ".studio" / "knowledge").is_dir()
+    # .studio/ should exist
+    assert (game_repo / ".studio").is_dir()
+    assert (game_repo / ".studio" / "output").is_dir()
+    assert (game_repo / ".studio" / "knowledge").is_dir()
 
-        # Bridge doc should be created with Studio root injected
-        bridge = game_repo / "docs" / "studio-bridge.md"
-        assert bridge.exists()
-        content = bridge.read_text()
-        assert str(studio_root.resolve()) in content
-    finally:
-        run_phase.set_artifact_root(None)
+    # Bridge doc should be created with Studio root injected
+    bridge = game_repo / "docs" / "studio-bridge.md"
+    assert bridge.exists()
+    content = bridge.read_text()
+    assert str(studio_root.resolve()) in content
 
 
 def test_cross_repo_scaffold_skips_existing_bridge(tmp_path, monkeypatch):
@@ -261,16 +251,13 @@ def test_cross_repo_scaffold_skips_existing_bridge(tmp_path, monkeypatch):
     monkeypatch.setenv("STUDIO_ROOT", str(studio_root))
     monkeypatch.delenv("STUDIO_ARTIFACT_ROOT", raising=False)
     monkeypatch.chdir(game_repo)
-    run_phase.set_artifact_root(None)
+    monkeypatch.setattr(run_phase, "_artifact_root_override", None)
 
-    try:
-        run_phase.prepare_run(make_prepare_args(phase="market", text="Existing bridge test"))
+    run_phase.prepare_run(make_prepare_args(phase="market", text="Existing bridge test"))
 
-        # Custom bridge should be preserved
-        bridge = game_repo / "docs" / "studio-bridge.md"
-        assert bridge.read_text() == "CUSTOM BRIDGE"
-    finally:
-        run_phase.set_artifact_root(None)
+    # Custom bridge should be preserved
+    bridge = game_repo / "docs" / "studio-bridge.md"
+    assert bridge.read_text() == "CUSTOM BRIDGE"
 
 
 def test_instructions_finalize_snippet_uses_absolute_path(studio_root):
