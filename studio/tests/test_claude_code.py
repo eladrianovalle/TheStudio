@@ -31,7 +31,7 @@ class TestSlashCommand:
     def test_command_references_agent_separation(self):
         """The command must instruct separate Agent invocations."""
         assert "Agent" in self.content
-        assert "separate" in self.content.lower() or "SEPARATE" in self.content
+        assert "separate" in self.content.lower()
 
     def test_command_references_verdict(self):
         assert "VERDICT: APPROVED" in self.content
@@ -208,16 +208,7 @@ class TestTechPhaseE2E:
 class TestInstructionContent:
     """Test that generated instructions have Claude-Code-relevant content."""
 
-    def test_instructions_are_assistant_agnostic(self, studio_root):
-        """Instructions should not reference Cascade."""
-        run_id = run_phase.prepare_run(
-            make_prepare_args(phase="market", text="Test idea")
-        )
-        run_dir = studio_root / "output" / "market" / run_id
-        instructions = (run_dir / "instructions.md").read_text()
-
-        assert "Cascade" not in instructions
-        assert "Studio Instructions" in instructions
+    # NOTE: assistant-agnostic branding is tested in test_run_phase.py::test_instruction_doc_uses_generic_title
 
     def test_instructions_contain_finalize_command(self, studio_root):
         """Instructions should include the finalize CLI snippet."""
@@ -246,7 +237,7 @@ class TestStudioSlashCommand:
         assert "role-pack" in self.content or "role_pack" in self.content
 
     def test_command_references_agent_separation(self):
-        assert "SEPARATE" in self.content or "separate" in self.content.lower()
+        assert "separate" in self.content.lower()
 
     def test_command_references_integrator(self):
         assert "Integrator" in self.content
@@ -271,20 +262,24 @@ class TestStudioSlashCommand:
 class TestStudioPhaseE2E:
     """Simulate a full studio phase run with multiple roles."""
 
-    def test_studio_prepare_has_role_menu(self, studio_root):
-        """Prepare with studio phase should generate Role Menu in instructions."""
+    @pytest.fixture
+    def studio_prepared(self, studio_root):
+        """Prepare a default studio phase run, shared by instruction-inspection tests."""
         run_id = run_phase.prepare_run(
             make_prepare_args(phase="studio", text="Improve Studio workflow")
         )
         run_dir = studio_root / "output" / "studio" / run_id
+        return run_dir
 
-        instructions = (run_dir / "instructions.md").read_text()
+    def test_studio_prepare_has_role_menu(self, studio_prepared):
+        """Prepare with studio phase should generate Role Menu in instructions."""
+        instructions = (studio_prepared / "instructions.md").read_text()
         assert "Role Menu" in instructions
         assert "Marketing Lead" in instructions
         assert "Engineering Lead" in instructions
         assert "advocate--marketing--" in instructions
 
-        meta = json.loads((run_dir / "run.json").read_text())
+        meta = json.loads((studio_prepared / "run.json").read_text())
         assert "studio_roles" in meta
         assert "marketing" in meta["studio_roles"]["invited"]
         assert "engineering" in meta["studio_roles"]["invited"]
@@ -382,13 +377,9 @@ class TestStudioPhaseE2E:
         assert "marketing" in final_meta["studio_roles"]["completed"]
         assert "engineering" in final_meta["studio_roles"]["completed"]
 
-    def test_studio_instructions_have_integrator_duel(self, studio_root):
+    def test_studio_instructions_have_integrator_duel(self, studio_prepared):
         """Studio instructions should describe the integrator duel process."""
-        run_id = run_phase.prepare_run(
-            make_prepare_args(phase="studio", text="Test integrator")
-        )
-        run_dir = studio_root / "output" / "studio" / run_id
-        instructions = (run_dir / "instructions.md").read_text()
+        instructions = (studio_prepared / "instructions.md").read_text()
 
         assert "Integrator Duel" in instructions
         assert "Integrator Advocate" in instructions
