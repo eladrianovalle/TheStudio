@@ -154,7 +154,7 @@ Commit these helpers to dependent repos if you want reproducible ergonomics; oth
 
 ## 6. Reference Docs
 
-- [README.md](../README.md) – top-level overview and testing notes.
+- [README.md](../../README.md) – top-level overview and testing notes.
 - [STUDIO_INTERACTION_GUIDE.md](../STUDIO_INTERACTION_GUIDE.md) – the canonical user workflow.
 - [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) – Claude Code slash commands and agent workflow.
 - [windsurf/USAGE.md](./windsurf/USAGE.md) – Windsurf/Cascade-specific workflow.

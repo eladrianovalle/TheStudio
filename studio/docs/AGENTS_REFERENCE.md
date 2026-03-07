@@ -108,9 +108,10 @@ Because everything is declarative, there’s no hidden CrewAI config to edit—j
 
 ## 7. Related Docs
 
-- [README.md](../README.md) – overall workflow and testing notes.  
-- [STUDIO_INTERACTION_GUIDE.md](../STUDIO_INTERACTION_GUIDE.md) – day-to-day instructions.  
-- [WINDSURF_USAGE.md](./WINDSURF_USAGE.md) – prompts + palette shortcuts.  
+- [README.md](../../README.md) – overall workflow and testing notes.
+- [STUDIO_INTERACTION_GUIDE.md](../STUDIO_INTERACTION_GUIDE.md) – day-to-day instructions.
+- [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) – Claude Code slash commands and agent workflow.
+- [windsurf/USAGE.md](./windsurf/USAGE.md) – Windsurf/Cascade-specific workflow.  
 - [API.md](./API.md) – CLI/reference schema.  
 - [ARCHITECTURE.md](./ARCHITECTURE.md) – system view of prepare → execute → finalize.  
 

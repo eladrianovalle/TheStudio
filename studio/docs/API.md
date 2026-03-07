@@ -229,7 +229,7 @@ Stick to the CLI whenever possible so scripts remain simple and any assistant ca
 
 ## 9. Related Documents
 
-- [README.md](../README.md) – big-picture overview and testing notes.
+- [README.md](../../README.md) – big-picture overview and testing notes.
 - [STUDIO_INTERACTION_GUIDE.md](../STUDIO_INTERACTION_GUIDE.md) – canonical user workflow.
 - [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) – Claude Code slash commands and agent workflow.
 - [windsurf/USAGE.md](./windsurf/USAGE.md) – Windsurf/Cascade-specific workflow.
