@@ -169,19 +169,6 @@ CLEANUP_SKIP_ENV = "STUDIO_SKIP_CLEANUP"
 CLEANUP_DRY_ENV = "STUDIO_CLEANUP_DRY_RUN"
 ARTIFACT_ROOT_ENV = "STUDIO_ARTIFACT_ROOT"
 
-PREPARE_OPTION_FLAGS = {
-    "--phase",
-    "--text",
-    "--budget",
-    "--max-iterations",
-    "--role-pack",
-    "--roles",
-    "--scopes",
-    "--no-scopes",
-    "--skip-cleanup",
-    "--cleanup-dry-run",
-}
-
 SUBCOMMANDS = {"prepare", "finalize", "cleanup", "validate"}
 
 

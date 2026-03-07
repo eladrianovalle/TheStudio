@@ -16,31 +16,28 @@ COMMAND_FILE = REPO_ROOT / ".claude" / "commands" / "run-phase.md"
 class TestSlashCommand:
     """Verify the slash command file exists and has required content."""
 
-    def test_command_file_exists(self):
+    @pytest.fixture(autouse=True)
+    def _load_command(self):
         assert COMMAND_FILE.exists(), f"Missing {COMMAND_FILE}"
+        self.content = COMMAND_FILE.read_text()
 
     def test_command_references_prepare(self):
-        content = COMMAND_FILE.read_text()
-        assert "run_phase.py prepare" in content
+        assert "run_phase.py prepare" in self.content
 
     def test_command_references_finalize(self):
-        content = COMMAND_FILE.read_text()
-        assert "run_phase.py finalize" in content
+        assert "run_phase.py finalize" in self.content
 
     def test_command_references_agent_separation(self):
         """The command must instruct separate Agent invocations."""
-        content = COMMAND_FILE.read_text()
-        assert "Agent" in content
-        assert "separate" in content.lower() or "SEPARATE" in content
+        assert "Agent" in self.content
+        assert "separate" in self.content.lower() or "SEPARATE" in self.content
 
     def test_command_references_verdict(self):
-        content = COMMAND_FILE.read_text()
-        assert "VERDICT: APPROVED" in content
-        assert "VERDICT: REJECTED" in content
+        assert "VERDICT: APPROVED" in self.content
+        assert "VERDICT: REJECTED" in self.content
 
     def test_command_has_arguments_placeholder(self):
-        content = COMMAND_FILE.read_text()
-        assert "$ARGUMENTS" in content
+        assert "$ARGUMENTS" in self.content
 
 
 class TestMarketPhaseE2E:
@@ -207,42 +204,27 @@ class TestTechPhaseE2E:
         assert meta["iterations_run"] == 1
 
 
-class TestRerunFlow:
-    """Test that rejection from one run feeds into the next."""
+class TestInstructionContent:
+    """Test that generated instructions have Claude-Code-relevant content."""
 
-    def test_rejection_context_injected_on_rerun(self, studio_root):
-        import time
-
-        # Run 1: REJECTED
-        run_id_1 = run_phase.prepare_run(
-            make_prepare_args(phase="tech", text="Build auth system")
+    def test_instructions_are_assistant_agnostic(self, studio_root):
+        """Instructions should not reference Cascade."""
+        run_id = run_phase.prepare_run(
+            make_prepare_args(phase="market", text="Test idea")
         )
-        run_dir_1 = studio_root / "output" / "tech" / run_id_1
+        run_dir = studio_root / "output" / "market" / run_id
+        instructions = (run_dir / "instructions.md").read_text()
 
-        (run_dir_1 / "advocate_1.md").write_text("# Advocate\n\nUse JWT tokens.")
-        (run_dir_1 / "contrarian_1.md").write_text(
-            "# Contrarian\n\n"
-            "VERDICT: REJECTED\n\n"
-            "1. No token refresh strategy\n"
-            "2. Missing rate limiting\n"
+        assert "Cascade" not in instructions
+        assert "Studio Instructions" in instructions
+
+    def test_instructions_contain_finalize_command(self, studio_root):
+        """Instructions should include the finalize CLI snippet."""
+        run_id = run_phase.prepare_run(
+            make_prepare_args(phase="tech", text="Build API")
         )
-        (run_dir_1 / "summary.md").write_text("# Summary\n\nRejected.")
+        run_dir = studio_root / "output" / "tech" / run_id
+        instructions = (run_dir / "instructions.md").read_text()
 
-        run_phase.finalize_run(
-            make_finalize_args(
-                phase="tech", run_id=run_id_1, verdict="REJECTED",
-            )
-        )
-
-        time.sleep(1)  # avoid timestamp collision
-
-        # Run 2: Should have rerun context
-        run_id_2 = run_phase.prepare_run(
-            make_prepare_args(phase="tech", text="Build auth system (revised)")
-        )
-        run_dir_2 = studio_root / "output" / "tech" / run_id_2
-
-        instructions = (run_dir_2 / "instructions.md").read_text()
-        # The instructions should reference the previous rejection
-        assert run_dir_2.exists()
-        assert (run_dir_2 / "instructions.md").exists()
+        assert "run_phase.py finalize" in instructions
+        assert run_id in instructions
