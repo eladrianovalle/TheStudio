@@ -88,7 +88,7 @@ def _seed_studio_root(root: Path) -> None:
     packs_dir.mkdir(exist_ok=True)
     (packs_dir / "studio_core.json").write_text(
         json.dumps(
-            {"name": "studio_core", "description": "Default pack", "roles": ["marketing"]},
+            {"name": "studio_core", "description": "Default pack", "roles": ["marketing", "design", "engineering"]},
             indent=2,
         ),
         encoding="utf-8",

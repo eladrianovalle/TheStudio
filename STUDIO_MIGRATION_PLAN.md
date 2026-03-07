@@ -1,6 +1,6 @@
 # Studio Migration Plan
 
-Status: **In Progress — Milestone 4 (Multi-role Studio Phase)**
+Status: **In Progress — Milestone 5 (Windsurf as Peer Variant)**
 
 ## Goal
 Create a shared-core Studio with Claude Code and Windsurf as equal execution peers. Fix bugs, remove dead weight, build test foundation, then implement Claude Code native execution.
@@ -51,11 +51,12 @@ Create a shared-core Studio with Claude Code and Windsurf as equal execution pee
 - [x] T3.5 Test market + tech phases end-to-end (9 tests: slash command validation, market E2E, tech E2E, rerun flow)
 - **Result: 141 tests passing**
 
-### M4: Multi-role Studio Phase
-- [ ] T4.1 Create `.claude/commands/run-studio-phase.md`
-- [ ] T4.2 Sequential role processing with agent spawning
-- [ ] T4.3 Integrator duel via separate agents
-- [ ] T4.4 Test full studio phase with studio_core pack
+### M4: Multi-role Studio Phase — COMPLETE
+- [x] T4.1 Create `.claude/commands/run-studio-phase.md` (slash command with per-role agent instructions)
+- [x] T4.2 Sequential role processing with agent spawning (command documents role-by-role flow)
+- [x] T4.3 Integrator duel via separate agents (Integrator Advocate + Contrarian as separate Agent calls)
+- [x] T4.4 Test full studio phase with studio_core pack (11 tests: command validation, role menu, full workflow, integrator duel)
+- **Result: 152 tests passing**
 
 ### M5: Windsurf as Peer Variant
 - [ ] T5.1 Move Windsurf docs into `docs/windsurf/`

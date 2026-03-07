@@ -11,6 +11,7 @@ from conftest import make_prepare_args, make_finalize_args
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COMMAND_FILE = REPO_ROOT / ".claude" / "commands" / "run-phase.md"
+STUDIO_COMMAND_FILE = REPO_ROOT / ".claude" / "commands" / "run-studio-phase.md"
 
 
 class TestSlashCommand:
@@ -228,3 +229,168 @@ class TestInstructionContent:
 
         assert "run_phase.py finalize" in instructions
         assert run_id in instructions
+
+
+class TestStudioSlashCommand:
+    """Verify the studio phase slash command file."""
+
+    @pytest.fixture(autouse=True)
+    def _load_command(self):
+        assert STUDIO_COMMAND_FILE.exists(), f"Missing {STUDIO_COMMAND_FILE}"
+        self.content = STUDIO_COMMAND_FILE.read_text()
+
+    def test_command_references_studio_phase(self):
+        assert "--phase studio" in self.content
+
+    def test_command_references_role_pack(self):
+        assert "role-pack" in self.content or "role_pack" in self.content
+
+    def test_command_references_agent_separation(self):
+        assert "SEPARATE" in self.content or "separate" in self.content.lower()
+
+    def test_command_references_integrator(self):
+        assert "Integrator" in self.content
+        assert "integrator.md" in self.content
+
+    def test_command_references_role_file_naming(self):
+        assert "advocate--" in self.content
+        assert "contrarian--" in self.content
+
+    def test_command_has_arguments_placeholder(self):
+        assert "$ARGUMENTS" in self.content
+
+    def test_command_references_sequential_processing(self):
+        assert "sequentially" in self.content.lower() or "sequential" in self.content.lower()
+
+    def test_command_references_integrator_duel(self):
+        """Integrator should have its own advocate/contrarian duel."""
+        assert "Integrator Advocate" in self.content
+        assert "Integrator Contrarian" in self.content
+
+
+class TestStudioPhaseE2E:
+    """Simulate a full studio phase run with multiple roles."""
+
+    def test_studio_prepare_has_role_menu(self, studio_root):
+        """Prepare with studio phase should generate Role Menu in instructions."""
+        run_id = run_phase.prepare_run(
+            make_prepare_args(phase="studio", text="Improve Studio workflow")
+        )
+        run_dir = studio_root / "output" / "studio" / run_id
+
+        instructions = (run_dir / "instructions.md").read_text()
+        assert "Role Menu" in instructions
+        assert "Marketing Lead" in instructions
+        assert "Engineering Lead" in instructions
+        assert "advocate--marketing--" in instructions
+
+        meta = json.loads((run_dir / "run.json").read_text())
+        assert "studio_roles" in meta
+        assert "marketing" in meta["studio_roles"]["invited"]
+        assert "engineering" in meta["studio_roles"]["invited"]
+
+    def test_studio_full_workflow(self, studio_root):
+        """Simulate a complete studio phase with two roles and integrator."""
+        run_id = run_phase.prepare_run(
+            make_prepare_args(
+                phase="studio",
+                text="Add AI-powered critique engine",
+                roles=["+marketing", "+engineering", "-design"],
+            )
+        )
+        run_dir = studio_root / "output" / "studio" / run_id
+        meta = json.loads((run_dir / "run.json").read_text())
+        invited = meta["studio_roles"]["invited"]
+        assert "marketing" in invited
+        assert "engineering" in invited
+
+        # Simulate marketing role (1 iteration, approved)
+        (run_dir / "advocate--marketing--01.md").write_text(
+            "# Marketing Advocate\n\n"
+            "## Audience\n\nIndie developers seeking AI feedback.\n\n"
+            "## GTM\n\nProduct Hunt launch + dev community outreach.\n\n"
+            "## KPIs\n\n- 500 signups in first month\n"
+        )
+        (run_dir / "contrarian--marketing--01.md").write_text(
+            "# Marketing Contrarian\n\n"
+            "Solid approach for indie market.\n\n"
+            "VERDICT: APPROVED\n"
+        )
+
+        # Simulate engineering role (rejected then approved)
+        (run_dir / "advocate--engineering--01.md").write_text(
+            "# Engineering Advocate\n\n"
+            "## Architecture\n\nLLM pipeline with async processing.\n\n"
+            "## Stack\n\nPython + FastAPI + Claude API.\n"
+        )
+        (run_dir / "contrarian--engineering--01.md").write_text(
+            "# Engineering Contrarian\n\n"
+            "VERDICT: REJECTED\n\n"
+            "1. No cost controls on API calls\n"
+            "2. Missing fallback for API outages\n"
+        )
+        (run_dir / "advocate--engineering--02.md").write_text(
+            "# Engineering Advocate (Revised)\n\n"
+            "## Architecture\n\nLLM pipeline with rate limiting and circuit breaker.\n\n"
+            "## Cost Controls\n\nPer-request budget cap, daily spending limit.\n\n"
+            "## Fallbacks\n\nGraceful degradation to rule-based critique.\n"
+        )
+        (run_dir / "contrarian--engineering--02.md").write_text(
+            "# Engineering Contrarian (Round 2)\n\n"
+            "Cost controls and fallbacks address concerns.\n\n"
+            "VERDICT: APPROVED\n"
+        )
+
+        # Simulate integrator duel
+        (run_dir / "integrator.md").write_text(
+            "# Integrator\n\n"
+            "### Integrator Advocate\n\n"
+            "Phase 1: Build critique pipeline with cost controls.\n"
+            "Phase 2: Launch to indie developers via Product Hunt.\n"
+            "Phase 3: Iterate based on usage data.\n\n"
+            "### Integrator Contrarian\n\n"
+            "Plan is sound but Phase 2 needs success criteria before launch.\n\n"
+            "VERDICT: APPROVED\n\n"
+            "### Integrated Plan\n\n"
+            "1. Build pipeline with rate limiting (2 weeks)\n"
+            "2. Define launch success criteria (1 week)\n"
+            "3. Product Hunt launch (1 day)\n"
+            "4. Monitor and iterate (ongoing)\n"
+        )
+
+        # Summary
+        (run_dir / "summary.md").write_text(
+            "# Studio Run Summary\n\n"
+            "## Roles\n"
+            "- Marketing: APPROVED (1 iteration)\n"
+            "- Engineering: APPROVED (2 iterations)\n\n"
+            "## Integrated Plan\n"
+            "4-phase rollout for AI critique engine.\n"
+        )
+
+        # Finalize
+        run_phase.finalize_run(
+            make_finalize_args(
+                phase="studio", run_id=run_id,
+                verdict="APPROVED", hours=1.5,
+            )
+        )
+
+        final_meta = json.loads((run_dir / "run.json").read_text())
+        assert final_meta["status"] == "COMPLETED"
+        assert final_meta["verdict"] == "APPROVED"
+        assert "marketing" in final_meta["studio_roles"]["completed"]
+        assert "engineering" in final_meta["studio_roles"]["completed"]
+
+    def test_studio_instructions_have_integrator_duel(self, studio_root):
+        """Studio instructions should describe the integrator duel process."""
+        run_id = run_phase.prepare_run(
+            make_prepare_args(phase="studio", text="Test integrator")
+        )
+        run_dir = studio_root / "output" / "studio" / run_id
+        instructions = (run_dir / "instructions.md").read_text()
+
+        assert "Integrator Duel" in instructions
+        assert "Integrator Advocate" in instructions
+        assert "Integrator Contrarian" in instructions
+        assert "integrator.md" in instructions
