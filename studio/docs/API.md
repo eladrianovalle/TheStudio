@@ -27,7 +27,7 @@ Supported commands:
 | --- | --- | --- | --- |
 | `--phase {market,design,tech,studio}` | ✅ | – | Studio phase to run. Controls artifact checklist and instruction copy. |
 | `--text "..."` | ✅ | – | Idea, objective, or question you want Studio to tackle. |
-| `--max-iterations N` | ❌ | `3` | How many Advocate↔Contrarian loops Cascade should run before stopping. |
+| `--max-iterations N` | ❌ | `3` | How many Advocate↔Contrarian loops the assistant should run before stopping. |
 | `--budget "$0-20/mo"` | ❌ | `$0-20/mo` | Advisory note printed in instructions (not enforced). Primarily used by `studio` phase. |
 | `--role-pack PACK` | ❌ | Manifest default | Studio-only: selects a curated pod from `role_packs/`. |
 | `--roles [+role|-role ...]` | ❌ | `None` | Studio-only: include/exclude roles relative to the selected pack. Supports `--roles +product +engineering +qa` and repeated flags (`--roles=+product --roles=+engineering --roles=+qa`). Use `-role` only when you explicitly need to remove a role. |
@@ -59,7 +59,7 @@ Inside each run directory:
 | `--run-id run_<phase>_<timestamp>` | ✅ | – | Identifier printed by `prepare`. |
 | `--status STATUS` | ❌ | `COMPLETED` | Free-form label (“completed”, “abandoned”, etc.). |
 | `--verdict VERDICT` | ❌ | – | `APPROVED`, `REJECTED`, `N/A`, or any label you prefer. |
-| `--iterations-run N` | ❌ | auto-count | Override if Cascade ran extra loops or skipped iterations. |
+| `--iterations-run N` | ❌ | auto-count | Override if the assistant ran extra loops or skipped iterations. |
 | `--hours FLOAT` | ❌ | `None` | Time spent; stored in `run.json` + `run_log.md`. |
 | `--cost FLOAT` | ❌ | `None` | Monetary cost in USD (typically `0`). |
 | `--summary PATH` | ❌ | auto-detected | Provide a custom summary path if you store it elsewhere. |
@@ -223,7 +223,7 @@ module.finalize_run(module.SimpleNamespace(
 ))
 ```
 
-Stick to the CLI whenever possible so scripts remain simple and Cascade can quote the same commands your teammates run manually.
+Stick to the CLI whenever possible so scripts remain simple and any assistant can quote the same commands your teammates run manually.
 
 ---
 
@@ -231,7 +231,8 @@ Stick to the CLI whenever possible so scripts remain simple and Cascade can quot
 
 - [README.md](../README.md) – big-picture overview and testing notes.
 - [STUDIO_INTERACTION_GUIDE.md](../STUDIO_INTERACTION_GUIDE.md) – canonical user workflow.
-- [WINDSURF_USAGE.md](./WINDSURF_USAGE.md) – conversational prompts + palette shortcuts.
+- [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) – Claude Code slash commands and agent workflow.
+- [windsurf/USAGE.md](./windsurf/USAGE.md) – Windsurf/Cascade-specific workflow.
 - [STUDIO_BRIDGE_TEMPLATE.md](./STUDIO_BRIDGE_TEMPLATE.md) – copy into every dependent repo.
 - [INTEGRATION_GUIDE.md](./INTEGRATION_GUIDE.md) – repo-level onboarding checklist and helper scripts.
 

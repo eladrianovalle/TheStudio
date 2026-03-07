@@ -1,6 +1,6 @@
 # Using Studio from Windsurf/Cascade
 
-This guide covers the Windsurf/Cascade-specific workflow for Studio. Every interaction flows through `run_phase.py` plus Cascade chat. For general Studio workflow, see [STUDIO_INTERACTION_GUIDE.md](../STUDIO_INTERACTION_GUIDE.md).
+This guide covers the Windsurf/Cascade-specific workflow for Studio. Every interaction flows through `run_phase.py` plus Cascade chat. For general Studio workflow, see [STUDIO_INTERACTION_GUIDE.md](../../STUDIO_INTERACTION_GUIDE.md).
 
 ---
 
@@ -161,9 +161,9 @@ You can add extra context files (screenshots, charts, code samples) as long as t
 
 ## 8. Related Docs
 
-- [README.md](../README.md) – overall vision + quick start.
-- [STUDIO_INTERACTION_GUIDE.md](../STUDIO_INTERACTION_GUIDE.md) – detailed workflow reference.
-- [STUDIO_BRIDGE_TEMPLATE.md](./STUDIO_BRIDGE_TEMPLATE.md) – copy into dependent repos.
-- [API.md](./API.md) – schema for `run_phase.py` arguments, metadata files, and output index.
+- [README.md](../../../README.md) – overall vision + quick start.
+- [STUDIO_INTERACTION_GUIDE.md](../../STUDIO_INTERACTION_GUIDE.md) – detailed workflow reference.
+- [STUDIO_BRIDGE_TEMPLATE.md](../STUDIO_BRIDGE_TEMPLATE.md) – copy into dependent repos.
+- [API.md](../API.md) – schema for `run_phase.py` arguments, metadata files, and output index.
 
 Keep all of these documents aligned whenever the workflow changes.

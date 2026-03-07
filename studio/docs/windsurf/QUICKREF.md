@@ -4,7 +4,7 @@
 
 - Set `STUDIO_ROOT` environment variable to your Studio path (e.g., `export STUDIO_ROOT="/path/to/studio"`).
 - Copy the bridge template into each repo that uses Studio (`docs/studio-bridge.md`) and fill in canon + instructions.
-- Optionally add a Windsurf command palette action for `run_phase.py prepare` (snippet in [WINDSURF_USAGE.md](./docs/WINDSURF_USAGE.md)).
+- Optionally add a Windsurf command palette action for `run_phase.py prepare` (snippet in [USAGE.md](./USAGE.md)).
 
 No PATH edits or API keys are required—the models run inside Cascade.
 
@@ -56,4 +56,4 @@ Always mention the bridge doc and run directory path so Cascade reloads the righ
 
 ## 📖 More Detail
 
-See [WINDSURF_USAGE.md](./docs/WINDSURF_USAGE.md) for deep-dive setup, sample prompts, and optional Windsurf shortcuts.
+See [USAGE.md](./USAGE.md) for deep-dive setup, sample prompts, and optional Windsurf shortcuts.

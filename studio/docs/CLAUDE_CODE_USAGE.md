@@ -97,4 +97,16 @@ cd studio && python run_phase.py finalize --phase market --run-id run_market_...
 
 ## Studio Phase (Multi-Role)
 
-The `studio` phase with multi-role pods is handled by a separate command — see M4 in the migration plan. For now, use the Windsurf workflow for studio-phase runs.
+For multi-role studio phase runs with role packs and integrator duels:
+
+```
+/run-studio-phase --text "Add AI critique engine" --roles +marketing +engineering
+```
+
+Options:
+- `--text` — Required. The objective for the multi-role debate
+- `--role-pack <name>` — Pod preset (default: studio_core)
+- `--roles +role -role` — Include/exclude roles from the pack
+- `--max-iterations N` — Cap per-role advocate/contrarian rounds (default: 3)
+
+Each role is processed sequentially with separate Advocate and Contrarian agents. After all roles complete, an Integrator duel synthesizes the cross-functional plan. See the [command file](../../.claude/commands/run-studio-phase.md) for full details.

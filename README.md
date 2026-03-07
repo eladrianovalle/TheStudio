@@ -236,12 +236,6 @@ Reference material:
 
 ---
 
-## Migration Status
-
-Studio is being adapted to support Claude Code as a native execution peer alongside Windsurf. See **[STUDIO_MIGRATION_PLAN.md](./STUDIO_MIGRATION_PLAN.md)** for the active plan and progress.
-
----
-
 ## License
 
 MIT — reuse freely across your projects.

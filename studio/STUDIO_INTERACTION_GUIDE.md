@@ -19,7 +19,7 @@ Single source of truth for running Studio. The legacy CLI runtime and direct Pyt
    - Studio location (and `STUDIO_ROOT` if overridden).
    - Canonical docs the assistant must read before each run.
    - Prompt stub referencing the bridge doc + canon and echoing the run folder path created by `run_phase.py`.
-3. **Optional shortcuts** — add command palette entries or shell aliases that wrap the `run_phase.py prepare/finalize` commands (examples in `docs/WINDSURF_USAGE.md`).
+3. **Optional shortcuts** — add command palette entries, shell aliases, or slash commands that wrap the `run_phase.py prepare/finalize` commands (examples in `docs/CLAUDE_CODE_USAGE.md` and `docs/windsurf/USAGE.md`).
 
 No additional dependencies or API keys are required — the agents execute inside your AI assistant.
 

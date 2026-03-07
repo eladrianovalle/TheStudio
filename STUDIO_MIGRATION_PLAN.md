@@ -1,6 +1,6 @@
 # Studio Migration Plan
 
-Status: **In Progress — Milestone 5 (Windsurf as Peer Variant)**
+Status: **COMPLETE**
 
 ## Goal
 Create a shared-core Studio with Claude Code and Windsurf as equal execution peers. Fix bugs, remove dead weight, build test foundation, then implement Claude Code native execution.
@@ -58,8 +58,12 @@ Create a shared-core Studio with Claude Code and Windsurf as equal execution pee
 - [x] T4.4 Test full studio phase with studio_core pack (11 tests: command validation, role menu, full workflow, integrator duel)
 - **Result: 152 tests passing**
 
-### M5: Windsurf as Peer Variant
-- [ ] T5.1 Move Windsurf docs into `docs/windsurf/`
-- [ ] T5.2 Agent-neutral README
-- [ ] T5.3 Configurable assistant name in instruction generation
-- [ ] T5.4 Agent-agnostic bridge template
+### M5: Windsurf as Peer Variant — COMPLETE
+- [x] T5.1 Move Windsurf docs into `docs/windsurf/` (USAGE.md, QUICKREF.md, cascade_workflow.md)
+- [x] T5.2 Agent-neutral README (removed migration status section, already agent-neutral from M2)
+- [x] T5.3 Make shared docs assistant-agnostic (instruction generation already agnostic from M2; replaced Cascade refs in API, Integration Guide, Bridge Template)
+- [x] T5.4 Agent-agnostic bridge template (replaced all Cascade-specific language with "the assistant"/"your assistant")
+- [x] Updated INDEX.md with Claude Code + Windsurf execution guides
+- [x] Updated CLAUDE_CODE_USAGE.md with studio phase command (was stale M4 placeholder)
+- [x] Fixed cross-references in moved Windsurf docs
+- **Result: 151 tests passing, migration complete**
