@@ -10,7 +10,7 @@ import time
 import pytest
 
 import run_phase
-from conftest import _seed_studio_root
+from conftest import _seed_studio_root, make_prepare_args, make_finalize_args
 
 
 @pytest.fixture
@@ -44,33 +44,9 @@ max_iterations = 1
     yield studio_root
 
 
-def _prepare(phase="tech", text="Build feature", max_iterations=5, no_scopes=True, **kw):
-    """Helper to build prepare args."""
-    from types import SimpleNamespace
-    defaults = dict(
-        phase=phase, text=text, max_iterations=max_iterations,
-        scopes=None, roles=None, role_pack=None,
-        no_scopes=no_scopes, budget=None,
-    )
-    defaults.update(kw)
-    return SimpleNamespace(**defaults)
-
-
-def _finalize(phase, run_id, verdict="APPROVED", **kw):
-    """Helper to build finalize args."""
-    from types import SimpleNamespace
-    defaults = dict(
-        phase=phase, run_id=run_id, status="completed",
-        verdict=verdict, hours=0.5, cost=0,
-        iterations_run=None, summary=None,
-    )
-    defaults.update(kw)
-    return SimpleNamespace(**defaults)
-
-
 def test_prepare_with_scopes_creates_instructions(temp_studio_root):
     """Test that prepare with scopes creates instructions with scope information."""
-    run_id = run_phase.prepare_run(_prepare(no_scopes=False, max_iterations=6))
+    run_id = run_phase.prepare_run(make_prepare_args(phase="tech", no_scopes=False, max_iterations=6))
 
     run_dir = temp_studio_root / "output" / "tech" / run_id
     assert run_dir.exists()
@@ -85,7 +61,7 @@ def test_prepare_without_scopes_works(temp_studio_root):
     """Test that prepare without scopes still works (backward compatibility)."""
     (temp_studio_root / ".studio" / "scopes.toml").unlink()
 
-    run_id = run_phase.prepare_run(_prepare(phase="market", no_scopes=False))
+    run_id = run_phase.prepare_run(make_prepare_args(phase="market", no_scopes=False))
 
     run_dir = temp_studio_root / "output" / "market" / run_id
     assert run_dir.exists()
@@ -96,7 +72,7 @@ def test_prepare_without_scopes_works(temp_studio_root):
 
 def test_prepare_with_no_scopes_flag(temp_studio_root):
     """Test that --no-scopes flag disables scopes even when config exists."""
-    run_id = run_phase.prepare_run(_prepare(no_scopes=True))
+    run_id = run_phase.prepare_run(make_prepare_args(phase="tech", no_scopes=True))
 
     instructions = (temp_studio_root / "output" / "tech" / run_id / "instructions.md").read_text()
     assert "Scope-Based Iteration Plan" not in instructions
@@ -104,14 +80,14 @@ def test_prepare_with_no_scopes_flag(temp_studio_root):
 
 def test_finalize_updates_index(temp_studio_root):
     """Test that finalize updates output/index.md."""
-    run_id = run_phase.prepare_run(_prepare(phase="design", text="Design UI mockups"))
+    run_id = run_phase.prepare_run(make_prepare_args(phase="design", text="Design UI mockups"))
 
     run_dir = temp_studio_root / "output" / "design" / run_id
     (run_dir / "advocate_1.md").write_text("# Advocate\n\nProposal...")
     (run_dir / "contrarian_1.md").write_text("# Contrarian\n\nVERDICT: APPROVED")
     (run_dir / "summary.md").write_text("# Summary\n\nCompleted successfully")
 
-    run_phase.finalize_run(_finalize("design", run_id, hours=1.5))
+    run_phase.finalize_run(make_finalize_args(phase="design", run_id=run_id, hours=1.5))
 
     index_content = (temp_studio_root / "output" / "index.md").read_text()
     assert run_id in index_content
@@ -119,7 +95,7 @@ def test_finalize_updates_index(temp_studio_root):
 
 def test_rerun_detection(temp_studio_root):
     """Test that rerun mode detects previous rejections."""
-    run_id_1 = run_phase.prepare_run(_prepare(text="Build auth system"))
+    run_id_1 = run_phase.prepare_run(make_prepare_args(phase="tech", text="Build auth system"))
     run_dir_1 = temp_studio_root / "output" / "tech" / run_id_1
 
     (run_dir_1 / "advocate_1.md").write_text("# Advocate\n\nUse microservices")
@@ -128,10 +104,10 @@ def test_rerun_detection(temp_studio_root):
         "# Contrarian\n\nVERDICT: REJECTED\n\n1. Too complex\n2. Operational overhead"
     )
 
-    run_phase.finalize_run(_finalize("tech", run_id_1, verdict="REJECTED"))
+    run_phase.finalize_run(make_finalize_args(phase="tech", run_id=run_id_1, verdict="REJECTED"))
     time.sleep(1)  # avoid timestamp collision
 
-    run_id_2 = run_phase.prepare_run(_prepare(text="Build auth system (revised)"))
+    run_id_2 = run_phase.prepare_run(make_prepare_args(phase="tech", text="Build auth system (revised)"))
     instructions = (temp_studio_root / "output" / "tech" / run_id_2 / "instructions.md").read_text()
 
     # Rerun context should be injected when previous run was rejected
@@ -140,17 +116,17 @@ def test_rerun_detection(temp_studio_root):
 
 def test_scopes_and_rerun_together(temp_studio_root):
     """Test that scopes and rerun work together correctly."""
-    run_id_1 = run_phase.prepare_run(_prepare(no_scopes=False, max_iterations=6))
+    run_id_1 = run_phase.prepare_run(make_prepare_args(phase="tech", no_scopes=False, max_iterations=6))
     run_dir_1 = temp_studio_root / "output" / "tech" / run_id_1
 
     (run_dir_1 / "advocate_1.md").write_text("# Advocate\n\nFirst attempt")
     (run_dir_1 / "summary.md").write_text("# Summary\n\nRejected")
     (run_dir_1 / "contrarian_1.md").write_text("VERDICT: REJECTED\n\n1. Bad approach")
 
-    run_phase.finalize_run(_finalize("tech", run_id_1, verdict="REJECTED"))
+    run_phase.finalize_run(make_finalize_args(phase="tech", run_id=run_id_1, verdict="REJECTED"))
     time.sleep(1)
 
-    run_id_2 = run_phase.prepare_run(_prepare(no_scopes=False, max_iterations=6, text="Revised"))
+    run_id_2 = run_phase.prepare_run(make_prepare_args(phase="tech", no_scopes=False, max_iterations=6, text="Revised"))
     instructions = (temp_studio_root / "output" / "tech" / run_id_2 / "instructions.md").read_text()
 
     assert "Scope-Based Iteration Plan" in instructions
@@ -158,14 +134,14 @@ def test_scopes_and_rerun_together(temp_studio_root):
 
 def test_full_workflow_prepare_finalize(temp_studio_root):
     """Test complete workflow: prepare → work → finalize."""
-    run_id = run_phase.prepare_run(_prepare(text="Build API"))
+    run_id = run_phase.prepare_run(make_prepare_args(phase="tech", text="Build API"))
     run_dir = temp_studio_root / "output" / "tech" / run_id
 
     (run_dir / "advocate_1.md").write_text("# Advocate\n\nBuild REST API")
     (run_dir / "contrarian_1.md").write_text("# Contrarian\n\nVERDICT: APPROVED")
     (run_dir / "summary.md").write_text("# Summary\n\nAPI design approved")
 
-    run_phase.finalize_run(_finalize("tech", run_id, hours=2.0, iterations_run=1))
+    run_phase.finalize_run(make_finalize_args(phase="tech", run_id=run_id, hours=2.0, iterations_run=1))
 
     with open(run_dir / "run.json") as f:
         run_data = json.load(f)

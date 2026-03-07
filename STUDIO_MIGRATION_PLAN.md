@@ -1,6 +1,6 @@
 # Studio Migration Plan
 
-Status: **In Progress — Milestone 3 (Claude Code MVP)**
+Status: **In Progress — Milestone 4 (Multi-role Studio Phase)**
 
 ## Goal
 Create a shared-core Studio with Claude Code and Windsurf as equal execution peers. Fix bugs, remove dead weight, build test foundation, then implement Claude Code native execution.
@@ -43,12 +43,13 @@ Create a shared-core Studio with Claude Code and Windsurf as equal execution pee
 - [x] T2.4 Define execution interface contracts (`execution_contract.py` with `RunContext`, `RunArtifacts`, lifecycle docs)
 - **Result: 132 tests passing**
 
-### M3: Claude Code MVP (single-phase)
-- [ ] T3.1 Create `.claude/commands/run-phase.md`
-- [ ] T3.2 Agent-based advocate/contrarian separation
-- [ ] T3.3 Create `docs/CLAUDE_CODE_USAGE.md`
-- [ ] T3.4 Update CLAUDE.md
-- [ ] T3.5 Test market + tech phases end-to-end
+### M3: Claude Code MVP (single-phase) — COMPLETE
+- [x] T3.1 Create `.claude/commands/run-phase.md` (slash command with $ARGUMENTS)
+- [x] T3.2 Agent-based advocate/contrarian separation (separate Agent invocations documented in command)
+- [x] T3.3 Create `docs/CLAUDE_CODE_USAGE.md` (usage guide with flow diagrams)
+- [x] T3.4 Update CLAUDE.md (added /run-phase section, reorganized commands)
+- [x] T3.5 Test market + tech phases end-to-end (9 tests: slash command validation, market E2E, tech E2E, rerun flow)
+- **Result: 141 tests passing**
 
 ### M4: Multi-role Studio Phase
 - [ ] T4.1 Create `.claude/commands/run-studio-phase.md`

@@ -676,7 +676,7 @@ def _resolve_scopes(args: argparse.Namespace):
 
     Returns (scopes_config, scopes_allocations, scopes_meta) — all None if disabled.
     """
-    if getattr(args, 'no_scopes', False):
+    if args.no_scopes:
         return None, None, None
 
     # Determine scopes path
@@ -774,14 +774,14 @@ def prepare_run(args: argparse.Namespace) -> str:
     run_id = f"run_{phase}_{timestamp_slug}"
     run_dir = get_output_root() / phase / run_id
 
-    if run_dir.exists():
+    try:
+        run_dir.mkdir(parents=True, exist_ok=False)
+    except FileExistsError:
         raise RuntimeError(
             f"Run directory {run_id} already exists. "
             f"This may be due to concurrent prepare commands or a timestamp collision. "
             f"Wait 1 second and retry, or use a different phase/text combination."
         )
-
-    run_dir.mkdir(parents=True, exist_ok=False)
     run_dir_abs = run_dir.resolve()
 
     studio_role_meta, studio_role_details = _resolve_studio_roles(args)
