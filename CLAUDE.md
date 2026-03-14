@@ -53,7 +53,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 - **`run_phase.py`** — Primary entrypoint: `prepare`, `finalize`, `validate`, `cleanup` subcommands.
 - **`run_phase_roles.py`** — Role system: loads `studio.manifest.json`, resolves role packs, builds per-role file naming (`advocate--<role>--NN.md`).
 - **`cleanup.py`** — TTL-based (30 days) and budget-based (900MB) run artifact cleanup.
-- **`scopes.py`** — Scope-based iteration allocation (high_level / implementation / polish).
+- **`scopes.py`** — Three-tier scope system (alignment / depth / polish) with output budgets and debate modes (`all_roles` vs `per_role`).
 - **`rerun.py`** — Detects rejection context from prior runs and generates rerun instructions.
 - **`verdict.py`** — Extracts APPROVED/REJECTED/UNKNOWN verdict from text.
 - **`validators/`** — `DocumentValidator` and `CodeValidator` for post-run quality checks.
@@ -72,7 +72,8 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 Runs produce timestamped directories under `output/<phase>/run_<phase>_<timestamp>/` containing:
 - `instructions.md`, `run.json`, `summary.md`
 - `advocate_N.md` / `contrarian_N.md` (simple phases)
-- `advocate--<role>--NN.md` / `contrarian--<role>--NN.md` + `integrator.md` (studio phase)
+- `advocate--<role>--NN.md` / `contrarian--<role>--NN.md` + `integrator.md` (studio flat mode)
+- `advocate--<role>--S1-NN.md` / `S2-NN.md` / `S3-NN.md` (studio scoped mode: alignment/depth/polish)
 
 ### Phases
 
