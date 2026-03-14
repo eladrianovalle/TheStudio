@@ -1,11 +1,12 @@
 # Studio Phase Run (Multi-Role)
 
-Execute a multi-role advocate/contrarian debate across disciplines (marketing, product, design, art, engineering, QA, etc.).
+Execute a multi-role advocate/contrarian debate across disciplines using a three-tier scoped debate: alignment → depth → polish.
 
 ## Arguments
 
 - `$ARGUMENTS` — Required. Format: `--text "your idea or objective"`
-- Optional: `--role-pack <name>` (default: studio_core), `--roles +role -role`, `--max-iterations N` (default 3)
+- Optional: `--role-pack <name>` (default: studio_core), `--roles +role -role`, `--max-iterations N` (default 6 across all scopes)
+- Optional: `--no-scopes` to use flat mode (all roles at full depth, no tiers)
 
 ## Instructions
 
@@ -13,124 +14,183 @@ You are executing a Studio multi-role phase run. Follow these steps exactly:
 
 ### Step 1: Prepare
 
-Run the prepare command to create a run directory and instructions:
-
 Determine the Studio root path. If this repo contains a `studio/run_phase.py`, use that. Otherwise check `$STUDIO_ROOT`. Then run:
 
 ```bash
-python "$STUDIO_ROOT/run_phase.py" prepare --phase studio $ARGUMENTS --no-scopes
+python "$STUDIO_ROOT/run_phase.py" prepare --phase studio $ARGUMENTS
 ```
 
-If running from a repo that is NOT the Studio repo itself, artifacts will automatically land in the current repo under `.studio/output/`. A bridge doc will be created on first use.
+If running from a repo that is NOT the Studio repo itself, artifacts will automatically land in the current repo under `.studio/output/`.
 
 Note the run_id and run directory path from the output.
 
 ### Step 2: Read Instructions and Role Menu
 
 Read the generated `instructions.md` file. Pay attention to:
-- The **Role Menu** table listing each invited role with its advocate/contrarian focuses and deliverables
-- The file naming convention: `advocate--<role>--<NN>.md` and `contrarian--<role>--<NN>.md`
-- The integrator duel section
+- The **Role Menu** table listing each invited role
+- The **Scope-Based Iteration Plan** (if scopes are enabled)
+- File naming convention
 
-### Step 3: Process Each Role Sequentially
+### Step 3: Execute Scoped Debate
 
-For each role listed in the Role Menu (process them in order):
+If `instructions.md` contains a **Scope-Based Iteration Plan**, follow the three-tier flow below. If `--no-scopes` was used, skip to the **Flat Mode** section at the bottom.
 
-#### a. Role Advocate
+---
 
-Use the Agent tool to spawn a subagent:
+#### Scope 1: ALIGNMENT (all roles, short, parallel)
 
-> You are the **{role_title} Advocate** for this Studio run.
+**Goal:** Directional alignment. "Should we go this way at all?"
+
+For each role in the Role Menu, spawn advocate + contrarian **in parallel** (all roles simultaneously):
+
+**Advocate prompt:**
+> You are the **{role_title} Advocate** for this Studio run — ALIGNMENT SCOPE.
 >
-> **Focus:** {advocate_focus from Role Menu}
->
+> **Focus:** {advocate_focus}
 > **Input/objective:** {the user's text}
 >
-> **Required deliverables:**
-> {deliverables list from Role Menu}
+> **IMPORTANT: Keep your response under 500 words.** This is a directional alignment pass. Focus on:
+> - Your high-level stance on the approach
+> - Any fatal flaws you see from your discipline
+> - Key trade-offs to flag for the room
+>
+> Do NOT produce full deliverables yet — save detail for the Depth scope.
+> Use bullet points, not full sections.
+>
+> Save to `{run_dir}/advocate--{role}--S1-01.md`.
+
+**Contrarian prompt (SEPARATE agent):**
+> You are the **{role_title} Contrarian** for this Studio run — ALIGNMENT SCOPE.
+>
+> **Focus:** {contrarian_focus}
+>
+> Read the advocate's alignment stance at `{run_dir}/advocate--{role}--S1-01.md`.
+>
+> **Keep your response under 500 words.** Only flag directional problems:
+> - Is the overall approach wrong?
+> - Are there fatal flaws the advocate missed?
+> - Any showstoppers from your discipline?
+>
+> End with `VERDICT: APPROVED` or `VERDICT: REJECTED` with numbered reasons.
+> Save to `{run_dir}/contrarian--{role}--S1-01.md`.
+
+**After all roles complete:** Read all contrarian verdicts.
+- If all APPROVED → proceed to Scope 2 with alignment context
+- If any REJECTED → note the rejection reasons. Proceed to Scope 2 anyway (the depth pass will address them), but include rejection context in each rejected role's depth prompt
+- If `max_iterations` for alignment scope allows iteration 2, loop rejected roles only (still with 500-word cap)
+
+---
+
+#### Scope 2: DEPTH (per-role, full, sequential)
+
+**Goal:** Detailed analysis per discipline. "How exactly should we do this?"
+
+Process each role **sequentially** (later roles can read earlier roles' outputs):
+
+**Advocate prompt:**
+> You are the **{role_title} Advocate** for this Studio run — DEPTH SCOPE.
+>
+> **Focus:** {advocate_focus}
+> **Input/objective:** {the user's text}
+>
+> **Context from Alignment scope:** Read the alignment artifacts in `{run_dir}/*--S1-*.md` to understand what was agreed and what was flagged across all disciplines.
+>
+> {If this role was REJECTED in alignment: "Alignment contrarian flagged these concerns:" + rejection reasons}
+>
+> **Required deliverables:** {deliverables list from Role Menu}
 >
 > {If this role has a prompt doc, read it at `studio/{prompt_doc}` for detailed guidance.}
 >
-> {If iteration > 1: "Previous contrarian feedback to address:" + rejection reasons}
->
-> Write a thorough advocate proposal covering all required deliverables. Save to `{run_dir}/advocate--{role}--{NN}.md`.
+> Write a thorough proposal covering all required deliverables. No word cap — this is the full analysis.
+> Save to `{run_dir}/advocate--{role}--S2-01.md`.
 
-#### b. Role Contrarian
-
-Use the Agent tool to spawn a SEPARATE subagent:
-
-> You are the **{role_title} Contrarian** for this Studio run.
+**Contrarian prompt (SEPARATE agent):**
+> You are the **{role_title} Contrarian** for this Studio run — DEPTH SCOPE.
 >
-> **Focus:** {contrarian_focus from Role Menu}
+> **Focus:** {contrarian_focus}
 >
-> Read the advocate's proposal at `{run_dir}/advocate--{role}--{NN}.md`.
+> Read the advocate's depth proposal at `{run_dir}/advocate--{role}--S2-{NN}.md`.
 >
-> Critically evaluate against your focus area. Check for:
-> - Fatal flaws in the proposal
-> - Unrealistic assumptions
-> - Missing considerations specific to your domain
-> - Risks that haven't been addressed
+> Critically evaluate against your focus area with full rigor. Check for:
+> - Fatal flaws, unrealistic assumptions, missing considerations
+> - Whether alignment-scope concerns were actually addressed
+> - Risks that haven't been mitigated
 >
-> **Escalation triggers** (flag immediately if found): {escalate_on from Role Menu}
+> **Escalation triggers** (flag immediately): {escalate_on from Role Menu}
 >
-> End with exactly `VERDICT: APPROVED` or `VERDICT: REJECTED`.
-> If REJECTED, list specific numbered reasons.
->
-> Save to `{run_dir}/contrarian--{role}--{NN}.md`.
+> End with `VERDICT: APPROVED` or `VERDICT: REJECTED` with numbered reasons.
+> Save to `{run_dir}/contrarian--{role}--S2-{NN}.md`.
 
-#### c. Check Verdict
+**Loop:** If REJECTED and iterations remain (up to 3), feed rejection back to advocate. If APPROVED, move to next role.
 
-Read the contrarian output. If `VERDICT: REJECTED` and iterations remain for this role, loop back to (a) with rejection feedback. If `VERDICT: APPROVED`, move to the next role.
+---
 
-### Step 4: Integrator Duel (after all roles complete)
+#### Scope 3: POLISH (all roles, short, parallel, 1 pass)
 
-Once all roles have been processed, create `{run_dir}/integrator.md` using separate Agent invocations:
+**Goal:** Cross-discipline gut-check. "Anything still broken across disciplines?"
+
+After all Scope 2 roles are approved, run one final parallel pass:
+
+**Advocate prompt:**
+> You are the **{role_title} Advocate** for this Studio run — POLISH SCOPE.
+>
+> **Keep your response under 300 words.**
+>
+> Read all Scope 2 artifacts in `{run_dir}/*--S2-*.md` to understand what each discipline proposed.
+>
+> Confirm your discipline's concerns are addressed in the integrated depth outputs. Flag any remaining cross-discipline conflicts. Do not introduce new proposals — only flag issues.
+>
+> Save to `{run_dir}/advocate--{role}--S3-01.md`.
+
+**Contrarian prompt (SEPARATE agent):**
+> You are the **{role_title} Contrarian** for this Studio run — POLISH SCOPE.
+>
+> **Keep your response under 300 words.**
+>
+> Read the advocate's polish check at `{run_dir}/advocate--{role}--S3-01.md`.
+>
+> Verify the advocate isn't rubber-stamping. Any real conflicts remaining?
+>
+> End with `VERDICT: APPROVED` or `VERDICT: REJECTED` with numbered reasons.
+> Save to `{run_dir}/contrarian--{role}--S3-01.md`.
+
+**No iteration** — this is a single pass. If any role REJECTS, note the concern for the integrator but proceed.
+
+---
+
+### Step 4: Integrator Duel (after Scope 3)
+
+Same as standard integrator flow. Create `{run_dir}/integrator.md`:
 
 #### a. Integrator Advocate
 
-Use the Agent tool:
-
 > You are the **Integrator Advocate** — a Systems Integrator & Ops Lead.
 >
-> Read ALL approved advocate and contrarian files from the run directory to understand what each discipline proposed and what concerns were raised.
+> Read ALL artifacts from all three scopes to understand the full debate arc:
+> - `*--S1-*.md` for alignment decisions
+> - `*--S2-*.md` for detailed proposals
+> - `*--S3-*.md` for final cross-checks
 >
-> Synthesize a unified plan that:
-> - Merges insights from all roles into a coherent roadmap
-> - Sequences work by priority and dependency
-> - Identifies cross-functional dependencies
-> - Proposes concrete next steps with owners
->
-> Write your synthesis as `### Integrator Advocate` in `{run_dir}/integrator.md`.
+> Synthesize a unified plan. Write as `### Integrator Advocate` in `{run_dir}/integrator.md`.
 
 #### b. Integrator Contrarian
 
-Use a SEPARATE Agent:
-
-> You are the **Integrator Contrarian** — a Director of Live Service Operations.
+> You are the **Integrator Contrarian** — Director of Live Service Operations.
 >
-> Read `{run_dir}/integrator.md` (the Integrator Advocate section).
->
-> Critique the integrated plan for:
-> - Feasibility and resource constraints
-> - Operational risk and maintenance burden
-> - Sequencing issues and dependency conflicts
-> - Missing stakeholders or unresolved tensions between roles
->
-> End with `VERDICT: APPROVED` or `VERDICT: REJECTED` with numbered reasons.
-> If REJECTED, the integrator gets one revision (max 2 total integrator iterations).
->
-> Append your review as `### Integrator Contrarian` in `{run_dir}/integrator.md`.
+> Read `{run_dir}/integrator.md`. Critique for feasibility, sequencing, and missing concerns.
+> End with `VERDICT: APPROVED` or `VERDICT: REJECTED`.
+> Append as `### Integrator Contrarian` in `{run_dir}/integrator.md`.
 
 #### c. Integrated Plan
 
-After the integrator duel resolves (approved or max iterations), append a `### Integrated Plan` section to `{run_dir}/integrator.md` that synthesizes both perspectives into the final roadmap with next steps.
+Append `### Integrated Plan` to `{run_dir}/integrator.md`.
 
 ### Step 5: Summary
 
 Write `{run_dir}/summary.md` covering:
 - Original input/objective
-- Which roles participated and their verdicts
-- Key recommendations from each discipline
+- Scope progression (what was caught at each tier)
+- Which roles participated and their verdicts per scope
 - The integrated plan highlights
 - Concrete next actions
 
@@ -140,11 +200,25 @@ Write `{run_dir}/summary.md` covering:
 python "$STUDIO_ROOT/run_phase.py" finalize --phase studio --run-id {run_id} --status completed --verdict {APPROVED|REJECTED}
 ```
 
+---
+
+## Flat Mode (--no-scopes)
+
+When `--no-scopes` is used, fall back to the original single-tier flow:
+
+For each role sequentially:
+1. Spawn advocate agent (full depth, no word cap)
+2. Spawn SEPARATE contrarian agent
+3. If REJECTED and iterations remain, loop
+4. If APPROVED, next role
+
+Then run integrator duel and summary as above.
+
 ## Key Rules
 
-- **Each role's Advocate and Contrarian MUST be separate Agent invocations** — no shared context.
-- **Process roles sequentially** — later roles can benefit from reading earlier roles' outputs if relevant.
-- **Integrator Advocate and Contrarian are also separate agents.**
-- The contrarian reads ONLY the advocate's written file for that role.
-- File naming: `advocate--marketing--01.md`, `contrarian--engineering--02.md`, etc.
-- The integrator reads ALL role artifacts to synthesize.
+- **Advocate and Contrarian MUST be separate Agent invocations** — no shared context.
+- **Scope 1 and 3 run all roles in parallel** — they're short enough to parallelize.
+- **Scope 2 runs roles sequentially** — later roles benefit from reading earlier outputs.
+- **Word caps are instruction-enforced** — include them in the agent prompt, not as runtime truncation.
+- File naming: `advocate--marketing--S1-01.md`, `contrarian--engineering--S2-02.md`, `advocate--qa--S3-01.md`
+- The integrator reads ALL scope artifacts to synthesize the full debate arc.

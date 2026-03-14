@@ -18,7 +18,7 @@ Run the prepare command to create a run directory and instructions:
 Determine the Studio root path. If this repo contains a `studio/run_phase.py`, use that. Otherwise check `$STUDIO_ROOT`. Then run:
 
 ```bash
-python "$STUDIO_ROOT/run_phase.py" prepare $ARGUMENTS --no-scopes
+python "$STUDIO_ROOT/run_phase.py" prepare $ARGUMENTS
 ```
 
 If running from a repo that is NOT the Studio repo itself, artifacts will automatically land in the current repo under `.studio/output/`. A bridge doc will be created on first use.

@@ -29,9 +29,11 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 | Component | Purpose |
 | --- | --- |
 | `run_phase.py` | CLI entrypoint for `prepare` and `finalize`. Generates instructions, enforces artifact checklists, and keeps indexes current. |
-| `run_phase_roles.py` | Helper module that loads `studio.manifest.json`, applies role packs, and normalizes per-role filenames. |
-| `studio.manifest.json` | Declarative description of phase-level personas plus Studio role definitions (title, focuses, deliverables, prompt doc, escalation cues). |
+| `run_phase_roles.py` | Helper module that loads `studio.manifest.json`, applies role packs with dependency injection, and normalizes per-role filenames (flat and scoped). |
+| `scopes.py` | Three-tier scope configuration: alignment → depth → polish, with output budgets and debate modes. |
+| `studio.manifest.json` | Declarative description of phase-level personas, Studio role definitions, and role dependencies. |
 | `role_packs/*.json` | Curated sets of Studio roles (e.g., `studio_core`). Operators pick a pack, then add/remove roles with CLI flags. |
+| `config/scopes.toml` | Default scope configuration for studio phase runs. |
 | `docs/role_prompts/*.md` | Long-form prompts for each role. Instructions link to these files rather than inlining pages of text. |
 | Active output root (`output/` or `.studio/output/`) | Run folders containing instructions, advocate/contrarian artifacts, integrator plans, summaries, and metadata. |
 | Active knowledge log (`knowledge/run_log.md` or `.studio/knowledge/run_log.md`) | Append-only log of finalized runs for easy reference across repos. |
@@ -58,14 +60,28 @@ No other services, runtimes, or APIs exist.
 
 ## 4. Execute via AI Assistant
 
-The assistant reads `instructions.md`, the bridge doc, and any prompt docs linked from the Role Menu. Operators ensure:
+The assistant reads `instructions.md`, the bridge doc, and any prompt docs linked from the Role Menu.
 
-- Every invited role produces matching `advocate--<role>--NN.md` and `contrarian--<role>--NN.md` files until the role’s contrarian issues `VERDICT: APPROVED`.
-- For Studio, once all necessary contrarians approve, the Integrator performs a capped duel inside `integrator.md` with three sections:
-  1. `### Integrator Advocate`
-  2. `### Integrator Contrarian (VERDICT: …)`
-  3. `### Integrated Plan`
-- All summaries land in `summary.md`.
+### Simple Phases (market, design, tech)
+
+Advocate → Contrarian loop until `VERDICT: APPROVED` or max iterations exhausted. Then implementation (tech) or summary.
+
+### Studio Phase — Three-Tier Scoped Debate (Default)
+
+Studio runs use a scoped flow configured in `config/scopes.toml`:
+
+1. **Alignment** (all roles, parallel, ~500 words each): Directional check — approach, fatal flaws, high-level tradeoffs. Catches bad directions cheaply before deep dives.
+2. **Depth** (per-role, sequential, no word cap): Full deliverables per discipline. Starts focused because alignment context is available.
+3. **Polish** (all roles, parallel, ~300 words, 1 pass): Cross-discipline gut-check. Flag remaining conflicts, no new proposals.
+4. **Integrator duel**: Synthesize all scope artifacts into `integrator.md` with `### Integrator Advocate`, `### Integrator Contrarian`, `### Integrated Plan`.
+
+File naming encodes scope: `advocate--marketing--S1-01.md` (alignment), `advocate--engineering--S2-02.md` (depth iteration 2), `advocate--qa--S3-01.md` (polish).
+
+Use `--no-scopes` for flat mode (all roles at full depth, original behavior).
+
+### Scope Configuration
+
+`scopes.py` provides `ScopeConfig` with fields: `name`, `focus`, `max_iterations`, `output_budget` (word cap, optional), `debate_mode` (`"all_roles"` or `"per_role"`). The `generate_scope_instructions()` function embeds scope guidance into `instructions.md`.
 
 No automation runs outside the assistant; the instructions are simply executed as a structured conversation.
 
@@ -79,7 +95,8 @@ No automation runs outside the assistant; the instructions are simply executed a
    - Non-Studio phases: glob `advocate_<n>.md` / `contrarian_<n>.md` / `implementation.md`.
    - Studio phase: iterate through the invited roles stored in `run.json["studio_roles"]["invited"]`, using `collect_role_artifacts` to confirm both advocate and contrarian files exist. Missing roles are recorded.
    - Verify `integrator.md` and `summary.md`.
-4. Finalize updates `run.json` with status, verdict, hours, cost, iterations, and for Studio: `completed` + `missing` role lists.
+   - **Quality checks** (single-pass, warnings only): verdict presence, rubber-stamp detection (<200 chars), format validation, and token budget tracking per scope. Results stored in `run.json["quality"]` and `run.json["token_budget"]`.
+4. Finalize updates `run.json` with status, verdict, hours, cost, iterations, quality checks, token budget, and for Studio: `completed` + `missing` role lists.
 5. The active index/log (`<active_output_root>/index.md` and `<active_knowledge_root>/run_log.md`) are refreshed, giving downstream repos searchable entries with summary links.
 
 ---
@@ -92,7 +109,8 @@ No automation runs outside the assistant; the instructions are simply executed a
   - `deliverables`
   - `escalate_on`
   - `prompt_doc` (Markdown file inside `docs/role_prompts/`)
-- **Role packs** enforce consistent combinations. Example `studio_core` includes marketing, product, design, art, engineering, and QA.
+- **Role packs** enforce consistent combinations. Example `studio_core` includes marketing, product, design, art, engineering, test_engineer, and QA.
+- **Role dependencies** are declared in `defaults.role_dependencies` (e.g., `engineering → test_engineer`). After resolving overrides, `resolve_role_list` injects co-required roles immediately after their trigger role — unless the operator explicitly removed them with `-role`. This guarantees that test integrity is always debated when engineering is present.
 - Operators select a pack via `--role-pack` and tweak attendance with `--roles` additions/removals. This keeps instructions concise while maintaining a single source of truth.
 
 ---
@@ -106,7 +124,8 @@ No automation runs outside the assistant; the instructions are simply executed a
       instructions.md
       run.json
       advocate_<n>.md / contrarian_<n>.md / implementation.md (non-studio)
-      advocate--<role>--<n>.md / contrarian--<role>--<n>.md / integrator.md (studio)
+      advocate--<role>--<n>.md / contrarian--<role>--<n>.md / integrator.md (studio, flat)
+      advocate--<role>--S1-<n>.md / S2-<n>.md / S3-<n>.md (studio, scoped)
       summary.md
 ```
 

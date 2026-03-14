@@ -67,8 +67,19 @@ MINIMAL_MANIFEST = {
             "deliverables": ["System outline"],
             "escalate_on": [],
         },
+        "test_engineer": {
+            "title": "Staff Test Engineer",
+            "advocate_focus": "Enforce scenario-first test design.",
+            "contrarian_focus": "Hunt AI-TDD anti-patterns.",
+            "prompt_doc": "docs/role_prompts/test_engineer.md",
+            "deliverables": ["Test specification", "Anti-pattern audit"],
+            "escalate_on": [],
+        },
     },
-    "defaults": {"studio_role_pack": "studio_core"},
+    "defaults": {
+        "studio_role_pack": "studio_core",
+        "role_dependencies": {"engineering": ["test_engineer"]},
+    },
 }
 
 
@@ -88,7 +99,7 @@ def _seed_studio_root(root: Path) -> None:
     packs_dir.mkdir(exist_ok=True)
     (packs_dir / "studio_core.json").write_text(
         json.dumps(
-            {"name": "studio_core", "description": "Default pack", "roles": ["marketing", "design", "engineering"]},
+            {"name": "studio_core", "description": "Default pack", "roles": ["marketing", "design", "engineering", "test_engineer"]},
             indent=2,
         ),
         encoding="utf-8",
@@ -97,7 +108,7 @@ def _seed_studio_root(root: Path) -> None:
     # Prompt docs
     docs_dir = root / "docs" / "role_prompts"
     docs_dir.mkdir(parents=True, exist_ok=True)
-    for role in ("marketing", "design", "engineering"):
+    for role in ("marketing", "design", "engineering", "test_engineer"):
         (docs_dir / f"{role}.md").write_text(f"# {role.title()} prompt\n")
 
 

@@ -16,7 +16,7 @@ Use the slash command to run a full advocate/contrarian debate:
 /run-studio-phase --text "Add AI critique engine" --roles +marketing +engineering
 ```
 
-Single-phase runs (`/run-phase`) spawn separate Advocate and Contrarian agents per iteration. Multi-role runs (`/run-studio-phase`) process each discipline sequentially, then run an Integrator duel. See `studio/docs/CLAUDE_CODE_USAGE.md` for details.
+Single-phase runs (`/run-phase`) spawn separate Advocate and Contrarian agents per iteration. Multi-role runs (`/run-studio-phase`) use a three-tier scoped debate by default: **alignment** (all roles, short, parallel) → **depth** (per-role, full, sequential) → **polish** (all roles, short, 1 pass) → integrator duel. Use `--no-scopes` for flat mode. See `studio/docs/CLAUDE_CODE_USAGE.md` for details.
 
 ## CLI Commands
 
@@ -53,15 +53,16 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 - **`run_phase.py`** — Primary entrypoint: `prepare`, `finalize`, `validate`, `cleanup` subcommands.
 - **`run_phase_roles.py`** — Role system: loads `studio.manifest.json`, resolves role packs, builds per-role file naming (`advocate--<role>--NN.md`).
 - **`cleanup.py`** — TTL-based (30 days) and budget-based (900MB) run artifact cleanup.
-- **`scopes.py`** — Scope-based iteration allocation (high_level / implementation / polish).
+- **`scopes.py`** — Three-tier scope system (alignment / depth / polish) with output budgets and debate modes (`all_roles` vs `per_role`).
 - **`rerun.py`** — Detects rejection context from prior runs and generates rerun instructions.
 - **`verdict.py`** — Extracts APPROVED/REJECTED/UNKNOWN verdict from text.
 - **`validators/`** — `DocumentValidator` and `CodeValidator` for post-run quality checks.
 
 ### Configuration files
 
-- **`studio.manifest.json`** — Defines all disciplines (marketing, product, design, art, engineering, qa, ml, pmm) with advocate/contrarian focuses, deliverables, and escalation cues.
-- **`role_packs/*.json`** — Curated pod presets (e.g., `studio_core` = marketing + product + design + art + engineering + qa). Override with `--roles +role/-role`.
+- **`studio.manifest.json`** — Defines all disciplines (marketing, product, design, art, engineering, test_engineer, qa, ml, pmm) with advocate/contrarian focuses, deliverables, escalation cues, and role dependencies.
+- **`role_packs/*.json`** — Curated pod presets (e.g., `studio_core` = marketing + product + design + art + engineering + test_engineer + qa). Override with `--roles +role/-role`. Role dependencies in the manifest auto-inject co-required roles (e.g., engineering always brings test_engineer).
+- **`config/scopes.toml`** — Default three-tier scope configuration (alignment → depth → polish) with output budgets and debate modes.
 - **`config/studio_settings.toml`** — Cleanup TTL and storage limits.
 - **`.studio/scopes.toml`** — Scope-based iteration budgets (auto-loaded if present).
 - **`.studio/validation.toml`** — Validation configuration.
@@ -71,7 +72,8 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 Runs produce timestamped directories under `output/<phase>/run_<phase>_<timestamp>/` containing:
 - `instructions.md`, `run.json`, `summary.md`
 - `advocate_N.md` / `contrarian_N.md` (simple phases)
-- `advocate--<role>--NN.md` / `contrarian--<role>--NN.md` + `integrator.md` (studio phase)
+- `advocate--<role>--NN.md` / `contrarian--<role>--NN.md` + `integrator.md` (studio flat mode)
+- `advocate--<role>--S1-NN.md` / `S2-NN.md` / `S3-NN.md` (studio scoped mode: alignment/depth/polish)
 
 ### Phases
 
@@ -81,7 +83,7 @@ Four phases: `market`, `design`, `tech`, `studio`. Each has distinct advocate/co
 
 - **Python 3.10+** required. Uses `tomllib` (3.11+) with `tomli` fallback.
 - **No heavy dependencies** — keep `run_phase.py` small and bash-friendly.
-- **Test-driven discipline** is mandatory for tech phase implementations.
+- **AI-TDD discipline** is mandatory for tech phase implementations. AI writes scenarios and boilerplate; humans own assertions. See `studio/docs/AI_TDD_METHODOLOGY.md` for the full methodology (scenario-first, stack boundary, mutation verification, anti-pattern detection).
 - **Documentation contract**: changes to workflow must update README, STUDIO_INTERACTION_GUIDE.md, and affected bridge docs simultaneously.
 - **Working directories**: `.scratch/` for temp files, `.private/` for sensitive data — both gitignored. Never commit `studio/output/` or `studio/knowledge/`.
 - Cross-repo usage: when run outside this repo, artifacts go to `<repo>/.studio/output/`. First run auto-scaffolds `.studio/` and a bridge doc. Override with `--artifact-root` flag or `STUDIO_ARTIFACT_ROOT` env var. Priority: flag > env > cwd detection.

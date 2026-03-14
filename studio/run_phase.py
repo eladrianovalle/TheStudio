@@ -22,12 +22,14 @@ from cleanup import (
     format_bytes,
     load_cleanup_settings,
 )
+from validators.document_validator import DocumentValidator
 from run_phase_roles import (
     RoleConfigError,
     RoleDetails,
     build_role_details,
     collect_role_artifacts,
     default_role_pack_name,
+    parse_role_filename,
     load_manifest,
     load_role_pack,
     normalize_role_filename,
@@ -412,6 +414,83 @@ def _validate_artifacts(
     advocate_names = []
     if phase != "studio":
         advocate_names = [file.name for file in advocate_files]  # type: ignore[name-defined]
+
+    # --- Quality checks (warnings only, never block finalize) ---
+    quality_warnings: List[str] = []
+    quality_errors: List[str] = []
+    checks_run = 0
+    doc_validator = DocumentValidator()
+
+    all_advocate_paths: List[Path] = []
+    all_contrarian_paths: List[Path] = []
+    if phase == "studio":
+        for role in completed_roles:
+            all_advocate_paths.extend(collect_role_artifacts(run_dir, role, "advocate"))
+            all_contrarian_paths.extend(collect_role_artifacts(run_dir, role, "contrarian"))
+    else:
+        all_advocate_paths = sorted(run_dir.glob("advocate_*.md"))
+        all_contrarian_paths = sorted(run_dir.glob("contrarian_*.md"))
+
+    all_artifact_paths = all_advocate_paths + all_contrarian_paths
+
+    contrarian_set = set(all_contrarian_paths)
+    scope_stats: Dict[str, Dict] = {}
+
+    for fpath in all_artifact_paths:
+        try:
+            content = fpath.read_text(encoding="utf-8")
+        except OSError:
+            quality_warnings.append(f"{fpath.name}: could not read file")
+            continue
+
+        # 1. Verdict check (contrarian files only)
+        if fpath in contrarian_set:
+            checks_run += 1
+            verdict_result = doc_validator.check_verdict(fpath)
+            if not verdict_result.passed:
+                quality_warnings.append(f"{fpath.name}: no VERDICT found")
+            quality_warnings.extend(f"{fpath.name}: {w}" for w in verdict_result.warnings)
+
+        # 2. Rubber-stamp detector
+        checks_run += 1
+        stripped_len = len(content.strip())
+        if stripped_len < 200:
+            quality_warnings.append(
+                f"{fpath.name}: only {stripped_len} chars (possible rubber-stamp)"
+            )
+
+        # 3. Format check
+        checks_run += 1
+        fmt_result = doc_validator.check_format(fpath)
+        quality_warnings.extend(f"{fpath.name}: {w}" for w in fmt_result.warnings)
+        quality_errors.extend(f"{fpath.name}: {issue}" for issue in fmt_result.issues)
+
+        # 4. Token budget tracking
+        _, _, scope, _ = parse_role_filename(fpath.name)
+        scope_key = scope or "flat"
+        if scope_key not in scope_stats:
+            scope_stats[scope_key] = {"files": 0, "total_chars": 0, "total_words": 0}
+        scope_stats[scope_key]["files"] += 1
+        scope_stats[scope_key]["total_chars"] += len(content)
+        scope_stats[scope_key]["total_words"] += len(content.split())
+
+    if quality_warnings or quality_errors:
+        print("Quality warnings:")
+        for w in quality_warnings:
+            print(f"  ⚠ {w}")
+        for e in quality_errors:
+            print(f"  ✗ {e}")
+
+    if meta is not None:
+        meta["quality"] = {
+            "checks_run": checks_run,
+            "warnings": quality_warnings,
+            "errors": quality_errors,
+        }
+
+        for stats in scope_stats.values():
+            stats["avg_words"] = round(stats["total_words"] / max(stats["files"], 1))
+        meta["token_budget"] = scope_stats
 
     return iterations_value, advocate_names, completed_roles, missing_roles
 

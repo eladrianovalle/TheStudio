@@ -94,10 +94,27 @@
         "SRE or infra buy-in required"
       ]
     },
+    "test_engineer": {
+      "title": "Staff Test Engineer — AI-TDD Integrity",
+      "advocate_focus": "Enforce scenario-first test design: demand Given-When-Then specifications before any test code, declare context boundaries (exact stack and banned frameworks), design parameterized data tables for AI-generated test inputs, and require mutation verification evidence that tests genuinely detect regressions.",
+      "contrarian_focus": "Hunt and kill AI-TDD anti-patterns: self-mocking tests that mock the system under test, hallucinated assertions that pass regardless of behavior, tests coupled to implementation details instead of observable behavior, and the green checkmark trap where passing tests create false confidence without meaningful coverage.",
+      "prompt_doc": "docs/role_prompts/test_engineer.md",
+      "deliverables": [
+        "Scenario-first test specification (Given-When-Then before code)",
+        "Context boundary declaration (stack, frameworks, banned patterns)",
+        "Mutation verification plan (which production mutations must be caught)",
+        "Anti-pattern audit checklist (self-mock, hallucinated assertion, impl-coupling, green trap)"
+      ],
+      "escalate_on": [
+        "Tests mock the system under test instead of its dependencies",
+        "No mutation verification evidence — tests pass but may not catch real regressions",
+        "Test suite uses frameworks or patterns outside the declared context boundary"
+      ]
+    },
     "qa": {
       "title": "Release QA & Launch Ops Lead",
       "advocate_focus": "Plan validation strategy, tooling hooks, and telemetry coverage.",
-      "contrarian_focus": "Attack blind spots in test coverage, environments, and support readiness.",
+      "contrarian_focus": "Attack blind spots in test coverage breadth, environment parity, and support readiness. Defer test methodology integrity (mock correctness, assertion quality, anti-patterns) to Test Engineer when present; escalate to add +test_engineer if methodology concerns arise without one.",
       "prompt_doc": "docs/role_prompts/qa.md",
       "deliverables": [
         "Test matrix + gate criteria",
@@ -106,7 +123,8 @@
       ],
       "escalate_on": [
         "Lack of automation coverage",
-        "Need for customer support/CSM alignment"
+        "Need for customer support/CSM alignment",
+        "Test suite methodology concerns with no Test Engineer in the pod"
       ]
     },
     "ml": {
@@ -142,6 +160,9 @@
     }
   },
   "defaults": {
-    "studio_role_pack": "studio_core"
+    "studio_role_pack": "studio_core",
+    "role_dependencies": {
+      "engineering": ["test_engineer"]
+    }
   }
 }
