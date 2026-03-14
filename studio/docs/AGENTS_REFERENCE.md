@@ -96,6 +96,13 @@ Contrarians must always end with `VERDICT: APPROVED` or `VERDICT: REJECTED`. Fin
 
 Because everything is declarative, there’s no hidden CrewAI config to edit—just JSON + Markdown.
 
+### Methodology Enforcement
+
+Roles enforce two methodologies via their contrarian focuses and escalation triggers:
+
+- **MVI (Minimum Viable Interaction)**: Product, Engineering, and Design contrarians reject plans where milestones, sprints, or tasks end in unusable states. "Build a skateboard, not a wheel." See [MVI_METHODOLOGY.md](./MVI_METHODOLOGY.md).
+- **AI-TDD**: Test Engineer and Engineering contrarians enforce scenario-first test design, mutation verification, and anti-pattern detection. See [AI_TDD_METHODOLOGY.md](./AI_TDD_METHODOLOGY.md).
+
 ---
 
 ## 5. Best Practices for Operators
