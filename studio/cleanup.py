@@ -7,6 +7,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
+try:
+    import tomllib  # Python 3.11+
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore[no-redefine]
+
 CONFIG_RELATIVE_PATH = Path("config") / "studio_settings.toml"
 DEFAULT_TTL_DAYS = 30
 DEFAULT_SIZE_LIMIT_MB = 900
@@ -75,11 +80,13 @@ def load_cleanup_settings(studio_root: Path) -> CleanupSettings:
     if not path.exists():
         return CleanupSettings()
     try:
-        text = path.read_text(encoding="utf-8")
+        with open(path, "rb") as f:
+            parsed = tomllib.load(f)
     except OSError as exc:
         raise CleanupError(f"Failed to read cleanup config at {path}: {exc}") from exc
+    except tomllib.TOMLDecodeError as exc:
+        raise CleanupError(f"Invalid TOML in cleanup config at {path}: {exc}") from exc
 
-    parsed = _parse_cleanup_toml(text)
     cleanup_section = parsed.get("cleanup", {})
 
     ttl_days = _safe_int(cleanup_section.get("ttl_days"), DEFAULT_TTL_DAYS)
@@ -222,28 +229,6 @@ def _directory_size(path: Path) -> int:
         except OSError:
             continue
     return total
-
-
-def _parse_cleanup_toml(text: str) -> Dict[str, Dict[str, str]]:
-    data: Dict[str, Dict[str, str]] = {}
-    current_section: Optional[str] = None
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("[") and line.endswith("]"):
-            section_name = line[1:-1].strip().lower()
-            current_section = section_name
-            data.setdefault(section_name, {})
-            continue
-        if "=" not in line or current_section is None:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.split("#", 1)[0].strip()
-        value = value.strip('"').strip("'")
-        data[current_section][key] = value
-    return data
 
 
 __all__ = [

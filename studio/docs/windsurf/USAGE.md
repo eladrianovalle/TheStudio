@@ -1,6 +1,6 @@
-# Using Studio from Windsurf/Cascade (Cascade-Only Workflow)
+# Using Studio from Windsurf/Cascade
 
-Studio no longer exposes a CLI runtime, LiteLLM proxy, or direct Python API. Every interaction now flows through a simple helper script (`run_phase.py`) plus Windsurf/Cascade chat. This guide shows how to prepare runs, execute them via Cascade, and keep artifacts tidy so any repo can continue the work later.
+This guide covers the Windsurf/Cascade-specific workflow for Studio. Every interaction flows through `run_phase.py` plus Cascade chat. For general Studio workflow, see [STUDIO_INTERACTION_GUIDE.md](../../STUDIO_INTERACTION_GUIDE.md).
 
 ---
 
@@ -15,7 +15,7 @@ Studio no longer exposes a CLI runtime, LiteLLM proxy, or direct Python API. Eve
   - Includes a prompt stub referencing the bridge doc, canon list, and run folder expectations.
 - (Optional but recommended) Configure Windsurf command palette entries for the prepare/finalize commands so you can trigger them without typing full paths.
 
-No API keys or Python dependencies are needed—the actual agent reasoning happens inside Windsurf/Cascade.
+No API keys are needed — the actual agent reasoning happens inside Windsurf/Cascade.
 
 ---
 
@@ -119,7 +119,8 @@ Example prompts:
 
 | Phase | Files | Notes |
 | --- | --- | --- |
-| Market / Design / Tech | `advocate_<n>.md`, `contrarian_<n>.md`, `implementation.md`, `summary.md` | Implementation is produced after the first APPROVED verdict. |
+| Market / Design | `advocate_<n>.md`, `contrarian_<n>.md`, `summary.md` | Discussion phases — `implementation.md` is optional. |
+| Tech | `advocate_<n>.md`, `contrarian_<n>.md`, `implementation.md`, `summary.md` | `implementation.md` (with tests) is produced after the first APPROVED verdict. |
 | Studio | `advocate--<role>--<n>.md`, `contrarian--<role>--<n>.md`, `integrator.md` (with duel sections), `summary.md` | Each invited role completes its own Advocate↔Contrarian loop. Integrator runs a capped duel before finalizing. |
 
 You can add extra context files (screenshots, charts, code samples) as long as they live inside the run folder.
@@ -160,9 +161,9 @@ You can add extra context files (screenshots, charts, code samples) as long as t
 
 ## 8. Related Docs
 
-- [README.md](../README.md) – overall vision + quick start.
-- [STUDIO_INTERACTION_GUIDE.md](../STUDIO_INTERACTION_GUIDE.md) – detailed workflow reference.
-- [STUDIO_BRIDGE_TEMPLATE.md](./STUDIO_BRIDGE_TEMPLATE.md) – copy into dependent repos.
-- [API.md](./API.md) – schema for `run_phase.py` arguments, metadata files, and output index.
+- [README.md](../../../README.md) – overall vision + quick start.
+- [STUDIO_INTERACTION_GUIDE.md](../../STUDIO_INTERACTION_GUIDE.md) – detailed workflow reference.
+- [STUDIO_BRIDGE_TEMPLATE.md](../STUDIO_BRIDGE_TEMPLATE.md) – copy into dependent repos.
+- [API.md](../API.md) – schema for `run_phase.py` arguments, metadata files, and output index.
 
-Keep all of these documents aligned whenever the workflow changes—Studio has no other entrypoint anymore.
+Keep all of these documents aligned whenever the workflow changes.

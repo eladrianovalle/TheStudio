@@ -108,6 +108,37 @@
         "Lack of automation coverage",
         "Need for customer support/CSM alignment"
       ]
+    },
+    "ml": {
+      "title": "ML Systems Lead",
+      "advocate_focus": "Design and deliver the AI critique engine with measurable quality and cost control.",
+      "contrarian_focus": "Stress test model reliability, cost predictability, and quality validation.",
+      "prompt_doc": "docs/role_prompts/ml.md",
+      "deliverables": [
+        "Critique pipeline outline",
+        "Model choices + fallbacks",
+        "Benchmark & calibration plan"
+      ],
+      "escalate_on": [
+        "Dependency on models not yet available or with prohibitive cost",
+        "Need for external labeling services or expert panels not yet engaged"
+      ]
+    },
+    "pmm": {
+      "title": "Product Marketing Lead",
+      "advocate_focus": "Shepherd the product narrative from MVP to public launch.",
+      "contrarian_focus": "Pressure-test launch realism and messaging integrity.",
+      "prompt_doc": "docs/role_prompts/pmm.md",
+      "deliverables": [
+        "Positioning Brief",
+        "Launch Plan",
+        "Measurement & Readiness Checklist"
+      ],
+      "escalate_on": [
+        "Launch claims lack legal approval or verifiable evidence",
+        "Critical assets have no owner or timeline",
+        "Instrumentation or support workflows cannot be staffed"
+      ]
     }
   },
   "defaults": {

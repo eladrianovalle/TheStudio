@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Tests for rerun mode detection and failure context injection."""
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -11,16 +10,8 @@ from rerun import (
     extract_rejection_reasons,
     find_latest_rejection,
     generate_rerun_instructions,
-    inject_context_into_prompt,
     load_rejection_context,
 )
-
-
-@pytest.fixture
-def temp_run_dir():
-    """Create a temporary run directory."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        yield Path(tmpdir)
 
 
 def test_rejection_context_format_for_prompt():
@@ -299,55 +290,6 @@ def test_load_rejection_context_no_rejection(temp_run_dir):
     assert context is None
 
 
-def test_inject_context_into_prompt_with_context():
-    """Test injecting context into advocate prompt."""
-    base_prompt = """
-# Advocate Prompt
-
-Your task is to propose a solution.
-
-## Deliverables
-
-- Proposal document
-- Implementation plan
-"""
-    
-    context = RejectionContext(
-        iteration=1,
-        role=None,
-        reasons=["Missing cost analysis", "No timeline provided"],
-        full_text="..."
-    )
-    
-    modified = inject_context_into_prompt(base_prompt, context)
-    
-    assert "Previous iteration was REJECTED" in modified
-    assert "Missing cost analysis" in modified
-    assert "No timeline provided" in modified
-    assert "## Deliverables" in modified  # Original content preserved
-    # Context should be injected before deliverables
-    context_pos = modified.find("Previous iteration")
-    deliverables_pos = modified.find("## Deliverables")
-    assert context_pos < deliverables_pos
-
-
-def test_inject_context_into_prompt_no_context():
-    """Test that prompt is unchanged when no context provided."""
-    base_prompt = "# Advocate Prompt\n\nYour task..."
-    
-    modified = inject_context_into_prompt(base_prompt, None)
-    assert modified == base_prompt
-
-
-def test_inject_context_into_prompt_empty_reasons():
-    """Test that prompt is unchanged when context has no reasons."""
-    base_prompt = "# Advocate Prompt\n\nYour task..."
-    context = RejectionContext(iteration=1, role=None, reasons=[], full_text="...")
-    
-    modified = inject_context_into_prompt(base_prompt, context)
-    assert modified == base_prompt
-
-
 def test_generate_rerun_instructions_with_rejection(temp_run_dir):
     """Test generating rerun instructions with rejection context."""
     rejection_content = """
@@ -428,30 +370,33 @@ Please revise the proposal to address these fundamental issues.
     instructions = generate_rerun_instructions(temp_run_dir)
     assert "Rerun Mode Detected" in instructions
     assert "horizontal scalability" in instructions
-    
-    # Step 4: Inject context into advocate prompt
-    base_prompt = """
-# Tech Advocate Prompt
 
-Propose a technical architecture for the system.
 
-## Deliverables
+def test_detect_rerun_mode_with_studio_role_files(temp_run_dir):
+    """Test rerun detection works with studio-phase contrarian--role--N.md files."""
+    (temp_run_dir / "contrarian--marketing--01.md").write_text("VERDICT: REJECTED\n\n1. Bad idea")
+    assert detect_rerun_mode(temp_run_dir) is True
 
-- Architecture diagram
-- Technology stack
-- Implementation plan
-"""
-    
-    modified_prompt = inject_context_into_prompt(base_prompt, context)
-    
-    # Verify context is injected
-    assert "Previous iteration was REJECTED" in modified_prompt
-    assert "horizontal scalability" in modified_prompt
-    assert "database migration" in modified_prompt
-    
-    # Verify original content preserved
-    assert "## Deliverables" in modified_prompt
-    assert "Architecture diagram" in modified_prompt
-    
-    # Verify injection order (context before deliverables)
-    assert modified_prompt.index("REJECTED") < modified_prompt.index("## Deliverables")
+
+def test_find_latest_rejection_studio_role_files(temp_run_dir):
+    """Test finding rejection across studio-phase files when role=None."""
+    (temp_run_dir / "contrarian--marketing--01.md").write_text("VERDICT: REJECTED\n\n1. Bad idea")
+    (temp_run_dir / "contrarian--design--01.md").write_text("VERDICT: APPROVED")
+
+    result = find_latest_rejection(temp_run_dir)
+    assert result is not None
+    assert "marketing" in result.name
+
+
+def test_load_rejection_context_studio_phase(temp_run_dir):
+    """Test loading rejection context from studio-phase files with role filter."""
+    (temp_run_dir / "contrarian--engineering--02.md").write_text(
+        "VERDICT: REJECTED\n\n1. Architecture too complex\n2. No monitoring plan"
+    )
+    (temp_run_dir / "contrarian--marketing--01.md").write_text("VERDICT: APPROVED")
+
+    context = load_rejection_context(temp_run_dir, role="engineering")
+    assert context is not None
+    assert context.role == "engineering"
+    assert context.iteration == 2
+    assert len(context.reasons) >= 1
