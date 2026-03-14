@@ -177,6 +177,21 @@ First run auto-scaffolds `.studio/` and creates a bridge doc. Override with `--a
 
 ---
 
+## MVI (Minimum Viable Interaction)
+
+Every task, sprint, and milestone must end in something **usable** — not a partial component that becomes useful later.
+
+> "Build a skateboard, not a wheel." Each increment is rideable.
+
+- **Tasks** produce an interactable result, not isolated backend/frontend pieces
+- **Sprints** end with a working flow, not a layer of the stack
+- **Milestones** are demonstrable without caveats like "once we also finish X"
+- **Roadmaps** are sequences of increasingly capable MVIs — if cancelled at any point, something usable exists
+
+Product, Engineering, and Design contrarians enforce MVI. See [MVI_METHODOLOGY.md](./studio/docs/MVI_METHODOLOGY.md).
+
+---
+
 ## AI-TDD Discipline
 
 All tech phase implementations follow AI-assisted test-driven development:
@@ -252,6 +267,7 @@ Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.
 
 - [ARCHITECTURE.md](./studio/docs/ARCHITECTURE.md) — system design and extensibility
 - [AGENTS_REFERENCE.md](./studio/docs/AGENTS_REFERENCE.md) — role definitions and debate flow
+- [MVI_METHODOLOGY.md](./studio/docs/MVI_METHODOLOGY.md) — Minimum Viable Interaction methodology
 - [AI_TDD_METHODOLOGY.md](./studio/docs/AI_TDD_METHODOLOGY.md) — AI-assisted testing methodology
 - [TEST_DRIVEN_GUIDE.md](./studio/docs/TEST_DRIVEN_GUIDE.md) — tech phase TDD workflow
 - [INTEGRATION_GUIDE.md](./studio/docs/INTEGRATION_GUIDE.md) — cross-repo setup
