@@ -81,11 +81,27 @@ For each role in the Role Menu, spawn advocate + contrarian **in parallel** (all
 
 ---
 
-#### Scope 2: DEPTH (per-role, full, sequential)
+#### Scope 2: DEPTH (per-role, sequential, with briefs and scoped reads)
 
 **Goal:** Detailed analysis per discipline. "How exactly should we do this?"
 
-Process each role **sequentially** (later roles can read earlier roles' outputs):
+Process each role **sequentially** (later roles benefit from earlier outputs).
+
+**Token optimization — summarize-then-delegate:** After every 2-3 completed roles, write a condensed 1-page brief (`{run_dir}/S2-brief.md`) summarizing key decisions, concerns, and conditions from completed S2 roles. Update this brief as more roles complete. Later roles read the brief instead of all individual files.
+
+**Scoped reads — each role only reads what's relevant:**
+
+| Role | Must read (S2 files) | Brief sufficient |
+|------|---------------------|-----------------|
+| Product | (runs first) | S1 alignment only |
+| Marketing | Product S2 | S1 alignment |
+| Design | Product S2, Marketing S2 | S1 alignment |
+| Art | Design S2 | Brief for others |
+| Engineering | Design S2, Art S2 | Brief for others |
+| Test Engineer | Engineering S2, Design S2 | Brief for others |
+| QA | Engineering S2, Test Engineer S2 | Brief for others |
+
+Adjust based on the specific proposal — if a role clearly depends on another's output, add it.
 
 **Advocate prompt:**
 > You are the **{role_title} Advocate** for this Studio run — DEPTH SCOPE.
@@ -93,9 +109,13 @@ Process each role **sequentially** (later roles can read earlier roles' outputs)
 > **Focus:** {advocate_focus}
 > **Input/objective:** {the user's text}
 >
-> **Context from Alignment scope:** Read the alignment artifacts in `{run_dir}/*--S1-*.md` to understand what was agreed and what was flagged across all disciplines.
+> **Context from Alignment scope:** Read the alignment artifacts in `{run_dir}/*--S1-*.md` to understand what was agreed and what was flagged.
 >
 > {If this role was REJECTED in alignment: "Alignment contrarian flagged these concerns:" + rejection reasons}
+>
+> **Context from prior Depth roles (SCOPED — read only these):**
+> - {List specific S2 files this role needs per the dependency map}
+> - Condensed brief of all other roles: `{run_dir}/S2-brief.md`
 >
 > **Required deliverables:** {deliverables list from Role Menu}
 >
@@ -111,6 +131,10 @@ Process each role **sequentially** (later roles can read earlier roles' outputs)
 >
 > Read the advocate's depth proposal at `{run_dir}/advocate--{role}--S2-{NN}.md`.
 >
+> **Scoped reads (only these — do NOT read all S2 files):**
+> - {1-2 S2 files most relevant per dependency map}
+> - Condensed brief: `{run_dir}/S2-brief.md`
+>
 > Critically evaluate against your focus area with full rigor. Check for:
 > - Fatal flaws, unrealistic assumptions, missing considerations
 > - Whether alignment-scope concerns were actually addressed
@@ -121,40 +145,36 @@ Process each role **sequentially** (later roles can read earlier roles' outputs)
 > End with `VERDICT: APPROVED` or `VERDICT: REJECTED` with numbered reasons.
 > Save to `{run_dir}/contrarian--{role}--S2-{NN}.md`.
 
+**Brief update cadence:** After every 2-3 roles complete, update `{run_dir}/S2-brief.md` with their key decisions and conditions. Keep under 1 page.
+
 **Loop:** If REJECTED and iterations remain (up to 3), feed rejection back to advocate. If APPROVED, move to next role.
 
 ---
 
-#### Scope 3: POLISH (all roles, short, parallel, 1 pass)
+#### Scope 3: POLISH (single consolidated agent)
 
 **Goal:** Cross-discipline gut-check. "Anything still broken across disciplines?"
 
-After all Scope 2 roles are approved, run one final parallel pass:
+After all Scope 2 roles are approved, run **one consolidated agent** — not per-role pairs.
 
-**Advocate prompt:**
-> You are the **{role_title} Advocate** for this Studio run — POLISH SCOPE.
+**Consolidated polish prompt (ONE agent):**
+> You are the **Cross-Discipline Polish Reviewer** for this Studio run.
 >
-> **Keep your response under 300 words.**
+> Read these files:
+> - Condensed S2 brief: `{run_dir}/S2-brief.md`
+> - All S2 contrarian files: `{run_dir}/contrarian--*--S2-*.md` (for conditions attached to each approval)
 >
-> Read all Scope 2 artifacts in `{run_dir}/*--S2-*.md` to understand what each discipline proposed.
+> Produce a single document covering:
+> 1. **Unresolved cross-discipline conflicts** — where one role's decision contradicts another's
+> 2. **Conditions that overlap or conflict** — where two contrarians demanded incompatible things
+> 3. **Gaps between roles** — concerns that fell between disciplines and no one owns
+> 4. **Consolidated open items** — deduplicated list of all conditions, grouped by priority
 >
-> Confirm your discipline's concerns are addressed in the integrated depth outputs. Flag any remaining cross-discipline conflicts. Do not introduce new proposals — only flag issues.
->
-> Save to `{run_dir}/advocate--{role}--S3-01.md`.
+> Do NOT introduce new proposals or repeat S2 analysis.
+> **Keep under 800 words.** End with `VERDICT: APPROVED` or `VERDICT: REJECTED` with numbered reasons.
+> Save to `{run_dir}/polish--consolidated--S3-01.md`.
 
-**Contrarian prompt (SEPARATE agent):**
-> You are the **{role_title} Contrarian** for this Studio run — POLISH SCOPE.
->
-> **Keep your response under 300 words.**
->
-> Read the advocate's polish check at `{run_dir}/advocate--{role}--S3-01.md`.
->
-> Verify the advocate isn't rubber-stamping. Any real conflicts remaining?
->
-> End with `VERDICT: APPROVED` or `VERDICT: REJECTED` with numbered reasons.
-> Save to `{run_dir}/contrarian--{role}--S3-01.md`.
-
-**No iteration** — this is a single pass. If any role REJECTS, note the concern for the integrator but proceed.
+**No iteration** — single pass. If REJECTED, note concerns for integrator but proceed.
 
 ---
 
@@ -166,10 +186,12 @@ Same as standard integrator flow. Create `{run_dir}/integrator.md`:
 
 > You are the **Integrator Advocate** — a Systems Integrator & Ops Lead.
 >
-> Read ALL artifacts from all three scopes to understand the full debate arc:
-> - `*--S1-*.md` for alignment decisions
-> - `*--S2-*.md` for detailed proposals
-> - `*--S3-*.md` for final cross-checks
+> Read these artifacts (briefs over full files):
+> - S2 condensed brief: `{run_dir}/S2-brief.md` (primary context)
+> - S3 consolidated polish: `{run_dir}/polish--consolidated--S3-01.md` (cross-discipline conflicts and open items)
+> - S1 alignment verdicts: skim `{run_dir}/*--S1-*.md` for rejected roles and key flags
+>
+> You do NOT need to read every individual S2 advocate/contrarian file — the brief and polish doc contain the distilled decisions.
 >
 > Synthesize a unified plan. Write as `### Integrator Advocate` in `{run_dir}/integrator.md`.
 
@@ -217,8 +239,9 @@ Then run integrator duel and summary as above.
 ## Key Rules
 
 - **Advocate and Contrarian MUST be separate Agent invocations** — no shared context.
-- **Scope 1 and 3 run all roles in parallel** — they're short enough to parallelize.
-- **Scope 2 runs roles sequentially** — later roles benefit from reading earlier outputs.
+- **Scope 1 runs all roles in parallel** — short enough to parallelize.
+- **Scope 2 runs roles sequentially** with scoped reads and rolling briefs (`S2-brief.md`).
+- **Scope 3 is a single consolidated agent** — one cross-discipline check, not per-role pairs.
+- **Briefs over full reads** — later roles and integrator read `S2-brief.md` instead of all individual files.
 - **Word caps are instruction-enforced** — include them in the agent prompt, not as runtime truncation.
-- File naming: `advocate--marketing--S1-01.md`, `contrarian--engineering--S2-02.md`, `advocate--qa--S3-01.md`
-- The integrator reads ALL scope artifacts to synthesize the full debate arc.
+- File naming: `advocate--marketing--S1-01.md`, `contrarian--engineering--S2-02.md`, `polish--consolidated--S3-01.md`
