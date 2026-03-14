@@ -22,6 +22,7 @@ from cleanup import (
     format_bytes,
     load_cleanup_settings,
 )
+from validators.document_validator import DocumentValidator
 from run_phase_roles import (
     RoleConfigError,
     RoleDetails,
@@ -412,6 +413,91 @@ def _validate_artifacts(
     advocate_names = []
     if phase != "studio":
         advocate_names = [file.name for file in advocate_files]  # type: ignore[name-defined]
+
+    # --- Quality checks (warnings only, never block finalize) ---
+    quality_warnings: List[str] = []
+    quality_errors: List[str] = []
+    checks_run = 0
+    doc_validator = DocumentValidator()
+
+    all_advocate_paths: List[Path] = []
+    all_contrarian_paths: List[Path] = []
+    if phase == "studio":
+        for role in completed_roles:
+            all_advocate_paths.extend(collect_role_artifacts(run_dir, role, "advocate"))
+            all_contrarian_paths.extend(collect_role_artifacts(run_dir, role, "contrarian"))
+    else:
+        all_advocate_paths = sorted(run_dir.glob("advocate_*.md"))
+        all_contrarian_paths = sorted(run_dir.glob("contrarian_*.md"))
+
+    all_artifact_paths = all_advocate_paths + all_contrarian_paths
+
+    for cpath in all_contrarian_paths:
+        checks_run += 1
+        verdict_result = doc_validator.check_verdict(cpath)
+        if not verdict_result.passed:
+            quality_warnings.append(f"{cpath.name}: no VERDICT found")
+        quality_warnings.extend(f"{cpath.name}: {w}" for w in verdict_result.warnings)
+
+    for fpath in all_artifact_paths:
+        checks_run += 1
+        try:
+            content = fpath.read_text(encoding="utf-8")
+            if len(content.strip()) < 200:
+                quality_warnings.append(
+                    f"{fpath.name}: only {len(content.strip())} chars (possible rubber-stamp)"
+                )
+        except OSError:
+            quality_warnings.append(f"{fpath.name}: could not read for length check")
+
+    for fpath in all_artifact_paths:
+        checks_run += 1
+        fmt_result = doc_validator.check_format(fpath)
+        quality_warnings.extend(f"{fpath.name}: {w}" for w in fmt_result.warnings)
+        quality_errors.extend(f"{fpath.name}: {issue}" for issue in fmt_result.issues)
+
+    if quality_warnings or quality_errors:
+        print("Quality warnings:")
+        for w in quality_warnings:
+            print(f"  ⚠ {w}")
+        for e in quality_errors:
+            print(f"  ✗ {e}")
+
+    if meta is not None:
+        meta["quality"] = {
+            "checks_run": checks_run,
+            "warnings": quality_warnings,
+            "errors": quality_errors,
+        }
+
+        # Token budget tracking: measure output per scope
+        scope_stats: Dict[str, Dict] = {}
+        for fpath in all_artifact_paths:
+            fname = fpath.name
+            # Detect scope from filename: advocate--role--S1-01.md → "S1"
+            parts = fname.split("--")
+            scope_key = "flat"
+            if len(parts) >= 3:
+                iter_part = parts[-1].split(".")[0]  # "S1-01" or "01"
+                if "-" in iter_part:
+                    scope_key = iter_part.rsplit("-", 1)[0]  # "S1"
+            try:
+                content = fpath.read_text(encoding="utf-8")
+                char_count = len(content)
+                word_count = len(content.split())
+            except OSError:
+                char_count = 0
+                word_count = 0
+            if scope_key not in scope_stats:
+                scope_stats[scope_key] = {"files": 0, "total_chars": 0, "total_words": 0}
+            scope_stats[scope_key]["files"] += 1
+            scope_stats[scope_key]["total_chars"] += char_count
+            scope_stats[scope_key]["total_words"] += word_count
+
+        for stats in scope_stats.values():
+            stats["avg_words"] = round(stats["total_words"] / max(stats["files"], 1))
+
+        meta["token_budget"] = scope_stats
 
     return iterations_value, advocate_names, completed_roles, missing_roles
 
