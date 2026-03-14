@@ -29,6 +29,7 @@ from run_phase_roles import (
     build_role_details,
     collect_role_artifacts,
     default_role_pack_name,
+    parse_role_filename,
     load_manifest,
     load_role_pack,
     normalize_role_filename,
@@ -432,29 +433,46 @@ def _validate_artifacts(
 
     all_artifact_paths = all_advocate_paths + all_contrarian_paths
 
-    for cpath in all_contrarian_paths:
-        checks_run += 1
-        verdict_result = doc_validator.check_verdict(cpath)
-        if not verdict_result.passed:
-            quality_warnings.append(f"{cpath.name}: no VERDICT found")
-        quality_warnings.extend(f"{cpath.name}: {w}" for w in verdict_result.warnings)
+    contrarian_set = set(all_contrarian_paths)
+    scope_stats: Dict[str, Dict] = {}
 
     for fpath in all_artifact_paths:
-        checks_run += 1
         try:
             content = fpath.read_text(encoding="utf-8")
-            if len(content.strip()) < 200:
-                quality_warnings.append(
-                    f"{fpath.name}: only {len(content.strip())} chars (possible rubber-stamp)"
-                )
         except OSError:
-            quality_warnings.append(f"{fpath.name}: could not read for length check")
+            quality_warnings.append(f"{fpath.name}: could not read file")
+            continue
 
-    for fpath in all_artifact_paths:
+        # 1. Verdict check (contrarian files only)
+        if fpath in contrarian_set:
+            checks_run += 1
+            verdict_result = doc_validator.check_verdict(fpath)
+            if not verdict_result.passed:
+                quality_warnings.append(f"{fpath.name}: no VERDICT found")
+            quality_warnings.extend(f"{fpath.name}: {w}" for w in verdict_result.warnings)
+
+        # 2. Rubber-stamp detector
+        checks_run += 1
+        stripped_len = len(content.strip())
+        if stripped_len < 200:
+            quality_warnings.append(
+                f"{fpath.name}: only {stripped_len} chars (possible rubber-stamp)"
+            )
+
+        # 3. Format check
         checks_run += 1
         fmt_result = doc_validator.check_format(fpath)
         quality_warnings.extend(f"{fpath.name}: {w}" for w in fmt_result.warnings)
         quality_errors.extend(f"{fpath.name}: {issue}" for issue in fmt_result.issues)
+
+        # 4. Token budget tracking
+        _, _, scope, _ = parse_role_filename(fpath.name)
+        scope_key = scope or "flat"
+        if scope_key not in scope_stats:
+            scope_stats[scope_key] = {"files": 0, "total_chars": 0, "total_words": 0}
+        scope_stats[scope_key]["files"] += 1
+        scope_stats[scope_key]["total_chars"] += len(content)
+        scope_stats[scope_key]["total_words"] += len(content.split())
 
     if quality_warnings or quality_errors:
         print("Quality warnings:")
@@ -470,33 +488,8 @@ def _validate_artifacts(
             "errors": quality_errors,
         }
 
-        # Token budget tracking: measure output per scope
-        scope_stats: Dict[str, Dict] = {}
-        for fpath in all_artifact_paths:
-            fname = fpath.name
-            # Detect scope from filename: advocate--role--S1-01.md → "S1"
-            parts = fname.split("--")
-            scope_key = "flat"
-            if len(parts) >= 3:
-                iter_part = parts[-1].split(".")[0]  # "S1-01" or "01"
-                if "-" in iter_part:
-                    scope_key = iter_part.rsplit("-", 1)[0]  # "S1"
-            try:
-                content = fpath.read_text(encoding="utf-8")
-                char_count = len(content)
-                word_count = len(content.split())
-            except OSError:
-                char_count = 0
-                word_count = 0
-            if scope_key not in scope_stats:
-                scope_stats[scope_key] = {"files": 0, "total_chars": 0, "total_words": 0}
-            scope_stats[scope_key]["files"] += 1
-            scope_stats[scope_key]["total_chars"] += char_count
-            scope_stats[scope_key]["total_words"] += word_count
-
         for stats in scope_stats.values():
             stats["avg_words"] = round(stats["total_words"] / max(stats["files"], 1))
-
         meta["token_budget"] = scope_stats
 
     return iterations_value, advocate_names, completed_roles, missing_roles

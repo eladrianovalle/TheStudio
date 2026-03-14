@@ -121,10 +121,6 @@ def load_scopes_config(config_path: Path) -> ScopesConfig:
             raise ValueError(f"Scope '{scope_name}' output_budget must be an integer")
 
         debate_mode = scope_config.get("debate_mode", "per_role")
-        if debate_mode not in VALID_DEBATE_MODES:
-            raise ValueError(
-                f"Scope '{scope_name}' debate_mode must be one of {VALID_DEBATE_MODES}"
-            )
 
         scopes.append(ScopeConfig(
             name=scope_name,

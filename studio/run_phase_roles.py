@@ -135,22 +135,35 @@ def normalize_role_filename(
     return f"{kind}--{slug}--{iteration:02d}.md"
 
 
-def parse_iteration_from_filename(filename: str) -> int:
-    # Expected patterns:
-    #   kind--role--NN.md          (flat mode)
-    #   kind--role--scope-NN.md    (scoped mode)
+def parse_role_filename(filename: str) -> Tuple[str, str, str | None, int]:
+    """Parse a role artifact filename into (kind, role, scope, iteration).
+
+    Handles both flat (``kind--role--NN.md``) and scoped
+    (``kind--role--scope-NN.md``) patterns.  Returns ``("", "", None, 0)``
+    for filenames that don't match.
+    """
     stem = filename.split("/")[-1]
     parts = stem.split("--")
     if len(parts) < 3:
-        return 0
-    iteration_part = parts[-1].split(".")[0]
-    # Handle scope prefix: "S1-01" → extract "01"
-    if "-" in iteration_part:
-        iteration_part = iteration_part.rsplit("-", 1)[-1]
+        return ("", "", None, 0)
+    kind = parts[0]
+    role = parts[1]
+    iter_part = parts[-1].split(".")[0]
+    scope: str | None = None
+    if "-" in iter_part:
+        scope, iter_str = iter_part.rsplit("-", 1)
+    else:
+        iter_str = iter_part
     try:
-        return int(iteration_part)
+        iteration = int(iter_str)
     except ValueError:
-        return 0
+        iteration = 0
+    return (kind, role, scope, iteration)
+
+
+def parse_iteration_from_filename(filename: str) -> int:
+    """Return just the iteration number from a role artifact filename."""
+    return parse_role_filename(filename)[3]
 
 
 def collect_role_artifacts(run_dir: Path, role: str, kind: str) -> List[Path]:
