@@ -126,18 +126,27 @@ def build_role_details(manifest: Dict, role_names: Sequence[str]) -> List[RoleDe
     return [get_role_spec(manifest, name) for name in role_names]
 
 
-def normalize_role_filename(role: str, iteration: int, kind: str) -> str:
+def normalize_role_filename(
+    role: str, iteration: int, kind: str, scope: str | None = None
+) -> str:
     slug = role.replace(" ", "-")
+    if scope:
+        return f"{kind}--{slug}--{scope}-{iteration:02d}.md"
     return f"{kind}--{slug}--{iteration:02d}.md"
 
 
 def parse_iteration_from_filename(filename: str) -> int:
-    # Expected pattern: kind--role--NN.md
+    # Expected patterns:
+    #   kind--role--NN.md          (flat mode)
+    #   kind--role--scope-NN.md    (scoped mode)
     stem = filename.split("/")[-1]
     parts = stem.split("--")
     if len(parts) < 3:
         return 0
     iteration_part = parts[-1].split(".")[0]
+    # Handle scope prefix: "S1-01" → extract "01"
+    if "-" in iteration_part:
+        iteration_part = iteration_part.rsplit("-", 1)[-1]
     try:
         return int(iteration_part)
     except ValueError:

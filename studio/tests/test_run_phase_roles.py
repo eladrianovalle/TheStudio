@@ -241,6 +241,16 @@ class TestNormalizeRoleFilename:
     def test_double_digit(self):
         assert normalize_role_filename("qa", 12, "advocate") == "advocate--qa--12.md"
 
+    def test_scoped_filename(self):
+        assert normalize_role_filename("marketing", 1, "advocate", scope="S1") == "advocate--marketing--S1-01.md"
+
+    def test_scoped_filename_contrarian(self):
+        assert normalize_role_filename("engineering", 2, "contrarian", scope="S2") == "contrarian--engineering--S2-02.md"
+
+    def test_no_scope_default(self):
+        """Without scope parameter, produces flat filename."""
+        assert normalize_role_filename("qa", 1, "advocate", scope=None) == "advocate--qa--01.md"
+
 
 # ---------------------------------------------------------------------------
 # parse_iteration_from_filename
@@ -258,6 +268,15 @@ class TestParseIterationFromFilename:
 
     def test_single_part_returns_zero(self):
         assert parse_iteration_from_filename("summary.md") == 0
+
+    def test_scoped_pattern(self):
+        assert parse_iteration_from_filename("advocate--marketing--S1-01.md") == 1
+
+    def test_scoped_pattern_higher_iteration(self):
+        assert parse_iteration_from_filename("contrarian--engineering--S2-03.md") == 3
+
+    def test_scoped_pattern_with_path(self):
+        assert parse_iteration_from_filename("run_dir/advocate--qa--S3-01.md") == 1
 
 
 # ---------------------------------------------------------------------------
@@ -283,3 +302,13 @@ class TestCollectRoleArtifacts:
         (temp_run_dir / "contrarian--qa--01.md").write_text("c1")
         result = collect_role_artifacts(temp_run_dir, "qa", "contrarian")
         assert len(result) == 1
+
+    def test_collects_scoped_artifacts(self, temp_run_dir):
+        """collect_role_artifacts finds files with scope prefixes."""
+        (temp_run_dir / "advocate--marketing--S1-01.md").write_text("s1")
+        (temp_run_dir / "advocate--marketing--S2-01.md").write_text("s2")
+        (temp_run_dir / "advocate--marketing--S2-02.md").write_text("s2r2")
+        (temp_run_dir / "advocate--marketing--S3-01.md").write_text("s3")
+
+        result = collect_role_artifacts(temp_run_dir, "marketing", "advocate")
+        assert len(result) == 4

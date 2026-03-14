@@ -16,7 +16,7 @@ Use the slash command to run a full advocate/contrarian debate:
 /run-studio-phase --text "Add AI critique engine" --roles +marketing +engineering
 ```
 
-Single-phase runs (`/run-phase`) spawn separate Advocate and Contrarian agents per iteration. Multi-role runs (`/run-studio-phase`) process each discipline sequentially, then run an Integrator duel. See `studio/docs/CLAUDE_CODE_USAGE.md` for details.
+Single-phase runs (`/run-phase`) spawn separate Advocate and Contrarian agents per iteration. Multi-role runs (`/run-studio-phase`) use a three-tier scoped debate by default: **alignment** (all roles, short, parallel) → **depth** (per-role, full, sequential) → **polish** (all roles, short, 1 pass) → integrator duel. Use `--no-scopes` for flat mode. See `studio/docs/CLAUDE_CODE_USAGE.md` for details.
 
 ## CLI Commands
 
@@ -62,6 +62,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 
 - **`studio.manifest.json`** — Defines all disciplines (marketing, product, design, art, engineering, test_engineer, qa, ml, pmm) with advocate/contrarian focuses, deliverables, escalation cues, and role dependencies.
 - **`role_packs/*.json`** — Curated pod presets (e.g., `studio_core` = marketing + product + design + art + engineering + test_engineer + qa). Override with `--roles +role/-role`. Role dependencies in the manifest auto-inject co-required roles (e.g., engineering always brings test_engineer).
+- **`config/scopes.toml`** — Default three-tier scope configuration (alignment → depth → polish) with output budgets and debate modes.
 - **`config/studio_settings.toml`** — Cleanup TTL and storage limits.
 - **`.studio/scopes.toml`** — Scope-based iteration budgets (auto-loaded if present).
 - **`.studio/validation.toml`** — Validation configuration.

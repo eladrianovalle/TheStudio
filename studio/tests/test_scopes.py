@@ -8,6 +8,7 @@ import pytest
 from scopes import (
     ScopeConfig,
     ScopesConfig,
+    VALID_DEBATE_MODES,
     allocate_iterations,
     generate_scope_instructions,
     load_scopes_config,
@@ -259,3 +260,124 @@ max_iterations = 1
         assert allocations["polish"] == 2  # Gets remaining to avoid rounding errors
     finally:
         config_path.unlink()
+
+
+# ---------------------------------------------------------------------------
+# New: output_budget, debate_mode, scoped filenames
+# ---------------------------------------------------------------------------
+
+
+def test_scope_config_output_budget():
+    """ScopeConfig accepts optional output_budget."""
+    scope = ScopeConfig("alignment", "Direction", 2, output_budget=500)
+    assert scope.output_budget == 500
+
+    scope_no_budget = ScopeConfig("depth", "Detail", 3)
+    assert scope_no_budget.output_budget is None
+
+
+def test_scope_config_debate_mode_default():
+    """ScopeConfig defaults to per_role debate_mode."""
+    scope = ScopeConfig("depth", "Detail", 3)
+    assert scope.debate_mode == "per_role"
+
+
+def test_scope_config_debate_mode_all_roles():
+    """ScopeConfig accepts all_roles debate_mode."""
+    scope = ScopeConfig("alignment", "Direction", 2, debate_mode="all_roles")
+    assert scope.debate_mode == "all_roles"
+
+
+def test_scope_config_invalid_debate_mode():
+    """ScopeConfig rejects invalid debate_mode."""
+    with pytest.raises(ValueError, match="debate_mode"):
+        ScopeConfig("bad", "Bad", 1, debate_mode="invalid")
+
+
+def test_load_scopes_config_with_budget_and_mode():
+    """Loading TOML with output_budget and debate_mode fields."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+        f.write("""
+[scopes.alignment]
+focus = "Direction"
+max_iterations = 2
+output_budget = 500
+debate_mode = "all_roles"
+
+[scopes.depth]
+focus = "Detail"
+max_iterations = 3
+debate_mode = "per_role"
+
+[scopes.polish]
+focus = "Cross-check"
+max_iterations = 1
+output_budget = 300
+debate_mode = "all_roles"
+""")
+        config_path = Path(f.name)
+
+    try:
+        config = load_scopes_config(config_path)
+        assert len(config.scopes) == 3
+
+        alignment = config.get_scope("alignment")
+        assert alignment is not None
+        assert alignment.output_budget == 500
+        assert alignment.debate_mode == "all_roles"
+
+        depth = config.get_scope("depth")
+        assert depth is not None
+        assert depth.output_budget is None
+        assert depth.debate_mode == "per_role"
+
+        polish = config.get_scope("polish")
+        assert polish is not None
+        assert polish.output_budget == 300
+        assert polish.debate_mode == "all_roles"
+    finally:
+        config_path.unlink()
+
+
+def test_generate_scope_instructions_with_budget_and_mode():
+    """Instructions include output budget and debate mode when set."""
+    config = ScopesConfig(scopes=[
+        ScopeConfig("alignment", "Direction", 2, output_budget=500, debate_mode="all_roles"),
+        ScopeConfig("depth", "Detail", 3, debate_mode="per_role"),
+    ])
+    allocations = {"alignment": 2, "depth": 3}
+
+    instructions = generate_scope_instructions(config, allocations)
+
+    assert "~500 words" in instructions
+    assert "All roles debate simultaneously" in instructions
+    assert "Each role debates sequentially" in instructions
+    # Depth scope should NOT have an output budget line
+    lines = instructions.split("\n")
+    depth_idx = next(i for i, l in enumerate(lines) if "Depth" in l)
+    # Check next few lines after Depth header don't mention output budget
+    depth_section = "\n".join(lines[depth_idx:depth_idx + 5])
+    assert "Output budget" not in depth_section
+
+
+def test_load_default_scopes_config():
+    """The shipped default scopes.toml loads correctly."""
+    default_path = Path(__file__).resolve().parents[1] / "config" / "scopes.toml"
+    if not default_path.exists():
+        pytest.skip("Default scopes.toml not found")
+
+    config = load_scopes_config(default_path)
+    assert len(config.scopes) == 3
+
+    names = [s.name for s in config.scopes]
+    assert "alignment" in names
+    assert "depth" in names
+    assert "polish" in names
+
+    alignment = config.get_scope("alignment")
+    assert alignment.output_budget == 500
+    assert alignment.debate_mode == "all_roles"
+
+    depth = config.get_scope("depth")
+    assert depth.output_budget is None
+    assert depth.debate_mode == "per_role"

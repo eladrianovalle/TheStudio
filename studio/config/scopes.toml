@@ -1,0 +1,21 @@
+# Default scope configuration for Studio multi-role runs.
+#
+# Three-tier scoped debate: alignment → depth → polish.
+# Override with --scopes <path> or --no-scopes for flat mode.
+
+[scopes.alignment]
+focus = "Directional alignment — approach, fatal flaws, high-level trade-offs only. Save detail for Depth."
+max_iterations = 2
+output_budget = 500
+debate_mode = "all_roles"
+
+[scopes.depth]
+focus = "Full analysis — detailed deliverables, edge cases, concrete recommendations per discipline."
+max_iterations = 3
+debate_mode = "per_role"
+
+[scopes.polish]
+focus = "Cross-discipline conflicts — flag remaining issues across roles, no new proposals."
+max_iterations = 1
+output_budget = 300
+debate_mode = "all_roles"
