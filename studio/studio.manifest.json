@@ -36,8 +36,8 @@
     },
     "product": {
       "title": "Group Product Manager",
-      "advocate_focus": "Align the concept with roadmap sequencing, measurable outcomes, and staffing envelopes.",
-      "contrarian_focus": "Challenge priority tradeoffs, ownership gaps, and unclear success metrics.",
+      "advocate_focus": "Align the concept with roadmap sequencing, measurable outcomes, and staffing envelopes. Every milestone must end in an MVI (Minimum Viable Interaction) — something usable, not a partial component.",
+      "contrarian_focus": "Challenge priority tradeoffs, ownership gaps, unclear success metrics, and MVI compliance. Reject milestone plans where any milestone ends in an unusable state.",
       "prompt_doc": "docs/role_prompts/product.md",
       "deliverables": [
         "Milestone plan with staffing callouts",
@@ -46,13 +46,14 @@
       ],
       "escalate_on": [
         "Unstaffed critical path",
-        "Dependencies on teams not yet engaged"
+        "Dependencies on teams not yet engaged",
+        "Milestone or sprint that ends in an unusable state (violates MVI)"
       ]
     },
     "design": {
       "title": "Lead Systems Designer",
-      "advocate_focus": "Define the fantasy, core loop, and experiential pillars that make the idea shippable.",
-      "contrarian_focus": "Call out scope bloat, UX ambiguity, and missing experiential guardrails.",
+      "advocate_focus": "Define the fantasy, core loop, and experiential pillars that make the idea shippable. Each experience tier must be playable/usable on its own (MVI).",
+      "contrarian_focus": "Call out scope bloat, UX ambiguity, missing experiential guardrails, and MVI violations. Reject designs that require all systems online before any interaction works.",
       "prompt_doc": "docs/role_prompts/design.md",
       "deliverables": [
         "Experience pillars + player promise",
@@ -81,8 +82,8 @@
     },
     "engineering": {
       "title": "Principal Gameplay Engineer",
-      "advocate_focus": "Lay out the technical architecture, integrations, and performance budgets.",
-      "contrarian_focus": "Highlight ops toil, reliability risks, and tech debt implications.",
+      "advocate_focus": "Lay out the technical architecture, integrations, and performance budgets. Decompose work into tasks that each produce an interactable result (MVI).",
+      "contrarian_focus": "Highlight ops toil, reliability risks, tech debt implications, and MVI compliance. Reject task breakdowns that are 'backend then frontend' or require multiple tasks to complete before anything is usable.",
       "prompt_doc": "docs/role_prompts/engineering.md",
       "deliverables": [
         "High-level architecture outline",
@@ -91,7 +92,8 @@
       ],
       "escalate_on": [
         "Dependencies on unbuilt platform features",
-        "SRE or infra buy-in required"
+        "SRE or infra buy-in required",
+        "Task list where no single task produces a usable interaction (violates MVI)"
       ]
     },
     "test_engineer": {
