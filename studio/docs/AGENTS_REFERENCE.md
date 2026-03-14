@@ -43,7 +43,10 @@ Studio phase now hosts as many Advocate↔Contrarian duos as needed. The default
 | design | Lead Systems Designer | Experience pillars, core loop | Scope control, UX clarity | Loop sketch, risks list |
 | art | Art Director | Visual north star, references | Production feasibility, tooling readiness | Mood board, style guardrails |
 | engineering | Principal Gameplay Engineer | Architecture, integrations, performance | Ops toil, technical risk | System outline, stack choices, ops checklist |
-| qa | Release QA & Launch Ops Lead | Validation strategy, telemetry | Coverage gaps, environment readiness | Test matrix, rollback plan, instrumentation gaps |
+| test_engineer | Staff Test Engineer — AI-TDD Integrity | Scenario-first test design, stack boundaries, mutation verification | Self-mocking tests, hallucinated assertions, green checkmark trap | Test spec (GWT), context boundary, mutation plan, anti-pattern audit |
+| qa | Release QA & Launch Ops Lead | Validation strategy, telemetry | Coverage breadth, environment readiness, support gaps | Test matrix, rollback plan, instrumentation gaps |
+
+**Role dependencies:** The manifest declares co-requirements — `engineering → test_engineer`. When engineering is present, test_engineer is automatically injected after it. This ensures test integrity is always debated when technical work is proposed. Override with `-test_engineer` only when explicitly unwanted.
 
 Each invited role writes `advocate--<role>--NN.md` and `contrarian--<role>--NN.md` until the contrarian issues `VERDICT: APPROVED`. After all critical roles approve, the Integrator runs a capped duel (two passes max) inside `integrator.md`.
 

@@ -13,7 +13,8 @@ Key goals:
 ## Role Packs & Role Menu
 
 - **Manifest (`studio.manifest.json`)** defines every discipline (title, focuses, prompt doc, deliverables, escalation cues).
-- **Role packs (`role_packs/*.json`)** are curated pod presets (e.g., `studio_core` = marketing + product + design + art + engineering + QA). Downstream repos do *not* fork them; they supply `--roles` overrides (typically `+product +engineering +qa`, with optional `-role` removals when needed).
+- **Role packs (`role_packs/*.json`)** are curated pod presets (e.g., `studio_core` = marketing + product + design + art + engineering + test_engineer + QA). Downstream repos do *not* fork them; they supply `--roles` overrides (typically `+product +engineering +qa`, with optional `-role` removals when needed).
+- **Role dependencies** — the manifest declares co-requirements (e.g., `engineering → test_engineer`). When engineering is in the room, test_engineer is automatically injected. Override with `-test_engineer` if explicitly unwanted.
 - **Instructions** now include a Role Menu table linking to prompt docs and file names (e.g., `advocate--design--02.md`).
 - **Finalize** validates that each invited role produced both advocate/contrarian artifacts and records missing pods inside `run.json["studio_roles"]["missing"]`.
 - **Integrator duel** is captured inside `integrator.md` with `### Integrator Advocate`, `### Integrator Contrarian (VERDICT)`, and `### Integrated Plan`.
@@ -24,17 +25,17 @@ python run_phase.py prepare --phase studio --text "..." --role-pack studio_core
 ```
 and add attendees via `--roles +product +engineering +qa`.
 
-## Test-Driven Development Discipline
+## AI-TDD Discipline
 
-**All tech phase implementations must follow test-driven discipline:**
+**All tech phase implementations must follow AI-assisted test-driven discipline (AI-TDD):**
 
-- Define testable requirements in the advocate phase
-- Write test specifications before implementation
-- Write test code that initially fails
-- Implement code to pass the tests
-- Include verification instructions
+- **Scenario-first**: Generate Given-When-Then test scenarios in plain English before any test code
+- **Context boundary**: Declare the exact test stack and ban incompatible frameworks
+- **Assertion ownership**: AI writes setup and boilerplate; humans own the assertions
+- **Mutation verification**: Deliberately break production code to verify tests catch it
+- **Anti-pattern detection**: Reject self-mocking tests, hallucinated assertions, and implementation-coupled tests
 
-Tech implementations without tests are incomplete. See **[docs/TEST_DRIVEN_GUIDE.md](./studio/docs/TEST_DRIVEN_GUIDE.md)** for the complete workflow, examples, and quality standards.
+The **Test Engineer** role enforces these principles as advocate/contrarian in every run that includes engineering. See **[docs/AI_TDD_METHODOLOGY.md](./studio/docs/AI_TDD_METHODOLOGY.md)** for the full methodology and **[docs/TEST_DRIVEN_GUIDE.md](./studio/docs/TEST_DRIVEN_GUIDE.md)** for the tech phase workflow.
 
 ## What's in the box?
 

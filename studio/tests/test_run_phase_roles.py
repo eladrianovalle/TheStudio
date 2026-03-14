@@ -164,6 +164,49 @@ class TestResolveRoleList:
         result = resolve_role_list(MINIMAL_MANIFEST, pack, ["", "  ", "+design"])
         assert result == ["marketing", "design"]
 
+    def test_engineering_auto_injects_test_engineer(self):
+        """When engineering is in the pack, test_engineer is injected after it."""
+        pack = {"roles": ["marketing", "engineering"]}
+        result = resolve_role_list(MINIMAL_MANIFEST, pack)
+        assert "test_engineer" in result
+        eng_idx = result.index("engineering")
+        te_idx = result.index("test_engineer")
+        assert te_idx == eng_idx + 1
+
+    def test_engineering_added_via_override_injects_test_engineer(self):
+        """Adding +engineering via override also injects test_engineer."""
+        pack = {"roles": ["marketing"]}
+        result = resolve_role_list(MINIMAL_MANIFEST, pack, ["+engineering"])
+        assert "test_engineer" in result
+
+    def test_no_duplicate_when_test_engineer_already_present(self):
+        """If test_engineer is already in the pack, don't inject a duplicate."""
+        pack = {"roles": ["engineering", "test_engineer"]}
+        result = resolve_role_list(MINIMAL_MANIFEST, pack)
+        assert result.count("test_engineer") == 1
+
+    def test_explicit_removal_of_test_engineer_honored(self):
+        """User can explicitly remove test_engineer with -test_engineer."""
+        pack = {"roles": ["engineering", "test_engineer"]}
+        result = resolve_role_list(MINIMAL_MANIFEST, pack, ["-test_engineer"])
+        assert "test_engineer" not in result
+
+    def test_no_injection_without_engineering(self):
+        """Without engineering, test_engineer is not auto-injected."""
+        pack = {"roles": ["marketing", "design"]}
+        result = resolve_role_list(MINIMAL_MANIFEST, pack)
+        assert "test_engineer" not in result
+
+    def test_no_dependency_without_config(self):
+        """Manifests without role_dependencies skip injection."""
+        manifest_no_deps = {
+            "roles": MINIMAL_MANIFEST["roles"],
+            "defaults": {"studio_role_pack": "studio_core"},
+        }
+        pack = {"roles": ["engineering"]}
+        result = resolve_role_list(manifest_no_deps, pack)
+        assert result == ["engineering"]
+
 
 # ---------------------------------------------------------------------------
 # build_role_details

@@ -60,8 +60,8 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 
 ### Configuration files
 
-- **`studio.manifest.json`** — Defines all disciplines (marketing, product, design, art, engineering, qa, ml, pmm) with advocate/contrarian focuses, deliverables, and escalation cues.
-- **`role_packs/*.json`** — Curated pod presets (e.g., `studio_core` = marketing + product + design + art + engineering + qa). Override with `--roles +role/-role`.
+- **`studio.manifest.json`** — Defines all disciplines (marketing, product, design, art, engineering, test_engineer, qa, ml, pmm) with advocate/contrarian focuses, deliverables, escalation cues, and role dependencies.
+- **`role_packs/*.json`** — Curated pod presets (e.g., `studio_core` = marketing + product + design + art + engineering + test_engineer + qa). Override with `--roles +role/-role`. Role dependencies in the manifest auto-inject co-required roles (e.g., engineering always brings test_engineer).
 - **`config/studio_settings.toml`** — Cleanup TTL and storage limits.
 - **`.studio/scopes.toml`** — Scope-based iteration budgets (auto-loaded if present).
 - **`.studio/validation.toml`** — Validation configuration.
@@ -81,7 +81,7 @@ Four phases: `market`, `design`, `tech`, `studio`. Each has distinct advocate/co
 
 - **Python 3.10+** required. Uses `tomllib` (3.11+) with `tomli` fallback.
 - **No heavy dependencies** — keep `run_phase.py` small and bash-friendly.
-- **Test-driven discipline** is mandatory for tech phase implementations.
+- **AI-TDD discipline** is mandatory for tech phase implementations. AI writes scenarios and boilerplate; humans own assertions. See `studio/docs/AI_TDD_METHODOLOGY.md` for the full methodology (scenario-first, stack boundary, mutation verification, anti-pattern detection).
 - **Documentation contract**: changes to workflow must update README, STUDIO_INTERACTION_GUIDE.md, and affected bridge docs simultaneously.
 - **Working directories**: `.scratch/` for temp files, `.private/` for sensitive data — both gitignored. Never commit `studio/output/` or `studio/knowledge/`.
 - Cross-repo usage: when run outside this repo, artifacts go to `<repo>/.studio/output/`. First run auto-scaffolds `.studio/` and a bridge doc. Override with `--artifact-root` flag or `STUDIO_ARTIFACT_ROOT` env var. Priority: flag > env > cwd detection.

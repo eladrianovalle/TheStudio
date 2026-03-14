@@ -77,6 +77,12 @@ def load_role_pack(studio_root: Path, pack_name: str) -> Dict:
         raise RoleConfigError(f"Role pack '{pack_name}' is invalid JSON: {exc}") from exc
 
 
+def _get_role_dependencies(manifest: Dict) -> Dict[str, List[str]]:
+    """Return the role_dependencies map from manifest defaults."""
+    defaults = manifest.get("defaults") or {}
+    return dict(defaults.get("role_dependencies") or {})
+
+
 def resolve_role_list(
     manifest: Dict,
     pack_data: Dict,
@@ -85,6 +91,7 @@ def resolve_role_list(
     overrides = overrides or []
     allowed_roles = set((manifest.get("roles") or {}).keys())
     selected = list(pack_data.get("roles") or [])
+    explicitly_removed: set[str] = set()
     for token in overrides:
         token = token.strip()
         if not token:
@@ -100,8 +107,19 @@ def resolve_role_list(
             if role not in selected:
                 selected.append(role)
         else:
+            explicitly_removed.add(role)
             selected = [existing for existing in selected if existing != role]
-    return selected
+
+    # Enforce role dependencies: if a role is present, its co-required
+    # roles are injected immediately after it (unless explicitly removed).
+    deps = _get_role_dependencies(manifest)
+    injected: List[str] = []
+    for role in selected:
+        injected.append(role)
+        for dep in deps.get(role, []):
+            if dep not in selected and dep not in injected and dep not in explicitly_removed and dep in allowed_roles:
+                injected.append(dep)
+    return injected
 
 
 def build_role_details(manifest: Dict, role_names: Sequence[str]) -> List[RoleDetails]:
