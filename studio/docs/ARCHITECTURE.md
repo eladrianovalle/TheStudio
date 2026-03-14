@@ -112,6 +112,7 @@ No automation runs outside the assistant; the instructions are simply executed a
 - **Role packs** enforce consistent combinations. Example `studio_core` includes marketing, product, design, art, engineering, test_engineer, and QA.
 - **Role dependencies** are declared in `defaults.role_dependencies` (e.g., `engineering → test_engineer`). After resolving overrides, `resolve_role_list` injects co-required roles immediately after their trigger role — unless the operator explicitly removed them with `-role`. This guarantees that test integrity is always debated when engineering is present.
 - Operators select a pack via `--role-pack` and tweak attendance with `--roles` additions/removals. This keeps instructions concise while maintaining a single source of truth.
+- **Methodology enforcement**: Product, Engineering, and Design roles enforce MVI (Minimum Viable Interaction) — every milestone must end in something usable. Engineering and Test Engineer enforce AI-TDD. See `docs/MVI_METHODOLOGY.md` and `docs/AI_TDD_METHODOLOGY.md`.
 
 ---
 
