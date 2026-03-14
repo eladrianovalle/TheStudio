@@ -163,9 +163,11 @@ Timeline is too aggressive
     
     reasons = extract_rejection_reasons(content)
     
-    assert len(reasons) >= 2
+    assert len(reasons) == 4
     assert any("user research" in r.lower() for r in reasons)
     assert any("testing plan" in r.lower() for r in reasons)
+    assert any("success metrics" in r.lower() for r in reasons)
+    assert any("too aggressive" in r.lower() for r in reasons)
 
 
 def test_extract_rejection_reasons_paragraph_format():
@@ -184,8 +186,8 @@ Third, the go-to-market strategy relies on unproven channels.
     
     reasons = extract_rejection_reasons(content)
     
-    # Should extract at least some paragraphs
-    assert len(reasons) > 0
+    # Paragraph fallback extracts substantive paragraphs after VERDICT
+    assert len(reasons) >= 2
     assert any("market validation" in r.lower() for r in reasons)
 
 

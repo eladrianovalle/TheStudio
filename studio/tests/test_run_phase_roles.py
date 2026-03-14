@@ -164,6 +164,49 @@ class TestResolveRoleList:
         result = resolve_role_list(MINIMAL_MANIFEST, pack, ["", "  ", "+design"])
         assert result == ["marketing", "design"]
 
+    def test_engineering_auto_injects_test_engineer(self):
+        """When engineering is in the pack, test_engineer is injected after it."""
+        pack = {"roles": ["marketing", "engineering"]}
+        result = resolve_role_list(MINIMAL_MANIFEST, pack)
+        assert "test_engineer" in result
+        eng_idx = result.index("engineering")
+        te_idx = result.index("test_engineer")
+        assert te_idx == eng_idx + 1
+
+    def test_engineering_added_via_override_injects_test_engineer(self):
+        """Adding +engineering via override also injects test_engineer."""
+        pack = {"roles": ["marketing"]}
+        result = resolve_role_list(MINIMAL_MANIFEST, pack, ["+engineering"])
+        assert "test_engineer" in result
+
+    def test_no_duplicate_when_test_engineer_already_present(self):
+        """If test_engineer is already in the pack, don't inject a duplicate."""
+        pack = {"roles": ["engineering", "test_engineer"]}
+        result = resolve_role_list(MINIMAL_MANIFEST, pack)
+        assert result.count("test_engineer") == 1
+
+    def test_explicit_removal_of_test_engineer_honored(self):
+        """User can explicitly remove test_engineer with -test_engineer."""
+        pack = {"roles": ["engineering", "test_engineer"]}
+        result = resolve_role_list(MINIMAL_MANIFEST, pack, ["-test_engineer"])
+        assert "test_engineer" not in result
+
+    def test_no_injection_without_engineering(self):
+        """Without engineering, test_engineer is not auto-injected."""
+        pack = {"roles": ["marketing", "design"]}
+        result = resolve_role_list(MINIMAL_MANIFEST, pack)
+        assert "test_engineer" not in result
+
+    def test_no_dependency_without_config(self):
+        """Manifests without role_dependencies skip injection."""
+        manifest_no_deps = {
+            "roles": MINIMAL_MANIFEST["roles"],
+            "defaults": {"studio_role_pack": "studio_core"},
+        }
+        pack = {"roles": ["engineering"]}
+        result = resolve_role_list(manifest_no_deps, pack)
+        assert result == ["engineering"]
+
 
 # ---------------------------------------------------------------------------
 # build_role_details
@@ -198,6 +241,16 @@ class TestNormalizeRoleFilename:
     def test_double_digit(self):
         assert normalize_role_filename("qa", 12, "advocate") == "advocate--qa--12.md"
 
+    def test_scoped_filename(self):
+        assert normalize_role_filename("marketing", 1, "advocate", scope="S1") == "advocate--marketing--S1-01.md"
+
+    def test_scoped_filename_contrarian(self):
+        assert normalize_role_filename("engineering", 2, "contrarian", scope="S2") == "contrarian--engineering--S2-02.md"
+
+    def test_no_scope_default(self):
+        """Without scope parameter, produces flat filename."""
+        assert normalize_role_filename("qa", 1, "advocate", scope=None) == "advocate--qa--01.md"
+
 
 # ---------------------------------------------------------------------------
 # parse_iteration_from_filename
@@ -215,6 +268,15 @@ class TestParseIterationFromFilename:
 
     def test_single_part_returns_zero(self):
         assert parse_iteration_from_filename("summary.md") == 0
+
+    def test_scoped_pattern(self):
+        assert parse_iteration_from_filename("advocate--marketing--S1-01.md") == 1
+
+    def test_scoped_pattern_higher_iteration(self):
+        assert parse_iteration_from_filename("contrarian--engineering--S2-03.md") == 3
+
+    def test_scoped_pattern_with_path(self):
+        assert parse_iteration_from_filename("run_dir/advocate--qa--S3-01.md") == 1
 
 
 # ---------------------------------------------------------------------------
@@ -240,3 +302,13 @@ class TestCollectRoleArtifacts:
         (temp_run_dir / "contrarian--qa--01.md").write_text("c1")
         result = collect_role_artifacts(temp_run_dir, "qa", "contrarian")
         assert len(result) == 1
+
+    def test_collects_scoped_artifacts(self, temp_run_dir):
+        """collect_role_artifacts finds files with scope prefixes."""
+        (temp_run_dir / "advocate--marketing--S1-01.md").write_text("s1")
+        (temp_run_dir / "advocate--marketing--S2-01.md").write_text("s2")
+        (temp_run_dir / "advocate--marketing--S2-02.md").write_text("s2r2")
+        (temp_run_dir / "advocate--marketing--S3-01.md").write_text("s3")
+
+        result = collect_role_artifacts(temp_run_dir, "marketing", "advocate")
+        assert len(result) == 4

@@ -269,3 +269,68 @@ def test_instructions_finalize_snippet_uses_absolute_path(studio_root):
     # Should contain absolute path, not just "python run_phase.py"
     assert "/run_phase.py" in instructions
     assert "finalize --phase market" in instructions
+
+
+def test_finalize_updates_status_to_completed(studio_root):
+    """finalize_run should update run.json status from PENDING to COMPLETED."""
+    run_id = run_phase.prepare_run(make_prepare_args())
+    run_dir = studio_root / "output" / "market" / run_id
+
+    # Verify initial PENDING status
+    meta_before = run_phase.load_json(run_dir / "run.json")
+    assert meta_before["status"] == "PENDING"
+
+    # Create required artifacts
+    (run_dir / "advocate_1.md").write_text("Advocate output", encoding="utf-8")
+    (run_dir / "contrarian_1.md").write_text("Contrarian output", encoding="utf-8")
+    (run_dir / "summary.md").write_text("Summary output", encoding="utf-8")
+
+    run_phase.finalize_run(make_finalize_args(run_id=run_id))
+
+    meta_after = run_phase.load_json(run_dir / "run.json")
+    assert meta_after["status"] == "COMPLETED"
+    assert meta_after["verdict"] == "APPROVED"
+    assert meta_after["iterations_run"] == 1
+
+
+def test_finalize_updates_status_to_rejected(studio_root):
+    """finalize_run with REJECTED verdict records it correctly."""
+    run_id = run_phase.prepare_run(make_prepare_args(phase="design"))
+    run_dir = studio_root / "output" / "design" / run_id
+
+    (run_dir / "advocate_1.md").write_text("Advocate output", encoding="utf-8")
+    (run_dir / "contrarian_1.md").write_text("Contrarian output", encoding="utf-8")
+    (run_dir / "summary.md").write_text("Summary output", encoding="utf-8")
+
+    run_phase.finalize_run(
+        make_finalize_args(phase="design", run_id=run_id, verdict="REJECTED")
+    )
+
+    meta_after = run_phase.load_json(run_dir / "run.json")
+    assert meta_after["status"] == "COMPLETED"
+    assert meta_after["verdict"] == "REJECTED"
+
+
+def test_prepare_with_scopes_integration(studio_root):
+    """prepare_run with scopes enabled embeds scope content in instructions."""
+    # Create scopes.toml in the studio root
+    scopes_dir = studio_root / ".studio"
+    scopes_dir.mkdir(parents=True, exist_ok=True)
+    (scopes_dir / "scopes.toml").write_text(
+        '[scopes.high_level]\n'
+        'focus = "Architecture and strategic decisions"\n'
+        'max_iterations = 3\n'
+        '\n'
+        '[scopes.implementation]\n'
+        'focus = "Detailed design and API contracts"\n'
+        'max_iterations = 2\n',
+        encoding="utf-8",
+    )
+
+    run_id = run_phase.prepare_run(
+        make_prepare_args(no_scopes=False, max_iterations=5)
+    )
+    run_dir = studio_root / "output" / "market" / run_id
+
+    instructions = (run_dir / "instructions.md").read_text(encoding="utf-8")
+    assert "high_level" in instructions.lower() or "High Level" in instructions

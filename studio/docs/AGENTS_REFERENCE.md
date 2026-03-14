@@ -43,9 +43,21 @@ Studio phase now hosts as many Advocate↔Contrarian duos as needed. The default
 | design | Lead Systems Designer | Experience pillars, core loop | Scope control, UX clarity | Loop sketch, risks list |
 | art | Art Director | Visual north star, references | Production feasibility, tooling readiness | Mood board, style guardrails |
 | engineering | Principal Gameplay Engineer | Architecture, integrations, performance | Ops toil, technical risk | System outline, stack choices, ops checklist |
-| qa | Release QA & Launch Ops Lead | Validation strategy, telemetry | Coverage gaps, environment readiness | Test matrix, rollback plan, instrumentation gaps |
+| test_engineer | Staff Test Engineer — AI-TDD Integrity | Scenario-first test design, stack boundaries, mutation verification | Self-mocking tests, hallucinated assertions, green checkmark trap | Test spec (GWT), context boundary, mutation plan, anti-pattern audit |
+| qa | Release QA & Launch Ops Lead | Validation strategy, telemetry | Coverage breadth, environment readiness, support gaps | Test matrix, rollback plan, instrumentation gaps |
 
-Each invited role writes `advocate--<role>--NN.md` and `contrarian--<role>--NN.md` until the contrarian issues `VERDICT: APPROVED`. After all critical roles approve, the Integrator runs a capped duel (two passes max) inside `integrator.md`.
+**Role dependencies:** The manifest declares co-requirements — `engineering → test_engineer`. When engineering is present, test_engineer is automatically injected after it. This ensures test integrity is always debated when technical work is proposed. Override with `-test_engineer` only when explicitly unwanted.
+
+### Three-Tier Scoped Debate (Default)
+
+Studio runs use a scoped flow by default (override with `--no-scopes`):
+
+1. **Alignment** — All roles debate in parallel, ~500-word cap. Catches directional problems cheaply before deep dives. File naming: `advocate--<role>--S1-NN.md`
+2. **Depth** — Each role debates sequentially with full deliverables, no word cap. Starts focused because alignment context is available. File naming: `advocate--<role>--S2-NN.md`
+3. **Polish** — All roles in parallel, ~300-word cap, single pass. Cross-discipline gut-check. File naming: `advocate--<role>--S3-NN.md`
+4. **Integrator** — After all roles approve in polish, synthesizes into `integrator.md` with capped duel (two passes max).
+
+In flat mode (`--no-scopes`), each role writes `advocate--<role>--NN.md` and `contrarian--<role>--NN.md` until approved, then the Integrator runs.
 
 ---
 
@@ -63,7 +75,8 @@ Each invited role writes `advocate--<role>--NN.md` and `contrarian--<role>--NN.m
 | --- | --- | --- | --- |
 | Market/Design | `advocate_<n>.md` | `contrarian_<n>.md` | `summary.md` (discussion phases) |
 | Tech | `advocate_<n>.md` | `contrarian_<n>.md` | `implementation.md` (with tests) |
-| Studio | `advocate--<role>--<n>.md` | `contrarian--<role>--<n>.md` | `integrator.md` (with duel sections) |
+| Studio (flat) | `advocate--<role>--<n>.md` | `contrarian--<role>--<n>.md` | `integrator.md` (with duel sections) |
+| Studio (scoped) | `advocate--<role>--S1-<n>.md` etc. | `contrarian--<role>--S1-<n>.md` etc. | `integrator.md` (with duel sections) |
 
 Contrarians must always end with `VERDICT: APPROVED` or `VERDICT: REJECTED`. Finalize will flag missing files per role and record `completed`/`missing` lists in `run.json["studio_roles"]`.
 

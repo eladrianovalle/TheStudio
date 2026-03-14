@@ -2,6 +2,8 @@
 
 This guide defines the test-driven discipline for technical implementations produced through Studio.
 
+> **See also: [AI_TDD_METHODOLOGY.md](./AI_TDD_METHODOLOGY.md)** for the AI-specific testing methodology (scenario-first, stack boundaries, mutation verification, anti-pattern detection). The Test Engineer role enforces AI-TDD principles in every run that includes engineering.
+
 ---
 
 ## Philosophy

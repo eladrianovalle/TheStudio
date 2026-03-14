@@ -157,11 +157,51 @@ VERDICT: REJECTED
 """)
     
     result = doc_validator.check_consistency(advocate_path, contrarian_path)
-    
+
     # Should pass (always passes, uses warnings)
     assert result.passed
-    # Should have few or no warnings since points are addressed
-    assert len(result.warnings) <= 3
+    # All advocate points are addressed — no warnings expected
+    assert len(result.warnings) == 0
+
+
+def test_check_consistency_unaddressed_points(doc_validator, temp_dir):
+    """Test consistency check when contrarian ignores advocate points."""
+    advocate_path = temp_dir / "advocate.md"
+    advocate_path.write_text("""
+# Advocate Proposal
+
+## Key Points
+
+1. **Serverless architecture** reduces operational overhead significantly
+2. **GraphQL federation** enables independent team deployments
+3. **Event sourcing** provides complete audit trail for compliance
+4. **Blue-green deployments** minimize downtime during releases
+5. **Chaos engineering** practices ensure system resilience
+
+We should adopt all five pillars immediately.
+""")
+
+    contrarian_path = temp_dir / "contrarian.md"
+    contrarian_path.write_text("""
+# Contrarian Response
+
+The proposal is interesting but I have different concerns.
+
+The timeline seems overly optimistic for a team of this size.
+Budget projections do not account for training costs.
+Stakeholder alignment has not been demonstrated.
+
+VERDICT: REJECTED
+""")
+
+    result = doc_validator.check_consistency(advocate_path, contrarian_path)
+
+    # Should pass (consistency never hard-fails)
+    assert result.passed
+    # Should have warnings because >3 advocate points are unaddressed
+    assert len(result.warnings) > 0
+    # Warnings should contain the unaddressed advocate points
+    assert any("serverless" in w.lower() or "graphql" in w.lower() for w in result.warnings)
 
 
 def test_check_format_valid_document(doc_validator, temp_dir):
@@ -346,9 +386,12 @@ Reasons:
 """)
     
     result = doc_validator.validate_run(temp_dir, "market")
-    
-    # Should have some warnings but overall structure is valid
-    assert isinstance(result, ValidationResult)
+
+    # Structure is valid — advocate/contrarian paired, verdict present with reasons
+    assert result.passed is True
+    assert isinstance(result.issues, list)
+    assert len(result.issues) == 0
+    assert isinstance(result.warnings, list)
 
 
 def test_validate_run_missing_files(doc_validator, temp_dir):
@@ -511,24 +554,30 @@ def test_check_format_empty_file(doc_validator, temp_dir):
 def test_validate_run_studio_phase(doc_validator, temp_dir):
     """validate_run for studio phase should look for role-based files."""
     (temp_dir / "advocate--marketing--01.md").write_text(
-        "# Marketing Advocate\n\n## Hook\n\nViral concept.\n\n## Audience\n\nGamers."
+        "# Marketing Advocate\n\n## Hook\n\nViral concept that leverages the nostalgia of classic arcade games with modern social mechanics.\n\n## Audience\n\nGamers aged 25-40 who grew up with retro titles and now seek cozy experiences.\n\n## Strategy\n\nLaunch on Steam with a free demo, then expand to mobile platforms.\n"
     )
     (temp_dir / "contrarian--marketing--01.md").write_text(
-        "# Marketing Contrarian\n\n## Analysis\n\nTAM is questionable.\n\nVERDICT: APPROVED"
+        "# Marketing Contrarian\n\n## Analysis\n\nThe TAM estimate of $500M is questionable given the niche audience. The competitive landscape includes several established titles in this space. Customer acquisition costs are underestimated by at least 2x.\n\nVERDICT: APPROVED\n"
     )
 
     result = doc_validator.validate_run(temp_dir, "studio")
-    assert isinstance(result, ValidationResult)
+    assert result.passed is True
+    assert isinstance(result.issues, list)
+    assert len(result.issues) == 0
+    assert isinstance(result.warnings, list)
 
 
 def test_validate_run_tech_phase(doc_validator, temp_dir):
     """validate_run for tech phase should look for standard files."""
     (temp_dir / "advocate_1.md").write_text(
-        "# Tech Advocate\n\n## Architecture\n\nMicroservices.\n\n## Stack\n\nPython + FastAPI."
+        "# Tech Advocate\n\n## Architecture\n\nMicroservices architecture with event-driven communication between services. Each service owns its data store and communicates via async message queues.\n\n## Stack\n\nPython + FastAPI for API gateway, PostgreSQL for persistence, Redis for caching and pub/sub.\n"
     )
     (temp_dir / "contrarian_1.md").write_text(
-        "# Tech Contrarian\n\n## Concerns\n\nToo complex.\n\nVERDICT: REJECTED\n\n1. Scaling risk"
+        "# Tech Contrarian\n\n## Concerns\n\nThe microservices approach is too complex for a team of three. The operational overhead of managing multiple services, message queues, and distributed data stores will consume most of the engineering bandwidth.\n\nVERDICT: REJECTED\n\n1. Scaling risk\n2. Operational complexity\n"
     )
 
     result = doc_validator.validate_run(temp_dir, "tech")
-    assert isinstance(result, ValidationResult)
+    assert result.passed is True
+    assert isinstance(result.issues, list)
+    assert len(result.issues) == 0
+    assert isinstance(result.warnings, list)

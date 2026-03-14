@@ -17,16 +17,25 @@ from pathlib import Path
 from typing import Dict, List
 
 
+VALID_DEBATE_MODES = {"all_roles", "per_role"}
+
+
 @dataclass
 class ScopeConfig:
     """Configuration for a single scope level."""
     name: str
     focus: str
     max_iterations: int
-    
+    output_budget: int | None = None    # word cap per stance doc (None = unlimited)
+    debate_mode: str = "per_role"       # "all_roles" or "per_role"
+
     def __post_init__(self):
         if self.max_iterations < 1:
             raise ValueError(f"Scope '{self.name}' must have at least 1 iteration")
+        if self.debate_mode not in VALID_DEBATE_MODES:
+            raise ValueError(
+                f"Scope '{self.name}' debate_mode must be one of {VALID_DEBATE_MODES}, got '{self.debate_mode}'"
+            )
 
 
 @dataclass
@@ -107,10 +116,18 @@ def load_scopes_config(config_path: Path) -> ScopesConfig:
         if not isinstance(max_iterations, int):
             raise ValueError(f"Scope '{scope_name}' max_iterations must be an integer")
         
+        output_budget = scope_config.get("output_budget")
+        if output_budget is not None and not isinstance(output_budget, int):
+            raise ValueError(f"Scope '{scope_name}' output_budget must be an integer")
+
+        debate_mode = scope_config.get("debate_mode", "per_role")
+
         scopes.append(ScopeConfig(
             name=scope_name,
             focus=focus,
-            max_iterations=max_iterations
+            max_iterations=max_iterations,
+            output_budget=output_budget,
+            debate_mode=debate_mode,
         ))
     
     if not scopes:
@@ -187,12 +204,16 @@ def generate_scope_instructions(scopes_config: ScopesConfig, allocations: Dict[s
     
     for scope in scopes_config.scopes:
         allocated = allocations.get(scope.name, 0)
+        mode_label = "All roles debate simultaneously" if scope.debate_mode == "all_roles" else "Each role debates sequentially"
         lines.extend([
             f"### {scope.name.replace('_', ' ').title()}",
             f"- **Focus**: {scope.focus}",
+            f"- **Debate mode**: {mode_label}",
             f"- **Max iterations**: {allocated}",
-            "",
         ])
+        if scope.output_budget:
+            lines.append(f"- **Output budget**: ~{scope.output_budget} words per stance document")
+        lines.append("")
     
     total = sum(allocations.values())
     lines.extend([

@@ -1,31 +1,50 @@
-import importlib.util
-import sys
-from datetime import datetime, timezone, timedelta
+#!/usr/bin/env python3
+"""Tests for TTL and budget-based cleanup of run artifacts."""
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-CLEANUP_PATH = Path(__file__).resolve().parents[1] / "cleanup.py"
-_spec = importlib.util.spec_from_file_location("cleanup_module", CLEANUP_PATH)
-cleanup = importlib.util.module_from_spec(_spec)
-assert _spec and _spec.loader
-sys.modules[_spec.name] = cleanup
-_spec.loader.exec_module(cleanup)
+import pytest
+
+from cleanup import (
+    CleanupSettings,
+    cleanup_runs,
+    format_bytes,
+    load_cleanup_settings,
+    DEFAULT_TTL_DAYS,
+    DEFAULT_SIZE_LIMIT_MB,
+)
 
 
-def _write_run(output_root: Path, phase: str, run_id: str, created_iso: str, size_bytes: int) -> Path:
+def _write_run(
+    output_root: Path,
+    phase: str,
+    run_id: str,
+    created_iso: str,
+    size_bytes: int,
+    *,
+    run_json_content: str | None = None,
+) -> Path:
+    """Create a fake run directory with run.json and an artifact of *size_bytes*."""
     run_dir = output_root / phase / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "run.json").write_text(
-        f'{{"run_id":"{run_id}","phase":"{phase}","created_iso":"{created_iso}"}}',
-        encoding="utf-8",
-    )
+    if run_json_content is not None:
+        (run_dir / "run.json").write_text(run_json_content, encoding="utf-8")
+    else:
+        (run_dir / "run.json").write_text(
+            f'{{"run_id":"{run_id}","phase":"{phase}","created_iso":"{created_iso}"}}',
+            encoding="utf-8",
+        )
     (run_dir / "artifact.bin").write_bytes(b"x" * size_bytes)
     return run_dir
 
 
+# ── existing tests ────────────────────────────────────────────────────
+
+
 def test_load_cleanup_settings_defaults_when_missing(tmp_path):
-    settings = cleanup.load_cleanup_settings(tmp_path)
-    assert settings.ttl_days == cleanup.DEFAULT_TTL_DAYS
-    assert settings.size_limit_mb == cleanup.DEFAULT_SIZE_LIMIT_MB
+    settings = load_cleanup_settings(tmp_path)
+    assert settings.ttl_days == DEFAULT_TTL_DAYS
+    assert settings.size_limit_mb == DEFAULT_SIZE_LIMIT_MB
 
 
 def test_cleanup_runs_enforces_ttl_and_size_budget(tmp_path):
@@ -38,8 +57,8 @@ def test_cleanup_runs_enforces_ttl_and_size_budget(tmp_path):
     mid_run = _write_run(output_root, "market", "run_market_mid", recent_iso, size_bytes=700_000)
     newest_run = _write_run(output_root, "market", "run_market_new", recent_iso, size_bytes=600_000)
 
-    settings = cleanup.CleanupSettings(ttl_days=7, size_limit_mb=1)
-    report = cleanup.cleanup_runs(output_root, settings, now=now, dry_run=False)
+    settings = CleanupSettings(ttl_days=7, size_limit_mb=1)
+    report = cleanup_runs(output_root, settings, now=now, dry_run=False)
 
     removed_ids = {record.run.run_id: record.reason for record in report.deletions}
     assert removed_ids["run_market_old"] == "ttl"
@@ -55,9 +74,151 @@ def test_cleanup_runs_dry_run_does_not_delete(tmp_path):
     output_root = tmp_path / "output"
     iso = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
     run_dir = _write_run(output_root, "design", "run_design_old", iso, size_bytes=100_000)
-    settings = cleanup.CleanupSettings(ttl_days=1, size_limit_mb=1)
+    settings = CleanupSettings(ttl_days=1, size_limit_mb=1)
 
-    report = cleanup.cleanup_runs(output_root, settings, now=datetime(2025, 1, 10, tzinfo=timezone.utc), dry_run=True)
+    report = cleanup_runs(output_root, settings, now=datetime(2025, 1, 10, tzinfo=timezone.utc), dry_run=True)
 
     assert report.deletions
     assert run_dir.exists()
+
+
+# ── TTL boundary tests ────────────────────────────────────────────────
+
+
+def test_ttl_boundary_exact_30_days_kept(tmp_path):
+    """A run created exactly 30 days ago should NOT be deleted (cutoff is strict <)."""
+    output_root = tmp_path / "output"
+    now = datetime(2025, 2, 1, tzinfo=timezone.utc)
+    boundary_iso = (now - timedelta(days=30)).isoformat()
+    run_dir = _write_run(output_root, "market", "run_market_boundary", boundary_iso, size_bytes=1_000)
+
+    settings = CleanupSettings(ttl_days=30, size_limit_mb=900)
+    report = cleanup_runs(output_root, settings, now=now, dry_run=False)
+
+    removed_ids = {record.run.run_id for record in report.deletions}
+    assert "run_market_boundary" not in removed_ids
+    assert run_dir.exists()
+
+
+def test_ttl_boundary_31_days_deleted(tmp_path):
+    """A run created 31 days ago should be deleted by TTL."""
+    output_root = tmp_path / "output"
+    now = datetime(2025, 2, 1, tzinfo=timezone.utc)
+    old_iso = (now - timedelta(days=31)).isoformat()
+    run_dir = _write_run(output_root, "market", "run_market_expired", old_iso, size_bytes=1_000)
+
+    settings = CleanupSettings(ttl_days=30, size_limit_mb=900)
+    report = cleanup_runs(output_root, settings, now=now, dry_run=False)
+
+    removed_ids = {record.run.run_id: record.reason for record in report.deletions}
+    assert removed_ids.get("run_market_expired") == "ttl"
+    assert not run_dir.exists()
+
+
+# ── Budget-only test ──────────────────────────────────────────────────
+
+
+def test_budget_only_deletes_oldest_first(tmp_path):
+    """Runs within TTL but exceeding budget: oldest runs deleted first."""
+    output_root = tmp_path / "output"
+    now = datetime(2025, 2, 1, tzinfo=timezone.utc)
+
+    oldest_iso = (now - timedelta(days=5)).isoformat()
+    middle_iso = (now - timedelta(days=3)).isoformat()
+    newest_iso = (now - timedelta(days=1)).isoformat()
+
+    oldest_run = _write_run(output_root, "tech", "run_tech_oldest", oldest_iso, size_bytes=400_000)
+    _write_run(output_root, "tech", "run_tech_middle", middle_iso, size_bytes=400_000)
+    newest_run = _write_run(output_root, "tech", "run_tech_newest", newest_iso, size_bytes=400_000)
+
+    settings = CleanupSettings(ttl_days=30, size_limit_mb=1)
+    report = cleanup_runs(output_root, settings, now=now, dry_run=False)
+
+    removed_ids = {record.run.run_id: record.reason for record in report.deletions}
+    assert all(reason == "budget" for reason in removed_ids.values())
+    assert "run_tech_oldest" in removed_ids
+    assert "run_tech_newest" not in removed_ids
+    assert not oldest_run.exists()
+    assert newest_run.exists()
+
+
+# ── TTL-only test ─────────────────────────────────────────────────────
+
+
+def test_ttl_only_within_budget(tmp_path):
+    """Expired runs are deleted even when total size is within budget."""
+    output_root = tmp_path / "output"
+    now = datetime(2025, 3, 1, tzinfo=timezone.utc)
+
+    expired_iso = (now - timedelta(days=60)).isoformat()
+    fresh_iso = (now - timedelta(days=1)).isoformat()
+
+    expired_run = _write_run(output_root, "design", "run_design_old", expired_iso, size_bytes=500)
+    fresh_run = _write_run(output_root, "design", "run_design_new", fresh_iso, size_bytes=500)
+
+    settings = CleanupSettings(ttl_days=30, size_limit_mb=900)
+    report = cleanup_runs(output_root, settings, now=now, dry_run=False)
+
+    removed_ids = {record.run.run_id: record.reason for record in report.deletions}
+    assert removed_ids.get("run_design_old") == "ttl"
+    assert "run_design_new" not in removed_ids
+    assert not expired_run.exists()
+    assert fresh_run.exists()
+
+
+# ── Corrupt run.json test ─────────────────────────────────────────────
+
+
+def test_corrupt_run_json_does_not_crash(tmp_path):
+    """A run directory with invalid JSON in run.json should not crash cleanup."""
+    output_root = tmp_path / "output"
+    now = datetime(2025, 2, 1, tzinfo=timezone.utc)
+
+    corrupt_run = _write_run(
+        output_root,
+        "market",
+        "run_market_corrupt",
+        "",
+        size_bytes=500,
+        run_json_content="NOT VALID JSON {{{",
+    )
+
+    valid_iso = (now - timedelta(days=1)).isoformat()
+    valid_run = _write_run(output_root, "market", "run_market_valid", valid_iso, size_bytes=500)
+
+    settings = CleanupSettings(ttl_days=30, size_limit_mb=900)
+    report = cleanup_runs(output_root, settings, now=now, dry_run=False)
+
+    assert report.total_runs == 2
+    assert report.errors == []
+    assert valid_run.exists()
+
+
+# ── format_bytes edge cases ──────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "input_bytes, expected",
+    [
+        (0, "0.0B"),
+        (1023, "1023.0B"),
+        (1024, "1.0KB"),
+        (1024 * 1024, "1.0MB"),
+        (1024 * 1024 * 1024, "1.0GB"),
+        (1024 * 1024 * 1024 * 1024, "1.0TB"),
+        (512, "512.0B"),
+        (1536, "1.5KB"),
+    ],
+    ids=[
+        "zero_bytes",
+        "just_under_1KB",
+        "exactly_1KB",
+        "exactly_1MB",
+        "exactly_1GB",
+        "exactly_1TB",
+        "mid_range_bytes",
+        "fractional_KB",
+    ],
+)
+def test_format_bytes_edge_cases(input_bytes, expected):
+    assert format_bytes(input_bytes) == expected

@@ -77,6 +77,12 @@ def load_role_pack(studio_root: Path, pack_name: str) -> Dict:
         raise RoleConfigError(f"Role pack '{pack_name}' is invalid JSON: {exc}") from exc
 
 
+def _get_role_dependencies(manifest: Dict) -> Dict[str, List[str]]:
+    """Return the role_dependencies map from manifest defaults."""
+    defaults = manifest.get("defaults") or {}
+    return dict(defaults.get("role_dependencies") or {})
+
+
 def resolve_role_list(
     manifest: Dict,
     pack_data: Dict,
@@ -85,6 +91,7 @@ def resolve_role_list(
     overrides = overrides or []
     allowed_roles = set((manifest.get("roles") or {}).keys())
     selected = list(pack_data.get("roles") or [])
+    explicitly_removed: set[str] = set()
     for token in overrides:
         token = token.strip()
         if not token:
@@ -100,30 +107,63 @@ def resolve_role_list(
             if role not in selected:
                 selected.append(role)
         else:
+            explicitly_removed.add(role)
             selected = [existing for existing in selected if existing != role]
-    return selected
+
+    # Enforce role dependencies: if a role is present, its co-required
+    # roles are injected immediately after it (unless explicitly removed).
+    deps = _get_role_dependencies(manifest)
+    injected: List[str] = []
+    for role in selected:
+        injected.append(role)
+        for dep in deps.get(role, []):
+            if dep not in selected and dep not in injected and dep not in explicitly_removed and dep in allowed_roles:
+                injected.append(dep)
+    return injected
 
 
 def build_role_details(manifest: Dict, role_names: Sequence[str]) -> List[RoleDetails]:
     return [get_role_spec(manifest, name) for name in role_names]
 
 
-def normalize_role_filename(role: str, iteration: int, kind: str) -> str:
+def normalize_role_filename(
+    role: str, iteration: int, kind: str, scope: str | None = None
+) -> str:
     slug = role.replace(" ", "-")
+    if scope:
+        return f"{kind}--{slug}--{scope}-{iteration:02d}.md"
     return f"{kind}--{slug}--{iteration:02d}.md"
 
 
-def parse_iteration_from_filename(filename: str) -> int:
-    # Expected pattern: kind--role--NN.md
+def parse_role_filename(filename: str) -> Tuple[str, str, str | None, int]:
+    """Parse a role artifact filename into (kind, role, scope, iteration).
+
+    Handles both flat (``kind--role--NN.md``) and scoped
+    (``kind--role--scope-NN.md``) patterns.  Returns ``("", "", None, 0)``
+    for filenames that don't match.
+    """
     stem = filename.split("/")[-1]
     parts = stem.split("--")
     if len(parts) < 3:
-        return 0
-    iteration_part = parts[-1].split(".")[0]
+        return ("", "", None, 0)
+    kind = parts[0]
+    role = parts[1]
+    iter_part = parts[-1].split(".")[0]
+    scope: str | None = None
+    if "-" in iter_part:
+        scope, iter_str = iter_part.rsplit("-", 1)
+    else:
+        iter_str = iter_part
     try:
-        return int(iteration_part)
+        iteration = int(iter_str)
     except ValueError:
-        return 0
+        iteration = 0
+    return (kind, role, scope, iteration)
+
+
+def parse_iteration_from_filename(filename: str) -> int:
+    """Return just the iteration number from a role artifact filename."""
+    return parse_role_filename(filename)[3]
 
 
 def collect_role_artifacts(run_dir: Path, role: str, kind: str) -> List[Path]:
