@@ -1,6 +1,6 @@
-# Integration Guide (Cascade-Only)
+# Integration Guide
 
-This doc explains how to integrate Studio into other repos now that the only supported workflow is: `run_phase.py` → Windsurf/Cascade chat → finalize/log. There is no importable Python API, CLI runtime, or hosted service. Treat Studio as a shared instructions generator plus artifact log.
+This doc explains how to integrate Studio into other repos. The workflow is: `run_phase.py` → AI assistant execution → finalize/log. There is no importable Python API or hosted service. Treat Studio as a shared instructions generator plus artifact log.
 
 ---
 
@@ -8,19 +8,19 @@ This doc explains how to integrate Studio into other repos now that the only sup
 
 1. **Copy the bridge template**  
    - Copy [`docs/STUDIO_BRIDGE_TEMPLATE.md`](./STUDIO_BRIDGE_TEMPLATE.md) into your repo (e.g., `docs/studio-bridge.md`).  
-   - Fill in Project summary, Studio location, canon table, and the Cascade prompt stub.
+   - Fill in Project summary, Studio location, canon table, and the prompt stub.
 2. **Record Studio path**  
    - Use `$STUDIO_ROOT` environment variable.  
    - Document the expected path or how to set `STUDIO_ROOT`.
 3. **Define canon**  
    - List the docs/data required for useful runs.  
-   - Keep it updated so Cascade can reload context without guesswork.
+   - Keep it updated so the assistant can reload context without guesswork.
 4. **Decide where runs live**  
    - If you run from your project repo, artifacts default to `<project>/.studio/output/<phase>/run_*`.  
    - If you run inside Studio, artifacts stay in `<studio>/output/<phase>/run_*`.  
    - You can force a target repo with `STUDIO_ARTIFACT_ROOT=/absolute/path/to/repo`.
 
-No other setup is required—Zero dependencies, zero API keys, zero services.
+No other setup is required — zero API keys, zero services.
 
 ---
 
@@ -59,17 +59,17 @@ Use `-role` tokens only when you explicitly need to remove a role from the selec
 ```
 <origin_repo>/.studio/output/<phase>/run_<phase>_<timestamp>/   # default when run outside Studio
 <studio>/output/<phase>/run_<phase>_<timestamp>/                # when run inside Studio
-  instructions.md        # what to paste into Cascade
+  instructions.md        # what to paste into your assistant
   run.json               # metadata
   advocate_<n>.md / contrarian_<n>.md / implementation.md (non-studio)
   advocate--<role>--<n>.md / contrarian--<role>--<n>.md / integrator.md (studio)
 ```
 
-Capture the printed `run_id` and `instructions.md` path—your prompts to Cascade should reference them directly.
+Capture the printed `run_id` and `instructions.md` path—your prompts should reference them directly.
 
-### Step B – Execute via Cascade
+### Step B – Execute via your assistant
 
-Use the prompt stub in your bridge doc. Remind Cascade to:
+Use the prompt stub in your bridge doc. Remind the assistant to:
 1. Read the bridge doc to understand canon + expectations.
 2. Open the `instructions.md` file.
 3. Follow the **Role Menu** in instructions:
@@ -127,18 +127,17 @@ python "$STUDIO_ROOT/run_phase.py" \
   --cost "${6:-0}"
 ```
 
-Commit these helpers to dependent repos if you want reproducible ergonomics; otherwise ask Cascade to run the commands directly.
+Commit these helpers to dependent repos if you want reproducible ergonomics; otherwise ask your assistant to run the commands directly.
 
 ---
 
-## 4. Automation Ideas (Still Cascade-First)
+## 4. Automation Ideas
 
 | Need | Approach |
 | --- | --- |
 | Run Studio on every feature branch | Include “Prepare Studio run” in your PR checklist; attach run folder + summary link in PR template. |
-| Slack/Teams share-outs | Link to `<artifact_root>/output/<phase>/run_*/summary.md` (or `<repo>/.studio/output/...` when run outside Studio). Cascade can paste highlights into chat if you give it the path. |
-| Command palette entries | Use the JSON snippet from `WINDSURF_USAGE.md` to register prepare/finalize commands so teammates don’t need shell access. |
-| Rehydrating context | Add a section to each repo’s bridge doc summarizing recent run IDs and verdicts so Cascade can jump straight in. |
+| Slack/Teams share-outs | Link to `<artifact_root>/output/<phase>/run_*/summary.md` (or `<repo>/.studio/output/...` when run outside Studio). The assistant can paste highlights into chat if you give it the path. |
+| Rehydrating context | Add a section to each repo’s bridge doc summarizing recent run IDs and verdicts so the assistant can jump straight in. |
 
 ---
 
@@ -147,18 +146,19 @@ Commit these helpers to dependent repos if you want reproducible ergonomics; oth
 | Problem | Fix |
 | --- | --- |
 | Team member doesn’t have Studio cloned | Add it as a git submodule or document a “clone + set STUDIO_ROOT” onboarding step. |
-| Cascade forgets to save artifacts | Update the bridge prompt stub to explicitly say “save outputs to `<run_dir>/advocate_1.md` etc.” and remind Cascade after each iteration. |
+| Assistant forgets to save artifacts | Update the bridge prompt stub to explicitly say “save outputs to `<run_dir>/advocate_1.md` etc.” and remind the assistant after each iteration. |
 | Run folders piling up | Use `.studio/output/index.md` (project-local) or `output/index.md` (Studio-local) to prune stale runs or create a clean-up task that archives old directories (never delete active ones). |
-| Need a different expert voice | Add/override roles via `studio.manifest.json` in your repo and remind Cascade to read it. |
+| Need a different expert voice | Add/override roles via `studio.manifest.json` in your repo and remind the assistant to read it. |
 
 ---
 
 ## 6. Reference Docs
 
-- [README.md](../README.md) – top-level overview and testing notes.
+- [README.md](../../README.md) – top-level overview and testing notes.
 - [STUDIO_INTERACTION_GUIDE.md](../STUDIO_INTERACTION_GUIDE.md) – the canonical user workflow.
-- [WINDSURF_USAGE.md](./WINDSURF_USAGE.md) – conversational prompts + palette shortcuts.
+- [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) – Claude Code slash commands and agent workflow.
+- [windsurf/USAGE.md](./windsurf/USAGE.md) – Windsurf/Cascade-specific workflow.
 - [API.md](./API.md) – command/JSON schema for `run_phase.py`, metadata, and logs.
 - [STUDIO_BRIDGE_TEMPLATE.md](./STUDIO_BRIDGE_TEMPLATE.md) – copy/paste contract for every repo.
 
-Keep these documents synchronized whenever the workflow changes—there is no hidden API anymore.
+Keep these documents synchronized whenever the workflow changes.

@@ -1,6 +1,6 @@
-# Studio Architecture (Cascade Edition)
+# Studio Architecture
 
-Studio is no longer a long-running runtime or CrewAI service. The entire system now revolves around producing structured instructions, running them inside Windsurf/Cascade, and packaging artifacts so every project can reuse the results. This document explains how the pieces fit together in the Cascade-only world.
+Studio is no longer a long-running runtime or CrewAI service. The entire system revolves around producing structured instructions, having an AI assistant (Claude Code, Windsurf/Cascade, or any capable agent) execute them, and packaging artifacts so every project can reuse the results.
 
 ---
 
@@ -11,7 +11,7 @@ run_phase.py prepare
         ↓
 <active_output_root>/<phase>/run_<phase>_<timestamp>/instructions.md
         ↓
-Windsurf/Cascade executes Advocate ↔ Contrarian loops
+AI assistant executes Advocate ↔ Contrarian loops
         ↓
 Artifacts saved back into the run folder
         ↓
@@ -20,7 +20,7 @@ run_phase.py finalize
 <active_output_root>/index.md + <active_knowledge_root>/run_log.md updated
 ```
 
-All intelligence lives inside Cascade conversations. Studio’s job is to keep the prompts, roles, artifacts, and logs organized.
+All intelligence lives inside the assistant’s execution. Studio’s job is to keep the prompts, roles, artifacts, and logs organized.
 
 ---
 
@@ -56,9 +56,9 @@ No other services, runtimes, or APIs exist.
 
 ---
 
-## 4. Execute Inside Cascade
+## 4. Execute via AI Assistant
 
-Cascade reads `instructions.md`, the bridge doc, and any prompt docs linked from the Role Menu. Operators ensure:
+The assistant reads `instructions.md`, the bridge doc, and any prompt docs linked from the Role Menu. Operators ensure:
 
 - Every invited role produces matching `advocate--<role>--NN.md` and `contrarian--<role>--NN.md` files until the role’s contrarian issues `VERDICT: APPROVED`.
 - For Studio, once all necessary contrarians approve, the Integrator performs a capped duel inside `integrator.md` with three sections:
@@ -67,7 +67,7 @@ Cascade reads `instructions.md`, the bridge doc, and any prompt docs linked from
   3. `### Integrated Plan`
 - All summaries land in `summary.md`.
 
-No automation runs outside of Cascade; the instructions are simply executed as a structured conversation.
+No automation runs outside the assistant; the instructions are simply executed as a structured conversation.
 
 ---
 
@@ -123,7 +123,7 @@ Indexes:
 | New Studio role | Update `studio.manifest.json` + add a prompt doc + include it in a role pack. |
 | Alternate role pack per repo | Check `role_packs/*.json` into the shared repo; downstream bridge docs specify which pack to use via CLI flags. |
 | New phase | Add entries to `PHASE_DETAILS` in `run_phase.py`, define deliverables, and update docs/tests accordingly. |
-| Automation | Wrap `run_phase.py prepare/finalize` in repo-specific scripts or Windsurf command palette entries. |
+| Automation | Wrap `run_phase.py prepare/finalize` in repo-specific scripts, shell aliases, or assistant-specific commands. |
 
 No direct imports or service layers are required—just CLI calls and Markdown artifacts.
 
@@ -135,4 +135,4 @@ No direct imports or service layers are required—just CLI calls and Markdown a
 2. Docs: README, STUDIO_INTERACTION_GUIDE, WINDSURF_USAGE, WINDSURF_QUICKREF, STUDIO_BRIDGE_TEMPLATE, API, INTEGRATION_GUIDE, AGENTS_REFERENCE, ARCHITECTURE (this file).
 3. Outputs: `<active_output_root>/index.md`, `<active_knowledge_root>/run_log.md`.
 
-Whenever the workflow changes, update all of the above in one commit. Studio deliberately has no hidden runtime—everything is visible, reproducible, and Cascade-first.
+Whenever the workflow changes, update all of the above in one commit. Studio deliberately has no hidden runtime — everything is visible, reproducible, and assistant-agnostic.

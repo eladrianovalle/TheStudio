@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Set
 
+from verdict import extract_verdict
+
 
 @dataclass
 class ValidationResult:
@@ -203,23 +205,20 @@ class DocumentValidator:
         
         content = contrarian_path.read_text(encoding="utf-8")
         
-        # Check for VERDICT: APPROVED or VERDICT: REJECTED
-        verdict_pattern = r'VERDICT:\s*(APPROVED|REJECTED)'
-        match = re.search(verdict_pattern, content, re.IGNORECASE)
-        
-        if not match:
+        verdict = extract_verdict(content)
+
+        if verdict == "UNKNOWN":
             return ValidationResult(
                 passed=False,
                 issues=["Missing or invalid verdict (must be 'VERDICT: APPROVED' or 'VERDICT: REJECTED')"]
             )
-        
-        verdict = match.group(1).upper()
+
         
         # If rejected, check for reasons
         if verdict == "REJECTED":
             # Look for numbered lists, bullet points, or reason sections after verdict
-            verdict_pos = match.end()
-            content_after_verdict = content[verdict_pos:]
+            verdict_match = re.search(r'VERDICT:\s*REJECTED', content, re.IGNORECASE)
+            content_after_verdict = content[verdict_match.end():] if verdict_match else content
             
             has_reasons = (
                 re.search(r'^\s*\d+\.', content_after_verdict, re.MULTILINE) or

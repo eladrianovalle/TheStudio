@@ -1,10 +1,12 @@
 [project]
 name = "studio"
 version = "0.1.0"
-description = "Studio Cascade workflow helpers"
+description = "Studio workflow instruction generator"
 authors = [{ name = "Your Name", email = "you@example.com" }]
 requires-python = ">=3.10,<3.14"
-dependencies = []
+dependencies = [
+    "tomli>=2.0;python_version<'3.11'",
+]
 
 [build-system]
 requires = ["hatchling"]

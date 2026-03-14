@@ -1,19 +1,9 @@
 #!/usr/bin/env python3
 """Tests for document and code validators."""
-import tempfile
-from pathlib import Path
-
 import pytest
 
 from validators.document_validator import DocumentValidator, ValidationResult
 from validators.code_validator import CodeValidator, CheckResult
-
-
-@pytest.fixture
-def temp_dir():
-    """Create a temporary directory."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        yield Path(tmpdir)
 
 
 @pytest.fixture
@@ -487,3 +477,58 @@ We need to consider resource constraints.
     
     # Should not be addressed in content2 (missing key terms)
     assert not doc_validator._is_addressed(point, contrarian_content2)
+
+
+# ---------------------------------------------------------------------------
+# Blind spot tests (T1.7)
+# ---------------------------------------------------------------------------
+
+def test_check_verdict_case_insensitive(doc_validator, temp_dir):
+    """Verdict matching should be case-insensitive."""
+    contrarian_path = temp_dir / "contrarian.md"
+    contrarian_path.write_text("# Response\n\nverdict: approved\n\nLooks good.")
+
+    result = doc_validator.check_verdict(contrarian_path)
+    assert result.passed
+
+
+def test_check_verdict_missing_file(doc_validator, temp_dir):
+    """Verdict check on missing file should fail gracefully."""
+    result = doc_validator.check_verdict(temp_dir / "nonexistent.md")
+    assert not result.passed
+    assert "not found" in result.issues[0].lower()
+
+
+def test_check_format_empty_file(doc_validator, temp_dir):
+    """Format check on empty file should fail."""
+    doc_path = temp_dir / "empty.md"
+    doc_path.write_text("")
+
+    result = doc_validator.check_format(doc_path)
+    assert not result.passed
+
+
+def test_validate_run_studio_phase(doc_validator, temp_dir):
+    """validate_run for studio phase should look for role-based files."""
+    (temp_dir / "advocate--marketing--01.md").write_text(
+        "# Marketing Advocate\n\n## Hook\n\nViral concept.\n\n## Audience\n\nGamers."
+    )
+    (temp_dir / "contrarian--marketing--01.md").write_text(
+        "# Marketing Contrarian\n\n## Analysis\n\nTAM is questionable.\n\nVERDICT: APPROVED"
+    )
+
+    result = doc_validator.validate_run(temp_dir, "studio")
+    assert isinstance(result, ValidationResult)
+
+
+def test_validate_run_tech_phase(doc_validator, temp_dir):
+    """validate_run for tech phase should look for standard files."""
+    (temp_dir / "advocate_1.md").write_text(
+        "# Tech Advocate\n\n## Architecture\n\nMicroservices.\n\n## Stack\n\nPython + FastAPI."
+    )
+    (temp_dir / "contrarian_1.md").write_text(
+        "# Tech Contrarian\n\n## Concerns\n\nToo complex.\n\nVERDICT: REJECTED\n\n1. Scaling risk"
+    )
+
+    result = doc_validator.validate_run(temp_dir, "tech")
+    assert isinstance(result, ValidationResult)

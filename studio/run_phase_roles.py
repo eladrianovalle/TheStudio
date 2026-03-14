@@ -86,9 +86,9 @@ def resolve_role_list(
     allowed_roles = set((manifest.get("roles") or {}).keys())
     selected = list(pack_data.get("roles") or [])
     for token in overrides:
+        token = token.strip()
         if not token:
             continue
-        token = token.strip()
         if token[0] not in {"+", "-"}:
             raise RoleConfigError(
                 f"Role override '{token}' must start with '+' (include) or '-' (exclude)."

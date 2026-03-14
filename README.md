@@ -1,16 +1,16 @@
-# The Studio (Cascade Edition)
+# The Game Studio
 
-Studio is now a **single-purpose instruction generator** for Windsurf/Cascade. Instead of hosting its own runtime, the repo prepares structured advocate/contrarian debates that you execute inside Cascade chat, then packages the results so every project can reference them later.
+Studio is an **instruction generator** for structured advocate/contrarian debates. It prepares run directories with instructions that an AI assistant (Claude Code, Windsurf/Cascade, or any capable agent) executes, then packages the results as versioned artifacts.
 
 Key goals:
 
-1. **Cascade-only workflow** – no Gemini, LiteLLM, or CLI runtime required.
-2. **Deterministic packaging** – every phase run creates a folder with instructions, iteration transcripts, summary, and metadata.
-3. **Cross-project visibility** – every artifact root gets its own `output/index.md` and `knowledge/run_log.md` so any repo can pick up the latest context.
+1. **Assistant-agnostic workflow** — no runtime, no API keys; any capable AI assistant can execute the generated instructions.
+2. **Deterministic packaging** — every phase run creates a folder with instructions, iteration transcripts, summary, and metadata.
+3. **Cross-project visibility** — every artifact root gets its own `output/index.md` and `knowledge/run_log.md` so any repo can pick up the latest context.
 
 ---
 
-## 🧱 Studio Role Packs & Role Menu
+## Role Packs & Role Menu
 
 - **Manifest (`studio.manifest.json`)** defines every discipline (title, focuses, prompt doc, deliverables, escalation cues).
 - **Role packs (`role_packs/*.json`)** are curated pod presets (e.g., `studio_core` = marketing + product + design + art + engineering + QA). Downstream repos do *not* fork them; they supply `--roles` overrides (typically `+product +engineering +qa`, with optional `-role` removals when needed).
@@ -24,7 +24,7 @@ python run_phase.py prepare --phase studio --text "..." --role-pack studio_core
 ```
 and add attendees via `--roles +product +engineering +qa`.
 
-## 🧪 Test-Driven Development Discipline
+## Test-Driven Development Discipline
 
 **All tech phase implementations must follow test-driven discipline:**
 
@@ -36,21 +36,19 @@ and add attendees via `--roles +product +engineering +qa`.
 
 Tech implementations without tests are incomplete. See **[docs/TEST_DRIVEN_GUIDE.md](./studio/docs/TEST_DRIVEN_GUIDE.md)** for the complete workflow, examples, and quality standards.
 
-## ✨ What’s in the box?
+## What's in the box?
 
 | Path | Purpose |
 | --- | --- |
-| `run_phase.py` | Primary entrypoint. Creates instructions + folders (`prepare`) and finalizes runs after Cascade finishes (`finalize`). |
+| `run_phase.py` | Primary CLI entrypoint. Creates instructions + folders (`prepare`) and finalizes runs after the assistant finishes (`finalize`). Also `validate` and `cleanup`. |
 | `output/` or `.studio/output/` | Auto-generated artifacts grouped by phase (`<artifact_root>/output/<phase>/run_<phase>_<timestamp>/…`). |
 | `knowledge/run_log.md` or `.studio/knowledge/run_log.md` | Chronological feed of finalized runs with verdict, hours, cost, and summary links. |
-| `docs/` | Guides for Cascade usage, bridge templates, presets, and architecture notes. |
+| `docs/` | Guides, bridge templates, and architecture notes. |
 | `studio.manifest.json` (optional) | Example of per-repo role overrides for advocates/contrarians. |
-
-There is **no** CLI, LiteLLM proxy, Gemini integration, or Python API entrypoint anymore. Everything routes through `run_phase.py` + Cascade chat.
 
 ---
 
-## 🚀 Zero-Setup Quick Start
+## Zero-Setup Quick Start
 
 1. **Clone** this repo somewhere long-lived.
 2. **(Optional)** Set `STUDIO_ROOT` if needed:
@@ -78,10 +76,10 @@ There is **no** CLI, LiteLLM proxy, Gemini integration, or Python API entrypoint
    - `--roles` lets you include/exclude roles (`+role`/`-role`) without editing instructions.
    - You can pass role overrides either as `--roles +product +engineering +qa` or repeated `--roles=+product --roles=+engineering --roles=+qa`.
    - Instructions will list a **Role Menu** with per-role file targets like `advocate--design--01.md`.
-5. **Execute inside Windsurf/Cascade**:
-   - Paste the instructions into chat.
+5. **Execute with your AI assistant**:
+   - Paste the instructions into your assistant (Claude Code, Windsurf/Cascade, etc.).
    - For each iteration, save files exactly where the instructions specify (`advocate_1.md`, `contrarian_1.md`, etc.).
-   - Generate `summary.md` (and `implementation.md` for non-studio phases).
+   - Generate `summary.md` (and `implementation.md` for tech phase, `integrator.md` for studio phase).
 6. **Finalize** once artifacts are in place:
    ```bash
    python $STUDIO_ROOT/run_phase.py \
@@ -101,13 +99,13 @@ There is **no** CLI, LiteLLM proxy, Gemini integration, or Python API entrypoint
      validate --phase market \
      --run-id run_market_20251223_170045
    ```
-   Validates document quality and code (if implementation phase).
+   Validates document quality and code (if tech phase).
 
-That’s the whole loop.
+That's the whole loop.
 
 ---
 
-## 🧭 Artifact Root Behavior (Cross-Repo Safety)
+## Artifact Root Behavior (Cross-Repo Safety)
 
 - If you run `run_phase.py` **inside this Studio repo**, artifacts stay in `studio/output` and `studio/knowledge`.
 - If you run it from a **different repo**, artifacts now default to that repo under:
@@ -122,20 +120,20 @@ This keeps generated docs/working files with the repo that requested the run, wh
 
 ---
 
-## 🧭 Standard Workflow (per phase)
+## Standard Workflow (per phase)
 
-1. **Bridge doc first** – copy `docs/STUDIO_BRIDGE_TEMPLATE.md` into each dependent repo (e.g., `docs/studio-bridge.md`) and fill in:
+1. **Bridge doc first** — copy `docs/STUDIO_BRIDGE_TEMPLATE.md` into each dependent repo (e.g., `docs/studio-bridge.md`) and fill in:
    - Where Studio lives.
-   - Canonical project docs Cascade must load.
-   - Prompt template instructing Cascade to mention the bridge doc, canon, objectives, and run folder.
-2. **Prepare** with `run_phase.py` (include `--max-iterations` or `--budget` for studio phase if needed).
-3. **Cascade executes** Advocate → Contrarian loops using the generated instructions.
+   - Canonical project docs the assistant must load.
+   - Prompt template referencing the bridge doc, canon, objectives, and run folder.
+2. **Prepare** with `run_phase.py`.
+3. **Assistant executes** Advocate → Contrarian loops using the generated instructions.
 4. **Finalize** to lock the run and log it.
 5. **Link back** to the run folder inside your project issue, PR, or design doc.
 
 All automation, scripting, or CI integrations should call `run_phase.py` rather than importing Python modules.
 
-## 🗂️ Run Directory Anatomy
+## Run Directory Anatomy
 
 ```
 .studio/output/                         # when run from another repo
@@ -144,7 +142,7 @@ All automation, scripting, or CI integrations should call `run_phase.py` rather 
       instructions.md
       advocate_1.md
       contrarian_1.md
-      implementation.md   # non-studio phases
+      implementation.md   # tech phase; optional for market/design
       summary.md
       run.json
   studio/
@@ -177,12 +175,12 @@ Use these files as the single source of truth when referencing decisions or cont
 
 ---
 
-## 🎯 New: Concentric-Iteration Strategy (v2.0)
+## Cleanup & Storage
 
-Studio now implements a **concentric-iteration strategy** (narrowing scope across iterations) with patterns inspired by agent-gauntlet:
+Studio enforces dual cleanup rules automatically on every `prepare` call:
 
-1. **Time-to-live:** runs older than **30 days** are purged before creating new ones.
-2. **Storage budget:** total run storage under a given `STUDIO_ROOT` is capped at **900 MB**. When the cap is exceeded, the oldest remaining runs are deleted until usage falls below the limit.
+1. **Time-to-live:** runs older than **30 days** are purged.
+2. **Storage budget:** total run storage is capped at **900 MB**. When exceeded, oldest runs are deleted until under budget.
 
 Controls live in `config/studio_settings.toml`:
 
@@ -192,28 +190,6 @@ ttl_days = 30
 size_limit_mb = 900
 ```
 
-## 🧹 Storage Management
-
-Studio includes automatic storage monitoring and cleanup:
-
-- **Storage Awareness**: Every run includes storage statistics in `run.json`
-- **Smart Suggestions**: Cleanup suggested when >50MB or files older than 45 days
-- **Manual Control**: Preview cleanup with `--dry-run` before executing
-
-### Storage Information
-Each `run.json` includes current storage stats:
-```json
-{
-  "storage": {
-    "total_size_mb": 0.3,
-    "file_count": 10,
-    "oldest_artifact_days": 0,
-    "cleanup_suggested": false
-  }
-}
-```
-
-### Cleanup Commands
 ```bash
 # Preview what would be deleted
 python run_phase.py cleanup --dry-run
@@ -222,19 +198,16 @@ python run_phase.py cleanup --dry-run
 python run_phase.py cleanup
 ```
 
-During `python run_phase.py prepare …`, cleanup runs automatically (unless you pass `--skip-cleanup`). Helpful flags/env vars:
-
 | Option | Purpose |
 | --- | --- |
-| `--skip-cleanup` / `STUDIO_SKIP_CLEANUP=1` | Bypass the cleanup pass (rare; only when experimenting). |
+| `--skip-cleanup` / `STUDIO_SKIP_CLEANUP=1` | Bypass the cleanup pass. |
 | `--cleanup-dry-run` / `STUDIO_CLEANUP_DRY_RUN=1` | Log what would be deleted without touching files. |
-| `python run_phase.py cleanup [--dry-run]` | Manually invoke cleanup on demand (e.g., cron, CI). |
 
-Every invocation prints how many runs were scanned, which ones were deleted (TTL vs. budget), and total bytes reclaimed so you can monitor behavior. If you need a different TTL/size cap per repo, check the TOML file in with project-specific values.
+See **[docs/STORAGE_MANAGEMENT.md](./studio/docs/STORAGE_MANAGEMENT.md)** for details.
 
 ---
 
-## 📑 Documentation Contract
+## Documentation Contract
 
 Whenever you change the workflow:
 
@@ -242,37 +215,27 @@ Whenever you change the workflow:
 2. Update **STUDIO_INTERACTION_GUIDE.md**.
 3. Update every affected **bridge doc** in downstream repos.
 
-No change is “done” until all three are in sync.
+No change is "done" until all three are in sync.
 
 Reference material:
 
-- [STUDIO_INTERACTION_GUIDE.md](./STUDIO_INTERACTION_GUIDE.md) – hands-on instructions, manifest notes, troubleshooting.
-- [docs/WINDSURF_USAGE.md](./docs/WINDSURF_USAGE.md) – verbose walkthrough for Cascade usage + command palette integrations.
-- [WINDSURF_QUICKREF.md](./WINDSURF_QUICKREF.md) – one-page reminder for Cascade prompts.
-- [docs/STUDIO_BRIDGE_TEMPLATE.md](./docs/STUDIO_BRIDGE_TEMPLATE.md) – copy into other repos before letting Cascade touch Studio.
-- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) – agent roles/tasks reference (still accurate but now invoked manually through Cascade).
+- [STUDIO_INTERACTION_GUIDE.md](./studio/STUDIO_INTERACTION_GUIDE.md) — hands-on instructions and troubleshooting.
+- [docs/INDEX.md](./studio/docs/INDEX.md) — full documentation index.
+- [docs/STUDIO_BRIDGE_TEMPLATE.md](./studio/docs/STUDIO_BRIDGE_TEMPLATE.md) — copy into other repos before running Studio.
+- [docs/ARCHITECTURE.md](./studio/docs/ARCHITECTURE.md) — system design and extensibility.
 
 ---
 
-## 🛠️ Testing & Dev Notes
+## Testing & Dev Notes
 
-- Run tests (currently only the `run_phase` suite):
+- Run tests (from `studio/` directory):
   ```bash
-  pytest tests/test_run_phase.py
+  cd studio && python -m pytest tests/ -v
   ```
-- Python dependencies are intentionally empty in `pyproject.toml`; the helper script only needs the standard library.
-- Removed modules (`studio.crew`, `studio.iteration`, `studio.health`, `studio.telemetry`, CLI, etc.) now raise a `StudioRuntimeRemoved` exception if imported. Do not rely on them.
+- Python dependencies are minimal: stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 
 ---
 
-## 🤝 Support & Contributions
+## License
 
-- Keep `run_phase.py` small, deterministic, and bash-friendly so Cascade can quote it verbatim.
-- If you need custom behavior (new phases, deliverable templates, manifest defaults), update `PHASE_DETAILS` in `run_phase.py` and the related docs simultaneously.
-- When adding data to `output/` or `knowledge/`, ensure paths remain relative to the active artifact root (`STUDIO_ROOT` when running in Studio, or `<origin_repo>/.studio` when running elsewhere) so other repos can reference them safely.
-
----
-
-## 📄 License
-
-MIT – reuse freely across your projects. The only requirement is to keep the Cascade-first workflow intact so every repo can share the same expectations. Anything that reintroduces a direct runtime must ship with a brand-new doc pass keeping this README and the interaction guide aligned.
+MIT — reuse freely across your projects.

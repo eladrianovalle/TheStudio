@@ -2,9 +2,9 @@
 """
 Studio run instruction helper.
 
-Prepares per-phase Cascade instructions, creates run directories, and keeps
+Prepares per-phase instructions, creates run directories, and keeps
 output/index.md in sync so every Studio request can be executed agentically
-through Cascade (no CLI round trips required).
+by any AI assistant (Claude Code, Windsurf/Cascade, etc.).
 """
 from __future__ import annotations
 
@@ -47,6 +47,11 @@ from rerun import (
 from validators.document_validator import DocumentValidator
 from validators.code_validator import CodeValidator
 
+try:
+    import tomllib  # Python 3.11+
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore[no-redefine]  # Python 3.10 fallback
+
 
 def get_storage_stats() -> dict:
     """Get simple storage statistics for user awareness."""
@@ -67,7 +72,6 @@ def get_storage_stats() -> dict:
         total_size_mb = total_size_bytes / (1024 * 1024)
         
         # Find oldest artifact
-        from datetime import datetime, timezone
         now = datetime.now(timezone.utc)
         oldest_run = min(runs, key=lambda run: run.created_at)
         oldest_age_days = (now - oldest_run.created_at).days
@@ -165,19 +169,6 @@ CLEANUP_SKIP_ENV = "STUDIO_SKIP_CLEANUP"
 CLEANUP_DRY_ENV = "STUDIO_CLEANUP_DRY_RUN"
 ARTIFACT_ROOT_ENV = "STUDIO_ARTIFACT_ROOT"
 
-PREPARE_OPTION_FLAGS = {
-    "--phase",
-    "--text",
-    "--budget",
-    "--max-iterations",
-    "--role-pack",
-    "--roles",
-    "--scopes",
-    "--no-scopes",
-    "--skip-cleanup",
-    "--cleanup-dry-run",
-}
-
 SUBCOMMANDS = {"prepare", "finalize", "cleanup", "validate"}
 
 
@@ -200,7 +191,19 @@ def get_studio_root() -> Path:
     return Path(__file__).resolve().parent
 
 
+_artifact_root_override: Path | None = None
+
+
+def set_artifact_root(path: Path | None) -> None:
+    """Set an explicit artifact root (used by --artifact-root CLI flag)."""
+    global _artifact_root_override
+    _artifact_root_override = path
+
+
 def get_artifact_root() -> Path:
+    if _artifact_root_override is not None:
+        return _artifact_root_override.resolve()
+
     env_override = os.environ.get(ARTIFACT_ROOT_ENV)
     if env_override:
         return _resolve_env_path(env_override)
@@ -255,7 +258,11 @@ def collect_runs(base_output: Path) -> List[Dict]:
         for run_dir in sorted(phase_dir.glob("run_*")):
             meta_path = run_dir / "run.json"
             if meta_path.exists():
-                meta = load_json(meta_path)
+                try:
+                    meta = load_json(meta_path)
+                except (json.JSONDecodeError, OSError) as exc:
+                    print(f"Warning: skipping {meta_path} (corrupt or unreadable: {exc})")
+                    continue
                 meta["run_dir"] = run_dir.as_posix()
                 entries.append(meta)
     return entries
@@ -277,8 +284,8 @@ def write_index(entries: List[Dict], index_path: Path) -> None:
 
         lines.append(
             "| {run_id} | {phase} | {created} | {status} | {input} | {summary} |".format(
-                run_id=entry["run_id"],
-                phase=entry["phase"],
+                run_id=entry.get("run_id", "unknown"),
+                phase=entry.get("phase", "unknown"),
                 created=entry.get("created_display", entry.get("created_iso", "")),
                 status=entry.get("status", "PENDING"),
                 input=sanitize_cell(entry.get("input", "")),
@@ -324,6 +331,15 @@ def _maybe_run_cleanup(*, dry_run: bool = False) -> None:
     settings = load_cleanup_settings(studio_root)
     report = cleanup_runs(output_root, settings, dry_run=dry_run)
     _log_cleanup_report(report)
+
+
+def _find_previous_run_dir(current_run_dir: Path) -> Path | None:
+    """Find the most recent prior run directory in the same phase folder."""
+    phase_dir = current_run_dir.parent
+    prior_runs = sorted(
+        [d for d in phase_dir.glob("run_*") if d.is_dir() and d != current_run_dir],
+    )
+    return prior_runs[-1] if prior_runs else None
 
 
 def _ensure_summary_path(meta: Dict, run_dir: Path) -> Path:
@@ -411,7 +427,7 @@ def _append_run_log(meta: Dict) -> None:
         summary_path if not summary_path else f"[summary]({summary_path})"
     )
     lines = [
-        f"## {meta['run_id']} ({meta['phase']}) – {meta.get('status', 'PENDING')}",
+        f"## {meta.get('run_id', 'unknown')} ({meta.get('phase', 'unknown')}) – {meta.get('status', 'PENDING')}",
         f"- Created: {meta.get('created_display', meta.get('created_iso', ''))}",
         f"- Verdict: {meta.get('verdict', 'N/A')}",
         f"- Iterations: {meta.get('iterations_run', 'N/A')}",
@@ -431,7 +447,7 @@ def build_instruction_doc(
     info = PHASE_DETAILS[phase]
     rel_dir = run_dir.as_posix()
     base_section = [
-        f"# Studio Cascade Instructions — {meta['run_id']}",
+        f"# Studio Instructions — {meta['run_id']}",
         "",
         f"- **Phase:** {phase.title()}",
         f"- **Run directory:** `{rel_dir}`",
@@ -478,10 +494,11 @@ def build_instruction_doc(
         scope_instructions = generate_scope_instructions(scopes_config, scopes_allocations)
         scope_section.append(scope_instructions)
     
-    # Add rerun context if previous rejections exist
+    # Add rerun context if previous rejections exist in prior runs
     rerun_section: List[str] = []
-    if detect_rerun_mode(run_dir):
-        rerun_instructions = generate_rerun_instructions(run_dir)
+    prev_run_dir = _find_previous_run_dir(run_dir)
+    if prev_run_dir and detect_rerun_mode(prev_run_dir):
+        rerun_instructions = generate_rerun_instructions(prev_run_dir)
         rerun_section.append(rerun_instructions)
         rerun_section.append("")
 
@@ -591,7 +608,7 @@ def build_instruction_doc(
     finalize_snippet = textwrap.dedent(
         f"""
         ```
-        python run_phase.py finalize --phase {phase} --run-id {meta['run_id']} --status completed --verdict <APPROVED|REJECTED|N/A>
+        python "{get_studio_root()}/run_phase.py" finalize --phase {phase} --run-id {meta['run_id']} --status completed --verdict <APPROVED|REJECTED|N/A>
         ```
         """
     ).strip()
@@ -623,114 +640,101 @@ def build_instruction_doc(
     )
 
 
-def prepare_run(args: argparse.Namespace) -> str:
-    phase = args.phase.lower()
-    if phase not in PHASE_DETAILS:
-        raise ValueError(f"Unsupported phase '{phase}'.")
-    text = args.text.strip()
-    if not text:
-        raise ValueError("Input text cannot be empty.")
+def _resolve_studio_roles(args: argparse.Namespace) -> Tuple[Dict | None, List[RoleDetails] | None]:
+    """Resolve studio-phase role configuration from CLI args.
 
-    skip_cleanup = getattr(args, "skip_cleanup", False) or _env_flag(CLEANUP_SKIP_ENV)
-    cleanup_dry = getattr(args, "cleanup_dry_run", False) or _env_flag(CLEANUP_DRY_ENV)
-    if not skip_cleanup:
-        _maybe_run_cleanup(dry_run=cleanup_dry)
+    Returns (role_meta_dict, role_details_list) or (None, None) for non-studio phases.
+    """
+    if args.phase.lower() != "studio":
+        return None, None
 
-    now = utc_now()
-    timestamp_slug = now.strftime("%Y%m%d_%H%M%S")
-    run_id = f"run_{phase}_{timestamp_slug}"
-    run_dir = get_output_root() / phase / run_id
-    
-    # Check for concurrent run collision BEFORE creating directory
-    if run_dir.exists():
+    studio_root = get_studio_root()
+    manifest = load_manifest(studio_root)
+    try:
+        pack_name = args.role_pack or default_role_pack_name(manifest)
+        pack_data = load_role_pack(studio_root, pack_name)
+        overrides = list(args.roles or [])
+        invited_roles = resolve_role_list(manifest, pack_data, overrides)
+        if not invited_roles:
+            raise RoleConfigError(
+                "Studio role selection resolved to zero roles. Adjust the pack or overrides."
+            )
+        role_details = build_role_details(manifest, invited_roles)
+        role_meta: Dict = {
+            "pack": pack_name,
+            "overrides": overrides,
+            "invited": invited_roles,
+        }
+        return role_meta, role_details
+    except RoleConfigError as exc:
+        raise RuntimeError(f"Studio role configuration error: {exc}") from exc
+
+
+def _resolve_scopes(args: argparse.Namespace):
+    """Resolve scope-based iteration config from CLI args.
+
+    Returns (scopes_config, scopes_allocations, scopes_meta) — all None if disabled.
+    """
+    if args.no_scopes:
+        return None, None, None
+
+    # Determine scopes path
+    if args.scopes:
+        scopes_path = Path(args.scopes)
+        if not scopes_path.is_absolute():
+            scopes_path = get_studio_root() / scopes_path
+    else:
+        default_scopes = get_studio_root() / ".studio" / "scopes.toml"
+        scopes_path = default_scopes if default_scopes.exists() else None
+
+    if not scopes_path:
+        return None, None, None
+
+    try:
+        config = load_scopes_config(scopes_path)
+        allocations = allocate_iterations(config, args.max_iterations)
+        meta: Dict = {
+            "config_path": scopes_path.as_posix(),
+            "scopes": [
+                {"name": s.name, "focus": s.focus, "allocated_iterations": allocations[s.name]}
+                for s in config.scopes
+            ],
+            "total_iterations": sum(allocations.values()),
+        }
+        print(f"Loaded scopes config: {scopes_path}")
+        print(f"- Total iteration budget: {meta['total_iterations']}")
+        for scope_info in meta['scopes']:
+            print(f"  - {scope_info['name']}: {scope_info['allocated_iterations']} iterations")
+        return config, allocations, meta
+    except FileNotFoundError as exc:
         raise RuntimeError(
-            f"Run directory {run_id} already exists. "
-            f"This may be due to concurrent prepare commands or a timestamp collision. "
-            f"Wait 1 second and retry, or use a different phase/text combination."
-        )
-    
-    run_dir.mkdir(parents=True, exist_ok=False)
-    run_dir_abs = run_dir.resolve()
+            f"Scopes configuration file not found: {exc}\n\n"
+            f"To fix:\n"
+            f"1. Create .studio/scopes.toml with scope definitions, or\n"
+            f"2. Use --no-scopes to disable scope-based iteration, or\n"
+            f"3. See docs/SCOPES_GUIDE.md for examples"
+        ) from exc
+    except ValueError as exc:
+        raise RuntimeError(
+            f"Invalid scopes configuration: {exc}\n\n"
+            f"To fix:\n"
+            f"1. Check TOML syntax in your scopes config\n"
+            f"2. Ensure all scopes have 'focus' and 'max_iterations' fields\n"
+            f"3. See docs/SCOPES_GUIDE.md for valid examples"
+        ) from exc
 
-    studio_role_meta: Dict | None = None
-    studio_role_details: List[RoleDetails] | None = None
-    if phase == "studio":
-        studio_root = get_studio_root()
-        manifest = load_manifest(studio_root)
-        try:
-            pack_name = args.role_pack or default_role_pack_name(manifest)
-            pack_data = load_role_pack(studio_root, pack_name)
-            overrides = list(args.roles or [])
-            invited_roles = resolve_role_list(manifest, pack_data, overrides)
-            if not invited_roles:
-                raise RoleConfigError(
-                    "Studio role selection resolved to zero roles. Adjust the pack or overrides."
-                )
-            studio_role_details = build_role_details(manifest, invited_roles)
-            studio_role_meta = {
-                "pack": pack_name,
-                "overrides": overrides,
-                "invited": invited_roles,
-            }
-        except RoleConfigError as exc:
-            raise RuntimeError(f"Studio role configuration error: {exc}") from exc
-    
-    # Load scopes configuration
-    # Default: use .studio/scopes.toml if it exists
-    # Override: use --scopes path if provided
-    # Disable: use --no-scopes flag
-    scopes_config = None
-    scopes_allocations = None
-    scopes_meta: Dict | None = None
-    
-    # Check if scopes should be disabled
-    use_scopes = not getattr(args, 'no_scopes', False)
-    
-    if use_scopes:
-        # Determine scopes path
-        if args.scopes:
-            scopes_path = Path(args.scopes)
-            if not scopes_path.is_absolute():
-                scopes_path = get_studio_root() / scopes_path
-        else:
-            # Default to .studio/scopes.toml if it exists
-            default_scopes = get_studio_root() / ".studio" / "scopes.toml"
-            scopes_path = default_scopes if default_scopes.exists() else None
-        
-        if scopes_path:
-            try:
-                scopes_config = load_scopes_config(scopes_path)
-                scopes_allocations = allocate_iterations(scopes_config, args.max_iterations)
-                scopes_meta = {
-                    "config_path": scopes_path.as_posix(),
-                    "scopes": [
-                        {"name": s.name, "focus": s.focus, "allocated_iterations": scopes_allocations[s.name]}
-                        for s in scopes_config.scopes
-                    ],
-                    "total_iterations": sum(scopes_allocations.values()),
-                }
-                print(f"Loaded scopes config: {scopes_path}")
-                print(f"- Total iteration budget: {scopes_meta['total_iterations']}")
-                for scope_info in scopes_meta['scopes']:
-                    print(f"  - {scope_info['name']}: {scope_info['allocated_iterations']} iterations")
-            except FileNotFoundError as exc:
-                raise RuntimeError(
-                    f"Scopes configuration file not found: {exc}\n\n"
-                    f"To fix:\n"
-                    f"1. Create .studio/scopes.toml with scope definitions, or\n"
-                    f"2. Use --no-scopes to disable scope-based iteration, or\n"
-                    f"3. See docs/SCOPES_GUIDE.md for examples"
-                ) from exc
-            except ValueError as exc:
-                raise RuntimeError(
-                    f"Invalid scopes configuration: {exc}\n\n"
-                    f"To fix:\n"
-                    f"1. Check TOML syntax in your scopes config\n"
-                    f"2. Ensure all scopes have 'focus' and 'max_iterations' fields\n"
-                    f"3. See docs/SCOPES_GUIDE.md for valid examples"
-                ) from exc
 
-    meta = {
+def _build_run_meta(
+    phase: str,
+    text: str,
+    now: datetime,
+    run_id: str,
+    args: argparse.Namespace,
+    studio_role_meta: Dict | None,
+    scopes_meta: Dict | None,
+) -> Dict:
+    """Build the run metadata dictionary."""
+    meta: Dict = {
         "run_id": run_id,
         "phase": phase,
         "input": text,
@@ -742,23 +746,85 @@ def prepare_run(args: argparse.Namespace) -> str:
         "summary_path": "",
         "verdict": "",
         "iterations_run": None,
-        "tokens": {
-            "total_input": 0,
-            "total_output": 0,
-            "total": 0,
-            "cost_usd": 0.0,
-            "tracked": False  # Set to True when token tracking is used
-        },
     }
     if studio_role_meta:
         meta["studio_roles"] = studio_role_meta
     if scopes_meta:
         meta["scopes"] = scopes_meta
-    
-    # Add storage information for user awareness
-    storage_stats = get_storage_stats()
-    meta["storage"] = storage_stats
-    
+    meta["storage"] = get_storage_stats()
+    return meta
+
+
+def _scaffold_external_repo(artifact_root: Path, studio_root: Path) -> None:
+    """Create .studio/ structure and bridge doc in an external repo on first use."""
+    studio_dir = artifact_root / ".studio"
+    if studio_dir.exists():
+        return
+
+    studio_dir.mkdir(parents=True, exist_ok=True)
+    (studio_dir / "output").mkdir(exist_ok=True)
+    (studio_dir / "knowledge").mkdir(exist_ok=True)
+
+    # Copy bridge template if no bridge doc exists
+    bridge_candidates = [
+        artifact_root / "docs" / "studio-bridge.md",
+        artifact_root / "studio-bridge.md",
+    ]
+    if not any(c.exists() for c in bridge_candidates):
+        template_path = studio_root / "docs" / "STUDIO_BRIDGE_TEMPLATE.md"
+        if template_path.exists():
+            dest = artifact_root / "docs" / "studio-bridge.md"
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            template = template_path.read_text(encoding="utf-8")
+            template = template.replace(
+                'export STUDIO_ROOT="/path/to/studio"',
+                f'export STUDIO_ROOT="{studio_root}"',
+            )
+            dest.write_text(template, encoding="utf-8")
+            print(f"  Created bridge doc: {dest}")
+            print(f"  Fill in the canon table and project summary.")
+
+    print(f"  Initialized .studio/ in {artifact_root}")
+
+
+def prepare_run(args: argparse.Namespace) -> str:
+    phase = args.phase.lower()
+    if phase not in PHASE_DETAILS:
+        raise ValueError(f"Unsupported phase '{phase}'.")
+    text = args.text.strip()
+    if not text:
+        raise ValueError("Input text cannot be empty.")
+
+    # Auto-scaffold external repos on first use
+    artifact_root = get_artifact_root()
+    studio_root = get_studio_root()
+    if artifact_root != studio_root:
+        _scaffold_external_repo(artifact_root, studio_root)
+
+    skip_cleanup = getattr(args, "skip_cleanup", False) or _env_flag(CLEANUP_SKIP_ENV)
+    cleanup_dry = getattr(args, "cleanup_dry_run", False) or _env_flag(CLEANUP_DRY_ENV)
+    if not skip_cleanup:
+        _maybe_run_cleanup(dry_run=cleanup_dry)
+
+    now = utc_now()
+    timestamp_slug = now.strftime("%Y%m%d_%H%M%S")
+    run_id = f"run_{phase}_{timestamp_slug}"
+    run_dir = get_output_root() / phase / run_id
+
+    try:
+        run_dir.mkdir(parents=True, exist_ok=False)
+    except FileExistsError:
+        raise RuntimeError(
+            f"Run directory {run_id} already exists. "
+            f"This may be due to concurrent prepare commands or a timestamp collision. "
+            f"Wait 1 second and retry, or use a different phase/text combination."
+        )
+    run_dir_abs = run_dir.resolve()
+
+    studio_role_meta, studio_role_details = _resolve_studio_roles(args)
+    scopes_config, scopes_allocations, scopes_meta = _resolve_scopes(args)
+    meta = _build_run_meta(phase, text, now, run_id, args, studio_role_meta, scopes_meta)
+
     instructions = build_instruction_doc(meta, run_dir, studio_role_details, scopes_config, scopes_allocations)
     instructions_path = run_dir / "instructions.md"
     instructions_path.write_text(instructions, encoding="utf-8")
@@ -770,21 +836,20 @@ def prepare_run(args: argparse.Namespace) -> str:
     print(f"Prepared {run_id} ({phase})")
     print(f"- Run directory: {run_dir_abs}")
     print(f"- Instructions: {instructions_abs_path}")
-    
-    # Contextual hints for feature discovery
+
     if scopes_meta:
         print(f"\n💡 Tip: Scopes are active. Work through {scopes_meta['scopes'][0]['name']} scope first.")
     else:
         print(f"\n💡 Tip: Want to optimize iteration budgets? Create .studio/scopes.toml")
         print(f"   See: docs/SCOPES_GUIDE.md")
-    
-    # Storage awareness hint
+
+    storage_stats = meta.get("storage", {})
     if storage_stats.get("cleanup_suggested", False):
         print(f"\n🧹 Storage Tip: You have {storage_stats['total_size_mb']}MB of Studio artifacts")
         print(f"   (oldest: {storage_stats['oldest_artifact_days']} days ago). Consider cleanup:")
         print(f"   python run_phase.py cleanup --dry-run  # Preview what would be deleted")
         print(f"   python run_phase.py cleanup           # Execute cleanup")
-    
+
     return run_id
 
 
@@ -868,9 +933,7 @@ def _normalize_prepare_roles_tokens(argv: Sequence[str]) -> List[str]:
         collected: List[str] = []
         while index < len(argv):
             candidate = argv[index]
-            if candidate.startswith("--") and candidate in PREPARE_OPTION_FLAGS:
-                break
-            if candidate.startswith("--") and candidate not in PREPARE_OPTION_FLAGS:
+            if candidate.startswith("--"):
                 break
             if candidate in SUBCOMMANDS:
                 break
@@ -898,8 +961,17 @@ def parse_cli_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(normalized_args)
 
 
+def _add_artifact_root_arg(subparser: argparse.ArgumentParser) -> None:
+    subparser.add_argument(
+        "--artifact-root",
+        type=Path,
+        default=None,
+        help="Override where artifacts are written. Defaults to cwd (external repo) or Studio root.",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Studio Cascade run helper.")
+    parser = argparse.ArgumentParser(description="Studio run helper.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     prepare_parser = subparsers.add_parser("prepare", help="Create a new run_id and instructions.")
@@ -959,6 +1031,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Preview cleanup deletions without removing any files.",
     )
+    _add_artifact_root_arg(prepare_parser)
 
     finalize_parser = subparsers.add_parser("finalize", help="Mark an existing run as completed and refresh index.")
     finalize_parser.add_argument(
@@ -1000,6 +1073,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         help="Optional cost (in USD) attributed to this run.",
     )
+    _add_artifact_root_arg(finalize_parser)
 
     cleanup_parser = subparsers.add_parser(
         "cleanup", help="Manually enforce cleanup thresholds."
@@ -1009,6 +1083,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Report what would be deleted without removing files.",
     )
+    _add_artifact_root_arg(cleanup_parser)
 
     validate_parser = subparsers.add_parser(
         "validate", help="Validate Studio run outputs (documents and/or code)."
@@ -1030,14 +1105,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Path to validation config TOML (default: .studio/validation.toml).",
     )
+    _add_artifact_root_arg(validate_parser)
 
     return parser
 
 
 def validate_run(args: argparse.Namespace) -> None:
     """Validate Studio run outputs."""
-    import tomllib
-    
     phase = args.phase.lower()
     run_id = args.run_id
     run_dir = get_output_root() / phase / run_id
@@ -1138,6 +1212,11 @@ def validate_run(args: argparse.Namespace) -> None:
 
 def main() -> None:
     args = parse_cli_args()
+
+    # Apply --artifact-root override before any command runs
+    artifact_root = getattr(args, "artifact_root", None)
+    if artifact_root is not None:
+        set_artifact_root(artifact_root)
 
     if args.command == "prepare":
         prepare_run(args)

@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
+from verdict import extract_verdict
+
 
 @dataclass
 class RejectionContext:
@@ -35,6 +37,12 @@ class RejectionContext:
         return "\n".join(lines)
 
 
+def _parse_iter_number(filename: str) -> int:
+    """Extract iteration number from a contrarian filename for proper numeric sorting."""
+    match = re.search(r'(\d+)', filename)
+    return int(match.group(1)) if match else 0
+
+
 def detect_rerun_mode(run_dir: Path) -> bool:
     """
     Detect if this is a rerun by checking for existing contrarian files.
@@ -48,9 +56,8 @@ def detect_rerun_mode(run_dir: Path) -> bool:
     if not run_dir.exists():
         return False
     
-    # Check for any contrarian files
-    contrarian_files = list(run_dir.glob("contrarian*.md"))
-    return len(contrarian_files) > 0
+    # Check for any contrarian files (both contrarian_N.md and contrarian--role--N.md)
+    return any(run_dir.glob("contrarian*.md"))
 
 
 def find_latest_rejection(run_dir: Path, role: str | None = None) -> Path | None:
@@ -71,13 +78,17 @@ def find_latest_rejection(run_dir: Path, role: str | None = None) -> Path | None
     if role:
         pattern = f"contrarian--{role}--*.md"
     else:
-        pattern = "contrarian_*.md"
-    
-    contrarian_files = sorted(run_dir.glob(pattern), reverse=True)
-    
+        pattern = "contrarian*.md"
+
+    contrarian_files = sorted(
+        run_dir.glob(pattern),
+        key=lambda p: _parse_iter_number(p.name),
+        reverse=True,
+    )
+
     for file_path in contrarian_files:
         content = file_path.read_text(encoding="utf-8")
-        if "VERDICT: REJECTED" in content:
+        if extract_verdict(content) == "REJECTED":
             return file_path
     
     return None
@@ -222,11 +233,7 @@ def load_rejection_context(run_dir: Path, role: str | None = None) -> RejectionC
     content = rejection_file.read_text(encoding="utf-8")
     reasons = extract_rejection_reasons(content)
     
-    # Extract iteration number from filename
-    # Format: contrarian_2.md or contrarian--product--02.md
-    filename = rejection_file.stem
-    iteration_match = re.search(r'(\d+)', filename)
-    iteration = int(iteration_match.group(1)) if iteration_match else 0
+    iteration = _parse_iter_number(rejection_file.name)
     
     return RejectionContext(
         iteration=iteration,
@@ -234,55 +241,6 @@ def load_rejection_context(run_dir: Path, role: str | None = None) -> RejectionC
         reasons=reasons,
         full_text=content
     )
-
-
-def inject_context_into_prompt(base_prompt: str, context: RejectionContext | None) -> str:
-    """
-    Inject rejection context into advocate prompt.
-    
-    Args:
-        base_prompt: Original advocate prompt template
-        context: Rejection context to inject, or None
-        
-    Returns:
-        Modified prompt with context injected
-    """
-    if not context or not context.reasons:
-        return base_prompt
-    
-    # Find a good injection point (before deliverables/checklist if present)
-    injection_markers = [
-        "## Deliverables",
-        "## Your Task",
-        "## Requirements",
-        "---",
-    ]
-    
-    injection_point = len(base_prompt)
-    for marker in injection_markers:
-        pos = base_prompt.find(marker)
-        if pos != -1:
-            injection_point = min(injection_point, pos)
-    
-    # Build context section
-    context_section = [
-        "",
-        "---",
-        "",
-        context.format_for_prompt(),
-        "",
-        "---",
-        "",
-    ]
-    
-    # Insert context
-    modified_prompt = (
-        base_prompt[:injection_point] +
-        "\n".join(context_section) +
-        base_prompt[injection_point:]
-    )
-    
-    return modified_prompt
 
 
 def generate_rerun_instructions(run_dir: Path, role: str | None = None) -> str:

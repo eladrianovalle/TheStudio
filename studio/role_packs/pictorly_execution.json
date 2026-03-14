@@ -1,0 +1,10 @@
+{
+  "name": "pictorly_execution",
+  "description": "Focused execution pod for Pictorly MVP planning (product, design, engineering, qa).",
+  "roles": [
+    "product",
+    "design",
+    "engineering",
+    "qa"
+  ]
+}
