@@ -226,8 +226,8 @@ class DocumentValidator:
         question_lines = re.findall(question_pattern, content, re.MULTILINE)
 
         # Also count blockquote DECISION points (the unified pre-flight format)
-        decision_pattern = r'^>\s*\*\*DECISION\s*\[P[012]\]:\*\*'
-        decision_lines = re.findall(decision_pattern, content, re.MULTILINE)
+        from decision_points import DECISION_LINE_RE
+        decision_lines = DECISION_LINE_RE.findall(content)
 
         total_questions = len(question_lines) + len(decision_lines)
         if total_questions < 3:

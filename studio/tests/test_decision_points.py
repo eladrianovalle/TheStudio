@@ -326,15 +326,9 @@ class TestInstructionDocDecisionSection:
     def test_instruction_doc_question_mode_no_decision_section(self, _prepare_run):
         """build_instruction_doc in question mode does NOT contain decision point section."""
         _, instructions = _prepare_run(
-            phase="market", text="Test question mode", scopes=None, no_scopes=True,
+            phase="market", text="Test question mode", mode="questions",
         )
-        # Question mode is set via output_type — we need to verify that when
-        # mode=questions is passed, the section is absent.
-        # Since make_prepare_args may not have a 'mode' field yet, we test
-        # the negative: question mode instructions should not include the section.
-        # This test will need updating once the mode parameter is wired through.
-        # For now, verify the default (non-question) mode DOES include it.
-        assert "Decision Point Protocol" in instructions
+        assert "Decision Point Protocol" not in instructions
 
     def test_decision_section_contains_priority_descriptions(self, _prepare_run):
         """Decision point section contains P0, P1, P2 priority level descriptions."""

@@ -23,8 +23,12 @@ from pathlib import Path
 from typing import List, Optional
 
 
-_VALID_PRIORITIES = ("P0", "P1", "P2")
 _PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2}
+
+# Regex to count DECISION lines (used by validator for quick counting).
+DECISION_LINE_RE = re.compile(
+    r"^>\s*\*\*DECISION\s*\[P[012]\]:\*\*", re.MULTILINE | re.IGNORECASE
+)
 
 # Regex to capture a decision point blockquote.
 # Matches lines starting with "> " where the first line has **DECISION [P0-2]:**
@@ -126,12 +130,13 @@ def format_decisions_log(decisions: list[DecisionPoint]) -> str:
 
     grouped: dict[str, list[DecisionPoint]] = {"P0": [], "P1": [], "P2": []}
     for dp in decisions:
-        grouped.setdefault(dp.priority, []).append(dp)
+        if dp.priority in grouped:
+            grouped[dp.priority].append(dp)
 
     labels = {"P0": "Blocking", "P1": "Important", "P2": "Nice-to-know"}
 
     for pri in ("P0", "P1", "P2"):
-        items = grouped.get(pri, [])
+        items = grouped[pri]
         if not items:
             continue
         sections.append(f"## [{pri}] {labels.get(pri, pri)} ({len(items)})\n")
@@ -140,7 +145,7 @@ def format_decisions_log(decisions: list[DecisionPoint]) -> str:
             sections.append(f"{i}. **{dp.question}**{source}")
             sections.append(f"   *Unblocks:* {dp.unblocks}")
             if dp.options:
-                opts = ", ".join(
+                opts = " ".join(
                     f"({chr(97 + j)}) {opt}"
                     for j, opt in enumerate(dp.options)
                 )

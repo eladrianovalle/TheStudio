@@ -1105,15 +1105,14 @@ def finalize_run(args: argparse.Namespace) -> None:
     rebuild_index()
     _append_run_log(meta)
 
-    # Generate decisions.md for question-mode runs by scanning agent output
-    if is_question_mode(meta.get("output_type")):
-        decisions = extract_decisions_from_run(run_dir)
-        if decisions:
-            decisions_path = run_dir / "decisions.md"
-            decisions_path.write_text(
-                format_decisions_log(decisions), encoding="utf-8"
-            )
-            print(f"Generated {decisions_path.name} with {len(decisions)} decision point(s)")
+    # Generate decisions.md if any decision points were surfaced by agents
+    decisions = extract_decisions_from_run(run_dir)
+    if decisions:
+        decisions_path = run_dir / "decisions.md"
+        decisions_path.write_text(
+            format_decisions_log(decisions), encoding="utf-8"
+        )
+        print(f"Generated {decisions_path.name} with {len(decisions)} decision point(s)")
 
     print(f"Finalized {run_id} ({phase}) → {meta['status']}")
     
