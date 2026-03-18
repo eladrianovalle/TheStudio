@@ -64,6 +64,16 @@ def test_question_instructions_contain_priority_tags(sample_role_data):
     assert "P2" in advocate_str
 
 
+def test_question_instructions_use_decision_blockquote_format(sample_role_data):
+    """Advocate instructions use the unified DECISION blockquote format."""
+    advocate_str, _ = generate_question_instructions(sample_role_data)
+
+    assert "DECISION [P0]" in advocate_str
+    assert "**Unblocks:**" in advocate_str
+    # Should NOT use the old numbered-list format
+    assert "1. [P0]" not in advocate_str
+
+
 def test_question_instructions_anti_generic_guardrails(sample_role_data):
     """Advocate instructions contain anti-generic guidance."""
     advocate_str, _ = generate_question_instructions(sample_role_data)
@@ -95,12 +105,28 @@ def test_contrarian_instructions_mention_challenge_rate(sample_role_data):
     assert "30%" in contrarian_str
 
 
+def test_contrarian_instructions_use_decision_blockquote_for_missing(sample_role_data):
+    """Contrarian instructions tell agents to use DECISION format for missing questions."""
+    _, contrarian_str = generate_question_instructions(sample_role_data)
+
+    assert "DECISION [P0]" in contrarian_str
+    assert "**Unblocks:**" in contrarian_str
+
+
 def test_integrator_instructions_no_roadmap():
     """Integrator instructions explicitly say NOT to produce a roadmap."""
     instructions = generate_question_integrator_instructions()
 
     assert "do not produce a roadmap" in instructions.lower()
     assert "deduplicate" in instructions.lower()
+
+
+def test_integrator_instructions_use_decision_format():
+    """Integrator instructions use the DECISION blockquote format."""
+    instructions = generate_question_integrator_instructions()
+
+    assert "DECISION [P0]" in instructions
+    assert "DECISION [P1]" in instructions
 
 
 # ---------------------------------------------------------------------------
@@ -215,3 +241,37 @@ def test_document_validator_question_mode_numbered_questions(doc_validator, tmp_
 
     result = doc_validator.validate_question_mode(doc)
     assert result.passed
+
+
+def test_document_validator_question_mode_accepts_decision_blockquotes(doc_validator, tmp_path):
+    """Blockquote DECISION points are accepted as valid question-mode output."""
+    doc = tmp_path / "decisions.md"
+    doc.write_text(
+        "# Open Questions\n\n"
+        "> **DECISION [P0]:** Should the social deduction mechanic be real-time or turn-based?\n"
+        "> **Unblocks:** Core loop design\n\n"
+        "> **DECISION [P1]:** What monetisation model avoids pay-to-win?\n"
+        "> **Unblocks:** Business plan and GTM strategy\n\n"
+        "> **DECISION [P2]:** Which art style — pixel or hand-drawn?\n"
+        "> **Unblocks:** Art pipeline scheduling\n",
+        encoding="utf-8",
+    )
+
+    result = doc_validator.validate_question_mode(doc)
+    assert result.passed, f"Expected pass but got: {result.issues}"
+
+
+def test_document_validator_question_mode_mixed_formats(doc_validator, tmp_path):
+    """Mixed bullet questions and blockquote DECISION points are both counted."""
+    doc = tmp_path / "mixed.md"
+    doc.write_text(
+        "# Questions\n\n"
+        "> **DECISION [P0]:** Should we target mobile or PC first?\n"
+        "> **Unblocks:** SDK selection\n\n"
+        "- What is the target audience's primary motivation?\n"
+        "- How does the core loop sustain engagement?\n",
+        encoding="utf-8",
+    )
+
+    result = doc_validator.validate_question_mode(doc)
+    assert result.passed, f"Expected pass but got: {result.issues}"

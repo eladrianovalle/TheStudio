@@ -20,6 +20,8 @@ Use the slash command to run a full advocate/contrarian debate:
 
 Single-phase runs (`/run-phase`) spawn separate Advocate and Contrarian agents per iteration. Multi-role runs (`/run-studio-phase`) use a three-tier scoped debate by default: **alignment** (all roles, short, parallel) → **depth** (per-role, full, sequential) → **polish** (all roles, short, 1 pass) → integrator duel. Use `--no-scopes` for flat mode. See `studio/docs/CLAUDE_CODE_USAGE.md` for details.
 
+All runs (except `--mode questions`) include inline **decision point surfacing** — agents flag P0 (blocking), P1 (important), and P2 (context) decisions using a standard blockquote format. Use `--mode questions` as a pre-flight step to collect key decisions before committing to a full deliverables run.
+
 ## CLI Commands
 
 ```bash
@@ -61,6 +63,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 - **`scopes.py`** — Three-tier scope system (alignment / depth / polish) with output budgets and debate modes (`all_roles` vs `per_role`).
 - **`rerun.py`** — Detects rejection context from prior runs and generates rerun instructions.
 - **`question_mode.py`** — Question-surfacing mode: generates P0/P1/P2 question instructions for advocate/contrarian instead of deliverable prompts. Pure function library, no I/O.
+- **`decision_points.py`** — Parses and formats inline decision points (P0/P1/P2 blockquotes) from agent output. Extracts decisions from completed runs into a consolidated log.
 - **`verdict.py`** — Extracts APPROVED/REJECTED/UNKNOWN verdict from text.
 - **`validators/`** — `DocumentValidator` (including `validate_question_mode()`) and `CodeValidator` for post-run quality checks.
 

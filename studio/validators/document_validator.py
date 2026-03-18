@@ -193,7 +193,8 @@ class DocumentValidator:
 
         Checks:
         - File exists and is non-empty
-        - Contains >= 3 bullet/numbered lines with question marks
+        - Contains >= 3 question-form lines: either bullet/numbered lines with
+          question marks OR blockquote DECISION points (the new unified format)
         - Does NOT contain verdict tokens (question mode has no verdicts)
 
         Returns:
@@ -220,13 +221,19 @@ class DocumentValidator:
                 issues=[f"[DocumentValidator] question-mode: verdict token found but question mode does not produce verdicts. File: {doc_path}"]
             )
 
-        # Count bullet/numbered lines containing question marks
+        # Count question-form lines: bullet/numbered with ? OR blockquote DECISION points
         question_pattern = r'^\s*(?:[-*]|\d+\.)\s+.*\?'
         question_lines = re.findall(question_pattern, content, re.MULTILINE)
-        if len(question_lines) < 3:
+
+        # Also count blockquote DECISION points (the unified pre-flight format)
+        decision_pattern = r'^>\s*\*\*DECISION\s*\[P[012]\]:\*\*'
+        decision_lines = re.findall(decision_pattern, content, re.MULTILINE)
+
+        total_questions = len(question_lines) + len(decision_lines)
+        if total_questions < 3:
             return ValidationResult(
                 passed=False,
-                issues=[f"[DocumentValidator] question-mode: expected ≥3 question-form lines, found {len(question_lines)}. File: {doc_path}"]
+                issues=[f"[DocumentValidator] question-mode: expected ≥3 question-form lines, found {total_questions}. File: {doc_path}"]
             )
 
         return ValidationResult(passed=True, issues=[])

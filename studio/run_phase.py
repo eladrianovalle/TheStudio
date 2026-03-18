@@ -41,6 +41,10 @@ from scopes import (
     generate_scope_instructions,
     load_scopes_config,
 )
+from decision_points import (
+    extract_decisions_from_run,
+    format_decisions_log,
+)
 from question_mode import (
     generate_question_instructions,
     generate_question_integrator_instructions,
@@ -677,6 +681,38 @@ def build_instruction_doc(
     loop_section.append("")
     loop_section.append(f"**Notes:** {info['notes']}")
 
+    # Decision Point Protocol — always included except in question mode
+    decision_point_section: List[str] = []
+    if not is_qmode:
+        decision_point_section.extend([
+            "",
+            "## Decision Point Protocol",
+            "",
+            "When you encounter a gap, ambiguity, or fork that could meaningfully change your approach, flag it as a decision point. Do NOT silently assume — surface it.",
+            "",
+            "### Format",
+            "",
+            "Use a markdown blockquote with a bold DECISION header:",
+            "",
+            "```",
+            "> **DECISION [P0]:** Should the social deduction mechanic be real-time or turn-based?",
+            "> **Unblocks:** Core loop design — fundamentally different gameplay",
+            "> **Options:** (a) Real-time (Among Us style) (b) Turn-based (Mafia style)",
+            "```",
+            "",
+            "### Priority Levels",
+            "",
+            "- **P0 (Blocking):** Cannot proceed without an answer. The orchestrator will pause and ask the user.",
+            "- **P1 (Important):** Shapes the approach significantly. State your assumption and continue, but flag it so the user can override.",
+            "- **P2 (Context):** Nice-to-know. Log it for completeness but do not pause.",
+            "",
+            "### For Advocates",
+            "Surface decision points as you encounter them during your analysis. Prefer fewer, high-quality P0/P1 flags over many P2s. Each decision point must name what it unblocks — if you can't articulate the impact, it's not worth flagging.",
+            "",
+            "### For Contrarians",
+            "If the advocate assumed something that is actually unsettled, flag it as a decision point. Your primary job remains challenging the proposal — decision points are a secondary output, not your focus.",
+        ])
+
     role_menu_section: List[str] = []
     if phase == "studio" and studio_roles:
         role_menu_section.extend(
@@ -794,6 +830,7 @@ def build_instruction_doc(
                 + rerun_section
                 + roles_section
                 + loop_section
+                + decision_point_section
                 + role_menu_section
                 + integrator_duel_section
                 + summary_section
@@ -1067,6 +1104,16 @@ def finalize_run(args: argparse.Namespace) -> None:
     write_json(meta_path, meta)
     rebuild_index()
     _append_run_log(meta)
+
+    # Generate decisions.md for question-mode runs by scanning agent output
+    if is_question_mode(meta.get("output_type")):
+        decisions = extract_decisions_from_run(run_dir)
+        if decisions:
+            decisions_path = run_dir / "decisions.md"
+            decisions_path.write_text(
+                format_decisions_log(decisions), encoding="utf-8"
+            )
+            print(f"Generated {decisions_path.name} with {len(decisions)} decision point(s)")
 
     print(f"Finalized {run_id} ({phase}) → {meta['status']}")
     

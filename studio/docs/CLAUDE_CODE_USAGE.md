@@ -67,9 +67,31 @@ Iteration 2:
 
 If a previous run in the same phase was REJECTED, the prepare step automatically injects that rejection context into the new run's instructions. The advocate sees what failed last time and must address those concerns.
 
-## Question Mode
+## Decision Point Protocol
 
-Use `--mode questions` when an idea is too early for deliverables — when you need to figure out what questions to answer before producing specs.
+All runs (except question mode) now include inline decision point surfacing. As agents produce their output, they flag decisions that need human input using a standard blockquote format:
+
+```markdown
+> **DECISION [P0]:** Should the mechanic be real-time or turn-based?
+> **Unblocks:** Core loop design — fundamentally different gameplay
+> **Options:** (a) Real-time (b) Turn-based
+```
+
+### Priority levels
+
+| Priority | Meaning | Agent behavior |
+|----------|---------|----------------|
+| **P0** | Blocking | Orchestrator pauses for human input before continuing |
+| **P1** | Important | Agent states an assumption and continues; human can override later |
+| **P2** | Context | Logged only — useful for future reference but not blocking |
+
+Decision points are automatically injected into `instructions.md` during `prepare`. After a run completes, you can extract all surfaced decisions from agent output files using `decision_points.extract_decisions_from_run()`, which produces a consolidated `decisions.md` grouped by priority.
+
+---
+
+## Pre-flight Decision Collection (`--mode questions`)
+
+Use `--mode questions` as a pre-flight reconnaissance step — a "what don't I know yet?" workflow before committing to a full deliverables run. This is especially useful when an idea is too early for specs and you need to identify the key decisions first.
 
 ```
 /run-phase --phase design --text "A cozy farming sim with social deduction" --mode questions
@@ -100,9 +122,11 @@ Contrarians must challenge at least 30% of questions on priority level, surface 
 ### When to use question mode
 
 - Early-stage ideas where you're not sure what you're building yet
-- Before a full Studio run, to identify what information is missing
+- Before a full deliverables run, to identify what decisions and information are missing
 - When a deliverables run keeps getting REJECTED because the input is too vague
 - To generate a structured brief that feeds into a subsequent deliverables run
+
+**Tip:** Run question mode first to surface P0 decisions, resolve them, then run a full deliverables phase. The deliverables run will still surface new decision points inline as agents encounter them.
 
 ### Metadata
 

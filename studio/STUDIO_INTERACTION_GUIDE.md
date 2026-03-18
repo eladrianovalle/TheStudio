@@ -63,6 +63,7 @@ Outputs:
 2. Follow the loop spelled out inside the file:
    - Save Advocate responses to `advocate_<n>.md` (non-studio) or per-role files like `advocate--design--02.md`.
    - Save Contrarian responses to `contrarian_<n>.md` (non-studio) or `contrarian--design--02.md`.
+   - **Decision points:** Agents may surface inline decisions using blockquote markers (e.g., `> **DECISION [P0]:** ...`). P0 decisions are blocking — pause and resolve them before continuing. P1 decisions note an assumption the agent made; override if needed. P2 decisions are informational only.
    - After approval:
      - Tech phase → write `implementation.md` (with tests).
      - Market/Design → `implementation.md` is optional (discussion phases).

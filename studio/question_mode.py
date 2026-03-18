@@ -44,7 +44,9 @@ def generate_question_instructions(role_data: Dict) -> Tuple[str, str]:
         # Question-Surfacing Mode — {title} (Advocate)
 
         **Your role:** Surface the open questions that must be answered before
-        this role can produce its standard deliverables.
+        this role can produce its standard deliverables. This is a pre-flight
+        reconnaissance pass — "what don't we know yet?" — that produces
+        decision points for the team to resolve before a full run.
 
         **Normal deliverables (for reference — do NOT produce these now):**
         {deliverables_str}
@@ -53,12 +55,11 @@ def generate_question_instructions(role_data: Dict) -> Tuple[str, str]:
 
         ## Instructions
 
-        Produce a numbered list of **5–15 questions**, each tagged with a
-        priority level:
+        Produce **5–15 decision points**, each tagged with a priority level:
 
-        - **[P0]** — Blocking: cannot start work without an answer.
-        - **[P1]** — Important: answer shapes the approach significantly.
-        - **[P2]** — Nice-to-know: refines quality but work can begin without it.
+        - **P0 (Blocking):** Cannot start work without an answer.
+        - **P1 (Important):** Answer shapes the approach significantly.
+        - **P2 (Nice-to-know):** Refines quality but work can begin without it.
 
         ## Anti-generic guardrails
 
@@ -71,16 +72,23 @@ def generate_question_instructions(role_data: Dict) -> Tuple[str, str]:
 
         ## Output format
 
+        Use the standard decision point blockquote format:
+
         ```
         ## Open Questions — {title}
 
-        1. [P0] <question text>
-           *Unblocks:* <what decision this enables>
+        > **DECISION [P0]:** <question text>
+        > **Unblocks:** <what decision this enables>
 
-        2. [P1] <question text>
-           *Unblocks:* <what decision this enables>
-        ...
+        > **DECISION [P1]:** <question text>
+        > **Unblocks:** <what decision this enables>
+
+        > **DECISION [P2]:** <question text>
+        > **Unblocks:** <what decision this enables>
         ```
+
+        Each decision point MUST use the `> **DECISION [Pn]:**` blockquote
+        format. Do NOT use numbered lists or bullet points for questions.
     """)
 
     contrarian = textwrap.dedent(f"""\
@@ -88,19 +96,21 @@ def generate_question_instructions(role_data: Dict) -> Tuple[str, str]:
 
         # Question-Surfacing Mode — {title} (Contrarian)
 
-        **Your role:** Challenge the advocate's question list. Are these the
+        **Your role:** Challenge the advocate's decision points. Are these the
         *right* questions? Are any missing? Are priorities correct?
 
         **Contrarian focus:** {contrarian_focus}
 
         ## Instructions
 
-        1. Review each question the advocate surfaced.
-        2. Challenge at least **30%** of the questions as wrong-level priority
-           (e.g., a P2 that should be P0, or a P0 that is already answerable).
+        1. Review each decision point the advocate surfaced.
+        2. Challenge at least **30%** of the decision points as wrong-level
+           priority (e.g., a P2 that should be P0, or a P0 that is already
+           answerable).
         3. Surface at least **2 unstated assumptions** the advocate's questions
            reveal but do not explicitly name.
-        4. Identify at least **2 missing questions** the advocate failed to ask.
+        4. Identify at least **2 missing decision points** the advocate failed
+           to surface.
         5. Remove any duplicate or overly generic questions.
 
         ## Output format
@@ -109,19 +119,24 @@ def generate_question_instructions(role_data: Dict) -> Tuple[str, str]:
         ## Question Challenges — {title}
 
         ### Priority Corrections
-        - Q3: Advocate tagged [P1], should be [P0] because ...
-        - Q7: Advocate tagged [P0], should be [P2] because ...
+        - Advocate's "Should we ..." tagged [P1], should be [P0] because ...
+        - Advocate's "What is ..." tagged [P0], should be [P2] because ...
 
         ### Unstated Assumptions
         - The advocate assumes ... but this has not been established.
         - The advocate assumes ... which may not hold if ...
 
-        ### Missing Questions
-        - [P0] <question the advocate missed>
-        - [P1] <question the advocate missed>
+        ### Missing Decision Points
 
-        ### Revised Question Set
-        <Consolidated, deduplicated, re-prioritised question list>
+        > **DECISION [P0]:** <question the advocate missed>
+        > **Unblocks:** <what this enables>
+
+        > **DECISION [P1]:** <question the advocate missed>
+        > **Unblocks:** <what this enables>
+
+        ### Revised Decision Set
+        <Consolidated, deduplicated, re-prioritised set using the blockquote
+        DECISION format above>
         ```
     """)
 
@@ -137,14 +152,16 @@ def generate_question_integrator_instructions() -> str:
     return textwrap.dedent("""\
         # Question-Mode Integrator
 
-        You are consolidating questions from all participating roles into a
-        single, deduplicated, prioritised question set.
+        You are consolidating decision points from all participating roles into
+        a single, deduplicated, prioritised decision set. This produces the
+        `decisions.md` content — a pre-flight checklist of what must be resolved
+        before a full deliverable run.
 
         ## Instructions
 
-        1. **Deduplicate** — merge questions that ask the same thing in
+        1. **Deduplicate** — merge decision points that ask the same thing in
            different words. Keep the most precise wording.
-        2. **Group by theme** — organise questions by topic (e.g., "Audience",
+        2. **Group by theme** — organise decisions by topic (e.g., "Audience",
            "Technical Constraints", "Scope") rather than by role.
         3. **Resolve priority conflicts** — if two roles assigned different
            priorities to the same question, use the higher priority and note
@@ -152,28 +169,32 @@ def generate_question_integrator_instructions() -> str:
         4. **Surface cross-role dependencies** — flag questions where the
            answer from one discipline constrains another.
         5. **Do NOT produce a roadmap, plan, or recommendations.** The output
-           is a question document, not a decision document.
+           is a decision point document, not a plan.
 
         ## Output format
 
+        Use the standard decision point blockquote format throughout:
+
         ```
-        ## Consolidated Questions
+        ## Consolidated Decision Points
 
         ### <Theme 1>
-        1. [P0] <question> (from: Design, Engineering)
-           *Unblocks:* ...
+
+        > **DECISION [P0]:** <question> (from: Design, Engineering)
+        > **Unblocks:** ...
 
         ### <Theme 2>
-        2. [P1] <question> (from: Product)
-           *Unblocks:* ...
+
+        > **DECISION [P1]:** <question> (from: Product)
+        > **Unblocks:** ...
 
         ...
 
         ## Summary
-        - Total questions: N
+        - Total decision points: N
         - P0 (blocking): N
         - P1 (important): N
         - P2 (nice-to-know): N
-        - Top 3 highest-leverage questions: Q1, Q5, Q9
+        - Top 3 highest-leverage decisions: ...
         ```
     """)
