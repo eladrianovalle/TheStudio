@@ -41,12 +41,16 @@ from scopes import (
     generate_scope_instructions,
     load_scopes_config,
 )
+from question_mode import (
+    generate_question_instructions,
+    generate_question_integrator_instructions,
+    is_question_mode,
+)
 from rerun import (
     detect_rerun_mode,
     generate_rerun_instructions,
     load_rejection_context,
 )
-from validators.document_validator import DocumentValidator
 from validators.code_validator import CodeValidator
 
 try:
@@ -573,13 +577,30 @@ def build_instruction_doc(
         scope_instructions = generate_scope_instructions(scopes_config, scopes_allocations)
         scope_section.append(scope_instructions)
     
-    # Add rerun context if previous rejections exist in prior runs
+    # Add rerun context if previous rejections exist in prior runs.
+    # Question mode bypasses rerun context — surfacing unknowns is not
+    # a response to prior rejections.
     rerun_section: List[str] = []
+    is_qmode = is_question_mode(meta.get("output_type"))
     prev_run_dir = _find_previous_run_dir(run_dir)
-    if prev_run_dir and detect_rerun_mode(prev_run_dir):
+    if not is_qmode and prev_run_dir and detect_rerun_mode(prev_run_dir):
         rerun_instructions = generate_rerun_instructions(prev_run_dir)
         rerun_section.append(rerun_instructions)
         rerun_section.append("")
+
+    # --- Question mode: override roles, loop, and integrator sections ---
+
+    question_mode_section: List[str] = []
+    if is_qmode:
+        question_mode_section.extend([
+            "",
+            "## Output Mode: Question Surfacing",
+            "",
+            "> **This run surfaces open questions — NOT deliverables.**",
+            "> Advocates produce prioritised question lists; contrarians challenge priorities",
+            "> and surface missing questions. The integrator consolidates and deduplicates.",
+            "",
+        ])
 
     roles_section = [
         "",
@@ -589,21 +610,38 @@ def build_instruction_doc(
         f"- **Contrarian:** {info['contrarian']}",
     ]
     if phase != "studio":
-        impl = info["implementer"]
-        roles_section.extend(
-            [
-                f"- **Implementer:** {impl['title']} — generate the deliverables listed below once APPROVED.",
+        if is_qmode:
+            roles_section.extend([
                 "",
-                "### Implementation Checklist",
+                "### Question-Surfacing Instructions",
                 "",
-            ]
-        )
-        roles_section.extend([f"- {item}" for item in impl["deliverables"]])
+                "The advocate surfaces 5–15 prioritised questions (P0/P1/P2) that must be",
+                "answered before deliverables can be produced. The contrarian challenges",
+                "priorities, surfaces unstated assumptions, and identifies missing questions.",
+                "",
+                "**Do NOT produce deliverables, specs, or recommendations — only questions.**",
+            ])
+        else:
+            impl = info["implementer"]
+            roles_section.extend(
+                [
+                    f"- **Implementer:** {impl['title']} — generate the deliverables listed below once APPROVED.",
+                    "",
+                    "### Implementation Checklist",
+                    "",
+                ]
+            )
+            roles_section.extend([f"- {item}" for item in impl["deliverables"]])
     else:
         roles_section.append(f"- **Integrator:** {info['integrator']}")
-        roles_section.append(
-            "- Integrator runs its own capped duel (Advocate vs. Contrarian) inside `integrator.md` once the pods approve."
-        )
+        if is_qmode:
+            roles_section.append(
+                "- Integrator consolidates questions across roles into a single deduplicated set — NO roadmap."
+            )
+        else:
+            roles_section.append(
+                "- Integrator runs its own capped duel (Advocate vs. Contrarian) inside `integrator.md` once the pods approve."
+            )
 
     loop_section = [
         "",
@@ -619,13 +657,23 @@ def build_instruction_doc(
         ]
     )
     if phase != "studio":
-        loop_section.append(
-            "5. As soon as a contrarian returns `VERDICT: APPROVED`, move to the Implementer checklist."
-        )
+        if is_qmode:
+            loop_section.append(
+                "5. As soon as a contrarian returns `VERDICT: APPROVED`, write `summary.md` with the consolidated question set."
+            )
+        else:
+            loop_section.append(
+                "5. As soon as a contrarian returns `VERDICT: APPROVED`, move to the Implementer checklist."
+            )
     else:
-        loop_section.append(
-            "5. Once the contrarian returns `VERDICT: APPROVED`, operate as the Integrator to merge inspiration + constraints into a roadmap (`integrator.md`)."
-        )
+        if is_qmode:
+            loop_section.append(
+                "5. Once all contrarians return `VERDICT: APPROVED`, the Integrator consolidates all questions into `integrator.md`."
+            )
+        else:
+            loop_section.append(
+                "5. Once the contrarian returns `VERDICT: APPROVED`, operate as the Integrator to merge inspiration + constraints into a roadmap (`integrator.md`)."
+            )
     loop_section.append("")
     loop_section.append(f"**Notes:** {info['notes']}")
 
@@ -670,19 +718,54 @@ def build_instruction_doc(
                     cues = "; ".join(details.escalate_on)
                     role_menu_section.append(f"- **{details.title}:** {cues}")
 
+        # Per-role question-surfacing instructions (studio + question mode)
+        if is_qmode:
+            role_menu_section.extend(["", "### Per-Role Question Instructions", ""])
+            for details in studio_roles:
+                role_data = {
+                    "title": details.title,
+                    "advocate_focus": details.advocate_focus,
+                    "contrarian_focus": details.contrarian_focus,
+                    "deliverables": details.deliverables,
+                    "escalate_on": details.escalate_on or [],
+                }
+                adv_instr, con_instr = generate_question_instructions(role_data)
+                role_menu_section.extend([
+                    f"#### {details.title}",
+                    "",
+                    "**Advocate question prompt:**",
+                    "",
+                    adv_instr.strip(),
+                    "",
+                    "**Contrarian question prompt:**",
+                    "",
+                    con_instr.strip(),
+                    "",
+                ])
+
     integrator_duel_section: List[str] = []
     if phase == "studio":
-        integrator_duel_section.extend(
-            [
+        if is_qmode:
+            integrator_duel_section.extend([
                 "",
-                "## Integrator Duel (after approval)",
+                "## Question Integrator (after approval)",
                 "",
-                "1. Inside `integrator.md`, add `### Integrator Advocate` summarizing the fused plan.",
-                "2. Add `### Integrator Contrarian` critiquing feasibility, ops risk, and sequencing. End with `VERDICT: APPROVED/REJECTED`.",
-                "3. If REJECTED, adjust with one additional mini-iteration (max 2 total) before continuing.",
-                "4. Close with `### Integrated Plan` that synthesizes both perspectives and lists next steps.",
-            ]
-        )
+                generate_question_integrator_instructions().strip(),
+                "",
+                "Save the consolidated question set to `integrator.md`.",
+            ])
+        else:
+            integrator_duel_section.extend(
+                [
+                    "",
+                    "## Integrator Duel (after approval)",
+                    "",
+                    "1. Inside `integrator.md`, add `### Integrator Advocate` summarizing the fused plan.",
+                    "2. Add `### Integrator Contrarian` critiquing feasibility, ops risk, and sequencing. End with `VERDICT: APPROVED/REJECTED`.",
+                    "3. If REJECTED, adjust with one additional mini-iteration (max 2 total) before continuing.",
+                    "4. Close with `### Integrated Plan` that synthesizes both perspectives and lists next steps.",
+                ]
+            )
 
     finalize_snippet = textwrap.dedent(
         f"""
@@ -706,6 +789,7 @@ def build_instruction_doc(
         textwrap.dedent(
             "\n".join(
                 base_section
+                + question_mode_section
                 + scope_section
                 + rerun_section
                 + roles_section
@@ -825,6 +909,7 @@ def _build_run_meta(
         "summary_path": "",
         "verdict": "",
         "iterations_run": None,
+        "output_type": getattr(args, "mode", "deliverables"),
     }
     if studio_role_meta:
         meta["studio_roles"] = studio_role_meta
@@ -921,6 +1006,19 @@ def prepare_run(args: argparse.Namespace) -> str:
     else:
         print(f"\n💡 Tip: Want to optimize iteration budgets? Create .studio/scopes.toml")
         print(f"   See: docs/SCOPES_GUIDE.md")
+
+    # Append to usage log (fail silently — don't break prepare over logging)
+    try:
+        mode = getattr(args, "mode", "deliverables")
+        roles_str = ",".join(r.name for r in (studio_role_details or []))
+        scoped = "true" if scopes_meta else "false"
+        log_line = f"{now.isoformat(timespec='seconds')} | prepare | {phase} | {mode} | roles={roles_str} | scoped={scoped}\n"
+        usage_log = artifact_root / ".studio" / "usage.log"
+        usage_log.parent.mkdir(parents=True, exist_ok=True)
+        with open(usage_log, "a", encoding="utf-8") as f:
+            f.write(log_line)
+    except Exception:
+        pass  # Usage logging must never block prepare
 
     storage_stats = meta.get("storage", {})
     if storage_stats.get("cleanup_suggested", False):
@@ -1088,6 +1186,12 @@ def build_parser() -> argparse.ArgumentParser:
             "Studio-only: role overrides like +qa or -marketing. "
             "You can pass them as '--roles +qa -marketing' or repeated '--roles=+qa --roles=-marketing'."
         ),
+    )
+    prepare_parser.add_argument(
+        "--mode",
+        choices=["deliverables", "questions"],
+        default="deliverables",
+        help="Output mode: 'deliverables' (default) produces specs; 'questions' surfaces open questions.",
     )
     prepare_parser.add_argument(
         "--scopes",

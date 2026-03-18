@@ -28,11 +28,13 @@ This triggers the full advocate/contrarian loop:
 
 ```
 /run-phase --phase tech --text "Build multiplayer lobby system" --max-iterations 5
+/run-phase --phase design --text "A cozy farming sim" --mode questions
 ```
 
 - `--phase` — Required. One of: market, design, tech
 - `--text` — Required. The idea or objective to debate
 - `--max-iterations N` — Cap on advocate/contrarian rounds (default: 3)
+- `--mode` — Output mode: `deliverables` (default) or `questions`
 
 ## How It Works
 
@@ -64,6 +66,49 @@ Iteration 2:
 ### Rerun Detection
 
 If a previous run in the same phase was REJECTED, the prepare step automatically injects that rejection context into the new run's instructions. The advocate sees what failed last time and must address those concerns.
+
+## Question Mode
+
+Use `--mode questions` when an idea is too early for deliverables — when you need to figure out what questions to answer before producing specs.
+
+```
+/run-phase --phase design --text "A cozy farming sim with social deduction" --mode questions
+/run-studio-phase --text "Add AI critique engine" --roles +product +design --mode questions
+```
+
+### What changes in question mode
+
+| Aspect | Deliverables mode (default) | Question mode |
+|--------|----------------------------|---------------|
+| Advocate output | Proposals, specs, plans | Prioritised question list (P0/P1/P2) |
+| Contrarian output | Critique + VERDICT | Challenge priorities, surface missing questions + VERDICT |
+| Integrator (studio) | Roadmap via duel | Consolidated, deduplicated question set grouped by theme |
+| Implementation step | Yes (after approval) | No — output is the question set itself |
+| Rerun context | Injected from prior rejections | Skipped (questions aren't responses to rejections) |
+
+### How questions are structured
+
+Advocates produce 5-15 numbered questions, each tagged:
+- **[P0]** — Blocking: cannot start work without an answer
+- **[P1]** — Important: answer shapes the approach significantly
+- **[P2]** — Nice-to-know: refines quality but work can begin without it
+
+Each question must name the specific decision it unblocks. Anti-generic guardrails prevent questions that are answerable from the input text or that request missing data rather than exposing hidden assumptions.
+
+Contrarians must challenge at least 30% of questions on priority level, surface 2+ unstated assumptions, and identify 2+ missing questions.
+
+### When to use question mode
+
+- Early-stage ideas where you're not sure what you're building yet
+- Before a full Studio run, to identify what information is missing
+- When a deliverables run keeps getting REJECTED because the input is too vague
+- To generate a structured brief that feeds into a subsequent deliverables run
+
+### Metadata
+
+Question-mode runs set `"output_type": "questions"` in `run.json`. The `DocumentValidator.validate_question_mode()` method validates question-mode artifacts (checks for >= 3 question-form lines, no verdict tokens, non-empty content).
+
+Usage is logged to `.studio/usage.log` with the mode field for observability.
 
 ## Cross-Repo Usage
 
@@ -141,5 +186,6 @@ Options:
 - `--role-pack <name>` — Pod preset (default: studio_core)
 - `--roles +role -role` — Include/exclude roles from the pack
 - `--max-iterations N` — Cap per-role advocate/contrarian rounds (default: 3)
+- `--mode` — Output mode: `deliverables` (default) or `questions` (see Question Mode above)
 
 Each role is processed sequentially with separate Advocate and Contrarian agents. After all roles complete, an Integrator duel synthesizes the cross-functional plan. See the [command file](../../.claude/commands/run-studio-phase.md) for full details.

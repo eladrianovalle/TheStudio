@@ -13,7 +13,9 @@ Use the slash command to run a full advocate/contrarian debate:
 ```
 /run-phase --phase market --text "A cozy farming sim with social deduction mechanics"
 /run-phase --phase tech --text "Build multiplayer lobby system" --max-iterations 5
+/run-phase --phase design --text "A cozy farming sim" --mode questions
 /run-studio-phase --text "Add AI critique engine" --roles +marketing +engineering
+/run-studio-phase --text "Social deduction farming sim" --roles +product +design --mode questions
 ```
 
 Single-phase runs (`/run-phase`) spawn separate Advocate and Contrarian agents per iteration. Multi-role runs (`/run-studio-phase`) use a three-tier scoped debate by default: **alignment** (all roles, short, parallel) → **depth** (per-role, full, sequential) → **polish** (all roles, short, 1 pass) → integrator duel. Use `--no-scopes` for flat mode. See `studio/docs/CLAUDE_CODE_USAGE.md` for details.
@@ -29,6 +31,9 @@ cd studio && python -m pytest tests/test_run_phase.py::TestClassName::test_name 
 
 # Prepare a phase run (manual)
 python studio/run_phase.py prepare --phase <market|design|tech|studio> --text "description"
+
+# Prepare in question-surfacing mode (surfaces open questions instead of deliverables)
+python studio/run_phase.py prepare --phase design --text "description" --mode questions
 
 # Prepare with role pack (studio phase only)
 python studio/run_phase.py prepare --phase studio --text "..." --role-pack studio_core --roles +product +engineering +qa
@@ -55,8 +60,9 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 - **`cleanup.py`** — TTL-based (30 days) and budget-based (900MB) run artifact cleanup.
 - **`scopes.py`** — Three-tier scope system (alignment / depth / polish) with output budgets and debate modes (`all_roles` vs `per_role`).
 - **`rerun.py`** — Detects rejection context from prior runs and generates rerun instructions.
+- **`question_mode.py`** — Question-surfacing mode: generates P0/P1/P2 question instructions for advocate/contrarian instead of deliverable prompts. Pure function library, no I/O.
 - **`verdict.py`** — Extracts APPROVED/REJECTED/UNKNOWN verdict from text.
-- **`validators/`** — `DocumentValidator` and `CodeValidator` for post-run quality checks.
+- **`validators/`** — `DocumentValidator` (including `validate_question_mode()`) and `CodeValidator` for post-run quality checks.
 
 ### Configuration files
 

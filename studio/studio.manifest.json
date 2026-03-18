@@ -1,4 +1,5 @@
 {
+  "schema_version": "1.0",
   "phases": {
     "studio": {
       "advocate": {
@@ -127,6 +128,57 @@
         "Lack of automation coverage",
         "Need for customer support/CSM alignment",
         "Test suite methodology concerns with no Test Engineer in the pod"
+      ]
+    },
+    "web_engineering": {
+      "title": "Lead Web Engineer — Next.js & Static Export",
+      "advocate_focus": "Evaluate architectural decisions for Next.js App Router, static export compatibility, route structure, component composition, and deployment to static hosting (GitHub Pages). Prioritize solutions that preserve existing UX while working within static export constraints.",
+      "contrarian_focus": "Challenge route architecture decisions, flag hydration mismatches, identify client-side navigation edge cases, stress test static export limitations, and reject solutions that introduce unnecessary complexity or break the existing split-panel UX.",
+      "prompt_doc": "",
+      "deliverables": [
+        "Architecture evaluation with risk assessment",
+        "Route structure validation (parallel routes + standalone coexistence)",
+        "Static export compatibility verification",
+        "Component reuse analysis"
+      ],
+      "escalate_on": [
+        "Hydration mismatches between server-rendered and client-navigated states",
+        "Static export producing incorrect or missing HTML files",
+        "Route conflicts between parallel slots and standalone pages"
+      ]
+    },
+    "web_test_engineer": {
+      "title": "Staff Test Engineer — Web & Static Export",
+      "advocate_focus": "Enforce scenario-first test design for static export, route generation, and component rendering. Demand Given-When-Then specs covering: build output verification (HTML files exist), direct URL access, client-side navigation, SEO metadata correctness, and redirect chain integrity.",
+      "contrarian_focus": "Hunt and kill false-confidence tests: build tests that pass without verifying actual HTML content, route tests that only check file existence without rendering, and integration tests that skip static export mode entirely.",
+      "prompt_doc": "",
+      "deliverables": [
+        "Static export test specification (file generation, content verification)",
+        "Route accessibility test plan (direct URL, client nav, redirects)",
+        "SEO verification checklist (metadata, JSON-LD, canonical URLs)",
+        "Anti-pattern audit for existing test suite"
+      ],
+      "escalate_on": [
+        "No test verifies actual rendered HTML content in static export",
+        "Tests pass in dev mode but would fail in static export",
+        "Missing coverage for direct URL access vs client-side navigation"
+      ]
+    },
+    "web_qa": {
+      "title": "Release QA Lead — Static Site Deployment",
+      "advocate_focus": "Plan validation strategy for GitHub Pages deployment: verify all routes resolve, redirects work, assets load, no 404s on critical paths, and the site functions correctly as a pure static site with no server.",
+      "contrarian_focus": "Attack blind spots in deployment coverage: missing routes in static export, broken asset paths with basePath, query parameter handling on static hosts, 404 fallback behavior, and cache invalidation gaps.",
+      "prompt_doc": "",
+      "deliverables": [
+        "Deployment smoke test matrix (routes × browsers × devices)",
+        "Static export completeness checklist",
+        "Rollback plan for failed deployments",
+        "Post-deploy verification steps"
+      ],
+      "escalate_on": [
+        "Critical routes missing from static export output",
+        "No automated post-deploy verification",
+        "Asset loading failures on GitHub Pages"
       ]
     },
     "ml": {
