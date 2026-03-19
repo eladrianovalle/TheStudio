@@ -76,6 +76,8 @@ For each role in the Role Menu, spawn advocate + contrarian **in parallel** (all
 > **Focus:** {advocate_focus}
 > **Input/objective:** {the user's text}
 >
+> **Read `{run_dir}/instructions.md`** for the Decision Point Protocol. When you hit a gap or fork, flag it using the blockquote DECISION format (P0/P1/P2).
+>
 > **IMPORTANT: Keep your response under 500 words.** This is a directional alignment pass. Focus on:
 > - Your high-level stance on the approach
 > - Any fatal flaws you see from your discipline
@@ -93,7 +95,7 @@ For each role in the Role Menu, spawn advocate + contrarian **in parallel** (all
 >
 > **Focus:** {contrarian_focus}
 >
-> Read the advocate's alignment stance at `{run_dir}/advocate--{role}--S1-01.md`.
+> Read the advocate's alignment stance at `{run_dir}/advocate--{role}--S1-01.md`. Also read `{run_dir}/instructions.md` for the Decision Point Protocol — if the advocate assumed something unsettled, flag it.
 >
 > **Keep your response under 500 words.** Only flag directional problems:
 > - Is the overall approach wrong?
@@ -158,6 +160,8 @@ Adjust based on the specific proposal — if a role clearly depends on another's
 >
 > {If this role has a prompt doc, read it at `studio/{prompt_doc}` for detailed guidance.}
 >
+> **Read `{run_dir}/instructions.md`** for the Decision Point Protocol. Flag gaps/forks using blockquote DECISION format (P0/P1/P2).
+>
 > {If `{run_dir}/decisions.md` exists: "**Settled decisions:** Read `{run_dir}/decisions.md` — treat as hard constraints."}
 >
 > Write a thorough proposal covering all required deliverables. No word cap — this is the full analysis.
@@ -168,7 +172,7 @@ Adjust based on the specific proposal — if a role clearly depends on another's
 >
 > **Focus:** {contrarian_focus}
 >
-> Read the advocate's depth proposal at `{run_dir}/advocate--{role}--S2-{NN}.md`.
+> Read the advocate's depth proposal at `{run_dir}/advocate--{role}--S2-{NN}.md`. Also read `{run_dir}/instructions.md` for the Decision Point Protocol — if the advocate assumed something unsettled, flag it.
 >
 > **Scoped reads (only these — do NOT read all S2 files):**
 > - {1-2 S2 files most relevant per dependency map}
@@ -277,8 +281,10 @@ When `--no-scopes` is used, fall back to the original single-tier flow:
 
 For each role sequentially:
 1. Spawn advocate agent (full depth, no word cap)
+   - Tell agent to read `{run_dir}/instructions.md` for Decision Point Protocol
    - Include settled decisions context if `{run_dir}/decisions.md` exists
 2. Spawn SEPARATE contrarian agent
+   - Tell agent to read `{run_dir}/instructions.md` for Decision Point Protocol
    - Include settled decisions context if `{run_dir}/decisions.md` exists
 3. **Check decision points** — follow the Decision Point Handling protocol after each advocate and contrarian output
 4. If REJECTED and iterations remain, loop

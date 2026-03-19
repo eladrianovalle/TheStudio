@@ -43,6 +43,8 @@ For each iteration (up to max_iterations):
 >
 > {If `{run_dir}/decisions.md` exists: "Read `{run_dir}/decisions.md` for settled constraints from prior iterations. Treat these as hard constraints — do not re-litigate."}
 >
+> **Before writing, read `{run_dir}/instructions.md`** — it contains the Decision Point Protocol. When you hit a gap or fork that could change your approach, flag it using the blockquote format described there (P0 = blocking, P1 = important, P2 = context).
+>
 > Write a thorough advocate proposal. Structure it with clear sections, concrete recommendations, and actionable details. Save your output to `{run_dir}/advocate_{N}.md`.
 
 **b. Check advocate decision points** — Read the advocate's output file (`{run_dir}/advocate_{N}.md`). Look for decision point blockquotes matching this pattern:
@@ -77,7 +79,7 @@ Handle by priority:
 >
 > {If `{run_dir}/decisions.md` exists: "Read `{run_dir}/decisions.md` first. Treat settled decisions as hard constraints — do not re-litigate them. Focus your critique on everything else."}
 >
-> Read the advocate's proposal at `{run_dir}/advocate_{N}.md`.
+> Read the advocate's proposal at `{run_dir}/advocate_{N}.md`. Also read `{run_dir}/instructions.md` for the Decision Point Protocol — if the advocate assumed something that is actually unsettled, flag it as a decision point.
 >
 > Critically evaluate the proposal. Look for fatal flaws, unrealistic assumptions, missing considerations, and risks. Be rigorous but fair.
 >
