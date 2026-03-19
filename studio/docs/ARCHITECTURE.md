@@ -35,7 +35,7 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 | `clarity.py` | Per-topic Clarity Score tracking from answered decisions. Controls agent question density and adapts to context scope. |
 | `question_mode.py` | Pre-flight question surfacing (`--mode questions`): generates decision-collection instructions for advocate/contrarian. |
 | `scopes.py` | Three-tier scope configuration: alignment → depth → polish, with output budgets and debate modes. |
-| `cleanup.py` | TTL-based (30 days) and budget-based (900 MB) run artifact cleanup. |
+| `cleanup.py` | TTL-based (30 days) and budget-based (900 MB) run artifact cleanup, plus loose file removal for legacy artifacts outside run directories. |
 | `rerun.py` | Detects rejection context from prior runs and generates rerun instructions. |
 | `verdict.py` | Extracts APPROVED/REJECTED/UNKNOWN verdict from agent output. |
 | `install.py` | Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project. |

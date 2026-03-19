@@ -289,7 +289,7 @@ studio/
   clarity.py                # Per-topic Clarity Score tracking and question density control
   question_mode.py          # Pre-flight question surfacing (--mode questions)
   install.py                # Cross-repo installer (init/check/update)
-  cleanup.py                # TTL + budget-based artifact cleanup
+  cleanup.py                # TTL + budget-based artifact cleanup + loose file removal
   rerun.py                  # Rejection context injection for iterate-on-failure
   verdict.py                # APPROVED/REJECTED extraction
   validators/               # DocumentValidator + CodeValidator
@@ -298,7 +298,7 @@ studio/
   config/scopes.toml         # Default scope configuration
   config/studio_settings.toml # Cleanup settings
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 366 tests (pytest)
+  tests/                    # 372 tests (pytest)
 ```
 
 ---
@@ -309,7 +309,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-338 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, scope allocation, rerun detection, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, cross-repo artifact routing, and install/update workflows.
+372 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, cross-repo artifact routing, and install/update workflows.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 
