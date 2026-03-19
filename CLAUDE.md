@@ -49,6 +49,11 @@ python studio/run_phase.py validate --phase <phase> --run-id <run_id>
 # Storage cleanup
 python studio/run_phase.py cleanup --dry-run
 python studio/run_phase.py cleanup
+
+# Cross-repo install (installs slash commands + source into any project)
+python studio/run_phase.py init --target /path/to/project
+python studio/run_phase.py check-install --target /path/to/project
+python studio/run_phase.py update --target /path/to/project
 ```
 
 ## Architecture

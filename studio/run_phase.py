@@ -1412,6 +1412,37 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to an agent output file to scan for decision points.",
     )
 
+    # --- Cross-repo install commands ---
+    init_parser = subparsers.add_parser(
+        "init", help="Install Studio into a target project directory."
+    )
+    init_parser.add_argument(
+        "--target",
+        type=Path,
+        required=True,
+        help="Path to the target project directory.",
+    )
+
+    check_install_parser = subparsers.add_parser(
+        "check-install", help="Check if installed Studio is up to date."
+    )
+    check_install_parser.add_argument(
+        "--target",
+        type=Path,
+        required=True,
+        help="Path to the target project directory.",
+    )
+
+    update_parser = subparsers.add_parser(
+        "update", help="Update installed Studio from source."
+    )
+    update_parser.add_argument(
+        "--target",
+        type=Path,
+        required=True,
+        help="Path to the target project directory.",
+    )
+
     return parser
 
 
@@ -1600,6 +1631,54 @@ def check_decisions(args: argparse.Namespace) -> None:
     print(json.dumps(grouped, indent=2))
 
 
+def _do_init(args: argparse.Namespace) -> None:
+    """Install Studio into a target project."""
+    from install import install_studio
+    target = Path(args.target).resolve()
+    if not target.is_dir():
+        raise FileNotFoundError(f"Target directory not found: {target}")
+    dot_studio = install_studio(target)
+    print(f"Studio installed to {dot_studio}")
+    print(f"  Slash commands: {target / '.claude' / 'commands'}")
+    print(f"  Source: {dot_studio / 'source'}")
+    print(f"\nRun /run-phase or /run-studio-phase from {target.name} — pause-and-ask included.")
+
+
+def _do_check_install(args: argparse.Namespace) -> None:
+    """Check if installed Studio is up to date."""
+    from install import check_studio
+    target = Path(args.target).resolve()
+    status = check_studio(target)
+    if not status["installed"]:
+        print(f"Studio is NOT installed at {target}")
+        print("Run: python run_phase.py init --target " + str(target))
+        return
+    if status["up_to_date"]:
+        print(f"Studio at {target} is up to date.")
+    else:
+        print(f"Studio at {target} needs updating:")
+        if status["changed"]:
+            print(f"  Changed: {', '.join(status['changed'])}")
+        if status["missing"]:
+            print(f"  Missing: {', '.join(status['missing'])}")
+        print(f"\nRun: python run_phase.py update --target {target}")
+
+
+def _do_update(args: argparse.Namespace) -> None:
+    """Update installed Studio from source."""
+    from install import update_studio
+    target = Path(args.target).resolve()
+    result = update_studio(target)
+    if result["updated"] == 0 and result["added"] == 0:
+        print(f"Studio at {target} is already up to date.")
+    else:
+        print(f"Studio updated at {target}:")
+        if result["updated"]:
+            print(f"  Updated: {result['updated']} file(s)")
+        if result["added"]:
+            print(f"  Added: {result['added']} file(s)")
+
+
 def main() -> None:
     args = parse_cli_args()
 
@@ -1621,6 +1700,12 @@ def main() -> None:
         record_decisions(args)
     elif args.command == "check-decisions":
         check_decisions(args)
+    elif args.command == "init":
+        _do_init(args)
+    elif args.command == "check-install":
+        _do_check_install(args)
+    elif args.command == "update":
+        _do_update(args)
     else:
         raise ValueError("Unknown command")
 

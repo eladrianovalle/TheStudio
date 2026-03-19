@@ -1,6 +1,6 @@
 # Studio Collaboration Plan
 
-Status: **IN PROGRESS** — M2 complete, M3 next
+Status: **IN PROGRESS** — M5 complete, M3 next
 
 ## Vision
 
@@ -164,21 +164,31 @@ This is the intelligence layer — the system gets smarter about when to ask.
 
 ---
 
-### M5: Cross-Repo Install + Per-Role Commands
+### M5: Cross-Repo Install (REORDERED — doing next)
 
-**Goal:** Install/copy Studio into a project, and invoke individual roles directly.
+**Goal:** `studio init` installs Studio into any project so `/run-phase` and `/run-studio-phase` work out of the box — including pause-and-ask.
 
-- [ ] **T5.1** `cross_repo.py` — init/check/update commands
-  - `studio init` — copy base Studio into a project
-  - `studio check` — compare installed version to source (local filesystem only)
-  - `studio update` — pull latest from source
-  - VERSION file, INSTALL_MANIFEST, SHA-256 checksums
+**Why now:** M2's pause-and-ask only works via slash commands, but cross-repo projects don't have them. This is the blocker.
 
-- [ ] **T5.2** `command_gen.py` — generate per-role slash commands
-  - `/studioProduct`, `/studioEng`, `/studioGameDesign` etc.
-  - Invoke a specific role agent directly for ad-hoc questions
-  - `generate-commands` subcommand to scaffold command files
+- [x] **T5.1** `install.py` module — init/check/update
+  - `studio init --target <path>` — copies slash commands to `.claude/commands/`, Python source to `.studio/source/`, config, manifest, role packs, prompt docs
+  - Slash commands auto-rewritten: `$STUDIO_ROOT` → `.studio/source`
+  - `studio check-install --target <path>` — SHA-256 comparison against source
+  - `studio update --target <path>` — refreshes source, preserves user customizations
+  - VERSION file with commit hash and install timestamp
 
-- [ ] **T5.3** Tests and usage docs
+- [x] **T5.2** Install manifest and selective copy
+  - MANIFEST.json with per-file SHA-256 checksums
+  - Copies: source Python, config, manifest, role packs, prompt docs, bridge template
+  - Skips: tests/, output/, knowledge/
+  - Slash command rewriting handles `$STUDIO_ROOT/` and bare `studio/` prompt doc references
 
-**MVI test:** Install Studio into a separate repo, run `/studioEng` to get an engineering perspective on a question, see it use the collaboration protocol.
+- [x] **T5.3** Tests (20 new)
+  - Install: creates dirs, copies files, rewrites commands, idempotent, preserves user files
+  - Check: detects not-installed, up-to-date, changed files
+  - Update: no-op when current, refreshes changed files, raises if not installed
+  - Rewriting: $STUDIO_ROOT replacement, prompt doc refs, preserves other content
+
+**M5 complete (2026-03-19):** Cross-repo install shipped. `studio init` installs slash commands + source into any project. `/run-phase` and `/run-studio-phase` work natively with pause-and-ask. 281 tests passing (20 new).
+
+**MVI test:** Run `python run_phase.py init --target /path/to/project`, then `/run-phase --phase design --text "Boss fight"` from that project — get paused on P0 decisions.
