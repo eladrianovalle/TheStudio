@@ -24,6 +24,7 @@ from typing import Dict, List, Optional
 SOURCE_FILES = [
     "run_phase.py",
     "run_phase_roles.py",
+    "role_overrides.py",
     "decision_points.py",
     "question_mode.py",
     "scopes.py",

@@ -271,3 +271,17 @@ Options:
 - `--mode` — Output mode: `deliverables` (default) or `questions` (see Question Mode above)
 
 Each role is processed sequentially with separate Advocate and Contrarian agents. After all roles complete, an Integrator duel synthesizes the cross-functional plan. See the [command file](../../.claude/commands/run-studio-phase.md) for full details.
+
+### Project-Local Role Overrides
+
+Customize base manifest roles per-project by placing JSON files in `.studio/roles/<role_name>.json`:
+
+```json
+// .studio/roles/engineering.json
+{
+  "advocate_focus": "Focus on Next.js App Router and static export architecture.",
+  "deliverables": ["Route structure validation", "Static export compatibility report"]
+}
+```
+
+Override keys replace the base; unspecified keys inherit from the manifest. Valid keys: `title`, `advocate_focus`, `contrarian_focus`, `prompt_doc`, `deliverables`, `escalate_on`. Applied overrides are logged in `run.json` under `studio_roles.role_overrides_applied`.

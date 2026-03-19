@@ -1,6 +1,6 @@
 # Studio Collaboration Plan
 
-Status: **IN PROGRESS** — M3 complete, M4 next
+Status: **COMPLETE** — all milestones shipped (M1–M5)
 
 ## Vision
 
@@ -151,16 +151,20 @@ This is the intelligence layer — the system gets smarter about when to ask.
 
 **Goal:** Projects can extend/override base roles with project-specific definitions.
 
-- [ ] **T4.1** `role_overrides.py` module
+- [x] **T4.1** `role_overrides.py` module
   - Load `.studio/roles/*.json` overlay files
   - Shallow key-level merge: override keys replace base, unspecified keys inherit
   - `validate_role_override()` for structural correctness
+  - Type-checked validation: string fields, list fields, unknown key rejection
 
-- [ ] **T4.2** Wire into `run_phase_roles.py`
-  - After loading manifest roles, apply any overrides from `.studio/roles/`
-  - Override resolution: project-local > manifest base
+- [x] **T4.2** Wire into `run_phase_roles.py`
+  - `get_role_spec()` and `build_role_details()` accept optional `overrides` parameter
+  - `_resolve_studio_roles()` loads overrides from `get_artifact_root()/.studio/roles/`
+  - Applied overrides logged in `run.json` under `studio_roles.role_overrides_applied`
 
-- [ ] **T4.3** Tests and usage docs
+- [x] **T4.3** Tests and usage docs
+
+**M4 complete (2026-03-19):** Role Customization shipped. `role_overrides.py` module with per-project `.studio/roles/*.json` overlays, shallow key-level merge, structural validation, and integration into `run_phase_roles.py`. CLAUDE_CODE_USAGE.md, STUDIO_INTERACTION_GUIDE.md, CLAUDE.md updated. 366 tests passing (28 new).
 
 **MVI test:** Create a `.studio/roles/engineering.json` override with custom advocate_focus, run a phase, see the override reflected in instructions.
 

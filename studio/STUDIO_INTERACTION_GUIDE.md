@@ -154,6 +154,20 @@ When introducing a new discipline:
 3. Update/introduce a `role_packs/*.json` entry.
 4. Mention the manifest + pack in downstream bridge docs.
 
+### Project-Local Role Overrides
+
+Projects can customize base roles without editing the manifest. Place JSON files in `.studio/roles/<role_name>.json` with any subset of role keys:
+
+```json
+// .studio/roles/engineering.json
+{
+  "advocate_focus": "Focus on Next.js App Router and static export architecture.",
+  "deliverables": ["Route structure validation", "Static export compatibility report"]
+}
+```
+
+Override resolution: **project-local > manifest base**. Unspecified keys inherit from the manifest. Valid keys: `title`, `advocate_focus`, `contrarian_focus`, `prompt_doc`, `deliverables`, `escalate_on`.
+
 ---
 
 ## 6. Troubleshooting & Tips

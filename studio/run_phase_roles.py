@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
+
+from role_overrides import apply_role_overrides
 
 
 MANIFEST_FILENAME = "studio.manifest.json"
@@ -122,7 +124,13 @@ def resolve_role_list(
     return injected
 
 
-def build_role_details(manifest: Dict, role_names: Sequence[str]) -> List[RoleDetails]:
+def build_role_details(
+    manifest: Dict,
+    role_names: Sequence[str],
+    overrides: Optional[Dict[str, Dict]] = None,
+) -> List[RoleDetails]:
+    if overrides:
+        manifest = {**manifest, "roles": apply_role_overrides(manifest.get("roles") or {}, overrides)}
     return [get_role_spec(manifest, name) for name in role_names]
 
 

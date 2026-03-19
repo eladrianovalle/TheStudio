@@ -23,6 +23,7 @@ from cleanup import (
     load_cleanup_settings,
 )
 from validators.document_validator import DocumentValidator
+from role_overrides import load_role_overrides
 from run_phase_roles import (
     RoleConfigError,
     RoleDetails,
@@ -877,21 +878,25 @@ def _resolve_studio_roles(args: argparse.Namespace) -> Tuple[Dict | None, List[R
         return None, None
 
     studio_root = get_studio_root()
+    artifact_root = get_artifact_root()
     manifest = load_manifest(studio_root)
     try:
         pack_name = args.role_pack or default_role_pack_name(manifest)
         pack_data = load_role_pack(studio_root, pack_name)
-        overrides = list(args.roles or [])
-        invited_roles = resolve_role_list(manifest, pack_data, overrides)
+        cli_overrides = list(args.roles or [])
+        invited_roles = resolve_role_list(manifest, pack_data, cli_overrides)
         if not invited_roles:
             raise RoleConfigError(
                 "Studio role selection resolved to zero roles. Adjust the pack or overrides."
             )
-        role_details = build_role_details(manifest, invited_roles)
+        # Load project-local role overrides from .studio/roles/
+        role_overrides = load_role_overrides(artifact_root)
+        role_details = build_role_details(manifest, invited_roles, overrides=role_overrides)
         role_meta: Dict = {
             "pack": pack_name,
-            "overrides": overrides,
+            "overrides": cli_overrides,
             "invited": invited_roles,
+            "role_overrides_applied": list(role_overrides.keys()) if role_overrides else [],
         }
         return role_meta, role_details
     except RoleConfigError as exc:

@@ -69,7 +69,8 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 ### Core modules (all in `studio/`)
 
 - **`run_phase.py`** — Primary entrypoint: `prepare`, `finalize`, `validate`, `cleanup` subcommands.
-- **`run_phase_roles.py`** — Role system: loads `studio.manifest.json`, resolves role packs, builds per-role file naming (`advocate--<role>--NN.md`).
+- **`run_phase_roles.py`** — Role system: loads `studio.manifest.json`, resolves role packs, applies project-local overrides, builds per-role file naming (`advocate--<role>--NN.md`).
+- **`role_overrides.py`** — Project-local role customization: loads `.studio/roles/*.json` overlays, validates structure, shallow-merges with manifest roles.
 - **`cleanup.py`** — TTL-based (30 days) and budget-based (900MB) run artifact cleanup.
 - **`scopes.py`** — Three-tier scope system (alignment / depth / polish) with output budgets and debate modes (`all_roles` vs `per_role`).
 - **`rerun.py`** — Detects rejection context from prior runs and generates rerun instructions.
@@ -87,6 +88,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 - **`config/studio_settings.toml`** — Cleanup TTL and storage limits.
 - **`.studio/scopes.toml`** — Scope-based iteration budgets (auto-loaded if present).
 - **`.studio/validation.toml`** — Validation configuration.
+- **`.studio/roles/*.json`** — Project-local role overrides. Shallow-merge with manifest roles (override keys replace base, unspecified keys inherit).
 
 ### Artifact structure
 
