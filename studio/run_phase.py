@@ -1642,6 +1642,7 @@ def _do_init(args: argparse.Namespace) -> None:
     print(f"  Slash commands: {target / '.claude' / 'commands'}")
     print(f"  Source: {dot_studio / 'source'}")
     print(f"\nRun /run-phase or /run-studio-phase from {target.name} — pause-and-ask included.")
+    print(f"NOTE: Start a NEW Claude Code session (not just /clear) to discover the commands.")
 
 
 def _do_check_install(args: argparse.Namespace) -> None:

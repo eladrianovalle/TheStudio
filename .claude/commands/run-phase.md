@@ -60,31 +60,21 @@ For each iteration (up to max_iterations):
 >
 > Write a thorough advocate proposal. Structure it with clear sections, concrete recommendations, and actionable details. Save your output to `{run_dir}/advocate_{N}.md`.
 
-**b. Check advocate decision points** — Read the advocate's output file (`{run_dir}/advocate_{N}.md`). Look for decision point blockquotes matching this pattern:
+**b. Check advocate decision points — MANDATORY, DO NOT SKIP** — Read the advocate's output file (`{run_dir}/advocate_{N}.md`). Look for decision point blockquotes (lines starting with `> **DECISION [`).
 
-> **DECISION [P0]:** [question]
-> **Unblocks:** [context]
-> **Options:** (a) ... (b) ...
+**If ANY decision points are found (P0, P1, or P2), you MUST pause and present them ALL to the user before proceeding.** Do not continue to the contrarian until the user has responded.
 
-Handle by priority:
+Present each decision to the user:
 
-- **P0 (blocking):** Present ALL P0 decisions to the user at once. Format each as:
-
-  **Blocking Decision:** [question]
+  **Decision [priority]:** [question]
   Unblocks: [context]
   Options: [options if present]
 
-  Wait for the user to answer each P0 decision. Then record ALL decisions from this agent in one batch — write a JSON file with all decisions and their answers, then run:
-  ```bash
-  python "$STUDIO_ROOT/run_phase.py" record-decisions --run-dir {run_dir} --decisions-file {tmp_json_path}
-  ```
-  The JSON file format: `[{"priority": "P0", "question": "...", "answer": "...", "unblocks": "...", "source_file": "advocate_{N}.md", "answered_by": "user"}, ...]`
-
-  Alternatively, for a single decision: `python "$STUDIO_ROOT/run_phase.py" record-decisions --run-dir {run_dir} --question "[question]" --answer "[answer]" --priority P0 --source "advocate_{N}.md" --unblocks "[context]" --answered-by user`
-
-- **P1 (important):** Show to the user as FYI: "The advocate is assuming [stated assumption/first option] for: [question]. Override? (press Enter to accept)". Include in the batch JSON with `"answered_by": "user"` (if overridden) or `"answered_by": "assumption"` (if accepted).
-
-- **P2 (context):** No user interaction. Include in the batch JSON with `"answered_by": "logged"`.
+Wait for the user to answer ALL decisions. Then record them in one batch — write a JSON file and run:
+```bash
+python "$STUDIO_ROOT/run_phase.py" record-decisions --run-dir {run_dir} --decisions-file {tmp_json_path}
+```
+JSON format: `[{"priority": "P0", "question": "...", "answer": "...", "unblocks": "...", "source_file": "advocate_{N}.md", "answered_by": "user"}, ...]`
 
 **c. Contrarian** — Use the Agent tool to spawn a SEPARATE subagent with this prompt:
 

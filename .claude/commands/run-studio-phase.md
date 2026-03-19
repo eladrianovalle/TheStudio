@@ -33,29 +33,20 @@ Read the generated `instructions.md` file. Pay attention to:
 
 ### Decision Point Handling (applies to ALL scopes)
 
-After EVERY agent (advocate or contrarian) saves its output:
+**MANDATORY — DO NOT SKIP:** After EVERY agent (advocate or contrarian) saves its output:
 
-1. **Read the output file** and look for decision point blockquotes:
-   ```
-   > **DECISION [P0]:** [question]
-   > **Unblocks:** [context]
-   > **Options:** (a) ... (b) ...
-   ```
+1. **Read the output file** and look for decision point blockquotes (lines starting with `> **DECISION [`).
 
-2. **P0 (blocking)** — Present ALL P0s from this agent to the user at once:
-   - Format: "**Blocking Decision:** [question]\n  Unblocks: [context]\n  Options: [options]"
-   - Wait for user's answer
-   - Record all decisions in one batch: write a JSON array to a temp file, then:
-     `python "$STUDIO_ROOT/run_phase.py" record-decisions --run-dir {run_dir} --decisions-file {tmp_json_path}`
-   - JSON format: `[{"priority": "P0", "question": "...", "answer": "...", "unblocks": "...", "source_file": "[filename]", "answered_by": "user"}, ...]`
+2. **If ANY decision points are found (P0, P1, or P2), you MUST pause and present them ALL to the user.** Do not spawn the next agent until the user has responded. Present each as:
+   - **Decision [priority]:** [question]
+   - Unblocks: [context]
+   - Options: [options if present]
 
-3. **P1 (important)** — Show as FYI:
-   - "FYI — agent assumes [first option/assumption] for: [question]. Override? (Enter to accept)"
-   - Include in the batch JSON with `"answered_by": "user"` (override) or `"answered_by": "assumption"` (accepted)
+3. **Wait for the user to answer ALL decisions.** Then record in one batch:
+   `python "$STUDIO_ROOT/run_phase.py" record-decisions --run-dir {run_dir} --decisions-file {tmp_json_path}`
+   JSON format: `[{"priority": "P0", "question": "...", "answer": "...", "unblocks": "...", "source_file": "[filename]", "answered_by": "user"}, ...]`
 
-4. **P2** — Log only, no interaction. Include in the batch JSON with `"answered_by": "logged"`.
-
-5. **Settled context** — If `{run_dir}/decisions.md` exists, ALL subsequent agent prompts must include:
+4. **Settled context** — If `{run_dir}/decisions.md` exists, ALL subsequent agent prompts must include:
    > Read `{run_dir}/decisions.md` for settled constraints. Treat these as hard constraints — do not re-litigate.
 
 ### Step 3: Execute Scoped Debate
