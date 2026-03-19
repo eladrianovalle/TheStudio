@@ -2,6 +2,27 @@
 
 All notable changes to Studio will be documented in this file.
 
+## [3.0.0] - 2026-03-19
+
+### Added — Collaboration Protocol (M1-M3)
+
+- **Decision Point Protocol** — agents flag inline decisions (P0/P1/P2) using blockquote format during normal deliverables runs. `decision_points.py` module for parsing, formatting, and persistence.
+- **Orchestrator Pause-and-Ask** — slash commands detect decision points after each agent, pause on P0s, show P1s as FYI, inject answers as constraints via `decisions.md`. New CLI: `check-decisions`, `record-decisions`.
+- **Clarity Scores** — per-topic confidence tracking from answered decisions. Controls agent question density: low clarity = more questions, high clarity = constraints. Adapts to context (broad game analysis vs narrow feature). New CLI: `show-clarity`, `set-clarity`, `recompute-clarity`.
+- **Question Mode** — `--mode questions` for pre-flight decision collection. Surfaces "what don't I know yet?" before committing to deliverables.
+
+### Added — Cross-Repo Install (M5)
+
+- `studio init --target <path>` — copies slash commands + source into any project. `/run-phase` and `/run-studio-phase` work natively with pause-and-ask.
+- `studio check-install` / `studio update` — SHA-256 comparison and refresh.
+
+### Stats
+
+- 338 tests (up from 204)
+- 13 Python modules in studio/
+
+---
+
 ## [2.0.1] - 2026-02-28
 
 ### Fixed - Critical Reliability Improvements
