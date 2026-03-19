@@ -43,7 +43,20 @@ For each iteration (up to max_iterations):
 >
 > {If `{run_dir}/decisions.md` exists: "Read `{run_dir}/decisions.md` for settled constraints from prior iterations. Treat these as hard constraints — do not re-litigate."}
 >
-> **Before writing, read `{run_dir}/instructions.md`** — it contains the Decision Point Protocol. When you hit a gap or fork that could change your approach, flag it using the blockquote format described there (P0 = blocking, P1 = important, P2 = context).
+> **Decision Point Protocol:** When you encounter a gap, ambiguity, or fork that could meaningfully change your approach, flag it inline using this exact blockquote format:
+>
+> ```
+> > **DECISION [P0]:** Should the mechanic be real-time or turn-based?
+> > **Unblocks:** Core loop design — fundamentally different gameplay
+> > **Options:** (a) Real-time (b) Turn-based
+> ```
+>
+> Priority levels:
+> - **P0 (Blocking):** Cannot proceed without an answer. The orchestrator will pause and ask the user.
+> - **P1 (Important):** State your assumption and continue, but flag it so the user can override.
+> - **P2 (Context):** Nice-to-know, logged for completeness.
+>
+> Surface decision points as you encounter them. Prefer fewer, high-quality P0/P1 flags over many P2s. Each must name what it unblocks.
 >
 > Write a thorough advocate proposal. Structure it with clear sections, concrete recommendations, and actionable details. Save your output to `{run_dir}/advocate_{N}.md`.
 
@@ -79,7 +92,13 @@ Handle by priority:
 >
 > {If `{run_dir}/decisions.md` exists: "Read `{run_dir}/decisions.md` first. Treat settled decisions as hard constraints — do not re-litigate them. Focus your critique on everything else."}
 >
-> Read the advocate's proposal at `{run_dir}/advocate_{N}.md`. Also read `{run_dir}/instructions.md` for the Decision Point Protocol — if the advocate assumed something that is actually unsettled, flag it as a decision point.
+> Read the advocate's proposal at `{run_dir}/advocate_{N}.md`.
+>
+> **Decision points:** If the advocate assumed something that is actually unsettled, flag it using this blockquote format:
+> `> **DECISION [P0]:** [question]`
+> `> **Unblocks:** [what this decision affects]`
+> `> **Options:** (a) ... (b) ...`
+> Your primary job is critique — decision points are secondary, only when assumptions are genuinely unsettled.
 >
 > Critically evaluate the proposal. Look for fatal flaws, unrealistic assumptions, missing considerations, and risks. Be rigorous but fair.
 >

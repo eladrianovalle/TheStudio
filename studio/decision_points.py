@@ -243,14 +243,14 @@ def save_decisions_json(run_dir: Path, decisions: list[DecisionPoint]) -> Path:
         }
         for dp in decisions
     ]
-    path = Path(run_dir) / "decisions.json"
+    path = run_dir / "decisions.json"
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
     return path
 
 
 def load_decisions_json(run_dir: Path) -> list[DecisionPoint]:
     """Load decisions from decisions.json. Returns empty list if file missing."""
-    path = Path(run_dir) / "decisions.json"
+    path = run_dir / "decisions.json"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:

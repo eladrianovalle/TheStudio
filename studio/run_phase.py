@@ -1525,38 +1525,48 @@ def record_decisions(args: argparse.Namespace) -> None:
         raise FileNotFoundError(f"Run directory not found: {run_dir}")
 
     decisions = load_decisions_json(run_dir)
+    existing_qs = {dp.question for dp in decisions}
+
+    def _append(dp: DecisionPoint) -> None:
+        """Append decision, deduplicating by question text (update if exists)."""
+        if dp.question in existing_qs:
+            # Update existing decision with new answer
+            for i, existing in enumerate(decisions):
+                if existing.question == dp.question:
+                    decisions[i] = dp
+                    print(f"Updated [{dp.priority}] {dp.question} -> {dp.answer}")
+                    return
+        existing_qs.add(dp.question)
+        decisions.append(dp)
+        print(f"Recorded [{dp.priority}] {dp.question} -> {dp.answer}")
 
     if args.decisions_file:
         # Batch mode: read multiple decisions from a JSON file
         batch_data = json.loads(args.decisions_file.read_text(encoding="utf-8"))
         for d in batch_data:
-            dp = DecisionPoint(
+            _append(DecisionPoint(
                 priority=d["priority"],
                 question=d["question"],
                 unblocks=d.get("unblocks", ""),
                 answer=d["answer"],
                 answered_by=d.get("answered_by", "user"),
                 source_file=d.get("source_file"),
-            )
-            decisions.append(dp)
-            print(f"Recorded [{dp.priority}] {dp.question} -> {dp.answer}")
+            ))
     else:
         # Single decision mode — validate required args
-        if not all([args.question, args.answer, args.priority]):
+        if args.question is None or args.answer is None or args.priority is None:
             raise ValueError(
                 "Single-decision mode requires --question, --answer, and --priority. "
                 "Use --decisions-file for batch mode."
             )
-        dp = DecisionPoint(
+        _append(DecisionPoint(
             priority=args.priority,
             question=args.question,
             unblocks=args.unblocks,
             answer=args.answer,
             answered_by=args.answered_by,
             source_file=args.source,
-        )
-        decisions.append(dp)
-        print(f"Recorded [{dp.priority}] {dp.question} -> {dp.answer}")
+        ))
 
     save_decisions_json(run_dir, decisions)
 
