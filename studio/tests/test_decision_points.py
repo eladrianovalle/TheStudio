@@ -13,7 +13,10 @@ from decision_points import (
     extract_decisions_from_run,
     format_decision_point,
     format_decisions_log,
+    format_settled_decisions,
+    load_decisions_json,
     parse_decision_points,
+    save_decisions_json,
 )
 
 
@@ -342,3 +345,159 @@ class TestInstructionDocDecisionSection:
         """Decision point section contains the DECISION blockquote example."""
         _, instructions = _prepare_run(phase="design", text="Test format example")
         assert "DECISION [P0]" in instructions
+
+
+# ---------------------------------------------------------------------------
+# Answer-aware features tests (M2 T2.1/T2.3)
+# ---------------------------------------------------------------------------
+
+class TestDecisionPointAnswerFields:
+    """Tests for the answer and answered_by fields on DecisionPoint."""
+
+    def test_answer_fields_default_none(self):
+        """New DecisionPoint has answer=None and answered_by=None by default."""
+        dp = DecisionPoint(priority="P0", question="Q?", unblocks="U")
+        assert dp.answer is None
+        assert dp.answered_by is None
+
+    def test_answer_fields_set(self):
+        """DecisionPoint with answer and answered_by set explicitly."""
+        dp = DecisionPoint(
+            priority="P1",
+            question="Turn-based?",
+            unblocks="Core loop",
+            answer="Yes",
+            answered_by="user",
+        )
+        assert dp.answer == "Yes"
+        assert dp.answered_by == "user"
+
+
+class TestFormatSettledDecisions:
+    """Tests for format_settled_decisions()."""
+
+    def _make_dp(self, priority="P0", question="Q?", unblocks="U",
+                 answer=None, answered_by=None, source_file=None):
+        return DecisionPoint(
+            priority=priority,
+            question=question,
+            unblocks=unblocks,
+            answer=answer,
+            answered_by=answered_by,
+            source_file=source_file,
+        )
+
+    def test_format_settled_only_answered(self):
+        """Only decisions with answers appear in the output."""
+        decisions = [
+            self._make_dp(question="Answered?", answer="Yes", answered_by="user"),
+            self._make_dp(question="Not answered?"),
+        ]
+        result = format_settled_decisions(decisions)
+        assert "Answered?" in result
+        assert "Not answered?" not in result
+
+    def test_format_settled_empty(self):
+        """No answered decisions produces minimal output."""
+        decisions = [self._make_dp(question="Unanswered")]
+        result = format_settled_decisions(decisions)
+        assert "No decisions have been answered yet" in result
+
+    def test_format_settled_table_format(self):
+        """Table row count matches answered decisions."""
+        decisions = [
+            self._make_dp(question="Q1", answer="A1", answered_by="user"),
+            self._make_dp(question="Q2", answer="A2", answered_by="user"),
+            self._make_dp(question="Q3"),  # no answer
+        ]
+        result = format_settled_decisions(decisions)
+        # Count data rows in the table (lines starting with "| " and a digit)
+        table_rows = [line for line in result.splitlines()
+                      if line.startswith("| ") and line[2:3].isdigit()]
+        assert len(table_rows) == 2
+
+    def test_format_settled_includes_metadata(self):
+        """Output includes answer, answered_by, and source metadata."""
+        dp = self._make_dp(
+            question="Real-time or turn-based?",
+            answer="Turn-based",
+            answered_by="user",
+            source_file="advocate--design--S1-01.md",
+        )
+        result = format_settled_decisions([dp])
+        assert "Turn-based" in result
+        assert "user" in result
+        assert "advocate--design--S1-01.md" in result
+
+
+class TestSaveLoadDecisionsJson:
+    """Tests for save_decisions_json() and load_decisions_json()."""
+
+    def test_save_and_load_round_trip(self, tmp_path):
+        """Save decisions, load them back, verify equal."""
+        decisions = [
+            DecisionPoint(
+                priority="P0",
+                question="Real-time?",
+                unblocks="Core loop",
+                options=["Real-time", "Turn-based"],
+                source_file="advocate_1.md",
+            ),
+            DecisionPoint(
+                priority="P1",
+                question="Art style?",
+                unblocks="Art pipeline",
+            ),
+        ]
+        save_decisions_json(tmp_path, decisions)
+        loaded = load_decisions_json(tmp_path)
+
+        assert len(loaded) == 2
+        assert loaded[0].priority == "P0"
+        assert loaded[0].question == "Real-time?"
+        assert loaded[0].options == ["Real-time", "Turn-based"]
+        assert loaded[1].priority == "P1"
+        assert loaded[1].options is None
+
+    def test_load_missing_file(self, tmp_path):
+        """Returns empty list when decisions.json does not exist."""
+        result = load_decisions_json(tmp_path)
+        assert result == []
+
+    def test_save_with_answers(self, tmp_path):
+        """Decisions with answer fields persist correctly."""
+        decisions = [
+            DecisionPoint(
+                priority="P0",
+                question="Multiplayer?",
+                unblocks="Architecture",
+                answer="Yes",
+                answered_by="user",
+            ),
+        ]
+        save_decisions_json(tmp_path, decisions)
+        loaded = load_decisions_json(tmp_path)
+
+        assert loaded[0].answer == "Yes"
+        assert loaded[0].answered_by == "user"
+
+    def test_load_without_answer_fields(self, tmp_path):
+        """Backward compat: old JSON without answer/answered_by loads with None."""
+        import json
+        old_data = [
+            {
+                "priority": "P0",
+                "question": "Old question?",
+                "unblocks": "Something",
+                "options": None,
+                "source_file": None,
+            }
+        ]
+        (tmp_path / "decisions.json").write_text(
+            json.dumps(old_data, indent=2), encoding="utf-8"
+        )
+        loaded = load_decisions_json(tmp_path)
+
+        assert len(loaded) == 1
+        assert loaded[0].answer is None
+        assert loaded[0].answered_by is None

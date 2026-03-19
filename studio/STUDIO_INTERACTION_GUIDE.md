@@ -64,6 +64,7 @@ Outputs:
    - Save Advocate responses to `advocate_<n>.md` (non-studio) or per-role files like `advocate--design--02.md`.
    - Save Contrarian responses to `contrarian_<n>.md` (non-studio) or `contrarian--design--02.md`.
    - **Decision points:** Agents may surface inline decisions using blockquote markers (e.g., `> **DECISION [P0]:** ...`). P0 decisions are blocking — pause and resolve them before continuing. P1 decisions note an assumption the agent made; override if needed. P2 decisions are informational only.
+   - **Pause-and-Ask (orchestrated runs):** When using slash commands (`/run-phase`, `/run-studio-phase`), the orchestrator actively detects decision points after each agent completes. P0s pause the run and present you with the decision and options — you answer before agents continue. P1s are shown as "FYI — agent assumes X" so you can override. P2s are logged silently. Your answers accumulate in `{run_dir}/decisions.md` and become hard constraints for all subsequent agents. In scoped runs, S1 decisions are batched after all alignment agents complete, S2 decisions are checked per-role sequentially, and S3/integrator agents receive all accumulated decisions.
    - After approval:
      - Tech phase → write `implementation.md` (with tests).
      - Market/Design → `implementation.md` is optional (discussion phases).

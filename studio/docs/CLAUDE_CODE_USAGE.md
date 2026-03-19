@@ -134,6 +134,30 @@ Question-mode runs set `"output_type": "questions"` in `run.json`. The `Document
 
 Usage is logged to `.studio/usage.log` with the mode field for observability.
 
+### Pause-and-Ask (Collaborative Decisions)
+
+During any run, agents may flag decision points — questions where your input changes the outcome. The orchestrator detects these and pauses to ask you:
+
+- **P0 (Blocking):** The run pauses and presents the decision with options. You answer before agents continue. Your answers become hard constraints for all subsequent agents.
+- **P1 (Important):** Shown as "FYI — agent assumes X for: [question]." You can override or accept the assumption.
+- **P2 (Context):** Logged silently to `decisions.md` — no interruption.
+
+All your decisions accumulate in `{run_dir}/decisions.md` throughout the run. Later agents read this file and treat settled decisions as constraints they cannot re-litigate.
+
+**Example flow:**
+1. Advocate writes proposal, flags P0: "Real-time or turn-based?"
+2. Orchestrator pauses: "Blocking Decision: Real-time or turn-based? Options: (a) Real-time (b) Turn-based"
+3. You answer: "Turn-based"
+4. Contrarian reads `decisions.md`, treats turn-based as a constraint
+5. Subsequent iterations build on your decision
+
+This works in both single-phase (`/run-phase`) and multi-role (`/run-studio-phase`) runs. In scoped runs:
+- **S1 (Alignment):** All role decisions batched and presented after all S1 agents complete
+- **S2 (Depth):** Decisions checked per-role (sequential), earlier role decisions inform later roles
+- **S3 (Polish) + Integrator:** Receive all accumulated decisions as constraints
+
+---
+
 ## Cross-Repo Usage
 
 Studio can be invoked from any external repository. Artifacts land in the calling repo, not in Studio.

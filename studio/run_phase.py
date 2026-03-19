@@ -42,8 +42,13 @@ from scopes import (
     load_scopes_config,
 )
 from decision_points import (
+    DecisionPoint,
     extract_decisions_from_run,
     format_decisions_log,
+    format_settled_decisions,
+    load_decisions_json,
+    parse_decision_points,
+    save_decisions_json,
 )
 from question_mode import (
     generate_question_instructions,
@@ -1105,14 +1110,28 @@ def finalize_run(args: argparse.Namespace) -> None:
     rebuild_index()
     _append_run_log(meta)
 
-    # Generate decisions.md if any decision points were surfaced by agents
-    decisions = extract_decisions_from_run(run_dir)
-    if decisions:
+    # Generate decisions.md — merge agent-surfaced decisions with any already-settled ones
+    existing = load_decisions_json(run_dir)
+    extracted = extract_decisions_from_run(run_dir)
+    if existing or extracted:
+        # Merge: keep existing settled decisions, add any new ones from agent output
+        existing_qs = {dp.question for dp in existing}
+        for dp in extracted:
+            if dp.question not in existing_qs:
+                existing.append(dp)
+        save_decisions_json(run_dir, existing)
+        # Use settled format if any decisions have answers, otherwise use discovery log
+        has_answers = any(dp.answer is not None for dp in existing)
         decisions_path = run_dir / "decisions.md"
-        decisions_path.write_text(
-            format_decisions_log(decisions), encoding="utf-8"
-        )
-        print(f"Generated {decisions_path.name} with {len(decisions)} decision point(s)")
+        if has_answers:
+            decisions_path.write_text(
+                format_settled_decisions(existing), encoding="utf-8"
+            )
+        else:
+            decisions_path.write_text(
+                format_decisions_log(existing), encoding="utf-8"
+            )
+        print(f"Generated {decisions_path.name} with {len(existing)} decision point(s)")
 
     print(f"Finalized {run_id} ({phase}) → {meta['status']}")
     
@@ -1336,6 +1355,63 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_artifact_root_arg(validate_parser)
 
+    record_parser = subparsers.add_parser(
+        "record-decisions", help="Record an answered decision into a run's decisions.json."
+    )
+    record_parser.add_argument(
+        "--run-dir",
+        type=Path,
+        required=True,
+        help="Path to the run directory.",
+    )
+    record_parser.add_argument(
+        "--question",
+        default=None,
+        help="The decision question text (required unless --decisions-file is used).",
+    )
+    record_parser.add_argument(
+        "--answer",
+        default=None,
+        help="The answer to the decision (required unless --decisions-file is used).",
+    )
+    record_parser.add_argument(
+        "--priority",
+        default=None,
+        choices=["P0", "P1", "P2"],
+        help="Decision priority level (required unless --decisions-file is used).",
+    )
+    record_parser.add_argument(
+        "--source",
+        default=None,
+        help="Source file the decision came from (optional).",
+    )
+    record_parser.add_argument(
+        "--unblocks",
+        default="",
+        help="What this decision unblocks (optional).",
+    )
+    record_parser.add_argument(
+        "--answered-by",
+        default="user",
+        help="Who answered: 'user' or 'assumption' (default: user).",
+    )
+    record_parser.add_argument(
+        "--decisions-file",
+        type=Path,
+        default=None,
+        help="Path to a JSON file with multiple decisions to record at once.",
+    )
+
+    check_parser = subparsers.add_parser(
+        "check-decisions", help="Parse decision points from a single agent output file."
+    )
+    check_parser.add_argument(
+        "--file",
+        type=Path,
+        required=True,
+        help="Path to an agent output file to scan for decision points.",
+    )
+
     return parser
 
 
@@ -1439,6 +1515,81 @@ def validate_run(args: argparse.Namespace) -> None:
     print(f"{'='*60}\n")
 
 
+def record_decisions(args: argparse.Namespace) -> None:
+    """Record answered decisions into a run's decisions.json and regenerate decisions.md.
+
+    Supports single decision via --question/--answer or batch via --decisions-file.
+    """
+    run_dir = Path(args.run_dir)
+    if not run_dir.is_dir():
+        raise FileNotFoundError(f"Run directory not found: {run_dir}")
+
+    decisions = load_decisions_json(run_dir)
+
+    if args.decisions_file:
+        # Batch mode: read multiple decisions from a JSON file
+        batch_data = json.loads(args.decisions_file.read_text(encoding="utf-8"))
+        for d in batch_data:
+            dp = DecisionPoint(
+                priority=d["priority"],
+                question=d["question"],
+                unblocks=d.get("unblocks", ""),
+                answer=d["answer"],
+                answered_by=d.get("answered_by", "user"),
+                source_file=d.get("source_file"),
+            )
+            decisions.append(dp)
+            print(f"Recorded [{dp.priority}] {dp.question} -> {dp.answer}")
+    else:
+        # Single decision mode — validate required args
+        if not all([args.question, args.answer, args.priority]):
+            raise ValueError(
+                "Single-decision mode requires --question, --answer, and --priority. "
+                "Use --decisions-file for batch mode."
+            )
+        dp = DecisionPoint(
+            priority=args.priority,
+            question=args.question,
+            unblocks=args.unblocks,
+            answer=args.answer,
+            answered_by=args.answered_by,
+            source_file=args.source,
+        )
+        decisions.append(dp)
+        print(f"Recorded [{dp.priority}] {dp.question} -> {dp.answer}")
+
+    save_decisions_json(run_dir, decisions)
+
+    # Regenerate decisions.md with settled decisions
+    settled_md = format_settled_decisions(decisions)
+    (run_dir / "decisions.md").write_text(settled_md, encoding="utf-8")
+
+    print(f"  decisions.json: {run_dir / 'decisions.json'}")
+    print(f"  decisions.md:   {run_dir / 'decisions.md'}")
+
+
+def check_decisions(args: argparse.Namespace) -> None:
+    """Parse decision points from a single agent output file and print as JSON."""
+    file_path = Path(args.file)
+    if not file_path.is_file():
+        raise FileNotFoundError(f"File not found: {file_path}")
+
+    text = file_path.read_text(encoding="utf-8")
+    points = parse_decision_points(text, source_file=file_path.name)
+
+    grouped: dict[str, list[dict]] = {"P0": [], "P1": [], "P2": []}
+    for dp in points:
+        entry = {
+            "question": dp.question,
+            "unblocks": dp.unblocks,
+            "options": dp.options,
+            "source_file": dp.source_file,
+        }
+        grouped[dp.priority].append(entry)
+
+    print(json.dumps(grouped, indent=2))
+
+
 def main() -> None:
     args = parse_cli_args()
 
@@ -1456,6 +1607,10 @@ def main() -> None:
         _maybe_run_cleanup(dry_run=dry_run or _env_flag(CLEANUP_DRY_ENV))
     elif args.command == "validate":
         validate_run(args)
+    elif args.command == "record-decisions":
+        record_decisions(args)
+    elif args.command == "check-decisions":
+        check_decisions(args)
     else:
         raise ValueError("Unknown command")
 

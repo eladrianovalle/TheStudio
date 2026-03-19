@@ -31,6 +31,33 @@ Read the generated `instructions.md` file. Pay attention to:
 - The **Scope-Based Iteration Plan** (if scopes are enabled)
 - File naming convention
 
+### Decision Point Handling (applies to ALL scopes)
+
+After EVERY agent (advocate or contrarian) saves its output:
+
+1. **Read the output file** and look for decision point blockquotes:
+   ```
+   > **DECISION [P0]:** [question]
+   > **Unblocks:** [context]
+   > **Options:** (a) ... (b) ...
+   ```
+
+2. **P0 (blocking)** — Present ALL P0s from this agent to the user at once:
+   - Format: "**Blocking Decision:** [question]\n  Unblocks: [context]\n  Options: [options]"
+   - Wait for user's answer
+   - Record all decisions in one batch: write a JSON array to a temp file, then:
+     `python "$STUDIO_ROOT/run_phase.py" record-decisions --run-dir {run_dir} --decisions-file {tmp_json_path}`
+   - JSON format: `[{"priority": "P0", "question": "...", "answer": "...", "unblocks": "...", "source_file": "[filename]", "answered_by": "user"}, ...]`
+
+3. **P1 (important)** — Show as FYI:
+   - "FYI — agent assumes [first option/assumption] for: [question]. Override? (Enter to accept)"
+   - Include in the batch JSON with `"answered_by": "user"` (override) or `"answered_by": "assumption"` (accepted)
+
+4. **P2** — Log only, no interaction. Include in the batch JSON with `"answered_by": "logged"`.
+
+5. **Settled context** — If `{run_dir}/decisions.md` exists, ALL subsequent agent prompts must include:
+   > Read `{run_dir}/decisions.md` for settled constraints. Treat these as hard constraints — do not re-litigate.
+
 ### Step 3: Execute Scoped Debate
 
 If `instructions.md` contains a **Scope-Based Iteration Plan**, follow the three-tier flow below. If `--no-scopes` was used, skip to the **Flat Mode** section at the bottom.
@@ -57,6 +84,8 @@ For each role in the Role Menu, spawn advocate + contrarian **in parallel** (all
 > Do NOT produce full deliverables yet — save detail for the Depth scope.
 > Use bullet points, not full sections.
 >
+> {If `{run_dir}/decisions.md` exists: "**Settled decisions:** Read `{run_dir}/decisions.md` — treat as hard constraints."}
+>
 > Save to `{run_dir}/advocate--{role}--S1-01.md`.
 
 **Contrarian prompt (SEPARATE agent):**
@@ -71,8 +100,16 @@ For each role in the Role Menu, spawn advocate + contrarian **in parallel** (all
 > - Are there fatal flaws the advocate missed?
 > - Any showstoppers from your discipline?
 >
+> {If `{run_dir}/decisions.md` exists: "**Settled decisions:** Read `{run_dir}/decisions.md` — treat as hard constraints. Do not re-litigate."}
+>
 > End with `VERDICT: APPROVED` or `VERDICT: REJECTED` with numbered reasons.
 > Save to `{run_dir}/contrarian--{role}--S1-01.md`.
+
+**After all S1 agents complete (before proceeding to S2):**
+1. Check ALL S1 output files for decision points (advocates and contrarians)
+2. Batch all P0 decisions across all roles and present to user at once — group by role for clarity
+3. Handle P1s as FYI
+4. Record all decisions to decisions.md
 
 **After all roles complete:** Read all contrarian verdicts.
 - If all APPROVED → proceed to Scope 2 with alignment context
@@ -121,6 +158,8 @@ Adjust based on the specific proposal — if a role clearly depends on another's
 >
 > {If this role has a prompt doc, read it at `studio/{prompt_doc}` for detailed guidance.}
 >
+> {If `{run_dir}/decisions.md` exists: "**Settled decisions:** Read `{run_dir}/decisions.md` — treat as hard constraints."}
+>
 > Write a thorough proposal covering all required deliverables. No word cap — this is the full analysis.
 > Save to `{run_dir}/advocate--{role}--S2-01.md`.
 
@@ -142,10 +181,14 @@ Adjust based on the specific proposal — if a role clearly depends on another's
 >
 > **Escalation triggers** (flag immediately): {escalate_on from Role Menu}
 >
+> {If `{run_dir}/decisions.md` exists: "**Settled decisions:** Read `{run_dir}/decisions.md` — treat as hard constraints. Do not re-litigate."}
+>
 > End with `VERDICT: APPROVED` or `VERDICT: REJECTED` with numbered reasons.
 > Save to `{run_dir}/contrarian--{role}--S2-{NN}.md`.
 
-**Brief update cadence:** After every 2-3 roles complete, update `{run_dir}/S2-brief.md` with their key decisions and conditions. Keep under 1 page.
+**Check decision points** — After each S2 advocate and contrarian saves output, follow the Decision Point Handling protocol above. Since S2 is sequential, decisions from earlier roles inform later roles.
+
+**Brief update cadence:** After every 2-3 roles complete, update `{run_dir}/S2-brief.md` with their key decisions and conditions. Include a "Settled Decisions" summary referencing key decisions from `decisions.md`. Keep under 1 page.
 
 **Loop:** If REJECTED and iterations remain (up to 3), feed rejection back to advocate. If APPROVED, move to next role.
 
@@ -170,6 +213,8 @@ After all Scope 2 roles are approved, run **one consolidated agent** — not per
 > 3. **Gaps between roles** — concerns that fell between disciplines and no one owns
 > 4. **Consolidated open items** — deduplicated list of all conditions, grouped by priority
 >
+> {If `{run_dir}/decisions.md` exists: "**Settled decisions:** Read `{run_dir}/decisions.md`. These are user-confirmed constraints. Flag in your review if any cross-discipline conflict involves a settled decision."}
+>
 > Do NOT introduce new proposals or repeat S2 analysis.
 > **Keep under 800 words.** End with `VERDICT: APPROVED` or `VERDICT: REJECTED` with numbered reasons.
 > Save to `{run_dir}/polish--consolidated--S3-01.md`.
@@ -192,6 +237,8 @@ Same as standard integrator flow. Create `{run_dir}/integrator.md`:
 > - S1 alignment verdicts: skim `{run_dir}/*--S1-*.md` for rejected roles and key flags
 >
 > You do NOT need to read every individual S2 advocate/contrarian file — the brief and polish doc contain the distilled decisions.
+>
+> {If `{run_dir}/decisions.md` exists: "**Settled decisions:** Read `{run_dir}/decisions.md` — incorporate all settled constraints into your unified plan."}
 >
 > Synthesize a unified plan. Write as `### Integrator Advocate` in `{run_dir}/integrator.md`.
 
@@ -230,9 +277,12 @@ When `--no-scopes` is used, fall back to the original single-tier flow:
 
 For each role sequentially:
 1. Spawn advocate agent (full depth, no word cap)
+   - Include settled decisions context if `{run_dir}/decisions.md` exists
 2. Spawn SEPARATE contrarian agent
-3. If REJECTED and iterations remain, loop
-4. If APPROVED, next role
+   - Include settled decisions context if `{run_dir}/decisions.md` exists
+3. **Check decision points** — follow the Decision Point Handling protocol after each advocate and contrarian output
+4. If REJECTED and iterations remain, loop
+5. If APPROVED, next role
 
 Then run integrator duel and summary as above.
 
@@ -244,4 +294,6 @@ Then run integrator duel and summary as above.
 - **Scope 3 is a single consolidated agent** — one cross-discipline check, not per-role pairs.
 - **Briefs over full reads** — later roles and integrator read `S2-brief.md` instead of all individual files.
 - **Word caps are instruction-enforced** — include them in the agent prompt, not as runtime truncation.
+- **Decision points are checked after every agent** — S1 batches (parallel), S2 checks per-role (sequential), S3 and integrator receive all accumulated decisions.
+- **`decisions.md` is the single source of truth** for settled constraints, accumulating throughout the run.
 - File naming: `advocate--marketing--S1-01.md`, `contrarian--engineering--S2-02.md`, `polish--consolidated--S3-01.md`

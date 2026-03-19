@@ -16,6 +16,7 @@ which reads files from a run directory.
 """
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -58,6 +59,8 @@ class DecisionPoint:
     unblocks: str
     options: Optional[List[str]] = field(default=None)
     source_file: Optional[str] = field(default=None)
+    answer: Optional[str] = field(default=None)
+    answered_by: Optional[str] = field(default=None)  # "user" or "assumption"
 
 
 def parse_decision_points(
@@ -184,3 +187,83 @@ def extract_decisions_from_run(run_dir: Path) -> list[DecisionPoint]:
 
     results.sort(key=lambda dp: _PRIORITY_ORDER.get(dp.priority, 99))
     return results
+
+
+def format_settled_decisions(decisions: list[DecisionPoint]) -> str:
+    """Format answered decision points as a settled-decisions markdown document.
+
+    Only includes decisions that have an answer set. Produces a summary table
+    followed by a details section with full metadata.
+    """
+    answered = [dp for dp in decisions if dp.answer is not None]
+
+    if not answered:
+        return "# Settled Decisions\n\n_No decisions have been answered yet._\n"
+
+    lines: list[str] = [
+        "# Settled Decisions",
+        "",
+        "_Treat these as hard constraints. Do not re-litigate._",
+        "",
+        "| # | Decision | Answer | Priority | Source |",
+        "|---|----------|--------|----------|--------|",
+    ]
+
+    for i, dp in enumerate(answered, 1):
+        source = dp.source_file or ""
+        lines.append(f"| {i} | {dp.question} | {dp.answer} | {dp.priority} | {source} |")
+
+    lines.append("")
+    lines.append("## Details")
+    lines.append("")
+
+    for i, dp in enumerate(answered, 1):
+        lines.append(f"### {i}. {dp.question} [{dp.priority}]")
+        lines.append(f"- **Answer:** {dp.answer}")
+        lines.append(f"- **Answered by:** {dp.answered_by or 'unknown'}")
+        lines.append(f"- **Unblocks:** {dp.unblocks}")
+        if dp.source_file:
+            lines.append(f"- **Source:** {dp.source_file}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def save_decisions_json(run_dir: Path, decisions: list[DecisionPoint]) -> Path:
+    """Save decisions to decisions.json in the run directory. Returns the path."""
+    data = [
+        {
+            "priority": dp.priority,
+            "question": dp.question,
+            "unblocks": dp.unblocks,
+            "options": dp.options,
+            "source_file": dp.source_file,
+            "answer": dp.answer,
+            "answered_by": dp.answered_by,
+        }
+        for dp in decisions
+    ]
+    path = Path(run_dir) / "decisions.json"
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return path
+
+
+def load_decisions_json(run_dir: Path) -> list[DecisionPoint]:
+    """Load decisions from decisions.json. Returns empty list if file missing."""
+    path = Path(run_dir) / "decisions.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return []
+    return [
+        DecisionPoint(
+            priority=d["priority"],
+            question=d["question"],
+            unblocks=d["unblocks"],
+            options=d.get("options"),
+            source_file=d.get("source_file"),
+            answer=d.get("answer"),
+            answered_by=d.get("answered_by"),
+        )
+        for d in data
+    ]

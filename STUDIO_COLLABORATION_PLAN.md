@@ -1,6 +1,6 @@
 # Studio Collaboration Plan
 
-Status: **IN PROGRESS** — M1 complete, M2 next
+Status: **IN PROGRESS** — M2 complete, M3 next
 
 ## Vision
 
@@ -83,25 +83,27 @@ This is the instruction-layer piece — what agents write when they hit a gap.
 
 This is the UX piece — where it actually feels collaborative.
 
-- [ ] **T2.1** Decision point detection in orchestrator
+- [x] **T2.1** Decision point detection in orchestrator
   - After each agent completes, parse output for decision point markers
   - Separate P0s (must ask) from P1s (show but continue) from P2s (log only)
 
-- [ ] **T2.2** User interaction flow
+- [x] **T2.2** User interaction flow
   - Surface P0 decision points to user (all at once from a single agent)
   - Wait for user response
   - P1s shown as "FYI — agent is assuming X, override if needed"
 
-- [ ] **T2.3** Answer injection via `decisions.md`
+- [x] **T2.3** Answer injection via `decisions.md`
   - Write user answers to `{run_dir}/decisions.md` with metadata (which agent asked, when, user's response)
   - All subsequent agent prompts include: "Read decisions.md for user-settled constraints"
   - Decisions accumulate across the full run
 
-- [ ] **T2.4** Update slash commands (`run-phase.md`, `run-studio-phase.md`)
+- [x] **T2.4** Update slash commands (`run-phase.md`, `run-studio-phase.md`)
   - Add orchestrator logic: after spawning agent, read output, check for decision points, pause if P0s found
   - Pass `decisions.md` context to next agent
 
-- [ ] **T2.5** Tests and usage docs
+- [x] **T2.5** Tests and usage docs
+
+**M2 complete (2026-03-18):** Orchestrator pause-and-ask shipped. Slash commands detect decision points after each agent, pause on P0s, show P1s as FYI, and inject answers into subsequent agents via `decisions.md`. Both `/run-phase` and `/run-studio-phase` updated. `record-decisions` and `check-decisions` subcommands added to `run_phase.py`. 259 tests passing (10 new).
 
 **MVI test:** Run a phase, get asked questions between advocate and contrarian, see your answers reflected in the contrarian's response as settled constraints.
 
