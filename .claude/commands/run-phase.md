@@ -43,6 +43,8 @@ For each iteration (up to max_iterations):
 >
 > {If `{run_dir}/decisions.md` exists: "Read `{run_dir}/decisions.md` for settled constraints from prior iterations. Treat these as hard constraints — do not re-litigate."}
 >
+> {If `{run_dir}/clarity.json` exists, run `python "$STUDIO_ROOT/run_phase.py" show-clarity` and include the output here. Tell the agent: "**Clarity context:** Topics marked Settled are constraints — do not re-litigate. For topics marked Needs work, actively surface decision points. For Settling topics, only flag genuine new gaps."}
+>
 > **Decision Point Protocol:** When you encounter a gap, ambiguity, or fork that could meaningfully change your approach, flag it inline using this exact blockquote format:
 >
 > ```
@@ -76,11 +78,19 @@ python "$STUDIO_ROOT/run_phase.py" record-decisions --run-dir {run_dir} --decisi
 ```
 JSON format: `[{"priority": "P0", "question": "...", "answer": "...", "unblocks": "...", "source_file": "advocate_{N}.md", "answered_by": "user"}, ...]`
 
+After recording, show updated clarity scores to the user:
+```bash
+python "$STUDIO_ROOT/run_phase.py" show-clarity
+```
+This displays per-topic confidence scores so the user can see which areas are settling and which still need work. If a topic score seems wrong, the user can override: `python "$STUDIO_ROOT/run_phase.py" set-clarity --topic <slug> --score <0.0-1.0>`.
+
 **c. Contrarian** — Use the Agent tool to spawn a SEPARATE subagent with this prompt:
 
 > You are the **Contrarian** for this Studio run. Your role: {contrarian role from instructions.md}.
 >
 > {If `{run_dir}/decisions.md` exists: "Read `{run_dir}/decisions.md` first. Treat settled decisions as hard constraints — do not re-litigate them. Focus your critique on everything else."}
+>
+> {If clarity data exists, include the same clarity context from the advocate prompt above — settled topics are constraints, unsettled topics should be explored.}
 >
 > Read the advocate's proposal at `{run_dir}/advocate_{N}.md`.
 >

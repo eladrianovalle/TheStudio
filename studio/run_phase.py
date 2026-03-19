@@ -62,6 +62,18 @@ from rerun import (
 )
 from validators.code_validator import CodeValidator
 
+# Clarity module — lazy-loaded to avoid hard dependency during cross-repo installs
+_clarity = None
+def _load_clarity():
+    global _clarity
+    if _clarity is None:
+        try:
+            import clarity as _mod
+            _clarity = _mod
+        except ImportError:
+            pass
+    return _clarity
+
 try:
     import tomllib  # Python 3.11+
 except ModuleNotFoundError:
@@ -533,7 +545,8 @@ def _append_run_log(meta: Dict) -> None:
 
 def build_instruction_doc(
     meta: Dict, run_dir: Path, studio_roles: List[RoleDetails] | None = None,
-    scopes_config=None, scopes_allocations: Dict[str, int] | None = None
+    scopes_config=None, scopes_allocations: Dict[str, int] | None = None,
+    clarity_snapshot=None,
 ) -> str:
     phase = meta["phase"]
     info = PHASE_DETAILS[phase]
@@ -718,6 +731,15 @@ def build_instruction_doc(
             "If the advocate assumed something that is actually unsettled, flag it as a decision point. Your primary job remains challenging the proposal — decision points are a secondary output, not your focus.",
         ])
 
+    # Clarity-guided focus section — inject if clarity data exists
+    clarity_section: List[str] = []
+    _cl = _load_clarity()
+    if _cl and clarity_snapshot is not None and not is_qmode:
+        scope_name = "depth"  # default
+        if scopes_config and scopes_config.scopes:
+            scope_name = scopes_config.scopes[0].name
+        clarity_section.append(_cl.generate_clarity_instructions(clarity_snapshot, scope_name))
+
     role_menu_section: List[str] = []
     if phase == "studio" and studio_roles:
         role_menu_section.extend(
@@ -836,6 +858,7 @@ def build_instruction_doc(
                 + roles_section
                 + loop_section
                 + decision_point_section
+                + clarity_section
                 + role_menu_section
                 + integrator_duel_section
                 + summary_section
@@ -1031,7 +1054,16 @@ def prepare_run(args: argparse.Namespace) -> str:
     scopes_config, scopes_allocations, scopes_meta = _resolve_scopes(args)
     meta = _build_run_meta(phase, text, now, run_id, args, studio_role_meta, scopes_meta)
 
-    instructions = build_instruction_doc(meta, run_dir, studio_role_details, scopes_config, scopes_allocations)
+    # Load project-level clarity for instruction injection
+    project_clarity = None
+    _cl = _load_clarity()
+    if _cl:
+        project_clarity = _cl.load_project_clarity(get_artifact_root())
+
+    instructions = build_instruction_doc(
+        meta, run_dir, studio_role_details, scopes_config, scopes_allocations,
+        clarity_snapshot=project_clarity,
+    )
     instructions_path = run_dir / "instructions.md"
     instructions_path.write_text(instructions, encoding="utf-8")
     instructions_abs_path = instructions_path.resolve()
@@ -1132,6 +1164,18 @@ def finalize_run(args: argparse.Namespace) -> None:
                 format_decisions_log(existing), encoding="utf-8"
             )
         print(f"Generated {decisions_path.name} with {len(existing)} decision point(s)")
+
+        # Recompute clarity from merged decisions
+        _cl = _load_clarity()
+        if _cl:
+            context = _cl.detect_context_scope(meta.get("input", ""))
+            prior = _cl.load_project_clarity(get_artifact_root())
+            snapshot = _cl.compute_clarity_snapshot(
+                existing, context, run_id=run_id, prior_snapshot=prior
+            )
+            _cl.save_clarity_json(run_dir / "clarity.json", snapshot)
+            _cl.save_project_clarity(get_artifact_root(), snapshot)
+            print(f"Updated clarity scores ({len(snapshot.topics)} topic(s), mean: {snapshot.mean_score:.2f})")
 
     print(f"Finalized {run_id} ({phase}) → {meta['status']}")
     
@@ -1443,6 +1487,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to the target project directory.",
     )
 
+    # --- Clarity commands ---
+    show_clarity_parser = subparsers.add_parser(
+        "show-clarity", help="Display current project clarity scores."
+    )
+    show_clarity_parser.add_argument(
+        "--artifact-root", type=Path, default=None,
+        help="Override artifact root directory.",
+    )
+
+    set_clarity_parser = subparsers.add_parser(
+        "set-clarity", help="Override a topic's clarity score."
+    )
+    set_clarity_parser.add_argument("--topic", required=True, help="Topic slug.")
+    set_clarity_parser.add_argument("--score", type=float, default=None, help="Override score (0.0-1.0).")
+    set_clarity_parser.add_argument("--reset", action="store_true", help="Remove user override.")
+    set_clarity_parser.add_argument(
+        "--artifact-root", type=Path, default=None,
+        help="Override artifact root directory.",
+    )
+
+    recompute_clarity_parser = subparsers.add_parser(
+        "recompute-clarity", help="Recompute clarity from a run's decisions."
+    )
+    recompute_clarity_parser.add_argument("--phase", required=True, choices=sorted(PHASE_DETAILS.keys()))
+    recompute_clarity_parser.add_argument("--run-id", required=True)
+    recompute_clarity_parser.add_argument(
+        "--artifact-root", type=Path, default=None,
+        help="Override artifact root directory.",
+    )
+
     return parser
 
 
@@ -1631,6 +1705,68 @@ def check_decisions(args: argparse.Namespace) -> None:
     print(json.dumps(grouped, indent=2))
 
 
+def show_clarity(args: argparse.Namespace) -> None:
+    """Display current project clarity scores."""
+    _cl = _load_clarity()
+    if not _cl:
+        print("Clarity module not available.")
+        return
+    root = Path(args.artifact_root).resolve() if args.artifact_root else get_artifact_root()
+    snapshot = _cl.load_project_clarity(root)
+    if snapshot is None:
+        print("No clarity data yet. Run a phase with decision points first.")
+        return
+    print(_cl.format_clarity_summary(snapshot))
+
+
+def set_clarity(args: argparse.Namespace) -> None:
+    """Override a topic's clarity score."""
+    _cl = _load_clarity()
+    if not _cl:
+        print("Clarity module not available.")
+        return
+    root = Path(args.artifact_root).resolve() if args.artifact_root else get_artifact_root()
+    snapshot = _cl.load_project_clarity(root)
+    if snapshot is None:
+        print("No clarity data yet. Run a phase with decision points first.")
+        return
+    if args.reset:
+        snapshot = _cl.apply_user_overrides(snapshot, {args.topic: None})
+    elif args.score is not None:
+        snapshot = _cl.apply_user_overrides(snapshot, {args.topic: args.score})
+    else:
+        print("Provide --score VALUE or --reset")
+        return
+    _cl.save_project_clarity(root, snapshot)
+    print(_cl.format_clarity_summary(snapshot))
+
+
+def recompute_clarity(args: argparse.Namespace) -> None:
+    """Recompute clarity from a run's decisions."""
+    _cl = _load_clarity()
+    if not _cl:
+        print("Clarity module not available.")
+        return
+    root = Path(args.artifact_root).resolve() if args.artifact_root else get_artifact_root()
+    phase = args.phase.lower()
+    run_id = args.run_id
+    run_dir = get_output_root() / phase / run_id
+    if not run_dir.is_dir():
+        raise FileNotFoundError(f"Run directory not found: {run_dir}")
+    decisions = load_decisions_json(run_dir)
+    meta_path = run_dir / "run.json"
+    input_text = ""
+    if meta_path.is_file():
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        input_text = meta.get("input", "")
+    context = _cl.detect_context_scope(input_text)
+    prior = _cl.load_project_clarity(root)
+    snapshot = _cl.compute_clarity_snapshot(decisions, context, run_id=run_id, prior_snapshot=prior)
+    _cl.save_clarity_json(run_dir / "clarity.json", snapshot)
+    _cl.save_project_clarity(root, snapshot)
+    print(_cl.format_clarity_summary(snapshot))
+
+
 def _do_init(args: argparse.Namespace) -> None:
     """Install Studio into a target project."""
     from install import install_studio  # lazy: install.py absent in cross-repo installs
@@ -1707,6 +1843,12 @@ def main() -> None:
         _do_check_install(args)
     elif args.command == "update":
         _do_update(args)
+    elif args.command == "show-clarity":
+        show_clarity(args)
+    elif args.command == "set-clarity":
+        set_clarity(args)
+    elif args.command == "recompute-clarity":
+        recompute_clarity(args)
     else:
         raise ValueError("Unknown command")
 

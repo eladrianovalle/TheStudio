@@ -1,6 +1,6 @@
 # Studio Collaboration Plan
 
-Status: **IN PROGRESS** — M5 complete, M3 next
+Status: **IN PROGRESS** — M3 complete, M4 next
 
 ## Vision
 
@@ -115,31 +115,33 @@ This is the UX piece — where it actually feels collaborative.
 
 This is the intelligence layer — the system gets smarter about when to ask.
 
-- [ ] **T3.1** Clarity score model
+- [x] **T3.1** Clarity score model
   - Per-topic scores (e.g., `core_loop: 0.8`, `monetization: 0.3`)
   - Computed from: questions answered, decisions made, assumption-to-fact ratio
   - Scoped to context: broad (whole game analysis) or narrow (single feature)
 
-- [ ] **T3.2** Automatic marker tracking
+- [x] **T3.2** Automatic marker tracking
   - Track which topics have been addressed by user decisions
   - Increment clarity when questions are answered, decisions confirmed
   - Decrement or flag when contrarians challenge settled assumptions
 
-- [ ] **T3.3** User validation
+- [x] **T3.3** User validation
   - After clarity is computed, surface it to user for confirmation
   - User can override: "I'm not actually confident about X" or "X is more settled than you think"
   - Validated clarity persists in `decisions.md` or a dedicated `clarity.json`
 
-- [ ] **T3.4** Clarity-driven question density
+- [x] **T3.4** Clarity-driven question density
   - Low clarity topics → agents instructed to surface more decision points
   - High clarity topics → agents instructed to treat prior decisions as constraints, only flag genuine new gaps
   - Maps naturally to scoped debate: S1 alignment (low clarity, many questions) → S2 depth (higher clarity, fewer questions) → S3 polish (high clarity, rare questions)
 
-- [ ] **T3.5** Context-adaptive scoping
+- [x] **T3.5** Context-adaptive scoping
   - When user asks about "the game" → broad clarity scope
   - When user asks about "the inventory system" → narrow scope, clarity tracked for that feature's concerns
 
-- [ ] **T3.6** Tests and usage docs
+- [x] **T3.6** Tests and usage docs
+
+**M3 complete (2026-03-19):** Clarity Score shipped. `clarity.py` module with per-topic scoring, automatic tracking from decisions, user override CLI (`show-clarity`, `set-clarity`, `recompute-clarity`), context-adaptive scoping (broad/narrow), and clarity-driven question density injected into agent instructions. Slash commands show clarity after decision recording. 338 tests passing (57 new).
 
 **MVI test:** Run a multi-scope studio phase, observe question density naturally decrease as you answer decision points. Clarity scores visible and overridable.
 

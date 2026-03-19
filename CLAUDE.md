@@ -46,6 +46,12 @@ python studio/run_phase.py finalize --phase <phase> --run-id <run_id> --status c
 # Validate a run
 python studio/run_phase.py validate --phase <phase> --run-id <run_id>
 
+# Clarity scores
+python studio/run_phase.py show-clarity
+python studio/run_phase.py set-clarity --topic core_loop_design --score 0.9
+python studio/run_phase.py set-clarity --topic core_loop_design --reset
+python studio/run_phase.py recompute-clarity --phase studio --run-id <run_id>
+
 # Storage cleanup
 python studio/run_phase.py cleanup --dry-run
 python studio/run_phase.py cleanup
@@ -69,6 +75,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 - **`rerun.py`** — Detects rejection context from prior runs and generates rerun instructions.
 - **`question_mode.py`** — Question-surfacing mode: generates P0/P1/P2 question instructions for advocate/contrarian instead of deliverable prompts. Pure function library, no I/O.
 - **`decision_points.py`** — Parses and formats inline decision points (P0/P1/P2 blockquotes) from agent output. Extracts decisions from completed runs into a consolidated log.
+- **`clarity.py`** — Per-topic Clarity Score tracking. Computes confidence from answered decisions, controls agent question density, persists to `clarity.json`. CLI: `show-clarity`, `set-clarity`, `recompute-clarity`.
 - **`verdict.py`** — Extracts APPROVED/REJECTED/UNKNOWN verdict from text.
 - **`validators/`** — `DocumentValidator` (including `validate_question_mode()`) and `CodeValidator` for post-run quality checks.
 

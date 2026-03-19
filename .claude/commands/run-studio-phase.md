@@ -46,7 +46,14 @@ Read the generated `instructions.md` file. Pay attention to:
    `python "$STUDIO_ROOT/run_phase.py" record-decisions --run-dir {run_dir} --decisions-file {tmp_json_path}`
    JSON format: `[{"priority": "P0", "question": "...", "answer": "...", "unblocks": "...", "source_file": "[filename]", "answered_by": "user"}, ...]`
 
-4. **Settled context** — If `{run_dir}/decisions.md` exists, ALL subsequent agent prompts must include:
+   After recording, show updated clarity scores: `python "$STUDIO_ROOT/run_phase.py" show-clarity`
+   Display the scores to the user — they can override with `set-clarity --topic <slug> --score <0.0-1.0>`.
+
+4. **Clarity context** — If clarity data exists (`python "$STUDIO_ROOT/run_phase.py" show-clarity` returns results), include in ALL subsequent agent prompts:
+   > **Clarity context:** Topics marked Settled are constraints — do not re-litigate. For topics marked Needs work, actively surface decision points. For Settling topics, only flag genuine new gaps.
+   Include the clarity summary table so agents can see which topics need attention.
+
+5. **Settled context** — If `{run_dir}/decisions.md` exists, ALL subsequent agent prompts must include:
    > Read `{run_dir}/decisions.md` for settled constraints. Treat these as hard constraints — do not re-litigate.
 
 ### Step 3: Execute Scoped Debate

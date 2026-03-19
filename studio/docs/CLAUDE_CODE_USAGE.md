@@ -156,6 +156,40 @@ This works in both single-phase (`/run-phase`) and multi-role (`/run-studio-phas
 - **S2 (Depth):** Decisions checked per-role (sequential), earlier role decisions inform later roles
 - **S3 (Polish) + Integrator:** Receive all accumulated decisions as constraints
 
+### Clarity Scores (Adaptive Question Density)
+
+As decisions accumulate, Studio tracks **per-topic clarity scores** — a confidence metric that controls how aggressively agents surface new decision points.
+
+| Score | Status | Agent behavior |
+|-------|--------|----------------|
+| 0.0–0.4 | Needs work | Actively surface decision points on this topic |
+| 0.4–0.7 | Settling | Only flag genuine new gaps |
+| 0.7–1.0 | Settled | Treat as constraint, do not re-litigate |
+
+Scores are computed from: decisions answered / total decisions surfaced, with a mild penalty for contrarian challenges. They persist across runs in `.studio/clarity.json`.
+
+**Viewing and overriding clarity:**
+```bash
+# Show current project clarity
+python studio/run_phase.py show-clarity
+
+# Override a topic score (if the system has it wrong)
+python studio/run_phase.py set-clarity --topic core_loop_design --score 0.9
+
+# Reset an override (back to computed score)
+python studio/run_phase.py set-clarity --topic core_loop_design --reset
+
+# Recompute from a specific run's decisions
+python studio/run_phase.py recompute-clarity --phase studio --run-id run_studio_20260319_143000
+```
+
+**Context-adaptive scoping:** Studio detects whether you're analyzing something broad ("a cozy farming sim") or narrow ("build the inventory system") and tracks clarity accordingly. Broad runs produce more topics; narrow runs focus on what that feature needs.
+
+**Natural scope progression:** Clarity maps to scoped debate tiers:
+- **S1 Alignment** (low clarity) → many decision points
+- **S2 Depth** (medium-high clarity) → fewer, only genuine gaps
+- **S3 Polish** (high clarity) → rare, mostly confirmations
+
 ---
 
 ## Cross-Repo Usage
