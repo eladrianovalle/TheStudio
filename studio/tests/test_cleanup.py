@@ -10,6 +10,7 @@ from cleanup import (
     cleanup_runs,
     format_bytes,
     load_cleanup_settings,
+    _cleanup_loose_files,
     DEFAULT_TTL_DAYS,
     DEFAULT_SIZE_LIMIT_MB,
 )
@@ -192,6 +193,97 @@ def test_corrupt_run_json_does_not_crash(tmp_path):
     assert report.total_runs == 2
     assert report.errors == []
     assert valid_run.exists()
+
+
+# ── format_bytes edge cases ──────────────────────────────────────────
+
+
+# ── Loose file cleanup tests ─────────────────────────────────────────
+
+
+def _write_loose_file(output_root: Path, *parts: str, age_days: int = 0) -> Path:
+    """Create a loose file and backdate its mtime."""
+    path = output_root.joinpath(*parts)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("legacy content", encoding="utf-8")
+    if age_days > 0:
+        import os
+        old_time = (datetime.now(timezone.utc) - timedelta(days=age_days)).timestamp()
+        os.utime(path, (old_time, old_time))
+    return path
+
+
+def test_loose_files_deleted_when_older_than_ttl(tmp_path):
+    """Loose files older than TTL are removed."""
+    output_root = tmp_path / "output"
+    old_file = _write_loose_file(output_root, "old_pipeline.json", age_days=45)
+    fresh_file = _write_loose_file(output_root, "recent.json", age_days=5)
+
+    settings = CleanupSettings(ttl_days=30, size_limit_mb=900)
+    errors = _cleanup_loose_files(output_root, settings)
+
+    assert not old_file.exists()
+    assert fresh_file.exists()
+    assert errors == []
+
+
+def test_loose_files_in_phase_dirs_cleaned(tmp_path):
+    """Loose files inside phase subdirectories are also cleaned."""
+    output_root = tmp_path / "output"
+    old_file = _write_loose_file(output_root, "market", "market_20251220.md", age_days=100)
+    # A run directory should be untouched by loose file cleanup
+    run_dir = output_root / "market" / "run_market_20260101"
+    run_dir.mkdir(parents=True)
+    (run_dir / "instructions.md").write_text("keep me")
+
+    settings = CleanupSettings(ttl_days=30, size_limit_mb=900)
+    _cleanup_loose_files(output_root, settings)
+
+    assert not old_file.exists()
+    assert (run_dir / "instructions.md").exists()
+
+
+def test_index_md_preserved(tmp_path):
+    """index.md is preserved even when older than TTL."""
+    output_root = tmp_path / "output"
+    index = _write_loose_file(output_root, "index.md", age_days=100)
+
+    settings = CleanupSettings(ttl_days=30, size_limit_mb=900)
+    _cleanup_loose_files(output_root, settings)
+
+    assert index.exists()
+
+
+def test_loose_files_dry_run_via_cleanup_runs(tmp_path):
+    """Loose files are not deleted in dry_run mode (via cleanup_runs integration)."""
+    output_root = tmp_path / "output"
+    old_file = _write_loose_file(output_root, "legacy.json", age_days=60)
+
+    settings = CleanupSettings(ttl_days=30, size_limit_mb=900)
+    now = datetime.now(timezone.utc)
+    cleanup_runs(output_root, settings, now=now, dry_run=True)
+
+    assert old_file.exists()
+
+
+def test_loose_files_no_dir_no_error(tmp_path):
+    """No error when output root doesn't exist."""
+    output_root = tmp_path / "nonexistent"
+    settings = CleanupSettings(ttl_days=30, size_limit_mb=900)
+    errors = _cleanup_loose_files(output_root, settings)
+    assert errors == []
+
+
+def test_loose_files_ttl_zero_skips(tmp_path):
+    """TTL of 0 means no TTL enforcement — loose files not cleaned."""
+    output_root = tmp_path / "output"
+    old_file = _write_loose_file(output_root, "ancient.json", age_days=500)
+
+    settings = CleanupSettings(ttl_days=0, size_limit_mb=900)
+    errors = _cleanup_loose_files(output_root, settings)
+
+    assert old_file.exists()
+    assert errors == []
 
 
 # ── format_bytes edge cases ──────────────────────────────────────────
