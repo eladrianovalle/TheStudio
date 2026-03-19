@@ -59,6 +59,23 @@ EXTRA_WHITESPACE = """\
 > **Options:**  (a) Small  (b) Medium  (c) Large
 """
 
+# Alternate format: question inside bold (what agents naturally produce)
+ALT_FORMAT_INSIDE_BOLD = """\
+> **DECISION [P0]: When does the boss phase trigger?**
+> **Unblocks:** Round progression design, endgame pacing
+> **Options:** (a) After round 5 (b) After all enemies cleared
+"""
+
+ALT_FORMAT_MIXED = """\
+> **DECISION [P0]:** Standard format question
+> **Unblocks:** Something
+> **Options:** (a) A (b) B
+
+> **DECISION [P1]: Alt format question inside bold**
+> **Unblocks:** Something else
+> **Options:** (a) X (b) Y
+"""
+
 # Malformed: no blockquote prefix — should not be parsed
 MALFORMED_NO_BLOCKQUOTE = """\
 **DECISION [P0]:** Orphan decision without blockquote prefix
@@ -132,6 +149,22 @@ class TestParseDecisionPoints:
         """Empty string returns empty list."""
         results = parse_decision_points("")
         assert results == []
+
+    def test_parse_alt_format_question_inside_bold(self):
+        """Parse decision point where question is inside the bold markers."""
+        results = parse_decision_points(ALT_FORMAT_INSIDE_BOLD)
+        assert len(results) == 1
+        dp = results[0]
+        assert dp.priority == "P0"
+        assert "boss phase" in dp.question.lower()
+        assert "Round progression" in dp.unblocks
+
+    def test_parse_alt_format_mixed_with_standard(self):
+        """Parse both standard and alt format decision points in the same text."""
+        results = parse_decision_points(ALT_FORMAT_MIXED)
+        assert len(results) == 2
+        assert results[0].priority == "P0"
+        assert results[1].priority == "P1"
 
     def test_parse_malformed_no_blockquote(self):
         """Decision without blockquote prefix is not parsed."""

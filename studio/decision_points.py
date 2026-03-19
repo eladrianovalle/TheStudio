@@ -16,6 +16,7 @@ which reads files from a run directory.
 """
 from __future__ import annotations
 
+import itertools
 import json
 import re
 from dataclasses import dataclass, field
@@ -27,15 +28,24 @@ from typing import List, Optional
 _PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2}
 
 # Regex to count DECISION lines (used by validator for quick counting).
+# Accepts both `**DECISION [P0]:**` and `**DECISION [P0]: ...**`
 DECISION_LINE_RE = re.compile(
-    r"^>\s*\*\*DECISION\s*\[P[012]\]:\*\*", re.MULTILINE | re.IGNORECASE
+    r"^>\s*\*\*DECISION\s*\[P[012]\]:", re.MULTILINE | re.IGNORECASE
 )
 
 # Regex to capture a decision point blockquote.
-# Matches lines starting with "> " where the first line has **DECISION [P0-2]:**
+# Matches lines starting with "> " where the first line has **DECISION [P0-2]:
+# Handles two variants agents produce:
+#   > **DECISION [P0]:** question text here     (canonical — colon outside bold)
+#   > **DECISION [P0]: question text here**     (natural — question inside bold)
 # and continues as long as lines start with "> ".
 _BLOCK_RE = re.compile(
     r"^> \*\*DECISION \[(P[012])\]:\*\*\s*(.+)\n"
+    r"((?:> .+\n?)*)",
+    re.MULTILINE | re.IGNORECASE,
+)
+_BLOCK_RE_ALT = re.compile(
+    r"^> \*\*DECISION \[(P[012])\]:\s*(.+?)\*\*\s*\n"
     r"((?:> .+\n?)*)",
     re.MULTILINE | re.IGNORECASE,
 )
@@ -72,8 +82,13 @@ def parse_decision_points(
     Returns list sorted by priority (P0 first).
     """
     results: list[DecisionPoint] = []
+    seen_spans: set[tuple[int, int]] = set()
 
-    for match in _BLOCK_RE.finditer(text):
+    for match in itertools.chain(_BLOCK_RE.finditer(text), _BLOCK_RE_ALT.finditer(text)):
+        span = (match.start(), match.end())
+        if span in seen_spans:
+            continue
+        seen_spans.add(span)
         priority = match.group(1).upper()
         question = match.group(2).strip()
         body_lines = match.group(3)
