@@ -1633,7 +1633,7 @@ def check_decisions(args: argparse.Namespace) -> None:
 
 def _do_init(args: argparse.Namespace) -> None:
     """Install Studio into a target project."""
-    from install import install_studio
+    from install import install_studio  # lazy: install.py absent in cross-repo installs
     target = Path(args.target).resolve()
     if not target.is_dir():
         raise FileNotFoundError(f"Target directory not found: {target}")
@@ -1647,7 +1647,7 @@ def _do_init(args: argparse.Namespace) -> None:
 
 def _do_check_install(args: argparse.Namespace) -> None:
     """Check if installed Studio is up to date."""
-    from install import check_studio
+    from install import check_studio  # lazy: install.py absent in cross-repo installs
     target = Path(args.target).resolve()
     status = check_studio(target)
     if not status["installed"]:
@@ -1667,7 +1667,7 @@ def _do_check_install(args: argparse.Namespace) -> None:
 
 def _do_update(args: argparse.Namespace) -> None:
     """Update installed Studio from source."""
-    from install import update_studio
+    from install import update_studio  # lazy: install.py absent in cross-repo installs
     target = Path(args.target).resolve()
     result = update_studio(target)
     if result["updated"] == 0 and result["added"] == 0:

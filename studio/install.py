@@ -234,7 +234,10 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
     # Load installed manifest
     installed_manifest: Dict[str, str] = {}
     if manifest_path.exists():
-        installed_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        try:
+            installed_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, ValueError):
+            installed_manifest = {}
 
     # Build current source manifest
     source_files = _collect_source_files(studio_dir)
