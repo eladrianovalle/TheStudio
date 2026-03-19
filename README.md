@@ -220,7 +220,7 @@ Keep installed copies current: `python studio/run_phase.py check-install --targe
 | `status` / `verdict` | `COMPLETED` + `APPROVED`/`REJECTED` after finalize |
 | `studio_roles` | `{pack, overrides, invited, completed, missing}` |
 | `quality` | Finalize-time quality checks: `{checks_run, warnings, errors}` |
-| `token_budget` | Per-scope output stats: `{files, total_chars, avg_words}` |
+| `scope_stats` | Per-scope output stats: `{files, total_chars, avg_words}` |
 
 ---
 
@@ -260,9 +260,9 @@ Finalize runs quality checks on every advocate/contrarian artifact (warnings onl
 - **Verdict presence**: Warns if contrarian files lack `VERDICT: APPROVED/REJECTED`
 - **Rubber-stamp detection**: Flags files under 200 characters
 - **Format validation**: Checks markdown structure, title presence, list formatting
-- **Token budget tracking**: Measures output per scope (chars, words, file count)
+- **Scope stats tracking**: Measures output per scope (chars, words, file count)
 
-Results are stored in `run.json["quality"]` and `run.json["token_budget"]`.
+Results are stored in `run.json["quality"]` and `run.json["scope_stats"]`.
 
 ---
 

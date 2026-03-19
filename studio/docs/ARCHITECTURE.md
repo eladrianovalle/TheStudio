@@ -105,7 +105,7 @@ No automation runs outside the assistant; the instructions are simply executed a
    - Non-Studio phases: glob `advocate_<n>.md` / `contrarian_<n>.md` / `implementation.md`.
    - Studio phase: iterate through the invited roles stored in `run.json["studio_roles"]["invited"]`, using `collect_role_artifacts` to confirm both advocate and contrarian files exist. Missing roles are recorded.
    - Verify `integrator.md` and `summary.md`.
-   - **Quality checks** (single-pass, warnings only): verdict presence, rubber-stamp detection (<200 chars), format validation, and scope stats tracking per scope. Results stored in `run.json["quality"]` and `run.json["token_budget"]`.
+   - **Quality checks** (single-pass, warnings only): verdict presence, rubber-stamp detection (<200 chars), format validation, and scope stats tracking per scope. Results stored in `run.json["quality"]` and `run.json["scope_stats"]`.
 4. Finalize updates `run.json` with status, verdict, hours, cost, iterations, quality checks, scope stats, and for Studio: `completed` + `missing` role lists.
 5. The active index/log (`<active_output_root>/index.md` and `<active_knowledge_root>/run_log.md`) are refreshed, giving downstream repos searchable entries with summary links.
 
