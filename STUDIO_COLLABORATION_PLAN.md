@@ -195,6 +195,6 @@ This is the intelligence layer — the system gets smarter about when to ask.
   - Update: no-op when current, refreshes changed files, raises if not installed
   - Rewriting: $STUDIO_ROOT replacement, prompt doc refs, preserves other content
 
-**M5 complete (2026-03-19):** Cross-repo install shipped. `studio init` installs slash commands + source into any project. `/run-phase` and `/run-studio-phase` work natively with pause-and-ask. 281 tests passing (20 new).
+**M5 complete (2026-03-19):** Cross-repo install shipped. `studio init` installs slash commands + source into any project. `/run-phase` and `/run-studio-phase` work natively with pause-and-ask. 281 tests at time of commit (20 new); M5 shipped before M3/M4 in development order.
 
 **MVI test:** Run `python run_phase.py init --target /path/to/project`, then `/run-phase --phase design --text "Boss fight"` from that project — get paused on P0 decisions.

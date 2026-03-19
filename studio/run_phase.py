@@ -197,7 +197,12 @@ CLEANUP_SKIP_ENV = "STUDIO_SKIP_CLEANUP"
 CLEANUP_DRY_ENV = "STUDIO_CLEANUP_DRY_RUN"
 ARTIFACT_ROOT_ENV = "STUDIO_ARTIFACT_ROOT"
 
-SUBCOMMANDS = {"prepare", "finalize", "cleanup", "validate"}
+SUBCOMMANDS = {
+    "prepare", "finalize", "cleanup", "validate",
+    "record-decisions", "check-decisions",
+    "init", "check-install", "update",
+    "show-clarity", "set-clarity", "recompute-clarity",
+}
 
 
 def _resolve_env_path(value: str) -> Path:
@@ -516,7 +521,7 @@ def _validate_artifacts(
 
         for stats in scope_stats.values():
             stats["avg_words"] = round(stats["total_words"] / max(stats["files"], 1))
-        meta["token_budget"] = scope_stats
+        meta["scope_stats"] = scope_stats
 
     return iterations_value, advocate_names, completed_roles, missing_roles
 

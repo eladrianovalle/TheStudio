@@ -28,12 +28,22 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 
 | Component | Purpose |
 | --- | --- |
-| `run_phase.py` | CLI entrypoint for `prepare` and `finalize`. Generates instructions, enforces artifact checklists, and keeps indexes current. |
-| `run_phase_roles.py` | Helper module that loads `studio.manifest.json`, applies role packs with dependency injection, and normalizes per-role filenames (flat and scoped). |
+| `run_phase.py` | CLI entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, clarity, install, and decision subcommands. |
+| `run_phase_roles.py` | Loads `studio.manifest.json`, applies role packs with dependency injection, applies project-local overrides, and normalizes per-role filenames. |
+| `role_overrides.py` | Project-local role customization: loads `.studio/roles/*.json` overlays, validates structure, shallow-merges with manifest roles. |
+| `decision_points.py` | Inline decision point parsing (P0/P1/P2 blockquote format), formatting, `decisions.md` generation, run directory scanning. |
+| `clarity.py` | Per-topic Clarity Score tracking from answered decisions. Controls agent question density and adapts to context scope. |
+| `question_mode.py` | Pre-flight question surfacing (`--mode questions`): generates decision-collection instructions for advocate/contrarian. |
 | `scopes.py` | Three-tier scope configuration: alignment → depth → polish, with output budgets and debate modes. |
+| `cleanup.py` | TTL-based (30 days) and budget-based (900 MB) run artifact cleanup. |
+| `rerun.py` | Detects rejection context from prior runs and generates rerun instructions. |
+| `verdict.py` | Extracts APPROVED/REJECTED/UNKNOWN verdict from agent output. |
+| `install.py` | Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project. |
+| `validators/` | `DocumentValidator` and `CodeValidator` for post-run quality checks. |
 | `studio.manifest.json` | Declarative description of phase-level personas, Studio role definitions, and role dependencies. |
 | `role_packs/*.json` | Curated sets of Studio roles (e.g., `studio_core`). Operators pick a pack, then add/remove roles with CLI flags. |
 | `config/scopes.toml` | Default scope configuration for studio phase runs. |
+| `.studio/roles/*.json` | Project-local role overrides. Shallow-merge with manifest roles (override keys replace base, unspecified keys inherit). |
 | `docs/role_prompts/*.md` | Long-form prompts for each role. Instructions link to these files rather than inlining pages of text. |
 | Active output root (`output/` or `.studio/output/`) | Run folders containing instructions, advocate/contrarian artifacts, integrator plans, summaries, and metadata. |
 | Active knowledge log (`knowledge/run_log.md` or `.studio/knowledge/run_log.md`) | Append-only log of finalized runs for easy reference across repos. |
@@ -95,8 +105,8 @@ No automation runs outside the assistant; the instructions are simply executed a
    - Non-Studio phases: glob `advocate_<n>.md` / `contrarian_<n>.md` / `implementation.md`.
    - Studio phase: iterate through the invited roles stored in `run.json["studio_roles"]["invited"]`, using `collect_role_artifacts` to confirm both advocate and contrarian files exist. Missing roles are recorded.
    - Verify `integrator.md` and `summary.md`.
-   - **Quality checks** (single-pass, warnings only): verdict presence, rubber-stamp detection (<200 chars), format validation, and token budget tracking per scope. Results stored in `run.json["quality"]` and `run.json["token_budget"]`.
-4. Finalize updates `run.json` with status, verdict, hours, cost, iterations, quality checks, token budget, and for Studio: `completed` + `missing` role lists.
+   - **Quality checks** (single-pass, warnings only): verdict presence, rubber-stamp detection (<200 chars), format validation, and scope stats tracking per scope. Results stored in `run.json["quality"]` and `run.json["token_budget"]`.
+4. Finalize updates `run.json` with status, verdict, hours, cost, iterations, quality checks, scope stats, and for Studio: `completed` + `missing` role lists.
 5. The active index/log (`<active_output_root>/index.md` and `<active_knowledge_root>/run_log.md`) are refreshed, giving downstream repos searchable entries with summary links.
 
 ---

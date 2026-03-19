@@ -15,7 +15,6 @@ from install import (
     check_studio,
     update_studio,
     _rewrite_slash_command,
-    _collect_source_files,
 )
 
 

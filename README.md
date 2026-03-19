@@ -283,6 +283,7 @@ Configure in `config/studio_settings.toml`. Use `--skip-cleanup` to bypass.
 studio/
   run_phase.py              # CLI entrypoint: prepare, finalize, validate, cleanup, clarity, install
   run_phase_roles.py        # Role system: manifest, packs, dependencies, file naming
+  role_overrides.py         # Project-local role customization (.studio/roles/*.json)
   scopes.py                 # Three-tier scope allocation (alignment/depth/polish)
   decision_points.py        # Inline decision point parsing, formatting, persistence
   clarity.py                # Per-topic Clarity Score tracking and question density control
@@ -297,7 +298,7 @@ studio/
   config/scopes.toml         # Default scope configuration
   config/studio_settings.toml # Cleanup settings
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 338 tests (pytest)
+  tests/                    # 366 tests (pytest)
 ```
 
 ---

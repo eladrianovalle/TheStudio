@@ -11,6 +11,11 @@ All notable changes to Studio will be documented in this file.
 - **Clarity Scores** — per-topic confidence tracking from answered decisions. Controls agent question density: low clarity = more questions, high clarity = constraints. Adapts to context (broad game analysis vs narrow feature). New CLI: `show-clarity`, `set-clarity`, `recompute-clarity`.
 - **Question Mode** — `--mode questions` for pre-flight decision collection. Surfaces "what don't I know yet?" before committing to deliverables.
 
+### Added — Role Customization (M4)
+
+- Project-local role overrides via `.studio/roles/<role_name>.json` — shallow key-level merge with manifest roles.
+- `role_overrides.py` module with validation and `apply_role_overrides()`.
+
 ### Added — Cross-Repo Install (M5)
 
 - `studio init --target <path>` — copies slash commands + source into any project. `/run-phase` and `/run-studio-phase` work natively with pause-and-ask.
@@ -18,8 +23,8 @@ All notable changes to Studio will be documented in this file.
 
 ### Stats
 
-- 338 tests (up from 204)
-- 13 Python modules in studio/
+- 366 tests (up from 204)
+- 14 Python modules in studio/
 
 ---
 
