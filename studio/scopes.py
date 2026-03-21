@@ -184,6 +184,152 @@ def allocate_iterations(scopes_config: ScopesConfig, total_budget: int | None = 
     return allocations
 
 
+def generate_scope_prompt(
+    scope: ScopeConfig,
+    scope_index: int,
+    role_title: str,
+    stance: str,
+    run_dir: str,
+    advocate_focus: str,
+    contrarian_focus: str,
+    deliverables: List[str],
+    user_text: str,
+    decisions_md_exists: bool,
+    s1_files: List[str] | None = None,
+    s2_brief_exists: bool = False,
+    rejection_context: str | None = None,
+) -> str:
+    """Generate scope-specific agent instructions for a single agent prompt.
+
+    Returns a complete prompt fragment telling the agent what scope it's in,
+    what prior-scope files to read, the decision point protocol, and
+    scope-specific focus guidance.
+
+    Args:
+        scope: The scope config for the current tier.
+        scope_index: 0-based index (0=alignment, 1=depth, 2=polish).
+        role_title: Human-readable role name (e.g., "Marketing").
+        stance: "advocate" or "contrarian".
+        run_dir: Path string for the run directory.
+        advocate_focus: Advocate focus description from manifest.
+        contrarian_focus: Contrarian focus description from manifest.
+        deliverables: List of deliverable strings from manifest.
+        user_text: The user's original input/objective text.
+        decisions_md_exists: Whether decisions.md exists in run_dir.
+        s1_files: For S2/S3: list of S1 file paths this agent should read.
+        s2_brief_exists: Whether S2-brief.md exists in run_dir.
+        rejection_context: Rejection reasons from prior iteration, if any.
+
+    Returns:
+        Markdown prompt fragment for inclusion in agent instructions.
+    """
+    scope_labels = {0: "ALIGNMENT", 1: "DEPTH", 2: "POLISH"}
+    scope_label = scope_labels.get(scope_index, scope.name.upper())
+    focus = advocate_focus if stance == "advocate" else contrarian_focus
+
+    lines: List[str] = [
+        f"## Scope: {scope_label}",
+        "",
+        f"**Focus for this scope:** {scope.focus}",
+        f"**Your role:** {role_title} ({stance.title()})",
+        f"**Your discipline focus:** {focus}",
+        f"**Input/objective:** {user_text}",
+        "",
+    ]
+
+    # Word cap
+    if scope.output_budget:
+        lines.append(f"**Word cap:** Keep your response under {scope.output_budget} words.")
+        lines.append("")
+
+    # Scope-specific guidance
+    if scope_index == 0:  # Alignment
+        lines.extend([
+            "**Scope guidance:** This is a directional alignment pass. Focus on:",
+            "- Your high-level stance on the approach",
+            "- Any fatal flaws from your discipline",
+            "- Key trade-offs to flag for the room",
+            "",
+            "Do NOT produce full deliverables — save detail for the Depth scope.",
+            "",
+        ])
+    elif scope_index == 1:  # Depth
+        lines.extend([
+            "**Scope guidance:** This is the full-depth analysis pass. Produce:",
+        ])
+        if stance == "advocate" and deliverables:
+            for d in deliverables:
+                lines.append(f"- {d}")
+        else:
+            lines.append("- Thorough critique of the advocate's depth proposal")
+        lines.append("")
+    elif scope_index >= 2:  # Polish
+        lines.extend([
+            "**Scope guidance:** This is the cross-discipline polish pass. Focus ONLY on:",
+            "- Unresolved cross-discipline conflicts",
+            "- Conditions that overlap or conflict between roles",
+            "- Gaps between disciplines that no one owns",
+            "",
+            "Do NOT introduce new proposals or repeat depth analysis.",
+            "",
+        ])
+
+    # Prior-scope context
+    if s1_files and scope_index >= 1:
+        lines.append("**Prior-scope context (Alignment):** Read these S1 files:")
+        for f in s1_files:
+            lines.append(f"- `{f}`")
+        lines.append("")
+
+    if s2_brief_exists and scope_index >= 1:
+        lines.append(f"**S2 brief:** Read `{run_dir}/S2-brief.md` for condensed cross-role context.")
+        lines.append("")
+
+    # Rejection context
+    if rejection_context:
+        lines.extend([
+            "**Prior rejection context:** The previous iteration was REJECTED. Address these concerns:",
+            rejection_context,
+            "",
+        ])
+
+    # Settled decisions
+    if decisions_md_exists:
+        lines.extend([
+            f"**Settled decisions:** Read `{run_dir}/decisions.md` — treat as hard constraints. Do not re-litigate.",
+            "",
+        ])
+
+    # Decision point protocol
+    lines.extend([
+        "**Decision Point Protocol:** When you encounter a gap, ambiguity, or fork that could meaningfully change your approach, flag it inline:",
+        "",
+        "```",
+        "> **DECISION [P0]:** [question]",
+        "> **Unblocks:** [what this decision affects]",
+        "> **Options:** (a) ... (b) ...",
+        "```",
+        "",
+        "- **P0 (Blocking):** Cannot proceed without an answer.",
+        "- **P1 (Important):** State your assumption and continue, but flag it.",
+        "- **P2 (Context):** Nice-to-know, logged for completeness.",
+        "",
+    ])
+
+    if stance == "advocate":
+        lines.append("You MUST surface at least 1 decision point (P0 or P1) per output. If nothing is genuinely unsettled, state that explicitly rather than omitting the section.")
+    else:
+        lines.append("If the advocate assumed something that is actually unsettled, you MUST flag it as a decision point. Decision points are required output when assumptions are unsettled.")
+
+    lines.append("")
+
+    if stance == "contrarian":
+        lines.append("End with `VERDICT: APPROVED` or `VERDICT: REJECTED` with numbered reasons.")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def generate_scope_instructions(scopes_config: ScopesConfig, allocations: Dict[str, int]) -> str:
     """
     Generate human-readable scope instructions for inclusion in run instructions.

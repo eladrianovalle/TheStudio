@@ -35,25 +35,32 @@ Read the generated `instructions.md` file. Pay attention to:
 
 **MANDATORY — DO NOT SKIP:** After EVERY agent (advocate or contrarian) saves its output:
 
-1. **Read the output file** and look for decision point blockquotes (lines starting with `> **DECISION [`).
+1. **Extract decision points** — Run this command (do NOT manually scan files):
+   ```bash
+   python "$STUDIO_ROOT/run_phase.py" extract-decisions --run-dir {run_dir}
+   ```
 
-2. **If ANY decision points are found (P0, P1, or P2), you MUST pause and present them ALL to the user.** Do not spawn the next agent until the user has responded. Present each as:
+2. **If the output is non-empty**, you MUST pause and present ALL decision points to the user. Do not spawn the next agent until the user has responded. Present each as:
    - **Decision [priority]:** [question]
    - Unblocks: [context]
    - Options: [options if present]
 
 3. **Wait for the user to answer ALL decisions.** Then record in one batch:
-   `python "$STUDIO_ROOT/run_phase.py" record-decisions --run-dir {run_dir} --decisions-file {tmp_json_path}`
+   ```bash
+   python "$STUDIO_ROOT/run_phase.py" record-decisions --run-dir {run_dir} --decisions-file {tmp_json_path}
+   ```
    JSON format: `[{"priority": "P0", "question": "...", "answer": "...", "unblocks": "...", "source_file": "[filename]", "answered_by": "user"}, ...]`
 
    After recording, show updated clarity scores: `python "$STUDIO_ROOT/run_phase.py" show-clarity`
    Display the scores to the user — they can override with `set-clarity --topic <slug> --score <0.0-1.0>`.
 
-4. **Clarity context** — If clarity data exists (`python "$STUDIO_ROOT/run_phase.py" show-clarity` returns results), include in ALL subsequent agent prompts:
-   > **Clarity context:** Topics marked Settled are constraints — do not re-litigate. For topics marked Needs work, actively surface decision points. For Settling topics, only flag genuine new gaps.
-   Include the clarity summary table so agents can see which topics need attention.
+4. **Context injection** — Before spawning each agent, generate its context block:
+   ```bash
+   python "$STUDIO_ROOT/run_phase.py" inject-context --run-dir {run_dir} --scope {scope} --role {role} --stance {stance}
+   ```
+   Append the output to the agent prompt. This automatically includes settled decisions, clarity summary, prior-scope file lists, and scope-specific instructions. No manual assembly needed.
 
-5. **Settled context** — If `{run_dir}/decisions.md` exists, ALL subsequent agent prompts must include:
+5. **Settled context** — If `{run_dir}/decisions.md` exists, the `inject-context` command includes this automatically. If NOT using `inject-context`, ALL subsequent agent prompts must include:
    > Read `{run_dir}/decisions.md` for settled constraints. Treat these as hard constraints — do not re-litigate.
 
 ### Step 3: Execute Scoped Debate
@@ -66,56 +73,35 @@ If `instructions.md` contains a **Scope-Based Iteration Plan**, follow the three
 
 **Goal:** Directional alignment. "Should we go this way at all?"
 
-For each role in the Role Menu, spawn advocate + contrarian **in parallel** (all roles simultaneously):
+For each role in the Role Menu, generate context and spawn advocate + contrarian **in parallel** (all roles simultaneously):
+
+**Before each agent**, generate its context:
+```bash
+python "$STUDIO_ROOT/run_phase.py" inject-context --run-dir {run_dir} --scope alignment --role {role} --stance advocate
+```
 
 **Advocate prompt:**
-> You are the **{role_title} Advocate** for this Studio run — ALIGNMENT SCOPE.
+> You are the **{role_title} Advocate** for this Studio run.
 >
-> **Focus:** {advocate_focus}
-> **Input/objective:** {the user's text}
->
-> **Decision points:** When you hit a gap or fork, flag it inline:
-> `> **DECISION [P0]:** [question]`
-> `> **Unblocks:** [context]`
-> `> **Options:** (a) ... (b) ...`
-> P0 = blocking (orchestrator asks user), P1 = assumption (user can override), P2 = context only.
->
-> **IMPORTANT: Keep your response under 500 words.** This is a directional alignment pass. Focus on:
-> - Your high-level stance on the approach
-> - Any fatal flaws you see from your discipline
-> - Key trade-offs to flag for the room
->
-> Do NOT produce full deliverables yet — save detail for the Depth scope.
-> Use bullet points, not full sections.
->
-> {If `{run_dir}/decisions.md` exists: "**Settled decisions:** Read `{run_dir}/decisions.md` — treat as hard constraints."}
+> {Paste the inject-context output here — it contains scope guidance, word cap, decision point protocol, and settled decisions.}
 >
 > Save to `{run_dir}/advocate--{role}--S1-01.md`.
 
-**Contrarian prompt (SEPARATE agent):**
-> You are the **{role_title} Contrarian** for this Studio run — ALIGNMENT SCOPE.
+**Contrarian** — generate context with `--stance contrarian`, then spawn a SEPARATE agent:
+> You are the **{role_title} Contrarian** for this Studio run.
 >
-> **Focus:** {contrarian_focus}
+> {Paste the inject-context output here.}
 >
 > Read the advocate's alignment stance at `{run_dir}/advocate--{role}--S1-01.md`.
->
-> **Decision points:** If the advocate assumed something unsettled, flag it: `> **DECISION [P0]:** [question]` / `> **Unblocks:** [context]` / `> **Options:** (a) ... (b) ...`
->
-> **Keep your response under 500 words.** Only flag directional problems:
-> - Is the overall approach wrong?
-> - Are there fatal flaws the advocate missed?
-> - Any showstoppers from your discipline?
->
-> {If `{run_dir}/decisions.md` exists: "**Settled decisions:** Read `{run_dir}/decisions.md` — treat as hard constraints. Do not re-litigate."}
 >
 > End with `VERDICT: APPROVED` or `VERDICT: REJECTED` with numbered reasons.
 > Save to `{run_dir}/contrarian--{role}--S1-01.md`.
 
 **After all S1 agents complete (before proceeding to S2):**
-1. Check ALL S1 output files for decision points (advocates and contrarians)
-2. Batch all P0 decisions across all roles and present to user at once — group by role for clarity
-3. Handle P1s as FYI
-4. Record all decisions to decisions.md
+1. Run `python "$STUDIO_ROOT/run_phase.py" extract-decisions --run-dir {run_dir} --scope S1`
+2. If non-empty, present ALL decision points to user at once — group by role for clarity
+3. Record all user answers to `decisions.md` via `record-decisions`
+4. Recompute clarity: `python "$STUDIO_ROOT/run_phase.py" recompute-clarity --phase studio --run-id {run_id}`
 
 **After all roles complete:** Read all contrarian verdicts.
 - If all APPROVED → proceed to Scope 2 with alignment context
@@ -146,45 +132,31 @@ Process each role **sequentially** (later roles benefit from earlier outputs).
 
 Adjust based on the specific proposal — if a role clearly depends on another's output, add it.
 
+**Before each S2 agent**, generate its context:
+```bash
+python "$STUDIO_ROOT/run_phase.py" inject-context --run-dir {run_dir} --scope depth --role {role} --stance advocate
+```
+
 **Advocate prompt:**
-> You are the **{role_title} Advocate** for this Studio run — DEPTH SCOPE.
+> You are the **{role_title} Advocate** for this Studio run.
 >
-> **Focus:** {advocate_focus}
-> **Input/objective:** {the user's text}
->
-> **Context from Alignment scope:** Read the alignment artifacts in `{run_dir}/*--S1-*.md` to understand what was agreed and what was flagged.
->
-> {If this role was REJECTED in alignment: "Alignment contrarian flagged these concerns:" + rejection reasons}
+> {Paste the inject-context output here — it contains scope guidance, deliverables, decision point protocol, settled decisions, clarity context, and prior-scope file lists.}
 >
 > **Context from prior Depth roles (SCOPED — read only these):**
 > - {List specific S2 files this role needs per the dependency map}
 > - Condensed brief of all other roles: `{run_dir}/S2-brief.md`
 >
-> **Required deliverables:** {deliverables list from Role Menu}
->
 > {If this role has a prompt doc, read it at `studio/{prompt_doc}` for detailed guidance.}
->
-> **Decision Point Protocol:** When you hit a gap or fork, flag it inline:
-> ```
-> > **DECISION [P0]:** [question]
-> > **Unblocks:** [what this affects]
-> > **Options:** (a) ... (b) ...
-> ```
-> P0 = blocking (orchestrator asks user), P1 = assumption (user can override), P2 = context only. Prefer fewer high-quality flags over many P2s.
->
-> {If `{run_dir}/decisions.md` exists: "**Settled decisions:** Read `{run_dir}/decisions.md` — treat as hard constraints."}
 >
 > Write a thorough proposal covering all required deliverables. No word cap — this is the full analysis.
 > Save to `{run_dir}/advocate--{role}--S2-01.md`.
 
-**Contrarian prompt (SEPARATE agent):**
-> You are the **{role_title} Contrarian** for this Studio run — DEPTH SCOPE.
+**Contrarian** — generate context with `--stance contrarian`, then spawn a SEPARATE agent:
+> You are the **{role_title} Contrarian** for this Studio run.
 >
-> **Focus:** {contrarian_focus}
+> {Paste the inject-context output here.}
 >
 > Read the advocate's depth proposal at `{run_dir}/advocate--{role}--S2-{NN}.md`.
->
-> **Decision points:** If the advocate assumed something unsettled, flag it: `> **DECISION [P0]:** [question]` / `> **Unblocks:** [context]` / `> **Options:** (a) ... (b) ...`
 >
 > **Scoped reads (only these — do NOT read all S2 files):**
 > - {1-2 S2 files most relevant per dependency map}
@@ -197,14 +169,20 @@ Adjust based on the specific proposal — if a role clearly depends on another's
 >
 > **Escalation triggers** (flag immediately): {escalate_on from Role Menu}
 >
-> {If `{run_dir}/decisions.md` exists: "**Settled decisions:** Read `{run_dir}/decisions.md` — treat as hard constraints. Do not re-litigate."}
->
 > End with `VERDICT: APPROVED` or `VERDICT: REJECTED` with numbered reasons.
 > Save to `{run_dir}/contrarian--{role}--S2-{NN}.md`.
 
-**Check decision points** — After each S2 advocate and contrarian saves output, follow the Decision Point Handling protocol above. Since S2 is sequential, decisions from earlier roles inform later roles.
+**Check decision points** — After each S2 advocate and contrarian saves output, run:
+```bash
+python "$STUDIO_ROOT/run_phase.py" extract-decisions --run-dir {run_dir} --scope S2
+```
+If non-empty, follow the Decision Point Handling protocol above. Since S2 is sequential, decisions from earlier roles inform later roles.
 
-**Brief update cadence:** After every 2-3 roles complete, update `{run_dir}/S2-brief.md` with their key decisions and conditions. Include a "Settled Decisions" summary referencing key decisions from `decisions.md`. Keep under 1 page.
+**Brief update cadence — MANDATORY:** After every 2-3 roles complete:
+1. Run `python "$STUDIO_ROOT/run_phase.py" extract-decisions --run-dir {run_dir}` to gather all decisions
+2. Write/update `{run_dir}/S2-brief.md` with key decisions and conditions from completed roles
+3. Include a "Settled Decisions" summary referencing `decisions.md`. Keep under 1 page.
+4. Run `python "$STUDIO_ROOT/run_phase.py" recompute-clarity --phase studio --run-id {run_id}` to update clarity scores
 
 **Loop:** If REJECTED and iterations remain (up to 3), feed rejection back to advocate. If APPROVED, move to next role.
 

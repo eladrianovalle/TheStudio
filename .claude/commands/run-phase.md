@@ -62,9 +62,13 @@ For each iteration (up to max_iterations):
 >
 > Write a thorough advocate proposal. Structure it with clear sections, concrete recommendations, and actionable details. Save your output to `{run_dir}/advocate_{N}.md`.
 
-**b. Check advocate decision points — MANDATORY, DO NOT SKIP** — Read the advocate's output file (`{run_dir}/advocate_{N}.md`). Look for decision point blockquotes (lines starting with `> **DECISION [`).
+**b. Extract decision points — MANDATORY, DO NOT SKIP** — Run the extraction command:
 
-**If ANY decision points are found (P0, P1, or P2), you MUST pause and present them ALL to the user before proceeding.** Do not continue to the contrarian until the user has responded.
+```bash
+python "$STUDIO_ROOT/run_phase.py" extract-decisions --run-dir {run_dir}
+```
+
+**If the output is non-empty (any decision points found), you MUST pause and present them ALL to the user before proceeding.** Do not continue to the contrarian until the user has responded.
 
 Present each decision to the user:
 
@@ -107,7 +111,7 @@ This displays per-topic confidence scores so the user can see which areas are se
 >
 > Save your output to `{run_dir}/contrarian_{N}.md`.
 
-**d. Check contrarian decision points** — Same process as step (b) but for `{run_dir}/contrarian_{N}.md`. Contrarians rarely flag new decisions, but when they do (e.g., "the advocate assumed X but that's actually unsettled"), handle identically.
+**d. Extract contrarian decision points** — Run `python "$STUDIO_ROOT/run_phase.py" extract-decisions --run-dir {run_dir}` again. If new decision points appear (from the contrarian), present them to the user and record as in step (b).
 
 **e. Check verdict** — Read the contrarian output. If `VERDICT: APPROVED`, proceed to Step 4. If `VERDICT: REJECTED` and iterations remain, loop back to (a) with the rejection feedback.
 

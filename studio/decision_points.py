@@ -204,6 +204,23 @@ def extract_decisions_from_run(run_dir: Path) -> list[DecisionPoint]:
     return results
 
 
+def merge_decisions(
+    existing: list[DecisionPoint], extracted: list[DecisionPoint]
+) -> list[DecisionPoint]:
+    """Merge extracted decisions into existing list, deduplicating by question.
+
+    Existing decisions (typically from decisions.json) take precedence —
+    extracted decisions are only added if their question text is new.
+    Mutates and returns *existing*.
+    """
+    existing_qs = {dp.question for dp in existing}
+    for dp in extracted:
+        if dp.question not in existing_qs:
+            existing.append(dp)
+            existing_qs.add(dp.question)
+    return existing
+
+
 def format_settled_decisions(decisions: list[DecisionPoint]) -> str:
     """Format answered decision points as a settled-decisions markdown document.
 

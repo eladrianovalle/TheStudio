@@ -238,6 +238,45 @@ class DocumentValidator:
 
         return ValidationResult(passed=True, issues=[])
 
+    def check_decision_points(self, doc_path: Path) -> ValidationResult:
+        """
+        Check if an advocate document contains decision points.
+
+        Warns (does not fail) when a non-question-mode advocate file contains
+        zero decision points. The warning message tells the orchestrator to
+        re-prompt the agent.
+
+        Args:
+            doc_path: Path to an advocate document
+
+        Returns:
+            ValidationResult with warning if no decision points found
+        """
+        if not doc_path.exists():
+            return ValidationResult(
+                passed=True,
+                issues=[],
+                warnings=[f"Document not found for decision point check: {doc_path}"]
+            )
+
+        content = doc_path.read_text(encoding="utf-8")
+
+        from decision_points import DECISION_LINE_RE
+        has_decisions = DECISION_LINE_RE.search(content)
+
+        if not has_decisions:
+            return ValidationResult(
+                passed=True,  # Warning only, does not fail validation
+                issues=[],
+                warnings=[
+                    f"{doc_path.name}: No decision points found. "
+                    "Consider re-prompting the agent — advocates should surface "
+                    "at least 1 P0/P1 decision point per output."
+                ]
+            )
+
+        return ValidationResult(passed=True, issues=[])
+
     def check_verdict(self, contrarian_path: Path) -> ValidationResult:
         """
         Check if contrarian document contains a valid verdict.

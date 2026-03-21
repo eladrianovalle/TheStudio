@@ -30,6 +30,7 @@ from run_phase_roles import (
     build_role_details,
     collect_role_artifacts,
     default_role_pack_name,
+    get_role_spec,
     parse_role_filename,
     load_manifest,
     load_role_pack,
@@ -40,6 +41,7 @@ from run_phase_roles import (
 from scopes import (
     allocate_iterations,
     generate_scope_instructions,
+    generate_scope_prompt,
     load_scopes_config,
 )
 from decision_points import (
@@ -48,6 +50,7 @@ from decision_points import (
     format_decisions_log,
     format_settled_decisions,
     load_decisions_json,
+    merge_decisions,
     parse_decision_points,
     save_decisions_json,
 )
@@ -200,6 +203,7 @@ ARTIFACT_ROOT_ENV = "STUDIO_ARTIFACT_ROOT"
 SUBCOMMANDS = {
     "prepare", "finalize", "cleanup", "validate",
     "record-decisions", "check-decisions",
+    "extract-decisions", "inject-context",
     "init", "check-install", "update",
     "show-clarity", "set-clarity", "recompute-clarity",
 }
@@ -604,6 +608,24 @@ def build_instruction_doc(
     if scopes_config and scopes_allocations:
         scope_instructions = generate_scope_instructions(scopes_config, scopes_allocations)
         scope_section.append(scope_instructions)
+        # Per-scope agent prompt templates for orchestrator use
+        scope_section.extend([
+            "",
+            "### Per-Scope Agent Prompt Templates",
+            "",
+            "The orchestrator can generate scope-specific agent prompts using:",
+            "",
+            "```bash",
+            f'python "{get_studio_root()}/run_phase.py" inject-context --run-dir {{run_dir}} --scope {{scope}} --role {{role}} --stance {{stance}}',
+            "```",
+            "",
+            "Or extract decisions between agents with:",
+            "",
+            "```bash",
+            f'python "{get_studio_root()}/run_phase.py" extract-decisions --run-dir {{run_dir}}',
+            "```",
+            "",
+        ])
     
     # Add rerun context if previous rejections exist in prior runs.
     # Question mode bypasses rerun context — surfacing unknowns is not
@@ -731,20 +753,22 @@ def build_instruction_doc(
             "- **P2 (Context):** Nice-to-know. Log it for completeness but do not pause.",
             "",
             "### For Advocates",
-            "Surface decision points as you encounter them during your analysis. Prefer fewer, high-quality P0/P1 flags over many P2s. Each decision point must name what it unblocks — if you can't articulate the impact, it's not worth flagging.",
+            "You MUST surface at least 1 decision point (P0 or P1) per output. If nothing is genuinely unsettled, state that explicitly rather than omitting the section. Prefer fewer, high-quality P0/P1 flags over many P2s. Each decision point must name what it unblocks — if you can't articulate the impact, it's not worth flagging.",
             "",
             "### For Contrarians",
-            "If the advocate assumed something that is actually unsettled, flag it as a decision point. Your primary job remains challenging the proposal — decision points are a secondary output, not your focus.",
+            "If the advocate assumed something that is actually unsettled, you MUST flag it as a decision point. Decision points are required output when assumptions are unsettled — do not let unexamined assumptions pass.",
         ])
 
     # Clarity-guided focus section — inject if clarity data exists
     clarity_section: List[str] = []
     _cl = _load_clarity()
     if _cl and clarity_snapshot is not None and not is_qmode:
-        scope_name = "depth"  # default
         if scopes_config and scopes_config.scopes:
-            scope_name = scopes_config.scopes[0].name
-        clarity_section.append(_cl.generate_clarity_instructions(clarity_snapshot, scope_name))
+            # Generate clarity guidance for each scope so agents get scope-appropriate density
+            for scope in scopes_config.scopes:
+                clarity_section.append(_cl.generate_clarity_instructions(clarity_snapshot, scope.name))
+        else:
+            clarity_section.append(_cl.generate_clarity_instructions(clarity_snapshot, "depth"))
 
     role_menu_section: List[str] = []
     if phase == "studio" and studio_roles:
@@ -1156,11 +1180,7 @@ def finalize_run(args: argparse.Namespace) -> None:
     existing = load_decisions_json(run_dir)
     extracted = extract_decisions_from_run(run_dir)
     if existing or extracted:
-        # Merge: keep existing settled decisions, add any new ones from agent output
-        existing_qs = {dp.question for dp in existing}
-        for dp in extracted:
-            if dp.question not in existing_qs:
-                existing.append(dp)
+        merge_decisions(existing, extracted)
         save_decisions_json(run_dir, existing)
         # Use settled format if any decisions have answers, otherwise use discovery log
         has_answers = any(dp.answer is not None for dp in existing)
@@ -1466,6 +1486,52 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to an agent output file to scan for decision points.",
     )
 
+    # --- Mid-run orchestration commands ---
+    extract_parser = subparsers.add_parser(
+        "extract-decisions", help="Extract decision points from agent files in a run directory."
+    )
+    extract_parser.add_argument(
+        "--run-dir",
+        type=Path,
+        required=True,
+        help="Path to the run directory.",
+    )
+    extract_parser.add_argument(
+        "--scope",
+        default=None,
+        help="Filter by scope (e.g., 'alignment', 'S1', 'depth', 'S2').",
+    )
+
+    inject_parser = subparsers.add_parser(
+        "inject-context", help="Generate context block for the next agent in a scoped run."
+    )
+    inject_parser.add_argument(
+        "--run-dir",
+        type=Path,
+        required=True,
+        help="Path to the run directory.",
+    )
+    inject_parser.add_argument(
+        "--scope",
+        required=True,
+        help="Current scope name (alignment, depth, polish).",
+    )
+    inject_parser.add_argument(
+        "--role",
+        required=True,
+        help="Role name (e.g., marketing, engineering).",
+    )
+    inject_parser.add_argument(
+        "--stance",
+        required=True,
+        choices=["advocate", "contrarian"],
+        help="Agent stance.",
+    )
+    inject_parser.add_argument(
+        "--artifact-root", type=Path, default=None,
+        help="Override artifact root directory.",
+    )
+
     # --- Cross-repo install commands ---
     init_parser = subparsers.add_parser(
         "init", help="Install Studio into a target project directory."
@@ -1715,6 +1781,140 @@ def check_decisions(args: argparse.Namespace) -> None:
     print(json.dumps(grouped, indent=2))
 
 
+def extract_decisions(args: argparse.Namespace) -> None:
+    """Extract decision points from agent files in a run directory.
+
+    Scans advocate/contrarian files (optionally filtered by scope) and
+    outputs formatted decision points. Useful mid-run between agents.
+    """
+    run_dir = Path(args.run_dir)
+    if not run_dir.is_dir():
+        raise FileNotFoundError(f"Run directory not found: {run_dir}")
+
+    all_decisions = extract_decisions_from_run(run_dir)
+
+    # Filter by scope if requested
+    scope_filter = getattr(args, "scope", None)
+    if scope_filter:
+        scope_tag = f"S{scope_filter[-1]}" if scope_filter[0].isalpha() else scope_filter
+        all_decisions = [
+            dp for dp in all_decisions
+            if dp.source_file and scope_tag in dp.source_file
+        ]
+
+    if not all_decisions:
+        # Silent exit — no decisions found is normal
+        return
+
+    print(format_decisions_log(all_decisions))
+
+
+def inject_context(args: argparse.Namespace) -> None:
+    """Generate the context block for the next agent in a scoped run.
+
+    Combines settled decisions, clarity summary, prior-scope file lists,
+    and scope-specific instructions into a single markdown block that
+    the orchestrator appends to the agent prompt.
+    """
+    run_dir = Path(args.run_dir)
+    if not run_dir.is_dir():
+        raise FileNotFoundError(f"Run directory not found: {run_dir}")
+
+    scope_name = args.scope
+    role = args.role
+    stance = args.stance
+
+    # Load run metadata
+    meta_path = run_dir / "run.json"
+    if not meta_path.is_file():
+        raise FileNotFoundError(f"run.json not found in {run_dir}")
+    meta = load_json(meta_path)
+    user_text = meta.get("input", "")
+
+    # Resolve scope config
+    studio_root = get_studio_root()
+    scopes_meta = meta.get("scopes")
+    scopes_config = None
+    scope = None
+    scope_index = 0
+
+    if scopes_meta:
+        scopes_path = Path(scopes_meta.get("config_path", ""))
+        if scopes_path.exists():
+            scopes_config = load_scopes_config(scopes_path)
+            scope = scopes_config.get_scope(scope_name)
+            if scope:
+                scope_index = next(
+                    (i for i, s in enumerate(scopes_config.scopes) if s.name == scope_name),
+                    0,
+                )
+
+    # Resolve role details from manifest via existing utility
+    manifest = load_manifest(studio_root)
+    try:
+        role_detail = get_role_spec(manifest, role)
+        advocate_focus = role_detail.advocate_focus
+        contrarian_focus = role_detail.contrarian_focus
+        deliverables = role_detail.deliverables
+        role_title = role_detail.title
+    except RoleConfigError:
+        # Graceful fallback for unknown roles
+        advocate_focus = ""
+        contrarian_focus = ""
+        deliverables = []
+        role_title = role.title()
+
+    # Check for prior-scope files
+    decisions_md_exists = (run_dir / "decisions.md").exists()
+    s2_brief_exists = (run_dir / "S2-brief.md").exists()
+
+    s1_files: List[str] | None = None
+    if scope_index >= 1:
+        s1_files = [f.name for f in sorted(run_dir.glob(f"*--{role}--S1-*.md"))]
+        if not s1_files:
+            # Also include all S1 files if role-specific ones don't exist
+            s1_files = [f.name for f in sorted(run_dir.glob("*--*--S1-*.md"))]
+
+    output_parts: List[str] = []
+
+    # 1. Scope-specific prompt (if scoped)
+    if scope:
+        output_parts.append(generate_scope_prompt(
+            scope=scope,
+            scope_index=scope_index,
+            role_title=role_title,
+            stance=stance,
+            run_dir=str(run_dir),
+            advocate_focus=advocate_focus,
+            contrarian_focus=contrarian_focus,
+            deliverables=deliverables,
+            user_text=user_text,
+            decisions_md_exists=decisions_md_exists,
+            s1_files=s1_files,
+            s2_brief_exists=s2_brief_exists,
+        ))
+
+    # 2. Settled decisions — only add if generate_scope_prompt didn't already cover it
+    if decisions_md_exists and not scope:
+        output_parts.extend([
+            "## Settled Decisions",
+            "",
+            f"Read `{run_dir}/decisions.md` for settled constraints. Treat as hard constraints — do not re-litigate.",
+            "",
+        ])
+
+    # 3. Clarity summary
+    _cl = _load_clarity()
+    if _cl:
+        root = get_artifact_root()
+        snapshot = _cl.load_project_clarity(root)
+        if snapshot is not None:
+            output_parts.append(_cl.generate_clarity_instructions(snapshot, scope_name))
+
+    if output_parts:
+        print("\n".join(output_parts))
+
+
 def show_clarity(args: argparse.Namespace) -> None:
     """Display current project clarity scores."""
     _cl = _load_clarity()
@@ -1752,7 +1952,12 @@ def set_clarity(args: argparse.Namespace) -> None:
 
 
 def recompute_clarity(args: argparse.Namespace) -> None:
-    """Recompute clarity from a run's decisions."""
+    """Recompute clarity from a run's decisions.
+
+    Works with both finalized and in-progress runs. If decisions.json exists,
+    uses it. Otherwise extracts decisions from agent output files directly,
+    making this usable mid-run.
+    """
     _cl = _load_clarity()
     if not _cl:
         print("Clarity module not available.")
@@ -1763,7 +1968,12 @@ def recompute_clarity(args: argparse.Namespace) -> None:
     run_dir = get_output_root() / phase / run_id
     if not run_dir.is_dir():
         raise FileNotFoundError(f"Run directory not found: {run_dir}")
+
+    # Load existing decisions from JSON, then merge any new ones from agent files
     decisions = load_decisions_json(run_dir)
+    extracted = extract_decisions_from_run(run_dir)
+    merge_decisions(decisions, extracted)
+
     meta_path = run_dir / "run.json"
     input_text = ""
     if meta_path.is_file():
@@ -1847,6 +2057,10 @@ def main() -> None:
         record_decisions(args)
     elif args.command == "check-decisions":
         check_decisions(args)
+    elif args.command == "extract-decisions":
+        extract_decisions(args)
+    elif args.command == "inject-context":
+        inject_context(args)
     elif args.command == "init":
         _do_init(args)
     elif args.command == "check-install":
