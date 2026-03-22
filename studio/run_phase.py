@@ -1172,9 +1172,19 @@ def finalize_run(args: argparse.Namespace) -> None:
         meta["cost"] = args.cost
     meta["updated_iso"] = utc_now().isoformat(timespec="seconds")
 
+    # Aggregate agent metrics into run.json before the single write
+    metrics_entries = _load_metrics(run_dir)
+    if metrics_entries:
+        meta["metrics"] = _summarize_metrics(metrics_entries)
+
     write_json(meta_path, meta)
     rebuild_index()
     _append_run_log(meta)
+
+    if metrics_entries:
+        total_tokens = meta["metrics"]["total_tokens"]
+        agent_count = meta["metrics"]["agents"]
+        print(f"Agent metrics: {agent_count} agents, {total_tokens:,} total tokens")
 
     # Generate decisions.md — merge agent-surfaced decisions with any already-settled ones
     existing = load_decisions_json(run_dir)
@@ -1206,15 +1216,6 @@ def finalize_run(args: argparse.Namespace) -> None:
             _cl.save_clarity_json(run_dir / "clarity.json", snapshot)
             _cl.save_project_clarity(get_artifact_root(), snapshot)
             print(f"Updated clarity scores ({len(snapshot.topics)} topic(s), mean: {snapshot.mean_score:.2f})")
-
-    # Aggregate agent metrics into run.json if metrics.json exists
-    metrics_entries = _load_metrics(run_dir)
-    if metrics_entries:
-        meta["metrics"] = _summarize_metrics(metrics_entries)
-        write_json(meta_path, meta)
-        total_tokens = meta["metrics"]["total_tokens"]
-        agent_count = meta["metrics"]["agents"]
-        print(f"Agent metrics: {agent_count} agents, {total_tokens:,} total tokens")
 
     print(f"Finalized {run_id} ({phase}) → {meta['status']}")
 
@@ -1608,12 +1609,12 @@ def build_parser() -> argparse.ArgumentParser:
         "record-metrics", help="Record token usage for a single agent invocation."
     )
     record_metrics_parser.add_argument("--run-dir", type=Path, required=True, help="Path to the run directory.")
-    record_metrics_parser.add_argument("--agent", required=True, help="Agent type: advocate, contrarian, integrator, polish.")
+    record_metrics_parser.add_argument("--agent", required=True, choices=["advocate", "contrarian", "integrator", "polish"], help="Agent type.")
     record_metrics_parser.add_argument("--total-tokens", type=int, required=True, help="Total tokens consumed.")
     record_metrics_parser.add_argument("--tool-uses", type=int, default=0, help="Number of tool uses.")
     record_metrics_parser.add_argument("--duration-ms", type=int, default=0, help="Duration in milliseconds.")
     record_metrics_parser.add_argument("--role", default=None, help="Role name (for studio phase).")
-    record_metrics_parser.add_argument("--scope", default=None, help="Scope: alignment, depth, polish, or flat.")
+    record_metrics_parser.add_argument("--scope", default=None, choices=["alignment", "depth", "polish", "flat"], help="Scope name.")
 
     show_metrics_parser = subparsers.add_parser(
         "show-metrics", help="Display token usage summary for a run."
@@ -1843,9 +1844,10 @@ def extract_decisions(args: argparse.Namespace) -> None:
 def _load_metrics(run_dir: Path) -> List[Dict]:
     """Load metrics.json from a run directory, returning [] if absent."""
     metrics_path = run_dir / "metrics.json"
-    if metrics_path.exists():
-        return load_json(metrics_path)
-    return []
+    try:
+        return json.loads(metrics_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return []
 
 
 def _save_metrics(run_dir: Path, entries: List[Dict]) -> None:
