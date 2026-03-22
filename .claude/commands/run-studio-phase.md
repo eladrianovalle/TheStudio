@@ -35,17 +35,23 @@ Read the generated `instructions.md` file. Pay attention to:
 
 **MANDATORY — DO NOT SKIP:** After EVERY agent (advocate or contrarian) saves its output:
 
-1. **Extract decision points** — Run this command (do NOT manually scan files):
+1. **Record agent metrics** — The Agent tool result includes `total_tokens`, `tool_uses`, and `duration_ms` in a `<usage>` block. Record these immediately:
+   ```bash
+   python "$STUDIO_ROOT/run_phase.py" record-metrics --run-dir {run_dir} --agent {advocate|contrarian|integrator|polish} --total-tokens {N} --tool-uses {N} --duration-ms {N} --role {role} --scope {scope}
+   ```
+   Omit `--role` and `--scope` for non-studio phases or integrator/polish agents.
+
+2. **Extract decision points** — Run this command (do NOT manually scan files):
    ```bash
    python "$STUDIO_ROOT/run_phase.py" extract-decisions --run-dir {run_dir}
    ```
 
-2. **If the output is non-empty**, you MUST pause and present ALL decision points to the user. Do not spawn the next agent until the user has responded. Present each as:
+3. **If the output is non-empty**, you MUST pause and present ALL decision points to the user. Do not spawn the next agent until the user has responded. Present each as:
    - **Decision [priority]:** [question]
    - Unblocks: [context]
    - Options: [options if present]
 
-3. **Wait for the user to answer ALL decisions.** Then record in one batch:
+4. **Wait for the user to answer ALL decisions.** Then record in one batch:
    ```bash
    python "$STUDIO_ROOT/run_phase.py" record-decisions --run-dir {run_dir} --decisions-file {tmp_json_path}
    ```
@@ -54,13 +60,13 @@ Read the generated `instructions.md` file. Pay attention to:
    After recording, show updated clarity scores: `python "$STUDIO_ROOT/run_phase.py" show-clarity`
    Display the scores to the user — they can override with `set-clarity --topic <slug> --score <0.0-1.0>`.
 
-4. **Context injection** — Before spawning each agent, generate its context block:
+5. **Context injection** — Before spawning each agent, generate its context block:
    ```bash
    python "$STUDIO_ROOT/run_phase.py" inject-context --run-dir {run_dir} --scope {scope} --role {role} --stance {stance}
    ```
    Append the output to the agent prompt. This automatically includes settled decisions, clarity summary, prior-scope file lists, and scope-specific instructions. No manual assembly needed.
 
-5. **Settled context** — If `{run_dir}/decisions.md` exists, the `inject-context` command includes this automatically. If NOT using `inject-context`, ALL subsequent agent prompts must include:
+6. **Settled context** — If `{run_dir}/decisions.md` exists, the `inject-context` command includes this automatically. If NOT using `inject-context`, ALL subsequent agent prompts must include:
    > Read `{run_dir}/decisions.md` for settled constraints. Treat these as hard constraints — do not re-litigate.
 
 ### Step 3: Execute Scoped Debate

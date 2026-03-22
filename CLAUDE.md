@@ -52,6 +52,10 @@ python studio/run_phase.py set-clarity --topic core_loop_design --score 0.9
 python studio/run_phase.py set-clarity --topic core_loop_design --reset
 python studio/run_phase.py recompute-clarity --phase studio --run-id <run_id>
 
+# Agent metrics (token tracking per agent)
+python studio/run_phase.py record-metrics --run-dir <path> --agent advocate --total-tokens 5000 --tool-uses 10 --duration-ms 30000 --role marketing --scope alignment
+python studio/run_phase.py show-metrics --run-dir <path>
+
 # Storage cleanup
 python studio/run_phase.py cleanup --dry-run
 python studio/run_phase.py cleanup

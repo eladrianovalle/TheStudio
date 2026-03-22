@@ -1,4 +1,6 @@
 """Unit tests for run_phase.py core functions."""
+import argparse
+
 import pytest
 
 import run_phase
@@ -334,3 +336,96 @@ def test_prepare_with_scopes_integration(studio_root):
 
     instructions = (run_dir / "instructions.md").read_text(encoding="utf-8")
     assert "high_level" in instructions.lower() or "High Level" in instructions
+
+
+# ---------------------------------------------------------------------------
+# Agent metrics tracking
+# ---------------------------------------------------------------------------
+
+
+def test_record_and_load_metrics(tmp_path):
+    """record-metrics writes entries to metrics.json."""
+    run_dir = tmp_path / "run_test"
+    run_dir.mkdir()
+
+    args = argparse.Namespace(
+        run_dir=run_dir, agent="advocate", total_tokens=5000,
+        tool_uses=10, duration_ms=30000, role="marketing", scope="alignment",
+    )
+    run_phase.record_metrics(args)
+
+    entries = run_phase._load_metrics(run_dir)
+    assert len(entries) == 1
+    assert entries[0]["agent"] == "advocate"
+    assert entries[0]["total_tokens"] == 5000
+    assert entries[0]["role"] == "marketing"
+    assert entries[0]["scope"] == "alignment"
+
+    # Append a second entry
+    args2 = argparse.Namespace(
+        run_dir=run_dir, agent="contrarian", total_tokens=3000,
+        tool_uses=5, duration_ms=20000, role="marketing", scope="alignment",
+    )
+    run_phase.record_metrics(args2)
+    entries = run_phase._load_metrics(run_dir)
+    assert len(entries) == 2
+
+
+def test_summarize_metrics():
+    """_summarize_metrics aggregates by scope and role."""
+    entries = [
+        {"agent": "advocate", "total_tokens": 10000, "tool_uses": 15, "duration_ms": 40000, "role": "marketing", "scope": "alignment"},
+        {"agent": "contrarian", "total_tokens": 8000, "tool_uses": 10, "duration_ms": 30000, "role": "marketing", "scope": "alignment"},
+        {"agent": "advocate", "total_tokens": 30000, "tool_uses": 40, "duration_ms": 120000, "role": "engineering", "scope": "depth"},
+    ]
+    summary = run_phase._summarize_metrics(entries)
+
+    assert summary["agents"] == 3
+    assert summary["total_tokens"] == 48000
+    assert summary["total_tool_uses"] == 65
+    assert summary["total_duration_ms"] == 190000
+
+    assert "alignment" in summary["by_scope"]
+    assert summary["by_scope"]["alignment"]["agents"] == 2
+    assert summary["by_scope"]["alignment"]["total_tokens"] == 18000
+
+    assert "depth" in summary["by_scope"]
+    assert summary["by_scope"]["depth"]["agents"] == 1
+
+    assert "marketing" in summary["by_role"]
+    assert summary["by_role"]["marketing"]["total_tokens"] == 18000
+    assert "engineering" in summary["by_role"]
+
+
+def test_show_metrics_empty(tmp_path, capsys):
+    """show-metrics handles empty/missing metrics gracefully."""
+    run_dir = tmp_path / "run_empty"
+    run_dir.mkdir()
+
+    args = argparse.Namespace(run_dir=run_dir)
+    run_phase.show_metrics(args)
+    assert "No metrics recorded" in capsys.readouterr().out
+
+
+def test_finalize_aggregates_metrics(studio_root):
+    """Finalize includes metrics summary in run.json when metrics.json exists."""
+    run_id = run_phase.prepare_run(make_prepare_args())
+    run_dir = studio_root / "output" / "market" / run_id
+
+    # Simulate artifacts
+    (run_dir / "advocate_1.md").write_text("Advocate output", encoding="utf-8")
+    (run_dir / "contrarian_1.md").write_text("Contrarian output", encoding="utf-8")
+    (run_dir / "summary.md").write_text("Summary output", encoding="utf-8")
+
+    # Write metrics
+    run_phase._save_metrics(run_dir, [
+        {"agent": "advocate", "total_tokens": 12000, "tool_uses": 20, "duration_ms": 50000},
+        {"agent": "contrarian", "total_tokens": 9000, "tool_uses": 12, "duration_ms": 35000},
+    ])
+
+    run_phase.finalize_run(make_finalize_args(run_id=run_id))
+
+    meta = run_phase.load_json(run_dir / "run.json")
+    assert "metrics" in meta
+    assert meta["metrics"]["agents"] == 2
+    assert meta["metrics"]["total_tokens"] == 21000

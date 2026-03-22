@@ -1207,8 +1207,17 @@ def finalize_run(args: argparse.Namespace) -> None:
             _cl.save_project_clarity(get_artifact_root(), snapshot)
             print(f"Updated clarity scores ({len(snapshot.topics)} topic(s), mean: {snapshot.mean_score:.2f})")
 
+    # Aggregate agent metrics into run.json if metrics.json exists
+    metrics_entries = _load_metrics(run_dir)
+    if metrics_entries:
+        meta["metrics"] = _summarize_metrics(metrics_entries)
+        write_json(meta_path, meta)
+        total_tokens = meta["metrics"]["total_tokens"]
+        agent_count = meta["metrics"]["agents"]
+        print(f"Agent metrics: {agent_count} agents, {total_tokens:,} total tokens")
+
     print(f"Finalized {run_id} ({phase}) → {meta['status']}")
-    
+
     # Contextual hints for next steps
     if meta['status'] == 'COMPLETED' and meta.get('verdict') == 'APPROVED':
         print(f"\n💡 Next steps:")
@@ -1593,6 +1602,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override artifact root directory.",
     )
 
+    # --- Agent metrics ---
+
+    record_metrics_parser = subparsers.add_parser(
+        "record-metrics", help="Record token usage for a single agent invocation."
+    )
+    record_metrics_parser.add_argument("--run-dir", type=Path, required=True, help="Path to the run directory.")
+    record_metrics_parser.add_argument("--agent", required=True, help="Agent type: advocate, contrarian, integrator, polish.")
+    record_metrics_parser.add_argument("--total-tokens", type=int, required=True, help="Total tokens consumed.")
+    record_metrics_parser.add_argument("--tool-uses", type=int, default=0, help="Number of tool uses.")
+    record_metrics_parser.add_argument("--duration-ms", type=int, default=0, help="Duration in milliseconds.")
+    record_metrics_parser.add_argument("--role", default=None, help="Role name (for studio phase).")
+    record_metrics_parser.add_argument("--scope", default=None, help="Scope: alignment, depth, polish, or flat.")
+
+    show_metrics_parser = subparsers.add_parser(
+        "show-metrics", help="Display token usage summary for a run."
+    )
+    show_metrics_parser.add_argument("--run-dir", type=Path, required=True, help="Path to the run directory.")
+
     return parser
 
 
@@ -1807,6 +1834,124 @@ def extract_decisions(args: argparse.Namespace) -> None:
         return
 
     print(format_decisions_log(all_decisions))
+
+
+# ---------------------------------------------------------------------------
+# Agent metrics tracking
+# ---------------------------------------------------------------------------
+
+def _load_metrics(run_dir: Path) -> List[Dict]:
+    """Load metrics.json from a run directory, returning [] if absent."""
+    metrics_path = run_dir / "metrics.json"
+    if metrics_path.exists():
+        return load_json(metrics_path)
+    return []
+
+
+def _save_metrics(run_dir: Path, entries: List[Dict]) -> None:
+    """Write metrics.json to a run directory."""
+    write_json(run_dir / "metrics.json", entries)
+
+
+def record_metrics(args: argparse.Namespace) -> None:
+    """Record token usage for a single agent invocation."""
+    run_dir = Path(args.run_dir)
+    if not run_dir.is_dir():
+        raise FileNotFoundError(f"Run directory not found: {run_dir}")
+
+    entries = _load_metrics(run_dir)
+    entry: Dict = {
+        "agent": args.agent,
+        "total_tokens": args.total_tokens,
+        "tool_uses": args.tool_uses or 0,
+        "duration_ms": args.duration_ms or 0,
+        "timestamp": utc_now().isoformat(timespec="seconds"),
+    }
+    if args.role:
+        entry["role"] = args.role
+    if args.scope:
+        entry["scope"] = args.scope
+    entries.append(entry)
+    _save_metrics(run_dir, entries)
+
+
+def _summarize_metrics(entries: List[Dict]) -> Dict:
+    """Aggregate metrics entries into a summary."""
+    total_tokens = sum(e.get("total_tokens", 0) for e in entries)
+    total_duration = sum(e.get("duration_ms", 0) for e in entries)
+    total_tool_uses = sum(e.get("tool_uses", 0) for e in entries)
+
+    by_scope: Dict[str, Dict] = {}
+    by_role: Dict[str, Dict] = {}
+
+    for e in entries:
+        scope = e.get("scope", "flat")
+        role = e.get("role", "unknown")
+
+        for group, key in [(by_scope, scope), (by_role, role)]:
+            if key not in group:
+                group[key] = {"agents": 0, "total_tokens": 0, "duration_ms": 0}
+            group[key]["agents"] += 1
+            group[key]["total_tokens"] += e.get("total_tokens", 0)
+            group[key]["duration_ms"] += e.get("duration_ms", 0)
+
+    return {
+        "agents": len(entries),
+        "total_tokens": total_tokens,
+        "total_duration_ms": total_duration,
+        "total_tool_uses": total_tool_uses,
+        "by_scope": by_scope,
+        "by_role": by_role,
+    }
+
+
+def show_metrics(args: argparse.Namespace) -> None:
+    """Display metrics summary for a run."""
+    run_dir = Path(args.run_dir)
+    if not run_dir.is_dir():
+        raise FileNotFoundError(f"Run directory not found: {run_dir}")
+
+    entries = _load_metrics(run_dir)
+    if not entries:
+        print("No metrics recorded for this run.")
+        return
+
+    summary = _summarize_metrics(entries)
+
+    print(f"\n{'='*60}")
+    print(f"Agent Metrics — {run_dir.name}")
+    print(f"{'='*60}")
+    print(f"  Agents spawned:  {summary['agents']}")
+    print(f"  Total tokens:    {summary['total_tokens']:,}")
+    print(f"  Total tool uses: {summary['total_tool_uses']:,}")
+    total_sec = summary["total_duration_ms"] / 1000
+    print(f"  Total duration:  {total_sec:.0f}s ({total_sec/60:.1f}m)")
+
+    if summary["by_scope"]:
+        print(f"\n  By scope:")
+        for scope, stats in sorted(summary["by_scope"].items()):
+            pct = (stats["total_tokens"] / summary["total_tokens"] * 100) if summary["total_tokens"] else 0
+            print(f"    {scope:12s}  {stats['agents']} agents  {stats['total_tokens']:>8,} tokens ({pct:.0f}%)")
+
+    if summary["by_role"]:
+        print(f"\n  By role:")
+        for role, stats in sorted(summary["by_role"].items()):
+            pct = (stats["total_tokens"] / summary["total_tokens"] * 100) if summary["total_tokens"] else 0
+            print(f"    {role:16s}  {stats['agents']} agents  {stats['total_tokens']:>8,} tokens ({pct:.0f}%)")
+
+    # Per-agent detail
+    print(f"\n  Agent detail:")
+    for e in entries:
+        role = e.get("role", "")
+        scope = e.get("scope", "")
+        label = e["agent"]
+        if role:
+            label = f"{label}--{role}"
+        if scope:
+            label = f"{label} ({scope})"
+        print(f"    {label:40s}  {e.get('total_tokens', 0):>8,} tokens  {e.get('duration_ms', 0)/1000:.0f}s")
+
+    print()
 
 
 def inject_context(args: argparse.Namespace) -> None:
@@ -2073,6 +2218,10 @@ def main() -> None:
         set_clarity(args)
     elif args.command == "recompute-clarity":
         recompute_clarity(args)
+    elif args.command == "record-metrics":
+        record_metrics(args)
+    elif args.command == "show-metrics":
+        show_metrics(args)
     else:
         raise ValueError("Unknown command")
 
