@@ -97,13 +97,13 @@ python "$STUDIO_ROOT/run_phase.py" inject-context --run-dir {run_dir} --scope al
 > End with `VERDICT: APPROVED` or `VERDICT: REJECTED` with numbered reasons.
 > Save to `{run_dir}/contrarian--{role}--S1-01.md`.
 
-**After all S1 agents complete (before proceeding to S2):**
-1. Run `python "$STUDIO_ROOT/run_phase.py" extract-decisions --run-dir {run_dir} --scope S1`
-2. If non-empty, present ALL decision points to user at once — group by role for clarity
-3. Record all user answers to `decisions.md` via `record-decisions`
-4. Recompute clarity: `python "$STUDIO_ROOT/run_phase.py" recompute-clarity --phase studio --run-id {run_id}`
+**Decision checking within S1 — after EACH agent saves output:**
+Even though S1 roles run in parallel, you MUST extract and check decision points after each individual agent (advocate or contrarian) completes — follow the Decision Point Handling protocol above. Do not batch decisions until the end of the scope. Surface them as they appear so the user can answer early and those answers flow into subsequent agents.
 
-**After all roles complete:** Read all contrarian verdicts.
+**After all S1 roles complete (before proceeding to S2):**
+1. Recompute clarity: `python "$STUDIO_ROOT/run_phase.py" recompute-clarity --phase studio --run-id {run_id}`
+
+**Read all contrarian verdicts.**
 - If all APPROVED → proceed to Scope 2 with alignment context
 - If any REJECTED → note the rejection reasons. Proceed to Scope 2 anyway (the depth pass will address them), but include rejection context in each rejected role's depth prompt
 - If `max_iterations` for alignment scope allows iteration 2, loop rejected roles only (still with 500-word cap)
@@ -290,6 +290,6 @@ Then run integrator duel and summary as above.
 - **Scope 3 is a single consolidated agent** — one cross-discipline check, not per-role pairs.
 - **Briefs over full reads** — later roles and integrator read `S2-brief.md` instead of all individual files.
 - **Word caps are instruction-enforced** — include them in the agent prompt, not as runtime truncation.
-- **Decision points are checked after every agent** — S1 batches (parallel), S2 checks per-role (sequential), S3 and integrator receive all accumulated decisions.
+- **Decision points are checked after every agent in every scope** — S1, S2, flat mode all extract and surface per-agent. S3 and integrator receive all accumulated decisions.
 - **`decisions.md` is the single source of truth** for settled constraints, accumulating throughout the run.
 - File naming: `advocate--marketing--S1-01.md`, `contrarian--engineering--S2-02.md`, `polish--consolidated--S3-01.md`

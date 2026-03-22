@@ -152,7 +152,7 @@ All your decisions accumulate in `{run_dir}/decisions.md` throughout the run. La
 5. Subsequent iterations build on your decision
 
 This works in both single-phase (`/run-phase`) and multi-role (`/run-studio-phase`) runs. In scoped runs:
-- **S1 (Alignment):** All role decisions batched and presented after all S1 agents complete
+- **S1 (Alignment):** Decisions checked after each agent (advocate/contrarian), surfaced immediately
 - **S2 (Depth):** Decisions checked per-role (sequential), earlier role decisions inform later roles
 - **S3 (Polish) + Integrator:** Receive all accumulated decisions as constraints
 
