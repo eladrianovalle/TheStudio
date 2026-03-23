@@ -18,8 +18,18 @@ Supported commands:
 | `finalize` | Validates artifacts, updates `run.json`, refreshes the active index, and appends to the active run log. |
 | `cleanup` | Manually enforces run retention budgets (age + total size). |
 | `validate` | Runs validators for a prepared/finalized run using validation config. |
+| `record-decisions` | Records answered decisions into a run's `decisions.json`. |
+| `check-decisions` | Parses decision points from a single agent output file. |
+| `extract-decisions` | Extracts decision points from all agent files in a run directory. |
+| `inject-context` | Generates the context block for the next agent in a scoped run. |
+| `show-clarity` | Displays current project clarity scores. |
+| `set-clarity` | Overrides a topic's clarity score. |
+| `recompute-clarity` | Recomputes clarity from a run's decisions. |
 | `record-metrics` | Records token usage for a single agent invocation into `metrics.json`. |
 | `show-metrics` | Displays aggregated agent token usage for a run (by scope, role, per-agent). |
+| `init` | Installs Studio into a target project directory. |
+| `check-install` | Checks if installed Studio is up to date. |
+| `update` | Updates installed Studio from source. |
 
 ---
 
@@ -154,7 +164,10 @@ Every run directory contains a `run.json` created by `prepare` and updated by `f
 | `iterations_run` | int or null | Auto-counted from artifacts unless overridden. |
 | `hours` | float or null | Optional metadata set by finalize. |
 | `cost` | float or null | Optional metadata set by finalize. |
+| `output_type` | string | `"deliverables"` or `"questions"` (from `--mode`). |
 | `studio_roles` | object or null | Studio-only metadata: `{ "pack": str, "overrides": list[str], "invited": list[str], "completed": list[str], "missing": list[str] }`. |
+| `scopes` | object or null | Scope config snapshot: `{ "config_path": str, "scopes": [...], "total_iterations": int }`. |
+| `storage` | object | Storage stats at prepare time: `{ "total_size_mb": float, "file_count": int, "oldest_artifact_days": float, "cleanup_suggested": bool }`. |
 | `updated_iso` | string (optional) | Added by finalize to record the last change timestamp. |
 | `scope_stats` | object or null | Per-scope output stats from finalize: `{ "<scope>": { "files": int, "total_chars": int, "total_words": int, "avg_words": int } }`. |
 | `quality` | object or null | Quality check results from finalize: `{ "checks_run": int, "warnings": list[str], "errors": list[str] }`. |
@@ -261,8 +274,7 @@ Stick to the CLI whenever possible so scripts remain simple and any assistant ca
 ## 9. Related Documents
 
 - [README.md](../../README.md) – big-picture overview and testing notes.
-- [STUDIO_INTERACTION_GUIDE.md](../STUDIO_INTERACTION_GUIDE.md) – canonical user workflow.
-- [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) – Claude Code slash commands and agent workflow.
+- [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) – Claude Code slash commands and workflow.
 - [windsurf/USAGE.md](./windsurf/USAGE.md) – Windsurf/Cascade-specific workflow.
 - [STUDIO_BRIDGE_TEMPLATE.md](./STUDIO_BRIDGE_TEMPLATE.md) – copy into every dependent repo.
 - [INTEGRATION_GUIDE.md](./INTEGRATION_GUIDE.md) – repo-level onboarding checklist and helper scripts.

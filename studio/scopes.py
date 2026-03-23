@@ -2,9 +2,9 @@
 """
 Scope-based iteration allocation for Studio runs.
 
-Enables users to allocate iteration budgets by scope level (high/medium/low),
-spending more iterations on high-level decisions (cheap to change) and fewer
-on low-level polish (expensive to change).
+Enables users to allocate iteration budgets by scope level (alignment/depth/polish),
+spending more iterations on alignment (cheap to change) and fewer
+on polish (expensive to change).
 """
 from __future__ import annotations
 
@@ -62,16 +62,16 @@ def load_scopes_config(config_path: Path) -> ScopesConfig:
     
     Expected format:
     ```toml
-    [scopes.high_level]
-    focus = "Architecture, plans, strategic decisions"
-    max_iterations = 3
-    
-    [scopes.implementation]
-    focus = "Detailed design, API contracts"
+    [scopes.alignment]
+    focus = "Directional alignment — should we go this way at all?"
     max_iterations = 2
-    
+
+    [scopes.depth]
+    focus = "Detailed analysis per discipline"
+    max_iterations = 3
+
     [scopes.polish]
-    focus = "Documentation, final review"
+    focus = "Cross-discipline gut-check"
     max_iterations = 1
     ```
     

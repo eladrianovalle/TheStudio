@@ -163,7 +163,7 @@ No direct imports or service layers are required—just CLI calls and Markdown a
 ## 9. Source of Truth
 
 1. Code: `run_phase.py`, `run_phase_roles.py`, manifest, role packs.
-2. Docs: README, STUDIO_INTERACTION_GUIDE, WINDSURF_USAGE, WINDSURF_QUICKREF, STUDIO_BRIDGE_TEMPLATE, API, INTEGRATION_GUIDE, AGENTS_REFERENCE, ARCHITECTURE (this file).
+2. Docs: README, CLAUDE_CODE_USAGE, WINDSURF_USAGE, WINDSURF_QUICKREF, STUDIO_BRIDGE_TEMPLATE, API, INTEGRATION_GUIDE, AGENTS_REFERENCE, ARCHITECTURE (this file).
 3. Outputs: `<active_output_root>/index.md`, `<active_knowledge_root>/run_log.md`.
 
 Whenever the workflow changes, update all of the above in one commit. Studio deliberately has no hidden runtime — everything is visible, reproducible, and assistant-agnostic.

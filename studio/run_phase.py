@@ -500,7 +500,7 @@ def _validate_artifacts(
         quality_warnings.extend(f"{fpath.name}: {w}" for w in fmt_result.warnings)
         quality_errors.extend(f"{fpath.name}: {issue}" for issue in fmt_result.issues)
 
-        # 4. Token budget tracking
+        # 4. Per-scope output stats
         _, _, scope, _ = parse_role_filename(fpath.name)
         scope_key = scope or "flat"
         if scope_key not in scope_stats:

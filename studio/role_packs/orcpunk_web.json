@@ -1,0 +1,9 @@
+{
+  "name": "orcpunk_web",
+  "description": "Web-focused pod for OrcPunk portfolio site: lead web engineer, test engineer, and QA.",
+  "roles": [
+    "web_engineering",
+    "web_test_engineer",
+    "web_qa"
+  ]
+}

@@ -1,4 +1,4 @@
-"""Tests for cross-repo Studio installation (M5).
+"""Tests for cross-repo Studio installation.
 
 Tests cover:
   - install_studio: copies source, slash commands, config, manifest, VERSION

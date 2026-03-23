@@ -1,4 +1,4 @@
-"""Tests for question-surfacing mode (M1).
+"""Tests for question-surfacing mode.
 
 Tests cover:
   - question_mode module: generate_question_instructions, is_question_mode, header constant

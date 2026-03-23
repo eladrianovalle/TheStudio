@@ -1,4 +1,4 @@
-"""Tests for decision point parsing, formatting, and extraction (T1.5).
+"""Tests for decision point parsing, formatting, and extraction.
 
 Tests cover:
   - parse_decision_points: single/multiple/missing/malformed markers
@@ -381,7 +381,7 @@ class TestInstructionDocDecisionSection:
 
 
 # ---------------------------------------------------------------------------
-# Answer-aware features tests (M2 T2.1/T2.3)
+# Answer-aware features tests
 # ---------------------------------------------------------------------------
 
 class TestDecisionPointAnswerFields:

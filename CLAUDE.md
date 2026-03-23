@@ -46,6 +46,12 @@ python studio/run_phase.py finalize --phase <phase> --run-id <run_id> --status c
 # Validate a run
 python studio/run_phase.py validate --phase <phase> --run-id <run_id>
 
+# Decision management
+python studio/run_phase.py check-decisions --file path/to/advocate_1.md
+python studio/run_phase.py record-decisions --run-dir <run_dir> --decisions-file answers.json
+python studio/run_phase.py extract-decisions --run-dir <run_dir>
+python studio/run_phase.py inject-context --run-dir <run_dir> --scope alignment --role marketing --stance advocate
+
 # Clarity scores
 python studio/run_phase.py show-clarity
 python studio/run_phase.py set-clarity --topic core_loop_design --score 0.9
@@ -72,7 +78,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 
 ### Core modules (all in `studio/`)
 
-- **`run_phase.py`** — Primary entrypoint: `prepare`, `finalize`, `validate`, `cleanup` subcommands.
+- **`run_phase.py`** — Primary entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, decision, clarity, metrics, and install subcommands.
 - **`run_phase_roles.py`** — Role system: loads `studio.manifest.json`, resolves role packs, applies project-local overrides, builds per-role file naming (`advocate--<role>--NN.md`).
 - **`role_overrides.py`** — Project-local role customization: loads `.studio/roles/*.json` overlays, validates structure, shallow-merges with manifest roles.
 - **`cleanup.py`** — TTL-based (30 days) and budget-based (900MB) run artifact cleanup, plus loose file removal for legacy artifacts outside run directories.
@@ -82,11 +88,12 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 - **`decision_points.py`** — Parses and formats inline decision points (P0/P1/P2 blockquotes) from agent output. Extracts decisions from completed runs into a consolidated log.
 - **`clarity.py`** — Per-topic Clarity Score tracking. Computes confidence from answered decisions, controls agent question density, persists to `clarity.json`. CLI: `show-clarity`, `set-clarity`, `recompute-clarity`.
 - **`verdict.py`** — Extracts APPROVED/REJECTED/UNKNOWN verdict from text.
+- **`install.py`** — Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project.
 - **`validators/`** — `DocumentValidator` (including `validate_question_mode()`) and `CodeValidator` for post-run quality checks.
 
 ### Configuration files
 
-- **`studio.manifest.json`** — Defines all disciplines (marketing, product, design, art, engineering, test_engineer, qa, ml, pmm) with advocate/contrarian focuses, deliverables, escalation cues, and role dependencies.
+- **`studio.manifest.json`** — Defines all disciplines (marketing, product, design, art, engineering, test_engineer, qa, web_engineering, web_test_engineer, web_qa, ml, pmm) with advocate/contrarian focuses, deliverables, escalation cues, and role dependencies.
 - **`role_packs/*.json`** — Curated pod presets (e.g., `studio_core` = marketing + product + design + art + engineering + test_engineer + qa). Override with `--roles +role/-role`. Role dependencies in the manifest auto-inject co-required roles (e.g., engineering always brings test_engineer).
 - **`config/scopes.toml`** — Default three-tier scope configuration (alignment → depth → polish) with output budgets and debate modes.
 - **`config/studio_settings.toml`** — Cleanup TTL and storage limits.

@@ -49,6 +49,7 @@ PROMPT_DOC_GLOB = "docs/role_prompts/*.md"
 SLASH_COMMANDS = [
     "run-phase.md",
     "run-studio-phase.md",
+    "unstale.md",
 ]
 
 # Marker to replace in slash commands

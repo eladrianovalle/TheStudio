@@ -129,7 +129,7 @@ Roles enforce two methodologies via their contrarian focuses and escalation trig
 ## 7. Related Docs
 
 - [README.md](../../README.md) – overall workflow and testing notes.
-- [STUDIO_INTERACTION_GUIDE.md](../STUDIO_INTERACTION_GUIDE.md) – day-to-day instructions.
+- [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) – Claude Code slash commands and workflow.
 - [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) – Claude Code slash commands and agent workflow.
 - [windsurf/USAGE.md](./windsurf/USAGE.md) – Windsurf/Cascade-specific workflow.  
 - [API.md](./API.md) – CLI/reference schema.  

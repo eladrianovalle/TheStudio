@@ -140,6 +140,8 @@ python studio/run_phase.py validate --phase <phase> --run-id <run_id>
 # Decision management
 python studio/run_phase.py check-decisions --file path/to/advocate_1.md
 python studio/run_phase.py record-decisions --run-dir <run_dir> --decisions-file answers.json
+python studio/run_phase.py extract-decisions --run-dir <run_dir>
+python studio/run_phase.py inject-context --run-dir <run_dir> --scope alignment --role marketing --stance advocate
 
 # Clarity scores
 python studio/run_phase.py show-clarity

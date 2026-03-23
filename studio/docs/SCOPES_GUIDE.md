@@ -2,401 +2,108 @@
 
 ## Overview
 
-Scope-based iteration allocation allows you to spend more iterations on high-level decisions (cheap to change) and fewer on low-level polish (expensive to change). This implements the "concentric-iteration" strategy where iterations start broad and narrow progressively.
+Studio multi-role runs use a **three-tier scoped debate** by default: alignment, depth, polish. Each tier has a different goal, word budget, and debate mode. This reduces token waste by catching bad directions cheaply in alignment before committing to expensive depth analysis.
 
-## Quick Start
+## Default Configuration
 
-### 1. Create a Scopes Config
-
-Create `.studio/scopes.toml` in your Studio directory:
+The shipped config lives at `config/scopes.toml`:
 
 ```toml
-[scopes.high_level]
-focus = "Architecture, plans, strategic decisions"
-max_iterations = 3
-
-[scopes.implementation]
-focus = "Detailed design, API contracts, core implementation"
+[scopes.alignment]
+focus = "Directional alignment — approach, fatal flaws, high-level trade-offs only."
 max_iterations = 2
+output_budget = 500        # ~500 words per agent
+debate_mode = "all_roles"  # All roles run in parallel
+
+[scopes.depth]
+focus = "Full analysis — detailed deliverables, edge cases, concrete recommendations."
+max_iterations = 3
+debate_mode = "per_role"   # Roles run sequentially
 
 [scopes.polish]
-focus = "Documentation, final review, minor refinements"
+focus = "Cross-discipline conflicts — flag remaining issues, no new proposals."
 max_iterations = 1
-```
-
-### 2. Run with Scopes
-
-```bash
-python run_phase.py prepare --phase tech --text "Build auth system" --scopes .studio/scopes.toml
-```
-
-The `--scopes` flag is **optional**. If omitted, Studio uses standard iteration allocation.
-
-## Configuration Format
-
-### Basic Structure
-
-```toml
-[scopes.<scope_name>]
-focus = "Description of what this scope covers"
-max_iterations = <number>
-```
-
-### Fields
-
-- **`scope_name`**: Identifier for the scope (e.g., `high_level`, `implementation`, `polish`)
-- **`focus`**: Human-readable description of what this scope covers
-- **`max_iterations`**: Number of iterations allocated to this scope (must be ≥ 1)
-
-### Example: Tech Phase
-
-```toml
-[scopes.architecture]
-focus = "High-level system design, component boundaries, data flow"
-max_iterations = 3
-
-[scopes.api_design]
-focus = "API contracts, interfaces, type definitions"
-max_iterations = 2
-
-[scopes.implementation]
-focus = "Core implementation, algorithms, error handling"
-max_iterations = 2
-
-[scopes.polish]
-focus = "Documentation, examples, edge cases"
-max_iterations = 1
-```
-
-### Example: Market Phase
-
-```toml
-[scopes.market_research]
-focus = "TAM/SAM analysis, competitor research, user personas"
-max_iterations = 3
-
-[scopes.positioning]
-focus = "Value proposition, messaging, differentiation"
-max_iterations = 2
-
-[scopes.go_to_market]
-focus = "Launch plan, channels, metrics"
-max_iterations = 1
+output_budget = 300
+debate_mode = "all_roles"
 ```
 
 ## How It Works
 
-### Iteration Budget Allocation
-
-When you specify `--max-iterations 5` with a scopes config:
-
-1. **Config total** is calculated (sum of all `max_iterations`)
-2. **Proportional scaling** adjusts each scope to match your budget
-3. **Minimum guarantee**: Each scope gets at least 1 iteration
-
-**Example**:
-
-```toml
-# Config defines 6 total iterations
-[scopes.high_level]
-max_iterations = 3  # 50% of total
-
-[scopes.implementation]
-max_iterations = 2  # 33% of total
-
-[scopes.polish]
-max_iterations = 1  # 17% of total
+```
+┌─ ALIGNMENT ─────────────────────────────────┐
+│ All roles in parallel. ~500 words each.     │
+│ "Should we go this way at all?"             │
+│ Catches fatal flaws cheaply.                │
+├─ DEPTH ─────────────────────────────────────┤
+│ Each role sequentially. Full deliverables.  │
+│ "How exactly should we do this?"            │
+│ Starts focused thanks to alignment context. │
+├─ POLISH ────────────────────────────────────┤
+│ All roles in parallel. ~300 words each.     │
+│ "Anything still broken across disciplines?" │
+│ Final cross-check before integrator.        │
+├─ INTEGRATOR ────────────────────────────────┤
+│ Synthesize all roles into unified roadmap.  │
+│ Own advocate/contrarian duel.               │
+└─────────────────────────────────────────────┘
 ```
 
-Running with `--max-iterations 10`:
-- `high_level`: 3/6 × 10 = **5 iterations**
-- `implementation`: 2/6 × 10 = **3 iterations**
-- `polish`: 1/6 × 10 = **2 iterations**
+### Scope Fields
 
-### Sequential Execution
+| Field | Required | Description |
+|-------|----------|-------------|
+| `focus` | Yes | Guidance included in agent prompts for this scope |
+| `max_iterations` | Yes | Advocate/contrarian rounds before moving on (min 1) |
+| `output_budget` | No | Word cap per agent output (omit for no cap) |
+| `debate_mode` | No | `"all_roles"` (parallel) or `"per_role"` (sequential). Default: `"all_roles"` |
 
-Scopes are executed **sequentially** in the order defined in the config:
+### File Naming
 
-1. Work through `high_level` scope (up to allocated iterations)
-2. Once approved or iterations exhausted, move to `implementation`
-3. Continue through remaining scopes
+Scope is encoded in filenames: `advocate--marketing--S1-01.md` (alignment), `advocate--engineering--S2-02.md` (depth iteration 2), `advocate--qa--S3-01.md` (polish).
 
-This creates the "concentric circles" effect: broad → narrow → focused.
+## Usage
 
-## Decision Tree: When to Use Scopes
+Scopes are **enabled by default** for studio phase runs. No flags needed:
 
-### Use Scopes When:
-
-- ✅ You want to spend more time on architecture/planning
-- ✅ You're working on a complex feature with multiple layers
-- ✅ You want to optimize token usage (fewer iterations on polish)
-- ✅ You want explicit scope boundaries in your workflow
-
-### Use Standard Workflow When:
-
-- ❌ Simple, straightforward tasks
-- ❌ Single-scope work (e.g., just documentation)
-- ❌ Rapid prototyping where structure isn't needed
-
-## Scope Naming Conventions
-
-### Recommended Names
-
-**High-Level Scopes** (3-4 iterations):
-- `architecture`
-- `high_level`
-- `planning`
-- `strategy`
-
-**Medium Scopes** (2-3 iterations):
-- `implementation`
-- `api_design`
-- `core_features`
-- `integration`
-
-**Low-Level Scopes** (1-2 iterations):
-- `polish`
-- `documentation`
-- `refinement`
-- `edge_cases`
-
-### Naming Tips
-
-- Use `snake_case` for scope names
-- Be descriptive but concise
-- Align with your team's terminology
-- Keep consistent across projects
-
-## Templates
-
-### Minimal (3 scopes)
-
-```toml
-[scopes.high_level]
-focus = "Architecture and planning"
-max_iterations = 3
-
-[scopes.implementation]
-focus = "Core implementation"
-max_iterations = 2
-
-[scopes.polish]
-focus = "Documentation and refinement"
-max_iterations = 1
+```
+/run-studio-phase --text "Evaluate multiplayer architecture" --roles +engineering +qa
 ```
 
-### Detailed (5 scopes)
+### Disable scopes (flat mode)
 
-```toml
-[scopes.architecture]
-focus = "System design, component boundaries"
-max_iterations = 3
-
-[scopes.api_contracts]
-focus = "API design, interfaces, types"
-max_iterations = 2
-
-[scopes.core_implementation]
-focus = "Algorithms, business logic"
-max_iterations = 2
-
-[scopes.integration]
-focus = "Component integration, error handling"
-max_iterations = 1
-
-[scopes.polish]
-focus = "Documentation, examples, edge cases"
-max_iterations = 1
+```
+/run-studio-phase --text "..." --no-scopes
 ```
 
-### Single-Focus (2 scopes)
+Flat mode runs all roles at full depth with no tiers — the original behavior.
 
-```toml
-[scopes.design]
-focus = "All design and planning work"
-max_iterations = 4
-
-[scopes.execution]
-focus = "Implementation and polish"
-max_iterations = 2
-```
-
-## Troubleshooting
-
-### Error: "Scopes config not found"
-
-**Cause**: File path is incorrect or file doesn't exist
-
-**Solution**:
-```bash
-# Use absolute path
-python run_phase.py prepare --phase tech --text "..." --scopes /full/path/to/scopes.toml
-
-# Or relative to Studio root
-python run_phase.py prepare --phase tech --text "..." --scopes .studio/scopes.toml
-```
-
-### Error: "Invalid TOML"
-
-**Cause**: Syntax error in TOML file
-
-**Solution**: Validate TOML syntax
-```bash
-# Check for common issues:
-# - Missing quotes around strings
-# - Unmatched brackets
-# - Invalid characters
-```
-
-### Error: "Scope 'X' missing 'focus' field"
-
-**Cause**: Required field is missing
-
-**Solution**: Add all required fields
-```toml
-[scopes.my_scope]
-focus = "Description here"  # Required
-max_iterations = 2          # Required
-```
-
-### Error: "Scope 'X' must have at least 1 iteration"
-
-**Cause**: `max_iterations` is 0 or negative
-
-**Solution**: Set to at least 1
-```toml
-[scopes.my_scope]
-focus = "Description"
-max_iterations = 1  # Minimum
-```
-
-## Best Practices
-
-### 1. Start Simple
-
-Begin with 3 scopes (high/medium/low) and add more only if needed.
-
-### 2. Align with Phase
-
-Different phases benefit from different scope structures:
-
-- **Market**: Research → Positioning → GTM
-- **Design**: Concept → Mechanics → UX
-- **Tech**: Architecture → Implementation → Polish
-- **Studio**: Vision → Constraints → Integration
-
-### 3. Iterate on Config
-
-Your first scopes config won't be perfect. Adjust based on:
-- Where you run out of iterations
-- Where you have iterations left over
-- Which scopes need more/less focus
-
-### 4. Document Your Rationale
-
-Add comments to your config explaining why you chose specific allocations:
-
-```toml
-# We spend more time on architecture because changes here are cheap
-[scopes.architecture]
-focus = "System design"
-max_iterations = 4
-
-# Implementation is more constrained once architecture is set
-[scopes.implementation]
-focus = "Core code"
-max_iterations = 2
-```
-
-### 5. Share Configs Across Projects
-
-Create reusable configs for common project types:
-- `.studio/scopes-tech.toml`
-- `.studio/scopes-market.toml`
-- `.studio/scopes-design.toml`
-
-## FAQ
-
-### Q: Can I skip scopes?
-
-**A**: No, scopes execute sequentially. However, you can set `max_iterations = 1` for scopes you want to minimize.
-
-### Q: What if I run out of iterations in a scope?
-
-**A**: The run moves to the next scope. You can always run another Studio session to continue work.
-
-### Q: Can I use scopes with Studio phase?
-
-**A**: Yes! Scopes work with all phases (market, design, tech, studio).
-
-### Q: Do scopes affect token usage?
-
-**A**: Yes! By allocating fewer iterations to polish, you reduce total token usage by 20-30% typically.
-
-### Q: Can I change scopes mid-run?
-
-**A**: No, scopes are set at `prepare` time. However, you can start a new run with different scopes.
-
-### Q: How do scopes interact with `--max-iterations`?
-
-**A**: The `--max-iterations` flag sets the total budget. Scopes divide that budget proportionally.
-
-## Examples
-
-### Example 1: Tech Phase with Scopes
+### Custom scopes config
 
 ```bash
-# Create config
-cat > .studio/scopes.toml << 'EOF'
-[scopes.architecture]
-focus = "System design, components, data flow"
-max_iterations = 3
-
-[scopes.implementation]
-focus = "Core code, algorithms, error handling"
-max_iterations = 2
-
-[scopes.polish]
-focus = "Docs, examples, edge cases"
-max_iterations = 1
-EOF
-
-# Run with scopes
-python run_phase.py prepare \
-  --phase tech \
-  --text "Build real-time multiplayer sync system" \
-  --max-iterations 6 \
-  --scopes .studio/scopes.toml
+python studio/run_phase.py prepare --phase studio --text "..." --scopes /path/to/custom-scopes.toml
 ```
 
-**Result**: 3 iterations on architecture, 2 on implementation, 1 on polish.
+### Per-project override
 
-### Example 2: Market Phase with Custom Budget
+Place a `.studio/scopes.toml` in your project root. Studio auto-loads it when present.
 
-```bash
-# Config defines 6 total, but we override to 10
-python run_phase.py prepare \
-  --phase market \
-  --text "Launch strategy for indie game" \
-  --max-iterations 10 \
-  --scopes .studio/scopes-market.toml
-```
+## Customization
 
-**Result**: Proportional scaling from 6 → 10 iterations.
+You can adjust the default config or create project-specific ones. The key levers:
 
-### Example 3: Standard Workflow (No Scopes)
+- **More alignment iterations** if your team frequently debates direction
+- **Higher output_budget** for depth if agents produce thin analysis
+- **Lower output_budget** for alignment if agents waste words on detail too early
+- **`per_role` debate_mode** for any scope where sequential role-by-role analysis matters
 
-```bash
-# Omit --scopes flag for standard behavior
-python run_phase.py prepare \
-  --phase design \
-  --text "Design inventory system" \
-  --max-iterations 3
-```
+## Interaction with Decision Points and Metrics
 
-**Result**: Standard 3-iteration advocate/contrarian loop.
+- **Decision points** are extracted and surfaced after every agent in every scope
+- **Agent metrics** (token usage) are recorded per-agent, so you can see which scope consumes the most tokens via `show-metrics`
+- **Clarity scores** inform agent question density across scopes — settled topics get fewer questions
 
 ## See Also
 
-- [STUDIO_INTERACTION_GUIDE.md](../STUDIO_INTERACTION_GUIDE.md) - Standard Studio workflow
-- [README.md](../README.md) - Studio overview
+- [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) — slash commands and agent workflow
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — system design
+- [README.md](../../README.md) — project overview
