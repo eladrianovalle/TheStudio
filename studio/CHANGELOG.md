@@ -2,6 +2,27 @@
 
 All notable changes to Studio will be documented in this file.
 
+## [3.1.0] - 2026-03-22
+
+### Added — Agent Metrics Tracking
+
+- **Per-agent token tracking** — `record-metrics` CLI records total tokens, tool uses, and duration from each agent invocation into `{run_dir}/metrics.json`.
+- **Metrics summary** — `show-metrics` CLI displays breakdowns by scope, role, and individual agent.
+- **Finalize aggregation** — metrics are summarized into `run.json["metrics"]` at finalize time with totals and per-scope/per-role breakdowns.
+- Slash commands (`/run-phase`, `/run-studio-phase`) now require metrics recording after every agent turn.
+
+### Fixed — Decision Point Surfacing
+
+- **S1 decisions surfaced per-agent** — alignment scope previously batched all decision points until every agent finished. Now extracts and surfaces after each individual agent, matching S2 and flat mode behavior.
+- All scopes consistently follow the same per-agent extraction pattern.
+
+### Stats
+
+- 400 tests (up from 372)
+- 14 Python modules in studio/
+
+---
+
 ## [3.0.0] - 2026-03-19
 
 ### Added — Collaboration Protocol (M1-M3)
@@ -79,32 +100,9 @@ All notable changes to Studio will be documented in this file.
   - Tracks validation speed (1KB: 0.5ms, 10KB: 1ms, 100KB: 9.5ms)
   - Prevents performance regressions
 
-### Added - Token Tracking & Optimization
+### Planned - Token Tracking (Superseded)
 
-**Measure and Optimize Token Usage**:
-
-- **Token Tracking System** (`token_tracker.py`)
-  - Log token usage per operation (advocate, contrarian, integrator)
-  - Track input/output tokens and costs
-  - JSONL storage for detailed records
-  - JSON summaries for aggregated stats
-
-- **Analysis Tools** (`analyze_tokens.py`)
-  - `summary`: View detailed token usage for a run
-  - `compare`: Compare baseline vs. optimized runs
-  - `report`: Generate usage reports across runs
-  - `estimate`: Estimate token usage for planned runs
-
-- **Run Metadata Integration**
-  - Token fields added to `run.json`
-  - Tracks total input/output tokens and costs
-  - Enables historical analysis
-
-- **Documentation** (`docs/TOKEN_TRACKING.md`)
-  - Complete API reference
-  - Integration guide for Windsurf workflow
-  - Best practices for measuring savings
-  - Troubleshooting guide
+Token tracking modules (`token_tracker.py`, `analyze_tokens.py`) were planned but never implemented. This was superseded by the agent metrics system in v3.1.0, which tracks per-agent token usage via `record-metrics` / `show-metrics` CLI commands using data from the orchestrator's Agent tool results.
 
 ### Testing
 

@@ -18,6 +18,8 @@ Supported commands:
 | `finalize` | Validates artifacts, updates `run.json`, refreshes the active index, and appends to the active run log. |
 | `cleanup` | Manually enforces run retention budgets (age + total size). |
 | `validate` | Runs validators for a prepared/finalized run using validation config. |
+| `record-metrics` | Records token usage for a single agent invocation into `metrics.json`. |
+| `show-metrics` | Displays aggregated agent token usage for a run (by scope, role, per-agent). |
 
 ---
 
@@ -65,6 +67,32 @@ Inside each run directory:
 | `--summary PATH` | ❌ | auto-detected | Provide a custom summary path if you store it elsewhere. |
 
 `finalize` enforces the artifact checklist (see Section 3). Missing files raise a `FileNotFoundError` describing the gaps.
+
+---
+
+### 1.3 `record-metrics` arguments
+
+| Flag | Required | Default | Description |
+| --- | --- | --- | --- |
+| `--run-dir PATH` | Yes | – | Path to the run directory. |
+| `--agent {advocate,contrarian,integrator,polish}` | Yes | – | Agent type being recorded. |
+| `--total-tokens N` | Yes | – | Total tokens consumed by the agent. |
+| `--tool-uses N` | No | `0` | Number of tool uses. |
+| `--duration-ms N` | No | `0` | Wall-clock duration in milliseconds. |
+| `--role NAME` | No | `None` | Role name (for studio phase). |
+| `--scope {alignment,depth,polish,flat}` | No | `None` | Scope the agent ran in. |
+
+Appends an entry to `{run_dir}/metrics.json`. Called by the orchestrator after each Agent tool returns, using values from the `<usage>` block in the tool result.
+
+---
+
+### 1.4 `show-metrics` arguments
+
+| Flag | Required | Default | Description |
+| --- | --- | --- | --- |
+| `--run-dir PATH` | Yes | – | Path to the run directory. |
+
+Displays a formatted summary of all recorded metrics: total tokens, tool uses, duration, breakdowns by scope and role, and per-agent detail.
 
 ---
 
@@ -128,6 +156,9 @@ Every run directory contains a `run.json` created by `prepare` and updated by `f
 | `cost` | float or null | Optional metadata set by finalize. |
 | `studio_roles` | object or null | Studio-only metadata: `{ "pack": str, "overrides": list[str], "invited": list[str], "completed": list[str], "missing": list[str] }`. |
 | `updated_iso` | string (optional) | Added by finalize to record the last change timestamp. |
+| `scope_stats` | object or null | Per-scope output stats from finalize: `{ "<scope>": { "files": int, "total_chars": int, "total_words": int, "avg_words": int } }`. |
+| `quality` | object or null | Quality check results from finalize: `{ "checks_run": int, "warnings": list[str], "errors": list[str] }`. |
+| `metrics` | object or null | Agent token usage aggregated from `metrics.json` at finalize: `{ "agents": int, "total_tokens": int, "total_duration_ms": int, "total_tool_uses": int, "by_scope": { ... }, "by_role": { ... } }`. |
 
 You can safely parse this JSON for dashboards, scripts, or audits.
 

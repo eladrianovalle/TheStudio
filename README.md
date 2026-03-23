@@ -147,6 +147,10 @@ python studio/run_phase.py set-clarity --topic core_loop_design --score 0.9
 python studio/run_phase.py set-clarity --topic core_loop_design --reset
 python studio/run_phase.py recompute-clarity --phase studio --run-id <run_id>
 
+# Agent metrics (token tracking per agent)
+python studio/run_phase.py record-metrics --run-dir <path> --agent advocate --total-tokens 5000 --role marketing --scope alignment
+python studio/run_phase.py show-metrics --run-dir <path>
+
 # Cross-repo install
 python studio/run_phase.py init --target /path/to/project
 python studio/run_phase.py check-install --target /path/to/project
@@ -207,6 +211,7 @@ Keep installed copies current: `python studio/run_phase.py check-install --targe
       decisions.json                   # Accumulated decision points + answers
       decisions.md                     # Human-readable settled decisions
       clarity.json                     # Per-topic clarity scores
+      metrics.json                     # Per-agent token usage (recorded during run)
       summary.md
       run.json
 ```
@@ -221,6 +226,7 @@ Keep installed copies current: `python studio/run_phase.py check-install --targe
 | `studio_roles` | `{pack, overrides, invited, completed, missing}` |
 | `quality` | Finalize-time quality checks: `{checks_run, warnings, errors}` |
 | `scope_stats` | Per-scope output stats: `{files, total_chars, avg_words}` |
+| `metrics` | Agent token usage: `{agents, total_tokens, total_duration_ms, by_scope, by_role}` |
 
 ---
 
@@ -298,7 +304,7 @@ studio/
   config/scopes.toml         # Default scope configuration
   config/studio_settings.toml # Cleanup settings
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 372 tests (pytest)
+  tests/                    # 400 tests (pytest)
 ```
 
 ---
@@ -309,7 +315,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-372 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, cross-repo artifact routing, and install/update workflows.
+400 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, cross-repo artifact routing, install/update workflows, and agent metrics tracking.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 
