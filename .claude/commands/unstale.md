@@ -19,10 +19,11 @@ Gather ground truth before comparing anything. Run these in parallel:
 3. **CLI commands** — `python studio/run_phase.py --help` to get the current command list.
 4. **Git log** — `git log --oneline -20` for recent changes that may not be reflected in docs.
 5. **File tree** — `ls studio/docs/` and `ls .claude/commands/` for the full doc and command inventory.
+6. **Project tracking** — detect what tracking systems are in use. Check: is `gh` available and does the repo have a GitHub remote? Scan for local tracking patterns: `.tasks/`, `TODO.md`, `ISSUES.md`, `issues/`, `backlog/`, `.todo/`. Note which systems are active — Agent 5 needs this to decide whether to run.
 
 ### Phase 2: Parallel Audit
 
-Launch **four** agents in parallel. Each agent audits a different category and returns a list of findings (file, line, what's stale, what it should say). Agents must **not edit files** — research only.
+Launch **five** agents in parallel (skip Agent 5 if no tracking systems were found in step 6). Each agent audits a different category and returns a list of findings (file, line, what's stale, what it should say). Agents must **not edit files** — research only.
 
 #### Agent 1: Documentation Audit
 
@@ -63,15 +64,37 @@ Check that these things agree with each other:
 - `run.json` schema in `API.md` vs `README.md` vs actual fields written by `run_phase.py`
 - Role list in `README.md` vs `studio.manifest.json`
 
+#### Agent 5: Project Tracking Audit
+
+Using the tracking systems detected in Phase 1 step 6, audit all open tracked items for staleness.
+
+**For GitHub Issues** (if `gh` is available and repo is on GitHub):
+
+- Issues referencing code, files, branches, or features that no longer exist in the repo
+- Issues tied to PRs that have been merged but the issue was never closed
+- Issues with stale status labels (e.g., "in progress" but the work already shipped)
+- Duplicate issues — multiple issues tracking the same work
+- Issues referencing branch names that have been deleted
+
+**For local tracking files** (`.tasks/`, `TODO.md`, `ISSUES.md`, `issues/`, `backlog/`, `.todo/`, etc.):
+
+- Items marked "in progress" or "open" whose work has already shipped (check git log, merged PRs, existing code)
+- Items referencing files, modules, or features that were deleted or renamed
+- Items tracking completed milestones or resolved TODOs
+- Duplicate entries tracking the same work
+- Orphaned tracking files that reference a context that no longer exists
+
 ### Phase 3: Fix Everything
 
-Aggregate all findings from the four agents. For each finding:
+Aggregate all findings from the five agents. For each finding:
 
 1. **Verify it** — confirm the finding is real (agents can have false positives)
 2. **Fix it** — edit the file to reflect current reality
 3. **Skip it** — if the finding is a false positive or cosmetic, note it and move on
 
 Group related fixes into logical batches. Fix docs and code in the same pass — don't leave one stale while updating the other.
+
+**Special handling for Agent 5 (Project Tracking) findings:** group into two buckets — **safe to fix** (status text updates in local files, adding completion notes, minor wording corrections) and **needs your approval** (closing GitHub issues, deleting tracking files, removing entries, major edits). Apply safe items automatically. For approval-needed items, present the full list to the user with rationale and **wait for explicit confirmation** before proceeding. Do not batch these with other fixes — they require explicit sign-off.
 
 ### Phase 4: Verify and Report
 
@@ -85,6 +108,7 @@ After all fixes:
    - **Stale examples corrected**
    - **Memory files updated**
    - **Comments cleaned up**
+   - **Tracking items fixed** (issues closed, local tracking updated — note which were auto-fixed vs user-approved)
 3. Note anything that looks suspicious but you weren't confident enough to fix — flag these for the user
 
 ### Key Rules

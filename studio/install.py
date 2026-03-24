@@ -51,6 +51,7 @@ SLASH_COMMANDS = [
     "run-studio-phase.md",
     "unstale.md",
     "studio-update.md",
+    "detest.md",
 ]
 
 # Marker to replace in slash commands
