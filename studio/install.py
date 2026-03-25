@@ -2,12 +2,13 @@
 Cross-repo Studio installer.
 
 Copies Studio source, slash commands, config, and manifest into a target
-project so that `/run-phase` and `/run-studio-phase` work natively —
+project so that all slash commands (`/run-phase`, `/run-studio-phase`,
+`/unstale`, `/detest`, `/offload`, `/studio-update`) work natively —
 including the pause-and-ask collaboration protocol.
 
 Usage via run_phase.py:
     python run_phase.py init --target /path/to/project
-    python run_phase.py check --target /path/to/project
+    python run_phase.py check-install --target /path/to/project
     python run_phase.py update --target /path/to/project
 """
 from __future__ import annotations

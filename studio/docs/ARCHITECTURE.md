@@ -39,6 +39,7 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 | `rerun.py` | Detects rejection context from prior runs and generates rerun instructions. |
 | `verdict.py` | Extracts APPROVED/REJECTED/UNKNOWN verdict from agent output. |
 | `install.py` | Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project. |
+| `offload.py` | CLAUDE.md analyzer: classifies sections, detects embedded constraints, scores pointer strength, generates offload reports, manages canary tokens. |
 | `validators/` | `DocumentValidator` and `CodeValidator` for post-run quality checks. |
 | `studio.manifest.json` | Declarative description of phase-level personas, Studio role definitions, and role dependencies. |
 | `role_packs/*.json` | Curated sets of Studio roles (e.g., `studio_core`). Operators pick a pack, then add/remove roles with CLI flags. |

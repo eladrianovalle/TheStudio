@@ -314,3 +314,16 @@ Customize base manifest roles per-project by placing JSON files in `.studio/role
 ```
 
 Override keys replace the base; unspecified keys inherit from the manifest. Valid keys: `title`, `advocate_focus`, `contrarian_focus`, `prompt_doc`, `deliverables`, `escalate_on`. Applied overrides are logged in `run.json` under `studio_roles.role_overrides_applied`.
+
+---
+
+## Utility Slash Commands
+
+In addition to phase runners, these slash commands are available:
+
+| Command | Purpose |
+|---------|---------|
+| `/unstale` | Comprehensive staleness audit — aligns all docs, code comments, memory, and project tracking to current reality. |
+| `/detest` | Audits the repo's test suite against AI-TDD methodology — finds anti-patterns, fixes them. |
+| `/offload` | Analyzes CLAUDE.md for content safe to move to companion docs, with canary token verification. |
+| `/studio-update` | One-step update of installed Studio source and slash commands. |

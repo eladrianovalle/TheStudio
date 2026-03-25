@@ -100,7 +100,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 
 ### Configuration files
 
-- **`studio.manifest.json`** — Defines all disciplines (marketing, product, design, art, engineering, test_engineer, qa, web_engineering, web_test_engineer, web_qa, ml, pmm) with advocate/contrarian focuses, deliverables, escalation cues, and role dependencies.
+- **`studio.manifest.json`** — Defines all disciplines (marketing, product, design, art, engineering, test_engineer, qa, web_engineering, web_test_engineer, web_qa, ml, ai_engineer, pmm) with advocate/contrarian focuses, deliverables, escalation cues, and role dependencies.
 - **`role_packs/*.json`** — Curated pod presets (e.g., `studio_core` = marketing + product + design + art + engineering + test_engineer + qa). Override with `--roles +role/-role`. Role dependencies in the manifest auto-inject co-required roles (e.g., engineering always brings test_engineer).
 - **`config/scopes.toml`** — Default three-tier scope configuration (alignment → depth → polish) with output budgets and debate modes.
 - **`config/studio_settings.toml`** — Cleanup TTL and storage limits.

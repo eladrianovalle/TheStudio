@@ -297,16 +297,17 @@ studio/
   clarity.py                # Per-topic Clarity Score tracking and question density control
   question_mode.py          # Pre-flight question surfacing (--mode questions)
   install.py                # Cross-repo installer (init/check/update)
+  offload.py                # CLAUDE.md analyzer: section classification, pointer scoring, canary tokens
   cleanup.py                # TTL + budget-based artifact cleanup + loose file removal
   rerun.py                  # Rejection context injection for iterate-on-failure
   verdict.py                # APPROVED/REJECTED extraction
   validators/               # DocumentValidator + CodeValidator
-  studio.manifest.json      # Role definitions (9 disciplines)
+  studio.manifest.json      # Role definitions (13 disciplines)
   role_packs/*.json          # Curated role sets (studio_core, etc.)
   config/scopes.toml         # Default scope configuration
   config/studio_settings.toml # Cleanup settings
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 400 tests (pytest)
+  tests/                    # 423 tests (pytest)
 ```
 
 ---
@@ -317,7 +318,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-400 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, cross-repo artifact routing, install/update workflows, and agent metrics tracking.
+423 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, cross-repo artifact routing, install/update workflows, agent metrics tracking, and CLAUDE.md offload analysis.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 

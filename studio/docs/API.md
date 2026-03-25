@@ -27,6 +27,7 @@ Supported commands:
 | `recompute-clarity` | Recomputes clarity from a run's decisions. |
 | `record-metrics` | Records token usage for a single agent invocation into `metrics.json`. |
 | `show-metrics` | Displays aggregated agent token usage for a run (by scope, role, per-agent). |
+| `offload` | Analyzes CLAUDE.md for content safe to offload to companion docs. Classifies sections, scores pointer strength, generates reports. |
 | `init` | Installs Studio into a target project directory. |
 | `check-install` | Checks if installed Studio is up to date. |
 | `update` | Updates installed Studio from source. |
