@@ -196,6 +196,23 @@
         "Need for external labeling services or expert panels not yet engaged"
       ]
     },
+    "ai_engineer": {
+      "title": "Staff AI Engineer — Prompt Architecture & Agent Optimization",
+      "advocate_focus": "Design prompt structures, context management strategies, and agent configurations that maximize accuracy, consistency, and token efficiency. Optimize how AI tools read, reference, and act on project instructions.",
+      "contrarian_focus": "Expose fragile prompt assumptions, context window blind spots, and silent failure modes where AI agents miss critical instructions, hallucinate references, or degrade under token pressure. Challenge any design that assumes the AI will 'just know' to check something.",
+      "prompt_doc": "",
+      "deliverables": [
+        "Prompt architecture analysis (what's always-loaded vs on-demand)",
+        "Context efficiency recommendations (token budget, retrieval patterns)",
+        "Failure mode catalog (what breaks when AI misses a reference)",
+        "Agent behavior validation plan (how to verify AI actually follows instructions)"
+      ],
+      "escalate_on": [
+        "Critical instructions placed where AI agents won't reliably see them",
+        "Prompt structures that degrade silently as context windows fill",
+        "No validation mechanism for whether AI agents followed offloaded instructions"
+      ]
+    },
     "pmm": {
       "title": "Product Marketing Lead",
       "advocate_focus": "Shepherd the product narrative from MVP to public launch.",

@@ -1621,6 +1621,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     show_metrics_parser.add_argument("--run-dir", type=Path, required=True, help="Path to the run directory.")
 
+    offload_parser = subparsers.add_parser(
+        "offload", help="Analyze CLAUDE.md for offload opportunities."
+    )
+    offload_parser.add_argument("--target", type=Path, default=Path("."), help="Directory containing the CLAUDE.md to analyze.")
+    offload_parser.add_argument("--apply", action="store_true", help="Apply changes after report.")
+    offload_parser.add_argument("--rollback", action="store_true", help="Restore from most recent backup.")
+    offload_parser.add_argument("--verify", action="store_true", help="Run canary verification.")
+
     return parser
 
 
@@ -2183,6 +2191,68 @@ def _do_update(args: argparse.Namespace) -> None:
             print(f"  Added: {result['added']} file(s)")
 
 
+def do_offload(args: argparse.Namespace) -> None:
+    """Analyze CLAUDE.md for offload opportunities."""
+    import offload as _offload
+
+    target = Path(args.target).resolve()
+    claude_md = target / "CLAUDE.md"
+
+    if args.rollback:
+        backup_dir = target / ".studio" / "offload-backup"
+        if not backup_dir.is_dir():
+            print("No backup directory found.")
+            return
+        # Find most recent backup
+        backups = sorted(backup_dir.iterdir(), reverse=True)
+        if not backups:
+            print("No backups found.")
+            return
+        restored = _offload.restore_backup(str(backups[0]))
+        print(f"Restored {len(restored)} file(s) from {backups[0].name}")
+    elif args.verify:
+        if not claude_md.exists():
+            print(f"No CLAUDE.md found at {target}")
+            return
+        content = claude_md.read_text(encoding="utf-8")
+        sections = _offload.classify_sections(content)
+        canaries = {
+            s["name"]: _offload.generate_canary_token(s["name"])
+            for s in sections if s["tier"] != _offload.TIER_ALWAYS_INLINE
+        }
+        leaked = _offload.verify_canary_isolation(content, list(canaries.values()))
+        if leaked:
+            print(f"WARNING: {len(leaked)} canary token(s) found in CLAUDE.md")
+        else:
+            print("Canary isolation verified — no tokens in CLAUDE.md")
+    else:
+        if not claude_md.exists():
+            print(f"No CLAUDE.md found at {target}")
+            return
+        content = claude_md.read_text(encoding="utf-8")
+        sections = _offload.classify_sections(content)
+        constraints = _offload.detect_embedded_constraints(sections)
+        context = _offload.detect_cross_repo_context()
+        companion_root = context.get("companion_root", ".")
+        existing = _offload.scan_existing_docs(companion_root)
+        reconciliation = _offload.reconcile_with_existing(sections, existing)
+        pointers = [
+            _offload.generate_pointer_stub(s, r.get("target", ""))
+            for s, r in zip(
+                [s for s in sections if s["tier"] != _offload.TIER_ALWAYS_INLINE],
+                reconciliation,
+            )
+        ]
+        canaries = {
+            s["name"]: _offload.generate_canary_token(s["name"])
+            for s in sections if s["tier"] != _offload.TIER_ALWAYS_INLINE
+        }
+        report = _offload.generate_report(
+            sections, constraints, pointers, canaries, reconciliation,
+        )
+        print(report)
+
+
 def main() -> None:
     args = parse_cli_args()
 
@@ -2224,6 +2294,8 @@ def main() -> None:
         record_metrics(args)
     elif args.command == "show-metrics":
         show_metrics(args)
+    elif args.command == "offload":
+        do_offload(args)
     else:
         raise ValueError("Unknown command")
 

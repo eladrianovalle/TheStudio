@@ -70,6 +70,12 @@ python studio/run_phase.py cleanup
 python studio/run_phase.py init --target /path/to/project
 python studio/run_phase.py check-install --target /path/to/project
 python studio/run_phase.py update --target /path/to/project
+
+# Offload analysis (analyze CLAUDE.md for offload opportunities)
+python studio/run_phase.py offload --target .
+python studio/run_phase.py offload --target . --apply
+python studio/run_phase.py offload --target . --rollback
+python studio/run_phase.py offload --target . --verify
 ```
 
 ## Architecture
@@ -89,6 +95,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 - **`clarity.py`** — Per-topic Clarity Score tracking. Computes confidence from answered decisions, controls agent question density, persists to `clarity.json`. CLI: `show-clarity`, `set-clarity`, `recompute-clarity`.
 - **`verdict.py`** — Extracts APPROVED/REJECTED/UNKNOWN verdict from text.
 - **`install.py`** — Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project.
+- **`offload.py`** — CLAUDE.md analyzer: classifies sections, detects embedded constraints, scores pointer strength, generates offload reports and manages canary tokens.
 - **`validators/`** — `DocumentValidator` (including `validate_question_mode()`) and `CodeValidator` for post-run quality checks.
 
 ### Configuration files

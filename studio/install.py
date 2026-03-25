@@ -32,6 +32,7 @@ SOURCE_FILES = [
     "rerun.py",
     "verdict.py",
     "install.py",
+    "offload.py",
     "studio.manifest.json",
     "validators/__init__.py",
     "validators/document_validator.py",
@@ -52,6 +53,7 @@ SLASH_COMMANDS = [
     "unstale.md",
     "studio-update.md",
     "detest.md",
+    "offload.md",
 ]
 
 # Marker to replace in slash commands
