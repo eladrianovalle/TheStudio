@@ -126,6 +126,6 @@ Four phases: `market`, `design`, `tech`, `studio`. Each has distinct advocate/co
 - **No heavy dependencies** — keep `run_phase.py` small and bash-friendly.
 - **MVI (Minimum Viable Interaction)** — every task, sprint, and milestone must end in something usable. "Build a skateboard, not a wheel." Product, Engineering, and Design contrarians enforce this. See `studio/docs/MVI_METHODOLOGY.md`.
 - **AI-TDD discipline** is mandatory for tech phase implementations. AI writes scenarios and boilerplate; humans own assertions. See `studio/docs/AI_TDD_METHODOLOGY.md` for the full methodology (scenario-first, stack boundary, mutation verification, anti-pattern detection).
-- **Documentation contract**: changes to workflow must update README, STUDIO_INTERACTION_GUIDE.md, and affected bridge docs simultaneously.
+- **Documentation contract**: changes to workflow must update README, CLAUDE_CODE_USAGE.md, and affected bridge docs simultaneously.
 - **Working directories**: `.scratch/` for temp files, `.private/` for sensitive data — both gitignored. Never commit `studio/output/` or `studio/knowledge/`.
 - Cross-repo usage: when run outside this repo, artifacts go to `<repo>/.studio/output/`. First run auto-scaffolds `.studio/` and a bridge doc. Override with `--artifact-root` flag or `STUDIO_ARTIFACT_ROOT` env var. Priority: flag > env > cwd detection.
