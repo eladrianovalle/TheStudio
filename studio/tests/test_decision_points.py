@@ -11,6 +11,7 @@ import pytest
 from decision_points import (
     DecisionPoint,
     extract_decisions_from_run,
+    filter_unsettled,
     format_decision_point,
     format_decisions_log,
     format_settled_decisions,
@@ -534,3 +535,69 @@ class TestSaveLoadDecisionsJson:
         assert len(loaded) == 1
         assert loaded[0].answer is None
         assert loaded[0].answered_by is None
+
+
+# ---------------------------------------------------------------------------
+# filter_unsettled tests
+# ---------------------------------------------------------------------------
+
+class TestFilterUnsettled:
+    """Tests for filter_unsettled()."""
+
+    def _make_dp(self, question, answer=None, answered_by=None):
+        return DecisionPoint(
+            priority="P0", question=question, unblocks="U",
+            answer=answer, answered_by=answered_by,
+        )
+
+    def test_filters_out_answered_decisions(self):
+        """Decisions already answered in settled list are removed."""
+        extracted = [
+            self._make_dp("Already answered?"),
+            self._make_dp("Still open?"),
+        ]
+        settled = [
+            self._make_dp("Already answered?", answer="Yes", answered_by="user"),
+        ]
+        result = filter_unsettled(extracted, settled)
+
+        assert len(result) == 1
+        assert result[0].question == "Still open?"
+
+    def test_keeps_all_when_no_settled(self):
+        """All decisions pass through when settled list is empty."""
+        extracted = [self._make_dp("Q1?"), self._make_dp("Q2?")]
+        result = filter_unsettled(extracted, [])
+
+        assert len(result) == 2
+
+    def test_keeps_all_when_settled_has_no_answers(self):
+        """Decisions in settled list without answers don't filter anything."""
+        extracted = [self._make_dp("Q1?")]
+        settled = [self._make_dp("Q1?")]  # no answer set
+        result = filter_unsettled(extracted, settled)
+
+        assert len(result) == 1
+
+    def test_empty_extracted_returns_empty(self):
+        """Empty extracted list returns empty."""
+        settled = [self._make_dp("Q?", answer="A", answered_by="user")]
+        result = filter_unsettled([], settled)
+
+        assert result == []
+
+    def test_filters_multiple_settled(self):
+        """Multiple settled decisions are all filtered out."""
+        extracted = [
+            self._make_dp("Q1?"),
+            self._make_dp("Q2?"),
+            self._make_dp("Q3?"),
+        ]
+        settled = [
+            self._make_dp("Q1?", answer="A1", answered_by="user"),
+            self._make_dp("Q3?", answer="A3", answered_by="assumption"),
+        ]
+        result = filter_unsettled(extracted, settled)
+
+        assert len(result) == 1
+        assert result[0].question == "Q2?"

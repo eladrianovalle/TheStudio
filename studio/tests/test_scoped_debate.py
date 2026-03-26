@@ -258,7 +258,7 @@ class TestExtractDecisionsCLI:
         from run_phase import parse_cli_args, extract_decisions
         import argparse
 
-        args = argparse.Namespace(run_dir=run_dir, scope=None)
+        args = argparse.Namespace(run_dir=run_dir, scope=None, show_all=False)
         # Should not raise
         extract_decisions(args)
 
@@ -279,7 +279,7 @@ class TestExtractDecisionsCLI:
         import argparse
 
         # Filter to S1 — should only find the P1
-        args = argparse.Namespace(run_dir=run_dir, scope="S1")
+        args = argparse.Namespace(run_dir=run_dir, scope="S1", show_all=False)
         from run_phase import extract_decisions
         # Just verify it runs without error (output is printed)
         extract_decisions(args)
@@ -291,9 +291,42 @@ class TestExtractDecisionsCLI:
 
         import argparse
         from run_phase import extract_decisions
-        args = argparse.Namespace(run_dir=run_dir, scope=None)
+        args = argparse.Namespace(run_dir=run_dir, scope=None, show_all=False)
         # Should complete silently
         extract_decisions(args)
+
+    def test_extract_filters_settled_by_default(self, tmp_path, capsys):
+        """extract-decisions hides settled decisions unless --all is passed."""
+        import argparse
+        from decision_points import DecisionPoint, save_decisions_json
+        from run_phase import extract_decisions
+
+        run_dir = tmp_path / "run_studio_004"
+        run_dir.mkdir()
+
+        (run_dir / "advocate--design--01.md").write_text(
+            "> **DECISION [P0]:** Already settled question?\n"
+            "> **Unblocks:** Something\n"
+        )
+
+        save_decisions_json(run_dir, [DecisionPoint(
+            priority="P0",
+            question="Already settled question?",
+            unblocks="Something",
+            source_file="advocate--design--01.md",
+            answer="Yes",
+            answered_by="user",
+        )])
+
+        # Default (show_all=False): settled decision should be filtered out
+        args = argparse.Namespace(run_dir=run_dir, scope=None, show_all=False)
+        extract_decisions(args)
+        assert "Already settled question?" not in capsys.readouterr().out
+
+        # With --all: settled decision should appear
+        args = argparse.Namespace(run_dir=run_dir, scope=None, show_all=True)
+        extract_decisions(args)
+        assert "Already settled question?" in capsys.readouterr().out
 
 
 class TestInjectContextCLI:

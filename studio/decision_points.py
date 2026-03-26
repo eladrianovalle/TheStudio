@@ -221,6 +221,17 @@ def merge_decisions(
     return existing
 
 
+def filter_unsettled(
+    extracted: list[DecisionPoint], settled: list[DecisionPoint]
+) -> list[DecisionPoint]:
+    """Return only decisions not already answered in the settled list.
+
+    Matches by exact question text — same key used by merge_decisions().
+    """
+    answered_qs = {dp.question for dp in settled if dp.answer is not None}
+    return [dp for dp in extracted if dp.question not in answered_qs]
+
+
 def format_settled_decisions(decisions: list[DecisionPoint]) -> str:
     """Format answered decision points as a settled-decisions markdown document.
 

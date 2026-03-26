@@ -47,6 +47,7 @@ from scopes import (
 from decision_points import (
     DecisionPoint,
     extract_decisions_from_run,
+    filter_unsettled,
     format_decisions_log,
     format_settled_decisions,
     load_decisions_json,
@@ -1511,6 +1512,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Filter by scope (e.g., 'alignment', 'S1', 'depth', 'S2').",
     )
+    extract_parser.add_argument(
+        "--all",
+        action="store_true",
+        dest="show_all",
+        help="Show all decisions including already-settled ones (default: only unsettled).",
+    )
 
     inject_parser = subparsers.add_parser(
         "inject-context", help="Generate context block for the next agent in a scoped run."
@@ -1837,6 +1844,10 @@ def extract_decisions(args: argparse.Namespace) -> None:
             dp for dp in all_decisions
             if dp.source_file and scope_tag in dp.source_file
         ]
+
+    if not getattr(args, "show_all", False):
+        settled = load_decisions_json(run_dir)
+        all_decisions = filter_unsettled(all_decisions, settled)
 
     if not all_decisions:
         # Silent exit — no decisions found is normal
