@@ -34,6 +34,7 @@ SOURCE_FILES = [
     "verdict.py",
     "install.py",
     "offload.py",
+    "clarity.py",
     "studio.manifest.json",
     "validators/__init__.py",
     "validators/document_validator.py",

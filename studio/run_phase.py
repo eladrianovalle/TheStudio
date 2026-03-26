@@ -67,17 +67,7 @@ from rerun import (
 )
 from validators.code_validator import CodeValidator
 
-# Clarity module — lazy-loaded to avoid hard dependency during cross-repo installs
-_clarity = None
-def _load_clarity():
-    global _clarity
-    if _clarity is None:
-        try:
-            import clarity as _mod
-            _clarity = _mod
-        except ImportError:
-            pass
-    return _clarity
+import clarity
 
 try:
     import tomllib  # Python 3.11+
@@ -760,16 +750,15 @@ def build_instruction_doc(
             "If the advocate assumed something that is actually unsettled, you MUST flag it as a decision point. Decision points are required output when assumptions are unsettled — do not let unexamined assumptions pass.",
         ])
 
-    # Clarity-guided focus section — inject if clarity data exists
+    # Clarity-guided focus section (skipped in question mode)
     clarity_section: List[str] = []
-    _cl = _load_clarity()
-    if _cl and clarity_snapshot is not None and not is_qmode:
+    if clarity_snapshot is not None and not is_qmode:
         if scopes_config and scopes_config.scopes:
             # Generate clarity guidance for each scope so agents get scope-appropriate density
             for scope in scopes_config.scopes:
-                clarity_section.append(_cl.generate_clarity_instructions(clarity_snapshot, scope.name))
+                clarity_section.append(clarity.generate_clarity_instructions(clarity_snapshot, scope.name))
         else:
-            clarity_section.append(_cl.generate_clarity_instructions(clarity_snapshot, "depth"))
+            clarity_section.append(clarity.generate_clarity_instructions(clarity_snapshot, "depth"))
 
     role_menu_section: List[str] = []
     if phase == "studio" and studio_roles:
@@ -1090,10 +1079,9 @@ def prepare_run(args: argparse.Namespace) -> str:
     meta = _build_run_meta(phase, text, now, run_id, args, studio_role_meta, scopes_meta)
 
     # Load project-level clarity for instruction injection
-    project_clarity = None
-    _cl = _load_clarity()
-    if _cl:
-        project_clarity = _cl.load_project_clarity(get_artifact_root())
+    project_clarity = clarity.load_project_clarity(artifact_root)
+    if project_clarity is None:
+        project_clarity = clarity.empty_snapshot(text, run_id, now)
 
     instructions = build_instruction_doc(
         meta, run_dir, studio_role_details, scopes_config, scopes_allocations,
@@ -1207,16 +1195,15 @@ def finalize_run(args: argparse.Namespace) -> None:
         print(f"Generated {decisions_path.name} with {len(existing)} decision point(s)")
 
         # Recompute clarity from merged decisions
-        _cl = _load_clarity()
-        if _cl:
-            context = _cl.detect_context_scope(meta.get("input", ""))
-            prior = _cl.load_project_clarity(get_artifact_root())
-            snapshot = _cl.compute_clarity_snapshot(
-                existing, context, run_id=run_id, prior_snapshot=prior
-            )
-            _cl.save_clarity_json(run_dir / "clarity.json", snapshot)
-            _cl.save_project_clarity(get_artifact_root(), snapshot)
-            print(f"Updated clarity scores ({len(snapshot.topics)} topic(s), mean: {snapshot.mean_score:.2f})")
+        art_root = get_artifact_root()
+        context = clarity.detect_context_scope(meta.get("input", ""))
+        prior = clarity.load_project_clarity(art_root)
+        snapshot = clarity.compute_clarity_snapshot(
+            existing, context, run_id=run_id, prior_snapshot=prior
+        )
+        clarity.save_clarity_json(run_dir / "clarity.json", snapshot)
+        clarity.save_project_clarity(art_root, snapshot)
+        print(f"Updated clarity scores ({len(snapshot.topics)} topic(s), mean: {snapshot.mean_score:.2f})")
 
     print(f"Finalized {run_id} ({phase}) → {meta['status']}")
 
@@ -2070,12 +2057,10 @@ def inject_context(args: argparse.Namespace) -> None:
         ])
 
     # 3. Clarity summary
-    _cl = _load_clarity()
-    if _cl:
-        root = get_artifact_root()
-        snapshot = _cl.load_project_clarity(root)
-        if snapshot is not None:
-            output_parts.append(_cl.generate_clarity_instructions(snapshot, scope_name))
+    root = get_artifact_root()
+    snapshot = clarity.load_project_clarity(root)
+    if snapshot is not None:
+        output_parts.append(clarity.generate_clarity_instructions(snapshot, scope_name))
 
     if output_parts:
         print("\n".join(output_parts))
@@ -2083,38 +2068,30 @@ def inject_context(args: argparse.Namespace) -> None:
 
 def show_clarity(args: argparse.Namespace) -> None:
     """Display current project clarity scores."""
-    _cl = _load_clarity()
-    if not _cl:
-        print("Clarity module not available.")
-        return
     root = Path(args.artifact_root).resolve() if args.artifact_root else get_artifact_root()
-    snapshot = _cl.load_project_clarity(root)
+    snapshot = clarity.load_project_clarity(root)
     if snapshot is None:
         print("No clarity data yet. Run a phase with decision points first.")
         return
-    print(_cl.format_clarity_summary(snapshot))
+    print(clarity.format_clarity_summary(snapshot))
 
 
 def set_clarity(args: argparse.Namespace) -> None:
     """Override a topic's clarity score."""
-    _cl = _load_clarity()
-    if not _cl:
-        print("Clarity module not available.")
-        return
     root = Path(args.artifact_root).resolve() if args.artifact_root else get_artifact_root()
-    snapshot = _cl.load_project_clarity(root)
+    snapshot = clarity.load_project_clarity(root)
     if snapshot is None:
         print("No clarity data yet. Run a phase with decision points first.")
         return
     if args.reset:
-        snapshot = _cl.apply_user_overrides(snapshot, {args.topic: None})
+        snapshot = clarity.apply_user_overrides(snapshot, {args.topic: None})
     elif args.score is not None:
-        snapshot = _cl.apply_user_overrides(snapshot, {args.topic: args.score})
+        snapshot = clarity.apply_user_overrides(snapshot, {args.topic: args.score})
     else:
         print("Provide --score VALUE or --reset")
         return
-    _cl.save_project_clarity(root, snapshot)
-    print(_cl.format_clarity_summary(snapshot))
+    clarity.save_project_clarity(root, snapshot)
+    print(clarity.format_clarity_summary(snapshot))
 
 
 def recompute_clarity(args: argparse.Namespace) -> None:
@@ -2124,10 +2101,6 @@ def recompute_clarity(args: argparse.Namespace) -> None:
     uses it. Otherwise extracts decisions from agent output files directly,
     making this usable mid-run.
     """
-    _cl = _load_clarity()
-    if not _cl:
-        print("Clarity module not available.")
-        return
     root = Path(args.artifact_root).resolve() if args.artifact_root else get_artifact_root()
     phase = args.phase.lower()
     run_id = args.run_id
@@ -2145,12 +2118,12 @@ def recompute_clarity(args: argparse.Namespace) -> None:
     if meta_path.is_file():
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
         input_text = meta.get("input", "")
-    context = _cl.detect_context_scope(input_text)
-    prior = _cl.load_project_clarity(root)
-    snapshot = _cl.compute_clarity_snapshot(decisions, context, run_id=run_id, prior_snapshot=prior)
-    _cl.save_clarity_json(run_dir / "clarity.json", snapshot)
-    _cl.save_project_clarity(root, snapshot)
-    print(_cl.format_clarity_summary(snapshot))
+    context = clarity.detect_context_scope(input_text)
+    prior = clarity.load_project_clarity(root)
+    snapshot = clarity.compute_clarity_snapshot(decisions, context, run_id=run_id, prior_snapshot=prior)
+    clarity.save_clarity_json(run_dir / "clarity.json", snapshot)
+    clarity.save_project_clarity(root, snapshot)
+    print(clarity.format_clarity_summary(snapshot))
 
 
 def _do_init(args: argparse.Namespace) -> None:

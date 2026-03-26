@@ -73,6 +73,16 @@ class ClaritySnapshot:
         return None
 
 
+def empty_snapshot(input_text: str, run_id: str, created_iso: str) -> ClaritySnapshot:
+    """Create an empty ClaritySnapshot for first-run bootstrap."""
+    return ClaritySnapshot(
+        topics=[],
+        context=detect_context_scope(input_text),
+        created_iso=created_iso,
+        run_id=run_id,
+    )
+
+
 # --- Pure Functions ---
 
 
