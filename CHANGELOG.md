@@ -11,6 +11,7 @@ All notable changes to TheGameStudio are documented here.
 - `/detest` slash command — audits test suites against AI-TDD methodology, finds anti-patterns, fixes them
 - `/unstale` Agent 5 — project tracking audit (GitHub Issues + local tracking files) with permission-gated destructive actions
 - `ai_engineer` role in manifest — Staff AI Engineer specializing in prompt architecture & agent optimization
+- `/studio-setup` slash command + `setup` CLI subcommand — post-install wizard for role pack selection, role customization, scope tuning, and cleanup settings with incremental versioned steps (`setup.py`, 43 tests)
 
 ### Changed
 - Clarity module now mandatory — direct import replaces lazy-load, always active in every studio run

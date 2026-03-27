@@ -28,7 +28,7 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 
 | Component | Purpose |
 | --- | --- |
-| `run_phase.py` | CLI entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, clarity, install, decision, and metrics subcommands. |
+| `run_phase.py` | CLI entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, clarity, install, decision, metrics, setup, and offload subcommands. |
 | `run_phase_roles.py` | Loads `studio.manifest.json`, applies role packs with dependency injection, applies project-local overrides, and normalizes per-role filenames. |
 | `role_overrides.py` | Project-local role customization: loads `.studio/roles/*.json` overlays, validates structure, shallow-merges with manifest roles. |
 | `decision_points.py` | Inline decision point parsing (P0/P1/P2 blockquote format), formatting, `decisions.md` generation, run directory scanning. |
@@ -40,6 +40,7 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 | `verdict.py` | Extracts APPROVED/REJECTED/UNKNOWN verdict from agent output. |
 | `install.py` | Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project. |
 | `offload.py` | CLAUDE.md analyzer: classifies sections, detects embedded constraints, scores pointer strength, generates offload reports, manages canary tokens. |
+| `setup.py` | Setup wizard: project configuration after install. Tracks setup state in `.studio/SETUP.json`, generates role overrides, scopes, and cleanup config with incremental versioned steps. |
 | `validators/` | `DocumentValidator` and `CodeValidator` for post-run quality checks. |
 | `studio.manifest.json` | Declarative description of phase-level personas, Studio role definitions, and role dependencies. |
 | `role_packs/*.json` | Curated sets of Studio roles (e.g., `studio_core`). Operators pick a pack, then add/remove roles with CLI flags. |

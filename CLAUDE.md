@@ -72,6 +72,12 @@ python studio/run_phase.py init --target /path/to/project
 python studio/run_phase.py check-install --target /path/to/project
 python studio/run_phase.py update --target /path/to/project
 
+# Setup wizard (configure roles, scopes, cleanup after install)
+python studio/run_phase.py setup --target . --status
+python studio/run_phase.py setup --target . --defaults
+python studio/run_phase.py setup --target . --answers answers.json
+python studio/run_phase.py setup --target . --role-pack studio_core --roles +ml -art
+
 # Offload analysis (analyze CLAUDE.md for offload opportunities)
 python studio/run_phase.py offload --target .
 python studio/run_phase.py offload --target . --apply
@@ -85,7 +91,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 
 ### Core modules (all in `studio/`)
 
-- **`run_phase.py`** — Primary entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, decision, clarity, metrics, and install subcommands.
+- **`run_phase.py`** — Primary entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, decision, clarity, metrics, install, setup, and offload subcommands.
 - **`run_phase_roles.py`** — Role system: loads `studio.manifest.json`, resolves role packs, applies project-local overrides, builds per-role file naming (`advocate--<role>--NN.md`).
 - **`role_overrides.py`** — Project-local role customization: loads `.studio/roles/*.json` overlays, validates structure, shallow-merges with manifest roles.
 - **`cleanup.py`** — TTL-based (30 days) and budget-based (900MB) run artifact cleanup, plus loose file removal for legacy artifacts outside run directories.
@@ -97,6 +103,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 - **`verdict.py`** — Extracts APPROVED/REJECTED/UNKNOWN verdict from text.
 - **`install.py`** — Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project.
 - **`offload.py`** — CLAUDE.md analyzer: classifies sections, detects embedded constraints, scores pointer strength, generates offload reports and manages canary tokens.
+- **`setup.py`** — Setup wizard: project configuration after install. Tracks setup state in `.studio/SETUP.json`, generates role overrides, scopes, and cleanup config. Supports incremental re-configuration when new features are added.
 - **`validators/`** — `DocumentValidator` (including `validate_question_mode()`) and `CodeValidator` for post-run quality checks.
 
 ### Configuration files
