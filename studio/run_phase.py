@@ -197,6 +197,7 @@ SUBCOMMANDS = {
     "extract-decisions", "inject-context",
     "init", "check-install", "update",
     "show-clarity", "set-clarity", "recompute-clarity",
+    "record-metrics", "show-metrics", "offload", "setup",
 }
 
 
@@ -1623,6 +1624,35 @@ def build_parser() -> argparse.ArgumentParser:
     offload_parser.add_argument("--rollback", action="store_true", help="Restore from most recent backup.")
     offload_parser.add_argument("--verify", action="store_true", help="Run canary verification.")
 
+    # --- Setup wizard ---
+    setup_parser = subparsers.add_parser(
+        "setup", help="Configure Studio for a project (roles, scopes, cleanup)."
+    )
+    setup_parser.add_argument(
+        "--target", type=Path, default=Path("."),
+        help="Path to the target project directory.",
+    )
+    setup_parser.add_argument(
+        "--status", action="store_true",
+        help="Show current setup configuration status.",
+    )
+    setup_parser.add_argument(
+        "--defaults", action="store_true",
+        help="Apply all default configuration non-interactively.",
+    )
+    setup_parser.add_argument(
+        "--answers", type=Path, default=None,
+        help="Apply configuration from a JSON answers file.",
+    )
+    setup_parser.add_argument(
+        "--role-pack", type=str, default=None,
+        help="Set role pack (shorthand for role_pack step).",
+    )
+    setup_parser.add_argument(
+        "--roles", nargs="*", default=None,
+        help="Role overrides (+role to add, -role to remove). Use with --role-pack.",
+    )
+
     return parser
 
 
@@ -2136,7 +2166,8 @@ def _do_init(args: argparse.Namespace) -> None:
     print(f"Studio installed to {dot_studio}")
     print(f"  Slash commands: {target / '.claude' / 'commands'}")
     print(f"  Source: {dot_studio / 'source'}")
-    print(f"\nRun /run-phase or /run-studio-phase from {target.name} — pause-and-ask included.")
+    print(f"\nRun /studio-setup to configure roles, scopes, and cleanup.")
+    print(f"Then use /run-phase or /run-studio-phase — pause-and-ask included.")
     print(f"NOTE: Start a NEW Claude Code session (not just /clear) to discover the commands.")
 
 
@@ -2173,6 +2204,44 @@ def _do_update(args: argparse.Namespace) -> None:
             print(f"  Updated: {result['updated']} file(s)")
         if result["added"]:
             print(f"  Added: {result['added']} file(s)")
+        # Check for new setup steps
+        try:
+            import setup as _setup
+            state = _setup.load_setup_state(target)
+            pend = _setup.pending_steps(state)
+            if pend:
+                labels = ", ".join(s["label"] for s in pend)
+                print(f"\n  New features available: {labels}")
+                print("  Run /studio-setup to configure.")
+        except ImportError:
+            pass
+
+
+def _do_setup(args: argparse.Namespace) -> None:
+    """Configure Studio for a project."""
+    import setup as _setup
+
+    target = Path(args.target).resolve()
+
+    if args.status:
+        print(_setup.show_status(target))
+    elif args.defaults:
+        state = _setup.apply_defaults(target)
+        pend = _setup.pending_steps(state)
+        print(f"Applied default configuration ({len(state['completed_steps'])} steps).")
+        if pend:
+            print(f"  Pending: {', '.join(s['label'] for s in pend)}")
+    elif args.answers:
+        answers = json.loads(Path(args.answers).read_text(encoding="utf-8"))
+        _setup.apply_from_answers(target, answers)
+        print(f"Applied configuration from {args.answers}.")
+    elif args.role_pack:
+        _setup.apply_role_pack(target, args.role_pack, args.roles or [])
+        print(f"Role pack set to '{args.role_pack}'.")
+        if args.roles:
+            print(f"  Overrides: {' '.join(args.roles)}")
+    else:
+        print(_setup.show_status(target))
 
 
 def do_offload(args: argparse.Namespace) -> None:
@@ -2280,6 +2349,8 @@ def main() -> None:
         show_metrics(args)
     elif args.command == "offload":
         do_offload(args)
+    elif args.command == "setup":
+        _do_setup(args)
     else:
         raise ValueError("Unknown command")
 

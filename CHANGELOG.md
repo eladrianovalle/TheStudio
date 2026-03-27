@@ -12,6 +12,11 @@ All notable changes to TheGameStudio are documented here.
 - `/unstale` Agent 5 — project tracking audit (GitHub Issues + local tracking files) with permission-gated destructive actions
 - `ai_engineer` role in manifest — Staff AI Engineer specializing in prompt architecture & agent optimization
 
+### Changed
+- Clarity module now mandatory — direct import replaces lazy-load, always active in every studio run
+- `clarity.py` added to cross-repo install `SOURCE_FILES`
+- New `empty_snapshot()` factory bootstraps clarity on first run
+
 ---
 
 ## 2026-03-22

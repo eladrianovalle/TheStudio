@@ -35,6 +35,7 @@ SOURCE_FILES = [
     "install.py",
     "offload.py",
     "clarity.py",
+    "setup.py",
     "studio.manifest.json",
     "validators/__init__.py",
     "validators/document_validator.py",
@@ -56,6 +57,7 @@ SLASH_COMMANDS = [
     "studio-update.md",
     "detest.md",
     "offload.md",
+    "studio-setup.md",
 ]
 
 # Marker to replace in slash commands

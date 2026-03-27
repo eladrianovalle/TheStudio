@@ -289,7 +289,7 @@ Configure in `config/studio_settings.toml`. Use `--skip-cleanup` to bypass.
 
 ```
 studio/
-  run_phase.py              # CLI entrypoint: prepare, finalize, validate, cleanup, clarity, install
+  run_phase.py              # CLI entrypoint: prepare, finalize, validate, cleanup, decision, clarity, metrics, install, offload
   run_phase_roles.py        # Role system: manifest, packs, dependencies, file naming
   role_overrides.py         # Project-local role customization (.studio/roles/*.json)
   scopes.py                 # Three-tier scope allocation (alignment/depth/polish)
@@ -307,7 +307,7 @@ studio/
   config/scopes.toml         # Default scope configuration
   config/studio_settings.toml # Cleanup settings
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 423 tests (pytest)
+  tests/                    # 429 tests (pytest)
 ```
 
 ---
@@ -318,7 +318,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-423 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, cross-repo artifact routing, install/update workflows, agent metrics tracking, and CLAUDE.md offload analysis.
+429 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, cross-repo artifact routing, install/update workflows, agent metrics tracking, and CLAUDE.md offload analysis.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 
