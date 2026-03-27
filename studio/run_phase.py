@@ -605,11 +605,13 @@ def build_instruction_doc(
             "",
             "### Per-Scope Agent Prompt Templates",
             "",
-            "The orchestrator can generate scope-specific agent prompts using:",
+            "The orchestrator **must** generate scope-specific agent context before spawning each agent:",
             "",
             "```bash",
             f'python "{get_studio_root()}/run_phase.py" inject-context --run-dir {{run_dir}} --scope {{scope}} --role {{role}} --stance {{stance}}',
             "```",
+            "",
+            "This writes `context--<role>--<scope>--<stance>.md` into the run directory. Read that file and prepend its contents to the agent prompt.",
             "",
             "Or extract decisions between agents with:",
             "",
@@ -2093,7 +2095,10 @@ def inject_context(args: argparse.Namespace) -> None:
         output_parts.append(clarity.generate_clarity_instructions(snapshot, scope_name))
 
     if output_parts:
-        print("\n".join(output_parts))
+        context_text = "\n".join(output_parts)
+        context_file = run_dir / f"context--{role}--{scope_name}--{stance}.md"
+        context_file.write_text(context_text, encoding="utf-8")
+        print(context_file)
 
 
 def show_clarity(args: argparse.Namespace) -> None:
@@ -2158,7 +2163,7 @@ def recompute_clarity(args: argparse.Namespace) -> None:
 
 def _do_init(args: argparse.Namespace) -> None:
     """Install Studio into a target project."""
-    from install import install_studio  # lazy: install.py absent in cross-repo installs
+    from install import install_studio
     target = Path(args.target).resolve()
     if not target.is_dir():
         raise FileNotFoundError(f"Target directory not found: {target}")
@@ -2173,7 +2178,7 @@ def _do_init(args: argparse.Namespace) -> None:
 
 def _do_check_install(args: argparse.Namespace) -> None:
     """Check if installed Studio is up to date."""
-    from install import check_studio  # lazy: install.py absent in cross-repo installs
+    from install import check_studio
     target = Path(args.target).resolve()
     status = check_studio(target)
     if not status["installed"]:
@@ -2193,7 +2198,7 @@ def _do_check_install(args: argparse.Namespace) -> None:
 
 def _do_update(args: argparse.Namespace) -> None:
     """Update installed Studio from source."""
-    from install import update_studio  # lazy: install.py absent in cross-repo installs
+    from install import update_studio
     target = Path(args.target).resolve()
     result = update_studio(target)
     if result["updated"] == 0 and result["added"] == 0:
