@@ -26,8 +26,8 @@ Gather ground truth before analysis. Run in parallel:
 
 1. **Read CLAUDE.md** — full content, count lines, identify section boundaries (split on `## ` headers).
 2. **Git status check** — if `--apply` flag is set, verify working tree is clean for all files that may be affected. Abort with explicit message if dirty.
-3. **Cross-repo detection** — determine if running inside the Studio repo or a cross-repo install. Check (in order): `$STUDIO_ROOT` env var, `.studio/source/` directory, `.studio/` directory, `CLAUDE.md` presence. After resolution, verify the companion doc root exists and is writable. Halt if not.
-4. **Existing companion doc inventory** — list all `.md` files in `studio/docs/`, `.studio/docs/`, and any paths referenced by CLAUDE.md.
+3. **Cross-repo detection** — determine if running inside the Studio repo or a cross-repo install. Check (in order): `.studio/source/` directory, `studio/` directory (source repo), `CLAUDE.md` presence. After resolution, verify the companion doc root exists and is writable. Halt if not.
+4. **Existing companion doc inventory** — list all `.md` files in `.studio/source/docs/`, `.studio/docs/`, and any paths referenced by CLAUDE.md.
 
 ### Phase 2: Parallel Analysis (3 agents)
 

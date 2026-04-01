@@ -221,6 +221,7 @@ def get_studio_root() -> Path:
 
 
 _artifact_root_override: Path | None = None
+_artifact_root_warned: bool = False
 
 
 def set_artifact_root(path: Path | None) -> None:
@@ -241,6 +242,14 @@ def get_artifact_root() -> Path:
     cwd = Path.cwd().resolve()
     if cwd == studio_root or _is_within(cwd, studio_root):
         return studio_root
+    global _artifact_root_warned
+    if not _artifact_root_warned:
+        print(
+            f"Warning: artifact root defaulting to current directory ({cwd}). "
+            f"Set STUDIO_ARTIFACT_ROOT or use --artifact-root to override.",
+            file=sys.stderr,
+        )
+        _artifact_root_warned = True
     return cwd
 
 
@@ -2099,6 +2108,8 @@ def inject_context(args: argparse.Namespace) -> None:
         context_file = run_dir / f"context--{role}--{scope_name}--{stance}.md"
         context_file.write_text(context_text, encoding="utf-8")
         print(context_file)
+    else:
+        print(f"No prior context for {scope_name} {role} {stance} — starting fresh.", file=sys.stderr)
 
 
 def show_clarity(args: argparse.Namespace) -> None:

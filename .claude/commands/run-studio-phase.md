@@ -14,10 +14,10 @@ You are executing a Studio multi-role phase run. Follow these steps exactly:
 
 ### Step 1: Prepare
 
-Determine the Studio root path. If this repo contains a `studio/run_phase.py`, use that. Otherwise check `$STUDIO_ROOT`. Then run:
+**Studio path:** Use `.studio/source/run_phase.py` for all commands below. If that file does not exist but `studio/run_phase.py` does, use `studio/run_phase.py` instead (you are in the Studio source repo).
 
 ```bash
-python "$STUDIO_ROOT/run_phase.py" prepare --phase studio $ARGUMENTS
+python ".studio/source/run_phase.py" prepare --phase studio $ARGUMENTS
 ```
 
 If running from a repo that is NOT the Studio repo itself, artifacts will automatically land in the current repo under `.studio/output/`.
@@ -37,13 +37,13 @@ Read the generated `instructions.md` file. Pay attention to:
 
 1. **Record agent metrics** — The Agent tool result includes `total_tokens`, `tool_uses`, and `duration_ms` in a `<usage>` block. Record these immediately:
    ```bash
-   python "$STUDIO_ROOT/run_phase.py" record-metrics --run-dir {run_dir} --agent {advocate|contrarian|integrator|polish} --total-tokens {N} --tool-uses {N} --duration-ms {N} --role {role} --scope {scope}
+   python ".studio/source/run_phase.py" record-metrics --run-dir {run_dir} --agent {advocate|contrarian|integrator|polish} --total-tokens {N} --tool-uses {N} --duration-ms {N} --role {role} --scope {scope}
    ```
    Omit `--role` and `--scope` for non-studio phases or integrator/polish agents.
 
 2. **Extract decision points** — Run this command (do NOT manually scan files):
    ```bash
-   python "$STUDIO_ROOT/run_phase.py" extract-decisions --run-dir {run_dir}
+   python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir}
    ```
 
 3. **If the output is non-empty**, you MUST pause and present ALL decision points to the user. Do not spawn the next agent until the user has responded. Present each as:
@@ -53,16 +53,16 @@ Read the generated `instructions.md` file. Pay attention to:
 
 4. **Wait for the user to answer ALL decisions.** Then record in one batch:
    ```bash
-   python "$STUDIO_ROOT/run_phase.py" record-decisions --run-dir {run_dir} --decisions-file {tmp_json_path}
+   python ".studio/source/run_phase.py" record-decisions --run-dir {run_dir} --decisions-file {tmp_json_path}
    ```
    JSON format: `[{"priority": "P0", "question": "...", "answer": "...", "unblocks": "...", "source_file": "[filename]", "answered_by": "user"}, ...]`
 
-   After recording, show updated clarity scores: `python "$STUDIO_ROOT/run_phase.py" show-clarity`
+   After recording, show updated clarity scores: `python ".studio/source/run_phase.py" show-clarity`
    Display the scores to the user — they can override with `set-clarity --topic <slug> --score <0.0-1.0>`.
 
 5. **Context injection** — Before spawning each agent, generate its context block:
    ```bash
-   python "$STUDIO_ROOT/run_phase.py" inject-context --run-dir {run_dir} --scope {scope} --role {role} --stance {stance}
+   python ".studio/source/run_phase.py" inject-context --run-dir {run_dir} --scope {scope} --role {role} --stance {stance}
    ```
    Append the output to the agent prompt. This automatically includes settled decisions, clarity summary, prior-scope file lists, and scope-specific instructions. No manual assembly needed.
 
@@ -83,7 +83,7 @@ For each role in the Role Menu, generate context and spawn advocate + contrarian
 
 **Before each agent**, generate its context:
 ```bash
-python "$STUDIO_ROOT/run_phase.py" inject-context --run-dir {run_dir} --scope alignment --role {role} --stance advocate
+python ".studio/source/run_phase.py" inject-context --run-dir {run_dir} --scope alignment --role {role} --stance advocate
 ```
 
 **Advocate prompt:**
@@ -107,7 +107,7 @@ python "$STUDIO_ROOT/run_phase.py" inject-context --run-dir {run_dir} --scope al
 Even though S1 roles run in parallel, you MUST extract and check decision points after each individual agent (advocate or contrarian) completes — follow the Decision Point Handling protocol above. Do not batch decisions until the end of the scope. Surface them as they appear so the user can answer early and those answers flow into subsequent agents.
 
 **After all S1 roles complete (before proceeding to S2):**
-1. Recompute clarity: `python "$STUDIO_ROOT/run_phase.py" recompute-clarity --phase studio --run-id {run_id}`
+1. Recompute clarity: `python ".studio/source/run_phase.py" recompute-clarity --phase studio --run-id {run_id}`
 
 **Read all contrarian verdicts.**
 - If all APPROVED → proceed to Scope 2 with alignment context
@@ -140,7 +140,7 @@ Adjust based on the specific proposal — if a role clearly depends on another's
 
 **Before each S2 agent**, generate its context:
 ```bash
-python "$STUDIO_ROOT/run_phase.py" inject-context --run-dir {run_dir} --scope depth --role {role} --stance advocate
+python ".studio/source/run_phase.py" inject-context --run-dir {run_dir} --scope depth --role {role} --stance advocate
 ```
 
 **Advocate prompt:**
@@ -152,7 +152,7 @@ python "$STUDIO_ROOT/run_phase.py" inject-context --run-dir {run_dir} --scope de
 > - {List specific S2 files this role needs per the dependency map}
 > - Condensed brief of all other roles: `{run_dir}/S2-brief.md`
 >
-> {If this role has a prompt doc, read it at `studio/{prompt_doc}` for detailed guidance.}
+> {If this role has a prompt doc, read it at `.studio/source/{prompt_doc}` for detailed guidance.}
 >
 > Write a thorough proposal covering all required deliverables. No word cap — this is the full analysis.
 > Save to `{run_dir}/advocate--{role}--S2-01.md`.
@@ -180,15 +180,15 @@ python "$STUDIO_ROOT/run_phase.py" inject-context --run-dir {run_dir} --scope de
 
 **Check decision points** — After each S2 advocate and contrarian saves output, run:
 ```bash
-python "$STUDIO_ROOT/run_phase.py" extract-decisions --run-dir {run_dir} --scope S2
+python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir} --scope S2
 ```
 If non-empty, follow the Decision Point Handling protocol above. Since S2 is sequential, decisions from earlier roles inform later roles.
 
 **Brief update cadence — MANDATORY:** After every 2-3 roles complete:
-1. Run `python "$STUDIO_ROOT/run_phase.py" extract-decisions --run-dir {run_dir}` to gather all decisions
+1. Run `python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir}` to gather all decisions
 2. Write/update `{run_dir}/S2-brief.md` with key decisions and conditions from completed roles
 3. Include a "Settled Decisions" summary referencing `decisions.md`. Keep under 1 page.
-4. Run `python "$STUDIO_ROOT/run_phase.py" recompute-clarity --phase studio --run-id {run_id}` to update clarity scores
+4. Run `python ".studio/source/run_phase.py" recompute-clarity --phase studio --run-id {run_id}` to update clarity scores
 
 **Loop:** If REJECTED and iterations remain (up to 3), feed rejection back to advocate. If APPROVED, move to next role.
 
@@ -266,7 +266,7 @@ Write `{run_dir}/summary.md` covering:
 ### Step 6: Finalize
 
 ```bash
-python "$STUDIO_ROOT/run_phase.py" finalize --phase studio --run-id {run_id} --status completed --verdict {APPROVED|REJECTED}
+python ".studio/source/run_phase.py" finalize --phase studio --run-id {run_id} --status completed --verdict {APPROVED|REJECTED}
 ```
 
 ---

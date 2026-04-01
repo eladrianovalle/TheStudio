@@ -60,10 +60,6 @@ SLASH_COMMANDS = [
     "studio-setup.md",
 ]
 
-# Marker to replace in slash commands
-_STUDIO_ROOT_MARKER = '"$STUDIO_ROOT/'
-_STUDIO_ROOT_REPLACEMENT_PREFIX = '"'  # filled in at install time
-
 
 def _get_studio_root() -> Path:
     """Get the root of the Studio source repo (parent of studio/)."""
@@ -115,25 +111,6 @@ def _collect_source_files(studio_dir: Path) -> List[Path]:
     return files
 
 
-def _rewrite_slash_command(content: str, studio_root_path: str) -> str:
-    """Rewrite $STUDIO_ROOT references in slash commands to point to installed source.
-
-    Handles patterns like:
-        python "$STUDIO_ROOT/run_phase.py" ...
-        Read it at `studio/{prompt_doc}` ...
-    """
-    # Replace $STUDIO_ROOT with the installed path
-    content = content.replace("$STUDIO_ROOT/", f"{studio_root_path}/")
-    content = content.replace("$STUDIO_ROOT", studio_root_path)
-
-    # Replace bare `studio/` references to prompt docs
-    content = content.replace(
-        "read it at `studio/",
-        f"read it at `{studio_root_path}/",
-    )
-
-    return content
-
 
 def _build_manifest(
     source_files: List[Path],
@@ -177,19 +154,14 @@ def install_studio(target: Path, studio_dir: Optional[Path] = None) -> Path:
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
 
-    # Copy and rewrite slash commands
+    # Copy slash commands verbatim (they use .studio/source/ paths directly)
     commands_dest.mkdir(parents=True, exist_ok=True)
-    # Relative path from target root to .studio/source
-    installed_root = ".studio/source"
-
     commands_src = studio_dir.parent / ".claude" / "commands"
     for cmd_name in SLASH_COMMANDS:
         src = commands_src / cmd_name
         if not src.exists():
             continue
-        content = src.read_text(encoding="utf-8")
-        content = _rewrite_slash_command(content, installed_root)
-        (commands_dest / cmd_name).write_text(content, encoding="utf-8")
+        shutil.copy2(src, commands_dest / cmd_name)
 
     # Ensure output and knowledge dirs exist
     (dot_studio / "output").mkdir(parents=True, exist_ok=True)

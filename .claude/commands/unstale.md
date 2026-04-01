@@ -10,15 +10,17 @@ Audit the entire project for stale documentation, outdated references, wrong cou
 
 You are performing a comprehensive staleness audit. The goal: every doc, README, changelog, memory file, code comment, and usage example in this project should reflect the **current** state of the codebase — not what was true three commits ago.
 
+**Studio path:** Use `.studio/source/` for all Studio file references below. If that directory does not exist but `studio/` does, use `studio/` instead (you are in the Studio source repo).
+
 ### Phase 1: Snapshot Current State
 
 Gather ground truth before comparing anything. Run these in parallel:
 
-1. **Test count** — `cd studio && python -m pytest tests/ -q --no-header 2>&1 | tail -1` to get the actual test count.
-2. **Module inventory** — `ls studio/*.py | wc -l` and `ls studio/*.py` to get the current module list.
-3. **CLI commands** — `python studio/run_phase.py --help` to get the current command list.
+1. **Test count** — `cd .studio/source && python -m pytest tests/ -q --no-header 2>&1 | tail -1` to get the actual test count.
+2. **Module inventory** — `ls .studio/source/*.py | wc -l` and `ls .studio/source/*.py` to get the current module list.
+3. **CLI commands** — `python .studio/source/run_phase.py --help` to get the current command list.
 4. **Git log** — `git log --oneline -20` for recent changes that may not be reflected in docs.
-5. **File tree** — `ls studio/docs/` and `ls .claude/commands/` for the full doc and command inventory.
+5. **File tree** — `ls .studio/source/docs/` and `ls .claude/commands/` for the full doc and command inventory.
 6. **Project tracking** — detect what tracking systems are in use. Check: is `gh` available and does the repo have a GitHub remote? Scan for local tracking patterns: `.tasks/`, `TODO.md`, `ISSUES.md`, `issues/`, `backlog/`, `.todo/`. Note which systems are active — Agent 5 needs this to decide whether to run.
 
 ### Phase 2: Parallel Audit
@@ -27,7 +29,7 @@ Launch **five** agents in parallel (skip Agent 5 if no tracking systems were fou
 
 #### Agent 1: Documentation Audit
 
-Check every `.md` file in `studio/docs/`, `README.md`, `CLAUDE.md`, and `CHANGELOG.md` for:
+Check every `.md` file in `.studio/source/docs/`, `README.md`, `CLAUDE.md`, and `CHANGELOG.md` for:
 
 - **Wrong counts** — test counts, module counts, role counts that don't match Phase 1 snapshot
 - **Dead references** — mentions of files, modules, functions, or CLI commands that no longer exist
@@ -38,7 +40,7 @@ Check every `.md` file in `studio/docs/`, `README.md`, `CLAUDE.md`, and `CHANGEL
 
 #### Agent 2: Code Comment & Docstring Audit
 
-Check all `.py` files in `studio/` for:
+Check all `.py` files in `.studio/source/` for:
 
 - **Stale docstrings** — function docstrings that describe old behavior or wrong parameters
 - **TODO/FIXME/HACK comments** — are they still relevant or already resolved?

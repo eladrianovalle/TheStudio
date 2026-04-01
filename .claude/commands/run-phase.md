@@ -15,10 +15,10 @@ You are executing a Studio phase run. Follow these steps exactly:
 
 Run the prepare command to create a run directory and instructions:
 
-Determine the Studio root path. If this repo contains a `studio/run_phase.py`, use that. Otherwise check `$STUDIO_ROOT`. Then run:
+**Studio path:** Use `.studio/source/run_phase.py` for all commands below. If that file does not exist but `studio/run_phase.py` does, use `studio/run_phase.py` instead (you are in the Studio source repo).
 
 ```bash
-python "$STUDIO_ROOT/run_phase.py" prepare $ARGUMENTS
+python ".studio/source/run_phase.py" prepare $ARGUMENTS
 ```
 
 If running from a repo that is NOT the Studio repo itself, artifacts will automatically land in the current repo under `.studio/output/`. A bridge doc will be created on first use.
@@ -43,7 +43,7 @@ For each iteration (up to max_iterations):
 >
 > {If `{run_dir}/decisions.md` exists: "Read `{run_dir}/decisions.md` for settled constraints from prior iterations. Treat these as hard constraints — do not re-litigate."}
 >
-> {If `{run_dir}/clarity.json` exists, run `python "$STUDIO_ROOT/run_phase.py" show-clarity` and include the output here. Tell the agent: "**Clarity context:** Topics marked Settled are constraints — do not re-litigate. For topics marked Needs work, actively surface decision points. For Settling topics, only flag genuine new gaps."}
+> {If `{run_dir}/clarity.json` exists, run `python ".studio/source/run_phase.py" show-clarity` and include the output here. Tell the agent: "**Clarity context:** Topics marked Settled are constraints — do not re-litigate. For topics marked Needs work, actively surface decision points. For Settling topics, only flag genuine new gaps."}
 >
 > **Decision Point Protocol:** When you encounter a gap, ambiguity, or fork that could meaningfully change your approach, flag it inline using this exact blockquote format:
 >
@@ -66,12 +66,12 @@ For each iteration (up to max_iterations):
 
 First, record the agent's token usage from the `<usage>` block in the Agent tool result:
 ```bash
-python "$STUDIO_ROOT/run_phase.py" record-metrics --run-dir {run_dir} --agent advocate --total-tokens {N} --tool-uses {N} --duration-ms {N}
+python ".studio/source/run_phase.py" record-metrics --run-dir {run_dir} --agent advocate --total-tokens {N} --tool-uses {N} --duration-ms {N}
 ```
 
 Then extract decision points:
 ```bash
-python "$STUDIO_ROOT/run_phase.py" extract-decisions --run-dir {run_dir}
+python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir}
 ```
 
 **If the output is non-empty (any decision points found), you MUST pause and present them ALL to the user before proceeding.** Do not continue to the contrarian until the user has responded.
@@ -84,15 +84,15 @@ Present each decision to the user:
 
 Wait for the user to answer ALL decisions. Then record them in one batch — write a JSON file and run:
 ```bash
-python "$STUDIO_ROOT/run_phase.py" record-decisions --run-dir {run_dir} --decisions-file {tmp_json_path}
+python ".studio/source/run_phase.py" record-decisions --run-dir {run_dir} --decisions-file {tmp_json_path}
 ```
 JSON format: `[{"priority": "P0", "question": "...", "answer": "...", "unblocks": "...", "source_file": "advocate_{N}.md", "answered_by": "user"}, ...]`
 
 After recording, show updated clarity scores to the user:
 ```bash
-python "$STUDIO_ROOT/run_phase.py" show-clarity
+python ".studio/source/run_phase.py" show-clarity
 ```
-This displays per-topic confidence scores so the user can see which areas are settling and which still need work. If a topic score seems wrong, the user can override: `python "$STUDIO_ROOT/run_phase.py" set-clarity --topic <slug> --score <0.0-1.0>`.
+This displays per-topic confidence scores so the user can see which areas are settling and which still need work. If a topic score seems wrong, the user can override: `python ".studio/source/run_phase.py" set-clarity --topic <slug> --score <0.0-1.0>`.
 
 **c. Contrarian** — Use the Agent tool to spawn a SEPARATE subagent with this prompt:
 
@@ -119,9 +119,9 @@ This displays per-topic confidence scores so the user can see which areas are se
 
 **d. Record contrarian metrics and extract decision points** — Record the contrarian's token usage:
 ```bash
-python "$STUDIO_ROOT/run_phase.py" record-metrics --run-dir {run_dir} --agent contrarian --total-tokens {N} --tool-uses {N} --duration-ms {N}
+python ".studio/source/run_phase.py" record-metrics --run-dir {run_dir} --agent contrarian --total-tokens {N} --tool-uses {N} --duration-ms {N}
 ```
-Then run `python "$STUDIO_ROOT/run_phase.py" extract-decisions --run-dir {run_dir}` again. If new decision points appear (from the contrarian), present them to the user and record as in step (b).
+Then run `python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir}` again. If new decision points appear (from the contrarian), present them to the user and record as in step (b).
 
 **e. Check verdict** — Read the contrarian output. If `VERDICT: APPROVED`, proceed to Step 4. If `VERDICT: REJECTED` and iterations remain, loop back to (a) with the rejection feedback.
 
@@ -136,7 +136,7 @@ Write a summary of the entire run (inputs, iterations, verdict, key recommendati
 ### Step 6: Finalize
 
 ```bash
-python "$STUDIO_ROOT/run_phase.py" finalize --phase {phase} --run-id {run_id} --status completed --verdict {APPROVED|REJECTED}
+python ".studio/source/run_phase.py" finalize --phase {phase} --run-id {run_id} --status completed --verdict {APPROVED|REJECTED}
 ```
 
 ## Key Rules

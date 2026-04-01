@@ -10,12 +10,14 @@ Configure this project's Studio installation — role packs, scope tuning, clean
 
 You are running the Studio setup wizard. This walks the user through configuring their Studio installation. Follow these steps exactly:
 
+**Studio path:** Use `.studio/source/run_phase.py` for all commands below. If that file does not exist but `studio/run_phase.py` does, use `studio/run_phase.py` instead (you are in the Studio source repo).
+
 ### Step 0: Check Arguments
 
 If the user passed `--defaults`, apply defaults and stop:
 
 ```bash
-python "$STUDIO_ROOT/run_phase.py" setup --target . --defaults
+python ".studio/source/run_phase.py" setup --target . --defaults
 ```
 
 Report what was applied and stop.
@@ -23,21 +25,21 @@ Report what was applied and stop.
 If the user passed `--status`, show status and stop:
 
 ```bash
-python "$STUDIO_ROOT/run_phase.py" setup --target . --status
+python ".studio/source/run_phase.py" setup --target . --status
 ```
 
 ### Step 1: Verify Installation
 
 Check that `.studio/VERSION` exists in this project. If not, tell the user:
 
-> Studio isn't installed in this project. Run `python <studio_root>/run_phase.py init --target .` first.
+> Studio isn't installed in this project. Run `python .studio/source/run_phase.py init --target .` first, or install from the Studio source repo.
 
 And stop.
 
 ### Step 2: Check Current Setup Status
 
 ```bash
-python "$STUDIO_ROOT/run_phase.py" setup --target . --status
+python ".studio/source/run_phase.py" setup --target . --status
 ```
 
 If all steps are already configured, tell the user their setup is complete. Ask if they want to reconfigure anything. If not, stop.
@@ -49,7 +51,7 @@ If steps are pending, tell the user which ones need configuration and proceed.
 Read the available role packs:
 
 ```bash
-ls "$STUDIO_ROOT/role_packs/"
+ls ".studio/source/role_packs/"
 ```
 
 Read each pack file to get names, descriptions, and roles. Present them as a numbered list:
@@ -67,7 +69,7 @@ Ask the user: **"Which role pack fits your project? (pick a number, or type a pa
 After they choose, read the full role catalog from the manifest:
 
 ```bash
-python -c "import json; m=json.load(open('$STUDIO_ROOT/studio.manifest.json')); [print(f'  {k}: {v[\"title\"]}') for k,v in m['roles'].items()]"
+python -c "import json; m=json.load(open('.studio/source/studio.manifest.json')); [print(f'  {k}: {v[\"title\"]}') for k,v in m['roles'].items()]"
 ```
 
 Ask: **"Want to add (+) or remove (-) any individual roles? (e.g., '+ml -art', or 'none')"**
@@ -75,7 +77,7 @@ Ask: **"Want to add (+) or remove (-) any individual roles? (e.g., '+ml -art', o
 Apply the choice:
 
 ```bash
-python "$STUDIO_ROOT/run_phase.py" setup --target . --role-pack <name> --roles <overrides>
+python ".studio/source/run_phase.py" setup --target . --role-pack <name> --roles <overrides>
 ```
 
 ### Step 4: Role Customization (Optional)
@@ -85,7 +87,7 @@ Ask: **"Do you want to customize any role's focus areas or deliverables? Most us
 If the user says no/skip, apply empty customization to mark the step complete:
 
 ```bash
-python "$STUDIO_ROOT/run_phase.py" setup --target . --answers '{"role_customizations": {}}'
+python ".studio/source/run_phase.py" setup --target . --answers '{"role_customizations": {}}'
 ```
 
 If yes, for each role the user wants to customize:
@@ -102,7 +104,7 @@ If yes, for each role the user wants to customize:
 3. Build a JSON answers file with the customizations and apply:
 
 ```bash
-python "$STUDIO_ROOT/run_phase.py" setup --target . --answers '<json with role_customizations>'
+python ".studio/source/run_phase.py" setup --target . --answers '<json with role_customizations>'
 ```
 
 ### Step 5: Scope Tuning
@@ -121,7 +123,7 @@ Ask: **"Want to adjust iteration counts or word budgets? The defaults work well 
 If no, apply defaults:
 
 ```bash
-python "$STUDIO_ROOT/run_phase.py" setup --target . --answers '{"scopes": "defaults"}'
+python ".studio/source/run_phase.py" setup --target . --answers '{"scopes": "defaults"}'
 ```
 
 If yes, walk through each scope asking about:
@@ -146,7 +148,7 @@ Ask: **"Want to change artifact retention settings? (yes/no)"**
 If no, apply defaults:
 
 ```bash
-python "$STUDIO_ROOT/run_phase.py" setup --target . --answers '{"cleanup": {"ttl_days": 30, "size_limit_mb": 900}}'
+python ".studio/source/run_phase.py" setup --target . --answers '{"cleanup": {"ttl_days": 30, "size_limit_mb": 900}}'
 ```
 
 If yes, ask for TTL (days) and size limit (MB), then apply.
@@ -156,7 +158,7 @@ If yes, ask for TTL (days) and size limit (MB), then apply.
 Show the final configuration:
 
 ```bash
-python "$STUDIO_ROOT/run_phase.py" setup --target . --status
+python ".studio/source/run_phase.py" setup --target . --status
 ```
 
 Tell the user:

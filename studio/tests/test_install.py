@@ -4,7 +4,7 @@ Tests cover:
   - install_studio: copies source, slash commands, config, manifest, VERSION
   - check_studio: detects up-to-date, changed, missing
   - update_studio: refreshes source, preserves user customizations
-  - slash command rewriting: $STUDIO_ROOT -> .studio/source
+  - slash commands copied verbatim (no rewriting needed)
 """
 import json
 import pytest
@@ -14,7 +14,6 @@ from install import (
     install_studio,
     check_studio,
     update_studio,
-    _rewrite_slash_command,
 )
 
 
@@ -51,12 +50,12 @@ class TestInstallStudio:
         assert (commands / "run-phase.md").is_file()
         assert (commands / "run-studio-phase.md").is_file()
 
-    def test_slash_commands_rewritten(self, target_dir, studio_dir):
-        """Slash commands reference .studio/source instead of $STUDIO_ROOT."""
+    def test_slash_commands_copied_verbatim(self, target_dir, studio_dir):
+        """Slash commands are copied verbatim (no rewriting needed)."""
         install_studio(target_dir, studio_dir)
-        content = (target_dir / ".claude" / "commands" / "run-phase.md").read_text()
-        assert "$STUDIO_ROOT" not in content
-        assert ".studio/source" in content
+        src = studio_dir.parent / ".claude" / "commands" / "run-phase.md"
+        dst = target_dir / ".claude" / "commands" / "run-phase.md"
+        assert src.read_text() == dst.read_text()
 
     def test_creates_version_file(self, target_dir, studio_dir):
         """Install creates .studio/VERSION with metadata."""
@@ -194,24 +193,21 @@ class TestUpdateStudio:
         assert content != "# tampered"
 
 
-class TestRewriteSlashCommand:
-    """Tests for _rewrite_slash_command()."""
+class TestSlashCommandsUseDirectPaths:
+    """Verify slash commands use .studio/source/ paths directly (no rewriting needed)."""
 
-    def test_replaces_studio_root(self):
-        """$STUDIO_ROOT references are replaced."""
-        content = 'python "$STUDIO_ROOT/run_phase.py" prepare'
-        result = _rewrite_slash_command(content, ".studio/source")
-        assert "$STUDIO_ROOT" not in result
-        assert ".studio/source/run_phase.py" in result
+    def test_no_studio_root_refs_in_source_commands(self, studio_dir):
+        """Source slash commands should not contain $STUDIO_ROOT references."""
+        commands_dir = studio_dir.parent / ".claude" / "commands"
+        for cmd_file in commands_dir.glob("*.md"):
+            content = cmd_file.read_text(encoding="utf-8")
+            assert '"$STUDIO_ROOT/' not in content, (
+                f"{cmd_file.name} still contains $STUDIO_ROOT references"
+            )
 
-    def test_replaces_studio_prompt_ref(self):
-        """Bare studio/ references to prompt docs are replaced."""
-        content = 'read it at `studio/docs/role_prompts/design.md`'
-        result = _rewrite_slash_command(content, ".studio/source")
-        assert ".studio/source/docs/role_prompts/design.md" in result
-
-    def test_preserves_other_content(self):
-        """Non-STUDIO_ROOT content is untouched."""
-        content = "Some normal markdown text\n> With blockquotes"
-        result = _rewrite_slash_command(content, ".studio/source")
-        assert result == content
+    def test_commands_reference_studio_source(self, studio_dir):
+        """Slash commands that invoke run_phase.py use .studio/source/ paths."""
+        commands_dir = studio_dir.parent / ".claude" / "commands"
+        run_phase_cmd = commands_dir / "run-phase.md"
+        content = run_phase_cmd.read_text(encoding="utf-8")
+        assert ".studio/source/run_phase.py" in content
