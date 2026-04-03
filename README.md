@@ -308,7 +308,7 @@ studio/
   config/scopes.toml         # Default scope configuration
   config/studio_settings.toml # Cleanup settings
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 472 tests (pytest)
+  tests/                    # 471 tests (pytest)
 ```
 
 ---
@@ -319,7 +319,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-472 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, cross-repo artifact routing, install/update workflows, agent metrics tracking, CLAUDE.md offload analysis, and setup wizard configuration.
+471 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, cross-repo artifact routing, install/update workflows, agent metrics tracking, CLAUDE.md offload analysis, and setup wizard configuration.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 

@@ -130,7 +130,7 @@ def install_studio(target: Path, studio_dir: Optional[Path] = None) -> Path:
 
     Creates:
         {target}/.studio/source/     — Studio Python source + config
-        {target}/.claude/commands/    — Slash commands (rewritten)
+        {target}/.claude/commands/    — Slash commands (verbatim, use .studio/source/ paths)
         {target}/.studio/VERSION      — Version info
         {target}/.studio/MANIFEST.json — Install manifest with checksums
 
