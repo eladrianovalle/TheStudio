@@ -2039,7 +2039,7 @@ def inject_context(args: argparse.Namespace) -> None:
             scope = scopes_config.get_scope(scope_name)
             if scope:
                 scope_index = next(
-                    (i for i, s in enumerate(scopes_config.scopes) if s.name == scope_name),
+                    (i for i, s in enumerate(scopes_config.scopes) if s.name == scope.name),
                     0,
                 )
 

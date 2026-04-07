@@ -49,10 +49,21 @@ class ScopesConfig:
         return sum(scope.max_iterations for scope in self.scopes)
     
     def get_scope(self, name: str) -> ScopeConfig | None:
-        """Get scope by name."""
+        """Get scope by name, falling back to canonical alias lookup.
+
+        Canonical aliases map the standard tier names (alignment, depth, polish)
+        to scopes by position (0, 1, 2) so that slash commands work regardless
+        of the names used in the user's scopes.toml.
+        """
+        # Exact name match first
         for scope in self.scopes:
             if scope.name == name:
                 return scope
+        # Canonical alias fallback: alignment→0, depth→1, polish→2
+        _CANONICAL = {"alignment": 0, "depth": 1, "polish": 2}
+        idx = _CANONICAL.get(name)
+        if idx is not None and idx < len(self.scopes):
+            return self.scopes[idx]
         return None
 
 
