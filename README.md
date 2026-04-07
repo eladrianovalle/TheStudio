@@ -161,6 +161,14 @@ python studio/run_phase.py update --target /path/to/project
 # Preview / execute storage cleanup
 python studio/run_phase.py cleanup --dry-run
 python studio/run_phase.py cleanup
+
+# Setup wizard (configure roles, scopes, cleanup after install)
+python studio/run_phase.py setup --target . --status
+python studio/run_phase.py setup --target . --defaults
+
+# Offload analysis (analyze CLAUDE.md for offload opportunities)
+python studio/run_phase.py offload --target .
+python studio/run_phase.py offload --target . --apply
 ```
 
 ---
@@ -308,7 +316,7 @@ studio/
   config/scopes.toml         # Default scope configuration
   config/studio_settings.toml # Cleanup settings
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 471 tests (pytest)
+  tests/                    # 472 tests (pytest)
 ```
 
 ---
@@ -319,7 +327,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-471 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, cross-repo artifact routing, install/update workflows, agent metrics tracking, CLAUDE.md offload analysis, and setup wizard configuration.
+472 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, cross-repo artifact routing, install/update workflows, agent metrics tracking, CLAUDE.md offload analysis, and setup wizard configuration.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 

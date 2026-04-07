@@ -13,6 +13,9 @@ All notable changes to TheGameStudio are documented here.
 - `ai_engineer` role in manifest — Staff AI Engineer specializing in prompt architecture & agent optimization
 - `/studio-setup` slash command + `setup` CLI subcommand — post-install wizard for role pack selection, role customization, scope tuning, and cleanup settings with incremental versioned steps (`setup.py`, 43 tests)
 
+### Fixed
+- `inject-context` now resolves custom scope names via canonical positional aliases (alignment→0, depth→1, polish→2)
+
 ### Changed
 - Clarity module now mandatory — direct import replaces lazy-load, always active in every studio run
 - `clarity.py` added to cross-repo install `SOURCE_FILES`

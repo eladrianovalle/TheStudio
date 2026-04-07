@@ -1,5 +1,5 @@
 """
-Per-topic Clarity Score tracking for Studio runs.
+Per-topic Clarity Score tracking for Studio runs (mandatory, always active).
 
 Topics are derived from DecisionPoint.unblocks fields, normalized to slugs.
 Clarity scores control agent question density — low clarity means more

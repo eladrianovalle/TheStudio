@@ -1856,7 +1856,9 @@ def extract_decisions(args: argparse.Namespace) -> None:
     """Extract decision points from agent files in a run directory.
 
     Scans advocate/contrarian files (optionally filtered by scope) and
-    outputs formatted decision points. Useful mid-run between agents.
+    outputs formatted decision points. Filters out already-settled
+    decisions by default; use --all to include them. Useful mid-run
+    between agents.
     """
     run_dir = Path(args.run_dir)
     if not run_dir.is_dir():
@@ -2004,11 +2006,12 @@ def show_metrics(args: argparse.Namespace) -> None:
 
 
 def inject_context(args: argparse.Namespace) -> None:
-    """Generate the context block for the next agent in a scoped run.
+    """Generate context for the next agent in a scoped run.
 
     Combines settled decisions, clarity summary, prior-scope file lists,
-    and scope-specific instructions into a single markdown block that
-    the orchestrator appends to the agent prompt.
+    and scope-specific instructions into a markdown file written to
+    ``context--<role>--<scope>--<stance>.md`` in the run directory.
+    Resolves custom scope names via canonical positional aliases.
     """
     run_dir = Path(args.run_dir)
     if not run_dir.is_dir():
