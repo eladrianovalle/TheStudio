@@ -429,3 +429,109 @@ def test_finalize_aggregates_metrics(studio_root):
     assert "metrics" in meta
     assert meta["metrics"]["agents"] == 2
     assert meta["metrics"]["total_tokens"] == 21000
+
+
+# ---------------------------------------------------------------------------
+# Fresh run context reset tests
+# ---------------------------------------------------------------------------
+
+
+class TestIsSameObjective:
+    """Tests for _is_same_objective helper."""
+
+    def test_same_input_returns_true(self, tmp_path):
+        run_dir = tmp_path / "run_market_001"
+        run_dir.mkdir()
+        run_phase.write_json(run_dir / "run.json", {"input": "Build a farming sim"})
+        assert run_phase._is_same_objective(run_dir, "Build a farming sim") is True
+
+    def test_different_input_returns_false(self, tmp_path):
+        run_dir = tmp_path / "run_market_001"
+        run_dir.mkdir()
+        run_phase.write_json(run_dir / "run.json", {"input": "Build a farming sim"})
+        assert run_phase._is_same_objective(run_dir, "Add multiplayer lobby") is False
+
+    def test_case_insensitive(self, tmp_path):
+        run_dir = tmp_path / "run_market_001"
+        run_dir.mkdir()
+        run_phase.write_json(run_dir / "run.json", {"input": "Build a Farming Sim"})
+        assert run_phase._is_same_objective(run_dir, "build a farming sim") is True
+
+    def test_whitespace_normalized(self, tmp_path):
+        run_dir = tmp_path / "run_market_001"
+        run_dir.mkdir()
+        run_phase.write_json(run_dir / "run.json", {"input": "Build  a   farming   sim"})
+        assert run_phase._is_same_objective(run_dir, "Build a farming sim") is True
+
+    def test_missing_run_json_returns_false(self, tmp_path):
+        run_dir = tmp_path / "run_market_001"
+        run_dir.mkdir()
+        assert run_phase._is_same_objective(run_dir, "anything") is False
+
+    def test_missing_input_key_returns_false(self, tmp_path):
+        run_dir = tmp_path / "run_market_001"
+        run_dir.mkdir()
+        run_phase.write_json(run_dir / "run.json", {"phase": "market"})
+        assert run_phase._is_same_objective(run_dir, "anything") is False
+
+
+class TestFreshRunClarityReset:
+    """Tests that prepare resets clarity when objective changes."""
+
+    def test_fresh_run_clears_stale_clarity(self, studio_root):
+        """A new objective should reset the clarity.json from the previous run."""
+        import time
+
+        # Run 1: create a run with objective A
+        run_id_1 = run_phase.prepare_run(make_prepare_args(text="Objective A"))
+
+        # Simulate clarity data from run 1
+        clarity_path = studio_root / ".studio" / "clarity.json"
+        clarity_path.parent.mkdir(parents=True, exist_ok=True)
+        clarity_path.write_text('{"run_id": "old", "topics": [], "context": {"objective": "Objective A", "scope_label": "test", "scope_description": "test"}, "created_iso": "2026-01-01T00:00:00"}', encoding="utf-8")
+        assert clarity_path.is_file()
+
+        time.sleep(1.1)  # avoid timestamp collision
+
+        # Run 2: different objective — should reset clarity
+        run_id_2 = run_phase.prepare_run(make_prepare_args(text="Objective B"))
+        assert not clarity_path.is_file(), "clarity.json should be cleared for a fresh run"
+
+    def test_same_objective_preserves_clarity(self, studio_root):
+        """A rerun of the same objective should keep clarity.json."""
+        import time
+
+        clarity_path = studio_root / ".studio" / "clarity.json"
+        clarity_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Run 1
+        run_id_1 = run_phase.prepare_run(make_prepare_args(text="Same objective"))
+
+        # Write clarity after run 1 (using correct schema field names)
+        clarity_path.write_text('{"run_id": "existing", "topics": [{"topic": "core_loop", "display_name": "Core Loop", "score": 0.8, "answered_count": 3, "total_count": 5, "challenged_count": 0}], "context": {"objective": "Same objective", "scope_label": "test", "scope_description": "test"}, "created_iso": "2026-01-01T00:00:00"}', encoding="utf-8")
+
+        time.sleep(1.1)  # avoid timestamp collision
+
+        # Run 2: same objective — should preserve clarity
+        run_id_2 = run_phase.prepare_run(make_prepare_args(text="Same objective"))
+        assert clarity_path.is_file(), "clarity.json should be preserved for same-objective rerun"
+
+    def test_fresh_run_skips_rerun_context(self, studio_root):
+        """A new objective should not inject rerun context from the previous run."""
+        # Run 1: create and add a rejected contrarian
+        run_id_1 = run_phase.prepare_run(make_prepare_args(text="Old objective"))
+        run_dir_1 = studio_root / "output" / "market" / run_id_1
+        (run_dir_1 / "contrarian_1.md").write_text(
+            "VERDICT: REJECTED\n1. This is terrible\n", encoding="utf-8"
+        )
+
+        import time; time.sleep(1.1)  # Ensure different timestamp
+
+        # Run 2: different objective
+        run_id_2 = run_phase.prepare_run(make_prepare_args(text="New objective"))
+        run_dir_2 = studio_root / "output" / "market" / run_id_2
+        instructions = (run_dir_2 / "instructions.md").read_text()
+
+        # Should NOT contain rerun context from the old objective
+        assert "This is terrible" not in instructions
+        assert "Prior Run" not in instructions

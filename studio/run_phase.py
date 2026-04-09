@@ -380,6 +380,27 @@ def _find_previous_run_dir(current_run_dir: Path) -> Path | None:
     return prior_runs[-1] if prior_runs else None
 
 
+def _is_same_objective(prev_run_dir: Path, current_input: str) -> bool:
+    """Check if the previous run targeted the same objective as the current one.
+
+    Returns True if the previous run's input text matches the current input
+    (case-insensitive, whitespace-normalized). This distinguishes genuine reruns
+    (same objective, new iteration) from fresh runs (different objective).
+    """
+    meta_path = prev_run_dir / "run.json"
+    if not meta_path.is_file():
+        return False
+    try:
+        meta = load_json(meta_path)
+        prev_input = meta.get("input", "")
+    except Exception:
+        return False
+    # Normalize: strip, collapse whitespace, lowercase
+    def _norm(s: str) -> str:
+        return " ".join(s.strip().lower().split())
+    return _norm(prev_input) == _norm(current_input)
+
+
 def _ensure_summary_path(meta: Dict, run_dir: Path) -> Path:
     summary_path = meta.get("summary_path")
     if summary_path:
@@ -633,10 +654,14 @@ def build_instruction_doc(
     # Add rerun context if previous rejections exist in prior runs.
     # Question mode bypasses rerun context — surfacing unknowns is not
     # a response to prior rejections.
+    # Fresh runs (different objective) also skip rerun context — rejection
+    # feedback from a prior objective is not relevant to the new one.
     rerun_section: List[str] = []
     is_qmode = is_question_mode(meta.get("output_type"))
     prev_run_dir = _find_previous_run_dir(run_dir)
-    if not is_qmode and prev_run_dir and detect_rerun_mode(prev_run_dir):
+    current_input = meta.get("input", "")
+    same_objective = prev_run_dir is not None and _is_same_objective(prev_run_dir, current_input)
+    if not is_qmode and prev_run_dir and same_objective and detect_rerun_mode(prev_run_dir):
         rerun_instructions = generate_rerun_instructions(prev_run_dir)
         rerun_section.append(rerun_instructions)
         rerun_section.append("")
@@ -1090,10 +1115,22 @@ def prepare_run(args: argparse.Namespace) -> str:
     scopes_config, scopes_allocations, scopes_meta = _resolve_scopes(args)
     meta = _build_run_meta(phase, text, now, run_id, args, studio_role_meta, scopes_meta)
 
-    # Load project-level clarity for instruction injection
-    project_clarity = clarity.load_project_clarity(artifact_root)
-    if project_clarity is None:
+    # Load project-level clarity for instruction injection.
+    # If the previous run targeted a different objective, reset clarity so
+    # stale topic scores don't bleed into the new run.  The new run will
+    # rebuild clarity via recompute-clarity as it progresses.
+    prev_run = _find_previous_run_dir(run_dir)
+    fresh_run = prev_run is not None and not _is_same_objective(prev_run, text)
+    if fresh_run:
+        # Reset project clarity — stale topics from the old objective
+        clarity_path = artifact_root / ".studio" / "clarity.json"
+        if clarity_path.is_file():
+            clarity_path.unlink()
         project_clarity = clarity.empty_snapshot(text, run_id, now)
+    else:
+        project_clarity = clarity.load_project_clarity(artifact_root)
+        if project_clarity is None:
+            project_clarity = clarity.empty_snapshot(text, run_id, now)
 
     instructions = build_instruction_doc(
         meta, run_dir, studio_role_details, scopes_config, scopes_allocations,
@@ -1109,6 +1146,8 @@ def prepare_run(args: argparse.Namespace) -> str:
     print(f"Prepared {run_id} ({phase})")
     print(f"- Run directory: {run_dir_abs}")
     print(f"- Instructions: {instructions_abs_path}")
+    if fresh_run:
+        print(f"- Fresh run: cleared stale clarity from previous objective")
 
     if scopes_meta:
         print(f"\n💡 Tip: Scopes are active. Work through {scopes_meta['scopes'][0]['name']} scope first.")
