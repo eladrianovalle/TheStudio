@@ -15,6 +15,7 @@ All notable changes to TheGameStudio are documented here.
 
 ### Fixed
 - `inject-context` now resolves custom scope names via canonical positional aliases (alignment→0, depth→1, polish→2)
+- `prepare` now resets stale clarity and skips rerun context when the new run has a different objective than the previous one — prevents orchestrator agents from inheriting irrelevant topic scores and rejection feedback
 
 ### Changed
 - Clarity module now mandatory — direct import replaces lazy-load, always active in every studio run
