@@ -474,6 +474,12 @@ class TestIsSameObjective:
         run_phase.write_json(run_dir / "run.json", {"phase": "market"})
         assert run_phase._is_same_objective(run_dir, "anything") is False
 
+    def test_empty_input_returns_false(self, tmp_path):
+        run_dir = tmp_path / "run_market_001"
+        run_dir.mkdir()
+        run_phase.write_json(run_dir / "run.json", {"input": ""})
+        assert run_phase._is_same_objective(run_dir, "") is False
+
 
 class TestFreshRunClarityReset:
     """Tests that prepare resets clarity when objective changes."""
