@@ -187,6 +187,96 @@ class DocumentValidator:
             warnings=warnings
         )
     
+    def validate_question_mode(self, doc_path: Path) -> ValidationResult:
+        """
+        Validate a question-mode artifact.
+
+        Checks:
+        - File exists and is non-empty
+        - Contains >= 3 question-form lines: either bullet/numbered lines with
+          question marks OR blockquote DECISION points (the new unified format)
+        - Does NOT contain verdict tokens (question mode has no verdicts)
+
+        Returns:
+            ValidationResult with issues if validation fails.
+        """
+        if not doc_path.exists():
+            return ValidationResult(
+                passed=False,
+                issues=[f"Document not found: {doc_path}"]
+            )
+
+        content = doc_path.read_text(encoding="utf-8")
+
+        if not content.strip():
+            return ValidationResult(
+                passed=False,
+                issues=[f"[DocumentValidator] question-mode: file is empty. File: {doc_path}"]
+            )
+
+        # Reject verdict tokens — question mode does not produce verdicts
+        if re.search(r'VERDICT:\s*(APPROVED|REJECTED)', content, re.IGNORECASE):
+            return ValidationResult(
+                passed=False,
+                issues=[f"[DocumentValidator] question-mode: verdict token found but question mode does not produce verdicts. File: {doc_path}"]
+            )
+
+        # Count question-form lines: bullet/numbered with ? OR blockquote DECISION points
+        question_pattern = r'^\s*(?:[-*]|\d+\.)\s+.*\?'
+        question_lines = re.findall(question_pattern, content, re.MULTILINE)
+
+        # Also count blockquote DECISION points (the unified pre-flight format)
+        from decision_points import DECISION_LINE_RE
+        decision_lines = DECISION_LINE_RE.findall(content)
+
+        total_questions = len(question_lines) + len(decision_lines)
+        if total_questions < 3:
+            return ValidationResult(
+                passed=False,
+                issues=[f"[DocumentValidator] question-mode: expected ≥3 question-form lines, found {total_questions}. File: {doc_path}"]
+            )
+
+        return ValidationResult(passed=True, issues=[])
+
+    def check_decision_points(self, doc_path: Path) -> ValidationResult:
+        """
+        Check if an advocate document contains decision points.
+
+        Warns (does not fail) when a non-question-mode advocate file contains
+        zero decision points. The warning message tells the orchestrator to
+        re-prompt the agent.
+
+        Args:
+            doc_path: Path to an advocate document
+
+        Returns:
+            ValidationResult with warning if no decision points found
+        """
+        if not doc_path.exists():
+            return ValidationResult(
+                passed=True,
+                issues=[],
+                warnings=[f"Document not found for decision point check: {doc_path}"]
+            )
+
+        content = doc_path.read_text(encoding="utf-8")
+
+        from decision_points import DECISION_LINE_RE
+        has_decisions = DECISION_LINE_RE.search(content)
+
+        if not has_decisions:
+            return ValidationResult(
+                passed=True,  # Warning only, does not fail validation
+                issues=[],
+                warnings=[
+                    f"{doc_path.name}: No decision points found. "
+                    "Consider re-prompting the agent — advocates should surface "
+                    "at least 1 P0/P1 decision point per output."
+                ]
+            )
+
+        return ValidationResult(passed=True, issues=[])
+
     def check_verdict(self, contrarian_path: Path) -> ValidationResult:
         """
         Check if contrarian document contains a valid verdict.

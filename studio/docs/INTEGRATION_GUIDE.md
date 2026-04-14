@@ -1,16 +1,37 @@
 # Integration Guide
 
-This doc explains how to integrate Studio into other repos. The workflow is: `run_phase.py` → AI assistant execution → finalize/log. There is no importable Python API or hosted service. Treat Studio as a shared instructions generator plus artifact log.
+This doc explains how to integrate Studio into other repos. There is no importable Python API or hosted service. Treat Studio as a shared instructions generator plus artifact log.
 
 ---
 
-## 1. Checklist for Every Repo
+## Recommended: `studio init`
 
-1. **Copy the bridge template**  
-   - Copy [`docs/STUDIO_BRIDGE_TEMPLATE.md`](./STUDIO_BRIDGE_TEMPLATE.md) into your repo (e.g., `docs/studio-bridge.md`).  
+The simplest way to integrate Studio into any project:
+
+```bash
+python studio/run_phase.py init --target /path/to/your-project
+```
+
+This copies slash commands and source so `/run-phase` and `/run-studio-phase` work natively. Keep up to date with `check-install` and `update`:
+
+```bash
+python studio/run_phase.py check-install --target /path/to/your-project
+python studio/run_phase.py update --target /path/to/your-project
+```
+
+---
+
+## Manual Setup (Alternative)
+
+If you prefer manual control over the integration:
+
+### Checklist for Every Repo
+
+1. **Copy the bridge template**
+   - Copy [`docs/STUDIO_BRIDGE_TEMPLATE.md`](./STUDIO_BRIDGE_TEMPLATE.md) into your repo (e.g., `docs/studio-bridge.md`).
    - Fill in Project summary, Studio location, canon table, and the prompt stub.
-2. **Record Studio path**  
-   - Use `$STUDIO_ROOT` environment variable.  
+2. **Record Studio path**
+   - Use `$STUDIO_ROOT` environment variable.
    - Document the expected path or how to set `STUDIO_ROOT`.
 3. **Define canon**  
    - List the docs/data required for useful runs.  
@@ -155,7 +176,7 @@ Commit these helpers to dependent repos if you want reproducible ergonomics; oth
 ## 6. Reference Docs
 
 - [README.md](../../README.md) – top-level overview and testing notes.
-- [STUDIO_INTERACTION_GUIDE.md](../STUDIO_INTERACTION_GUIDE.md) – the canonical user workflow.
+- [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) – Claude Code slash commands and workflow.
 - [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) – Claude Code slash commands and agent workflow.
 - [windsurf/USAGE.md](./windsurf/USAGE.md) – Windsurf/Cascade-specific workflow.
 - [API.md](./API.md) – command/JSON schema for `run_phase.py`, metadata, and logs.

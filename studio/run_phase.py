@@ -23,12 +23,14 @@ from cleanup import (
     load_cleanup_settings,
 )
 from validators.document_validator import DocumentValidator
+from role_overrides import load_role_overrides
 from run_phase_roles import (
     RoleConfigError,
     RoleDetails,
     build_role_details,
     collect_role_artifacts,
     default_role_pack_name,
+    get_role_spec,
     parse_role_filename,
     load_manifest,
     load_role_pack,
@@ -39,15 +41,33 @@ from run_phase_roles import (
 from scopes import (
     allocate_iterations,
     generate_scope_instructions,
+    generate_scope_prompt,
     load_scopes_config,
+)
+from decision_points import (
+    DecisionPoint,
+    extract_decisions_from_run,
+    filter_unsettled,
+    format_decisions_log,
+    format_settled_decisions,
+    load_decisions_json,
+    merge_decisions,
+    parse_decision_points,
+    save_decisions_json,
+)
+from question_mode import (
+    generate_question_instructions,
+    generate_question_integrator_instructions,
+    is_question_mode,
 )
 from rerun import (
     detect_rerun_mode,
     generate_rerun_instructions,
     load_rejection_context,
 )
-from validators.document_validator import DocumentValidator
 from validators.code_validator import CodeValidator
+
+import clarity
 
 try:
     import tomllib  # Python 3.11+
@@ -171,7 +191,14 @@ CLEANUP_SKIP_ENV = "STUDIO_SKIP_CLEANUP"
 CLEANUP_DRY_ENV = "STUDIO_CLEANUP_DRY_RUN"
 ARTIFACT_ROOT_ENV = "STUDIO_ARTIFACT_ROOT"
 
-SUBCOMMANDS = {"prepare", "finalize", "cleanup", "validate"}
+SUBCOMMANDS = {
+    "prepare", "finalize", "cleanup", "validate",
+    "record-decisions", "check-decisions",
+    "extract-decisions", "inject-context",
+    "init", "check-install", "update",
+    "show-clarity", "set-clarity", "recompute-clarity",
+    "record-metrics", "show-metrics", "offload", "setup",
+}
 
 
 def _resolve_env_path(value: str) -> Path:
@@ -194,6 +221,7 @@ def get_studio_root() -> Path:
 
 
 _artifact_root_override: Path | None = None
+_artifact_root_warned: bool = False
 
 
 def set_artifact_root(path: Path | None) -> None:
@@ -214,6 +242,14 @@ def get_artifact_root() -> Path:
     cwd = Path.cwd().resolve()
     if cwd == studio_root or _is_within(cwd, studio_root):
         return studio_root
+    global _artifact_root_warned
+    if not _artifact_root_warned:
+        print(
+            f"Warning: artifact root defaulting to current directory ({cwd}). "
+            f"Set STUDIO_ARTIFACT_ROOT or use --artifact-root to override.",
+            file=sys.stderr,
+        )
+        _artifact_root_warned = True
     return cwd
 
 
@@ -465,7 +501,7 @@ def _validate_artifacts(
         quality_warnings.extend(f"{fpath.name}: {w}" for w in fmt_result.warnings)
         quality_errors.extend(f"{fpath.name}: {issue}" for issue in fmt_result.issues)
 
-        # 4. Token budget tracking
+        # 4. Per-scope output stats
         _, _, scope, _ = parse_role_filename(fpath.name)
         scope_key = scope or "flat"
         if scope_key not in scope_stats:
@@ -490,7 +526,7 @@ def _validate_artifacts(
 
         for stats in scope_stats.values():
             stats["avg_words"] = round(stats["total_words"] / max(stats["files"], 1))
-        meta["token_budget"] = scope_stats
+        meta["scope_stats"] = scope_stats
 
     return iterations_value, advocate_names, completed_roles, missing_roles
 
@@ -520,7 +556,8 @@ def _append_run_log(meta: Dict) -> None:
 
 def build_instruction_doc(
     meta: Dict, run_dir: Path, studio_roles: List[RoleDetails] | None = None,
-    scopes_config=None, scopes_allocations: Dict[str, int] | None = None
+    scopes_config=None, scopes_allocations: Dict[str, int] | None = None,
+    clarity_snapshot=None,
 ) -> str:
     phase = meta["phase"]
     info = PHASE_DETAILS[phase]
@@ -572,14 +609,51 @@ def build_instruction_doc(
     if scopes_config and scopes_allocations:
         scope_instructions = generate_scope_instructions(scopes_config, scopes_allocations)
         scope_section.append(scope_instructions)
+        # Per-scope agent prompt templates for orchestrator use
+        scope_section.extend([
+            "",
+            "### Per-Scope Agent Prompt Templates",
+            "",
+            "The orchestrator **must** generate scope-specific agent context before spawning each agent:",
+            "",
+            "```bash",
+            f'python "{get_studio_root()}/run_phase.py" inject-context --run-dir {{run_dir}} --scope {{scope}} --role {{role}} --stance {{stance}}',
+            "```",
+            "",
+            "This writes `context--<role>--<scope>--<stance>.md` into the run directory. Read that file and prepend its contents to the agent prompt.",
+            "",
+            "Or extract decisions between agents with:",
+            "",
+            "```bash",
+            f'python "{get_studio_root()}/run_phase.py" extract-decisions --run-dir {{run_dir}}',
+            "```",
+            "",
+        ])
     
-    # Add rerun context if previous rejections exist in prior runs
+    # Add rerun context if previous rejections exist in prior runs.
+    # Question mode bypasses rerun context — surfacing unknowns is not
+    # a response to prior rejections.
     rerun_section: List[str] = []
+    is_qmode = is_question_mode(meta.get("output_type"))
     prev_run_dir = _find_previous_run_dir(run_dir)
-    if prev_run_dir and detect_rerun_mode(prev_run_dir):
+    if not is_qmode and prev_run_dir and detect_rerun_mode(prev_run_dir):
         rerun_instructions = generate_rerun_instructions(prev_run_dir)
         rerun_section.append(rerun_instructions)
         rerun_section.append("")
+
+    # --- Question mode: override roles, loop, and integrator sections ---
+
+    question_mode_section: List[str] = []
+    if is_qmode:
+        question_mode_section.extend([
+            "",
+            "## Output Mode: Question Surfacing",
+            "",
+            "> **This run surfaces open questions — NOT deliverables.**",
+            "> Advocates produce prioritised question lists; contrarians challenge priorities",
+            "> and surface missing questions. The integrator consolidates and deduplicates.",
+            "",
+        ])
 
     roles_section = [
         "",
@@ -589,21 +663,38 @@ def build_instruction_doc(
         f"- **Contrarian:** {info['contrarian']}",
     ]
     if phase != "studio":
-        impl = info["implementer"]
-        roles_section.extend(
-            [
-                f"- **Implementer:** {impl['title']} — generate the deliverables listed below once APPROVED.",
+        if is_qmode:
+            roles_section.extend([
                 "",
-                "### Implementation Checklist",
+                "### Question-Surfacing Instructions",
                 "",
-            ]
-        )
-        roles_section.extend([f"- {item}" for item in impl["deliverables"]])
+                "The advocate surfaces 5–15 prioritised questions (P0/P1/P2) that must be",
+                "answered before deliverables can be produced. The contrarian challenges",
+                "priorities, surfaces unstated assumptions, and identifies missing questions.",
+                "",
+                "**Do NOT produce deliverables, specs, or recommendations — only questions.**",
+            ])
+        else:
+            impl = info["implementer"]
+            roles_section.extend(
+                [
+                    f"- **Implementer:** {impl['title']} — generate the deliverables listed below once APPROVED.",
+                    "",
+                    "### Implementation Checklist",
+                    "",
+                ]
+            )
+            roles_section.extend([f"- {item}" for item in impl["deliverables"]])
     else:
         roles_section.append(f"- **Integrator:** {info['integrator']}")
-        roles_section.append(
-            "- Integrator runs its own capped duel (Advocate vs. Contrarian) inside `integrator.md` once the pods approve."
-        )
+        if is_qmode:
+            roles_section.append(
+                "- Integrator consolidates questions across roles into a single deduplicated set — NO roadmap."
+            )
+        else:
+            roles_section.append(
+                "- Integrator runs its own capped duel (Advocate vs. Contrarian) inside `integrator.md` once the pods approve."
+            )
 
     loop_section = [
         "",
@@ -619,15 +710,67 @@ def build_instruction_doc(
         ]
     )
     if phase != "studio":
-        loop_section.append(
-            "5. As soon as a contrarian returns `VERDICT: APPROVED`, move to the Implementer checklist."
-        )
+        if is_qmode:
+            loop_section.append(
+                "5. As soon as a contrarian returns `VERDICT: APPROVED`, write `summary.md` with the consolidated question set."
+            )
+        else:
+            loop_section.append(
+                "5. As soon as a contrarian returns `VERDICT: APPROVED`, move to the Implementer checklist."
+            )
     else:
-        loop_section.append(
-            "5. Once the contrarian returns `VERDICT: APPROVED`, operate as the Integrator to merge inspiration + constraints into a roadmap (`integrator.md`)."
-        )
+        if is_qmode:
+            loop_section.append(
+                "5. Once all contrarians return `VERDICT: APPROVED`, the Integrator consolidates all questions into `integrator.md`."
+            )
+        else:
+            loop_section.append(
+                "5. Once the contrarian returns `VERDICT: APPROVED`, operate as the Integrator to merge inspiration + constraints into a roadmap (`integrator.md`)."
+            )
     loop_section.append("")
     loop_section.append(f"**Notes:** {info['notes']}")
+
+    # Decision Point Protocol — always included except in question mode
+    decision_point_section: List[str] = []
+    if not is_qmode:
+        decision_point_section.extend([
+            "",
+            "## Decision Point Protocol",
+            "",
+            "When you encounter a gap, ambiguity, or fork that could meaningfully change your approach, flag it as a decision point. Do NOT silently assume — surface it.",
+            "",
+            "### Format",
+            "",
+            "Use a markdown blockquote with a bold DECISION header:",
+            "",
+            "```",
+            "> **DECISION [P0]:** Should the social deduction mechanic be real-time or turn-based?",
+            "> **Unblocks:** Core loop design — fundamentally different gameplay",
+            "> **Options:** (a) Real-time (Among Us style) (b) Turn-based (Mafia style)",
+            "```",
+            "",
+            "### Priority Levels",
+            "",
+            "- **P0 (Blocking):** Cannot proceed without an answer. The orchestrator will pause and ask the user.",
+            "- **P1 (Important):** Shapes the approach significantly. State your assumption and continue, but flag it so the user can override.",
+            "- **P2 (Context):** Nice-to-know. Log it for completeness but do not pause.",
+            "",
+            "### For Advocates",
+            "You MUST surface at least 1 decision point (P0 or P1) per output. If nothing is genuinely unsettled, state that explicitly rather than omitting the section. Prefer fewer, high-quality P0/P1 flags over many P2s. Each decision point must name what it unblocks — if you can't articulate the impact, it's not worth flagging.",
+            "",
+            "### For Contrarians",
+            "If the advocate assumed something that is actually unsettled, you MUST flag it as a decision point. Decision points are required output when assumptions are unsettled — do not let unexamined assumptions pass.",
+        ])
+
+    # Clarity-guided focus section (skipped in question mode)
+    clarity_section: List[str] = []
+    if clarity_snapshot is not None and not is_qmode:
+        if scopes_config and scopes_config.scopes:
+            # Generate clarity guidance for each scope so agents get scope-appropriate density
+            for scope in scopes_config.scopes:
+                clarity_section.append(clarity.generate_clarity_instructions(clarity_snapshot, scope.name))
+        else:
+            clarity_section.append(clarity.generate_clarity_instructions(clarity_snapshot, "depth"))
 
     role_menu_section: List[str] = []
     if phase == "studio" and studio_roles:
@@ -670,19 +813,54 @@ def build_instruction_doc(
                     cues = "; ".join(details.escalate_on)
                     role_menu_section.append(f"- **{details.title}:** {cues}")
 
+        # Per-role question-surfacing instructions (studio + question mode)
+        if is_qmode:
+            role_menu_section.extend(["", "### Per-Role Question Instructions", ""])
+            for details in studio_roles:
+                role_data = {
+                    "title": details.title,
+                    "advocate_focus": details.advocate_focus,
+                    "contrarian_focus": details.contrarian_focus,
+                    "deliverables": details.deliverables,
+                    "escalate_on": details.escalate_on or [],
+                }
+                adv_instr, con_instr = generate_question_instructions(role_data)
+                role_menu_section.extend([
+                    f"#### {details.title}",
+                    "",
+                    "**Advocate question prompt:**",
+                    "",
+                    adv_instr.strip(),
+                    "",
+                    "**Contrarian question prompt:**",
+                    "",
+                    con_instr.strip(),
+                    "",
+                ])
+
     integrator_duel_section: List[str] = []
     if phase == "studio":
-        integrator_duel_section.extend(
-            [
+        if is_qmode:
+            integrator_duel_section.extend([
                 "",
-                "## Integrator Duel (after approval)",
+                "## Question Integrator (after approval)",
                 "",
-                "1. Inside `integrator.md`, add `### Integrator Advocate` summarizing the fused plan.",
-                "2. Add `### Integrator Contrarian` critiquing feasibility, ops risk, and sequencing. End with `VERDICT: APPROVED/REJECTED`.",
-                "3. If REJECTED, adjust with one additional mini-iteration (max 2 total) before continuing.",
-                "4. Close with `### Integrated Plan` that synthesizes both perspectives and lists next steps.",
-            ]
-        )
+                generate_question_integrator_instructions().strip(),
+                "",
+                "Save the consolidated question set to `integrator.md`.",
+            ])
+        else:
+            integrator_duel_section.extend(
+                [
+                    "",
+                    "## Integrator Duel (after approval)",
+                    "",
+                    "1. Inside `integrator.md`, add `### Integrator Advocate` summarizing the fused plan.",
+                    "2. Add `### Integrator Contrarian` critiquing feasibility, ops risk, and sequencing. End with `VERDICT: APPROVED/REJECTED`.",
+                    "3. If REJECTED, adjust with one additional mini-iteration (max 2 total) before continuing.",
+                    "4. Close with `### Integrated Plan` that synthesizes both perspectives and lists next steps.",
+                ]
+            )
 
     finalize_snippet = textwrap.dedent(
         f"""
@@ -706,10 +884,13 @@ def build_instruction_doc(
         textwrap.dedent(
             "\n".join(
                 base_section
+                + question_mode_section
                 + scope_section
                 + rerun_section
                 + roles_section
                 + loop_section
+                + decision_point_section
+                + clarity_section
                 + role_menu_section
                 + integrator_duel_section
                 + summary_section
@@ -728,21 +909,25 @@ def _resolve_studio_roles(args: argparse.Namespace) -> Tuple[Dict | None, List[R
         return None, None
 
     studio_root = get_studio_root()
+    artifact_root = get_artifact_root()
     manifest = load_manifest(studio_root)
     try:
         pack_name = args.role_pack or default_role_pack_name(manifest)
         pack_data = load_role_pack(studio_root, pack_name)
-        overrides = list(args.roles or [])
-        invited_roles = resolve_role_list(manifest, pack_data, overrides)
+        cli_overrides = list(args.roles or [])
+        invited_roles = resolve_role_list(manifest, pack_data, cli_overrides)
         if not invited_roles:
             raise RoleConfigError(
                 "Studio role selection resolved to zero roles. Adjust the pack or overrides."
             )
-        role_details = build_role_details(manifest, invited_roles)
+        # Load project-local role overrides from .studio/roles/
+        role_overrides = load_role_overrides(artifact_root)
+        role_details = build_role_details(manifest, invited_roles, overrides=role_overrides)
         role_meta: Dict = {
             "pack": pack_name,
-            "overrides": overrides,
+            "overrides": cli_overrides,
             "invited": invited_roles,
+            "role_overrides_applied": list(role_overrides.keys()) if role_overrides else [],
         }
         return role_meta, role_details
     except RoleConfigError as exc:
@@ -825,6 +1010,7 @@ def _build_run_meta(
         "summary_path": "",
         "verdict": "",
         "iterations_run": None,
+        "output_type": getattr(args, "mode", "deliverables"),
     }
     if studio_role_meta:
         meta["studio_roles"] = studio_role_meta
@@ -904,7 +1090,15 @@ def prepare_run(args: argparse.Namespace) -> str:
     scopes_config, scopes_allocations, scopes_meta = _resolve_scopes(args)
     meta = _build_run_meta(phase, text, now, run_id, args, studio_role_meta, scopes_meta)
 
-    instructions = build_instruction_doc(meta, run_dir, studio_role_details, scopes_config, scopes_allocations)
+    # Load project-level clarity for instruction injection
+    project_clarity = clarity.load_project_clarity(artifact_root)
+    if project_clarity is None:
+        project_clarity = clarity.empty_snapshot(text, run_id, now)
+
+    instructions = build_instruction_doc(
+        meta, run_dir, studio_role_details, scopes_config, scopes_allocations,
+        clarity_snapshot=project_clarity,
+    )
     instructions_path = run_dir / "instructions.md"
     instructions_path.write_text(instructions, encoding="utf-8")
     instructions_abs_path = instructions_path.resolve()
@@ -921,6 +1115,19 @@ def prepare_run(args: argparse.Namespace) -> str:
     else:
         print(f"\n💡 Tip: Want to optimize iteration budgets? Create .studio/scopes.toml")
         print(f"   See: docs/SCOPES_GUIDE.md")
+
+    # Append to usage log (fail silently — don't break prepare over logging)
+    try:
+        mode = getattr(args, "mode", "deliverables")
+        roles_str = ",".join(r.name for r in (studio_role_details or []))
+        scoped = "true" if scopes_meta else "false"
+        log_line = f"{now.isoformat(timespec='seconds')} | prepare | {phase} | {mode} | roles={roles_str} | scoped={scoped}\n"
+        usage_log = artifact_root / ".studio" / "usage.log"
+        usage_log.parent.mkdir(parents=True, exist_ok=True)
+        with open(usage_log, "a", encoding="utf-8") as f:
+            f.write(log_line)
+    except Exception:
+        pass  # Usage logging must never block prepare
 
     storage_stats = meta.get("storage", {})
     if storage_stats.get("cleanup_suggested", False):
@@ -966,12 +1173,52 @@ def finalize_run(args: argparse.Namespace) -> None:
         meta["cost"] = args.cost
     meta["updated_iso"] = utc_now().isoformat(timespec="seconds")
 
+    # Aggregate agent metrics into run.json before the single write
+    metrics_entries = _load_metrics(run_dir)
+    if metrics_entries:
+        meta["metrics"] = _summarize_metrics(metrics_entries)
+
     write_json(meta_path, meta)
     rebuild_index()
     _append_run_log(meta)
 
+    if metrics_entries:
+        total_tokens = meta["metrics"]["total_tokens"]
+        agent_count = meta["metrics"]["agents"]
+        print(f"Agent metrics: {agent_count} agents, {total_tokens:,} total tokens")
+
+    # Generate decisions.md — merge agent-surfaced decisions with any already-settled ones
+    existing = load_decisions_json(run_dir)
+    extracted = extract_decisions_from_run(run_dir)
+    if existing or extracted:
+        merge_decisions(existing, extracted)
+        save_decisions_json(run_dir, existing)
+        # Use settled format if any decisions have answers, otherwise use discovery log
+        has_answers = any(dp.answer is not None for dp in existing)
+        decisions_path = run_dir / "decisions.md"
+        if has_answers:
+            decisions_path.write_text(
+                format_settled_decisions(existing), encoding="utf-8"
+            )
+        else:
+            decisions_path.write_text(
+                format_decisions_log(existing), encoding="utf-8"
+            )
+        print(f"Generated {decisions_path.name} with {len(existing)} decision point(s)")
+
+        # Recompute clarity from merged decisions
+        art_root = get_artifact_root()
+        context = clarity.detect_context_scope(meta.get("input", ""))
+        prior = clarity.load_project_clarity(art_root)
+        snapshot = clarity.compute_clarity_snapshot(
+            existing, context, run_id=run_id, prior_snapshot=prior
+        )
+        clarity.save_clarity_json(run_dir / "clarity.json", snapshot)
+        clarity.save_project_clarity(art_root, snapshot)
+        print(f"Updated clarity scores ({len(snapshot.topics)} topic(s), mean: {snapshot.mean_score:.2f})")
+
     print(f"Finalized {run_id} ({phase}) → {meta['status']}")
-    
+
     # Contextual hints for next steps
     if meta['status'] == 'COMPLETED' and meta.get('verdict') == 'APPROVED':
         print(f"\n💡 Next steps:")
@@ -1090,6 +1337,12 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     prepare_parser.add_argument(
+        "--mode",
+        choices=["deliverables", "questions"],
+        default="deliverables",
+        help="Output mode: 'deliverables' (default) produces specs; 'questions' surfaces open questions.",
+    )
+    prepare_parser.add_argument(
         "--scopes",
         type=Path,
         default=None,
@@ -1185,6 +1438,231 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to validation config TOML (default: .studio/validation.toml).",
     )
     _add_artifact_root_arg(validate_parser)
+
+    record_parser = subparsers.add_parser(
+        "record-decisions", help="Record an answered decision into a run's decisions.json."
+    )
+    record_parser.add_argument(
+        "--run-dir",
+        type=Path,
+        required=True,
+        help="Path to the run directory.",
+    )
+    record_parser.add_argument(
+        "--question",
+        default=None,
+        help="The decision question text (required unless --decisions-file is used).",
+    )
+    record_parser.add_argument(
+        "--answer",
+        default=None,
+        help="The answer to the decision (required unless --decisions-file is used).",
+    )
+    record_parser.add_argument(
+        "--priority",
+        default=None,
+        choices=["P0", "P1", "P2"],
+        help="Decision priority level (required unless --decisions-file is used).",
+    )
+    record_parser.add_argument(
+        "--source",
+        default=None,
+        help="Source file the decision came from (optional).",
+    )
+    record_parser.add_argument(
+        "--unblocks",
+        default="",
+        help="What this decision unblocks (optional).",
+    )
+    record_parser.add_argument(
+        "--answered-by",
+        default="user",
+        help="Who answered: 'user' or 'assumption' (default: user).",
+    )
+    record_parser.add_argument(
+        "--decisions-file",
+        type=Path,
+        default=None,
+        help="Path to a JSON file with multiple decisions to record at once.",
+    )
+
+    check_parser = subparsers.add_parser(
+        "check-decisions", help="Parse decision points from a single agent output file."
+    )
+    check_parser.add_argument(
+        "--file",
+        type=Path,
+        required=True,
+        help="Path to an agent output file to scan for decision points.",
+    )
+
+    # --- Mid-run orchestration commands ---
+    extract_parser = subparsers.add_parser(
+        "extract-decisions", help="Extract decision points from agent files in a run directory."
+    )
+    extract_parser.add_argument(
+        "--run-dir",
+        type=Path,
+        required=True,
+        help="Path to the run directory.",
+    )
+    extract_parser.add_argument(
+        "--scope",
+        default=None,
+        help="Filter by scope (e.g., 'alignment', 'S1', 'depth', 'S2').",
+    )
+    extract_parser.add_argument(
+        "--all",
+        action="store_true",
+        dest="show_all",
+        help="Show all decisions including already-settled ones (default: only unsettled).",
+    )
+
+    inject_parser = subparsers.add_parser(
+        "inject-context", help="Generate context block for the next agent in a scoped run."
+    )
+    inject_parser.add_argument(
+        "--run-dir",
+        type=Path,
+        required=True,
+        help="Path to the run directory.",
+    )
+    inject_parser.add_argument(
+        "--scope",
+        required=True,
+        help="Current scope name (alignment, depth, polish).",
+    )
+    inject_parser.add_argument(
+        "--role",
+        required=True,
+        help="Role name (e.g., marketing, engineering).",
+    )
+    inject_parser.add_argument(
+        "--stance",
+        required=True,
+        choices=["advocate", "contrarian"],
+        help="Agent stance.",
+    )
+    inject_parser.add_argument(
+        "--artifact-root", type=Path, default=None,
+        help="Override artifact root directory.",
+    )
+
+    # --- Cross-repo install commands ---
+    init_parser = subparsers.add_parser(
+        "init", help="Install Studio into a target project directory."
+    )
+    init_parser.add_argument(
+        "--target",
+        type=Path,
+        required=True,
+        help="Path to the target project directory.",
+    )
+
+    check_install_parser = subparsers.add_parser(
+        "check-install", help="Check if installed Studio is up to date."
+    )
+    check_install_parser.add_argument(
+        "--target",
+        type=Path,
+        required=True,
+        help="Path to the target project directory.",
+    )
+
+    update_parser = subparsers.add_parser(
+        "update", help="Update installed Studio from source."
+    )
+    update_parser.add_argument(
+        "--target",
+        type=Path,
+        required=True,
+        help="Path to the target project directory.",
+    )
+
+    # --- Clarity commands ---
+    show_clarity_parser = subparsers.add_parser(
+        "show-clarity", help="Display current project clarity scores."
+    )
+    show_clarity_parser.add_argument(
+        "--artifact-root", type=Path, default=None,
+        help="Override artifact root directory.",
+    )
+
+    set_clarity_parser = subparsers.add_parser(
+        "set-clarity", help="Override a topic's clarity score."
+    )
+    set_clarity_parser.add_argument("--topic", required=True, help="Topic slug.")
+    set_clarity_parser.add_argument("--score", type=float, default=None, help="Override score (0.0-1.0).")
+    set_clarity_parser.add_argument("--reset", action="store_true", help="Remove user override.")
+    set_clarity_parser.add_argument(
+        "--artifact-root", type=Path, default=None,
+        help="Override artifact root directory.",
+    )
+
+    recompute_clarity_parser = subparsers.add_parser(
+        "recompute-clarity", help="Recompute clarity from a run's decisions."
+    )
+    recompute_clarity_parser.add_argument("--phase", required=True, choices=sorted(PHASE_DETAILS.keys()))
+    recompute_clarity_parser.add_argument("--run-id", required=True)
+    recompute_clarity_parser.add_argument(
+        "--artifact-root", type=Path, default=None,
+        help="Override artifact root directory.",
+    )
+
+    # --- Agent metrics ---
+
+    record_metrics_parser = subparsers.add_parser(
+        "record-metrics", help="Record token usage for a single agent invocation."
+    )
+    record_metrics_parser.add_argument("--run-dir", type=Path, required=True, help="Path to the run directory.")
+    record_metrics_parser.add_argument("--agent", required=True, choices=["advocate", "contrarian", "integrator", "polish"], help="Agent type.")
+    record_metrics_parser.add_argument("--total-tokens", type=int, required=True, help="Total tokens consumed.")
+    record_metrics_parser.add_argument("--tool-uses", type=int, default=0, help="Number of tool uses.")
+    record_metrics_parser.add_argument("--duration-ms", type=int, default=0, help="Duration in milliseconds.")
+    record_metrics_parser.add_argument("--role", default=None, help="Role name (for studio phase).")
+    record_metrics_parser.add_argument("--scope", default=None, choices=["alignment", "depth", "polish", "flat"], help="Scope name.")
+
+    show_metrics_parser = subparsers.add_parser(
+        "show-metrics", help="Display token usage summary for a run."
+    )
+    show_metrics_parser.add_argument("--run-dir", type=Path, required=True, help="Path to the run directory.")
+
+    offload_parser = subparsers.add_parser(
+        "offload", help="Analyze CLAUDE.md for offload opportunities."
+    )
+    offload_parser.add_argument("--target", type=Path, default=Path("."), help="Directory containing the CLAUDE.md to analyze.")
+    offload_parser.add_argument("--apply", action="store_true", help="Apply changes after report.")
+    offload_parser.add_argument("--rollback", action="store_true", help="Restore from most recent backup.")
+    offload_parser.add_argument("--verify", action="store_true", help="Run canary verification.")
+
+    # --- Setup wizard ---
+    setup_parser = subparsers.add_parser(
+        "setup", help="Configure Studio for a project (roles, scopes, cleanup)."
+    )
+    setup_parser.add_argument(
+        "--target", type=Path, default=Path("."),
+        help="Path to the target project directory.",
+    )
+    setup_parser.add_argument(
+        "--status", action="store_true",
+        help="Show current setup configuration status.",
+    )
+    setup_parser.add_argument(
+        "--defaults", action="store_true",
+        help="Apply all default configuration non-interactively.",
+    )
+    setup_parser.add_argument(
+        "--answers", type=Path, default=None,
+        help="Apply configuration from a JSON answers file.",
+    )
+    setup_parser.add_argument(
+        "--role-pack", type=str, default=None,
+        help="Set role pack (shorthand for role_pack step).",
+    )
+    setup_parser.add_argument(
+        "--roles", nargs="*", default=None,
+        help="Role overrides (+role to add, -role to remove). Use with --role-pack.",
+    )
 
     return parser
 
@@ -1289,6 +1767,564 @@ def validate_run(args: argparse.Namespace) -> None:
     print(f"{'='*60}\n")
 
 
+def record_decisions(args: argparse.Namespace) -> None:
+    """Record answered decisions into a run's decisions.json and regenerate decisions.md.
+
+    Supports single decision via --question/--answer or batch via --decisions-file.
+    """
+    run_dir = Path(args.run_dir)
+    if not run_dir.is_dir():
+        raise FileNotFoundError(f"Run directory not found: {run_dir}")
+
+    decisions = load_decisions_json(run_dir)
+    existing_qs = {dp.question for dp in decisions}
+
+    def _append(dp: DecisionPoint) -> None:
+        """Append decision, deduplicating by question text (update if exists)."""
+        if dp.question in existing_qs:
+            # Update existing decision with new answer
+            for i, existing in enumerate(decisions):
+                if existing.question == dp.question:
+                    decisions[i] = dp
+                    print(f"Updated [{dp.priority}] {dp.question} -> {dp.answer}")
+                    return
+        existing_qs.add(dp.question)
+        decisions.append(dp)
+        print(f"Recorded [{dp.priority}] {dp.question} -> {dp.answer}")
+
+    if args.decisions_file:
+        # Batch mode: read multiple decisions from a JSON file
+        batch_data = json.loads(args.decisions_file.read_text(encoding="utf-8"))
+        for d in batch_data:
+            _append(DecisionPoint(
+                priority=d["priority"],
+                question=d["question"],
+                unblocks=d.get("unblocks", ""),
+                answer=d["answer"],
+                answered_by=d.get("answered_by", "user"),
+                source_file=d.get("source_file"),
+            ))
+    else:
+        # Single decision mode — validate required args
+        if args.question is None or args.answer is None or args.priority is None:
+            raise ValueError(
+                "Single-decision mode requires --question, --answer, and --priority. "
+                "Use --decisions-file for batch mode."
+            )
+        _append(DecisionPoint(
+            priority=args.priority,
+            question=args.question,
+            unblocks=args.unblocks,
+            answer=args.answer,
+            answered_by=args.answered_by,
+            source_file=args.source,
+        ))
+
+    save_decisions_json(run_dir, decisions)
+
+    # Regenerate decisions.md with settled decisions
+    settled_md = format_settled_decisions(decisions)
+    (run_dir / "decisions.md").write_text(settled_md, encoding="utf-8")
+
+    print(f"  decisions.json: {run_dir / 'decisions.json'}")
+    print(f"  decisions.md:   {run_dir / 'decisions.md'}")
+
+
+def check_decisions(args: argparse.Namespace) -> None:
+    """Parse decision points from a single agent output file and print as JSON."""
+    file_path = Path(args.file)
+    if not file_path.is_file():
+        raise FileNotFoundError(f"File not found: {file_path}")
+
+    text = file_path.read_text(encoding="utf-8")
+    points = parse_decision_points(text, source_file=file_path.name)
+
+    grouped: dict[str, list[dict]] = {"P0": [], "P1": [], "P2": []}
+    for dp in points:
+        entry = {
+            "question": dp.question,
+            "unblocks": dp.unblocks,
+            "options": dp.options,
+            "source_file": dp.source_file,
+        }
+        grouped[dp.priority].append(entry)
+
+    print(json.dumps(grouped, indent=2))
+
+
+def extract_decisions(args: argparse.Namespace) -> None:
+    """Extract decision points from agent files in a run directory.
+
+    Scans advocate/contrarian files (optionally filtered by scope) and
+    outputs formatted decision points. Filters out already-settled
+    decisions by default; use --all to include them. Useful mid-run
+    between agents.
+    """
+    run_dir = Path(args.run_dir)
+    if not run_dir.is_dir():
+        raise FileNotFoundError(f"Run directory not found: {run_dir}")
+
+    all_decisions = extract_decisions_from_run(run_dir)
+
+    # Filter by scope if requested
+    scope_filter = getattr(args, "scope", None)
+    if scope_filter:
+        scope_tag = f"S{scope_filter[-1]}" if scope_filter[0].isalpha() else scope_filter
+        all_decisions = [
+            dp for dp in all_decisions
+            if dp.source_file and scope_tag in dp.source_file
+        ]
+
+    if not getattr(args, "show_all", False):
+        settled = load_decisions_json(run_dir)
+        all_decisions = filter_unsettled(all_decisions, settled)
+
+    if not all_decisions:
+        # Silent exit — no decisions found is normal
+        return
+
+    print(format_decisions_log(all_decisions))
+
+
+# ---------------------------------------------------------------------------
+# Agent metrics tracking
+# ---------------------------------------------------------------------------
+
+def _load_metrics(run_dir: Path) -> List[Dict]:
+    """Load metrics.json from a run directory, returning [] if absent."""
+    metrics_path = run_dir / "metrics.json"
+    try:
+        return json.loads(metrics_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return []
+
+
+def _save_metrics(run_dir: Path, entries: List[Dict]) -> None:
+    """Write metrics.json to a run directory."""
+    write_json(run_dir / "metrics.json", entries)
+
+
+def record_metrics(args: argparse.Namespace) -> None:
+    """Record token usage for a single agent invocation."""
+    run_dir = Path(args.run_dir)
+    if not run_dir.is_dir():
+        raise FileNotFoundError(f"Run directory not found: {run_dir}")
+
+    entries = _load_metrics(run_dir)
+    entry: Dict = {
+        "agent": args.agent,
+        "total_tokens": args.total_tokens,
+        "tool_uses": args.tool_uses or 0,
+        "duration_ms": args.duration_ms or 0,
+        "timestamp": utc_now().isoformat(timespec="seconds"),
+    }
+    if args.role:
+        entry["role"] = args.role
+    if args.scope:
+        entry["scope"] = args.scope
+    entries.append(entry)
+    _save_metrics(run_dir, entries)
+
+
+def _summarize_metrics(entries: List[Dict]) -> Dict:
+    """Aggregate metrics entries into a summary."""
+    total_tokens = sum(e.get("total_tokens", 0) for e in entries)
+    total_duration = sum(e.get("duration_ms", 0) for e in entries)
+    total_tool_uses = sum(e.get("tool_uses", 0) for e in entries)
+
+    by_scope: Dict[str, Dict] = {}
+    by_role: Dict[str, Dict] = {}
+
+    for e in entries:
+        scope = e.get("scope", "flat")
+        role = e.get("role", "unknown")
+
+        for group, key in [(by_scope, scope), (by_role, role)]:
+            if key not in group:
+                group[key] = {"agents": 0, "total_tokens": 0, "duration_ms": 0}
+            group[key]["agents"] += 1
+            group[key]["total_tokens"] += e.get("total_tokens", 0)
+            group[key]["duration_ms"] += e.get("duration_ms", 0)
+
+    return {
+        "agents": len(entries),
+        "total_tokens": total_tokens,
+        "total_duration_ms": total_duration,
+        "total_tool_uses": total_tool_uses,
+        "by_scope": by_scope,
+        "by_role": by_role,
+    }
+
+
+def show_metrics(args: argparse.Namespace) -> None:
+    """Display metrics summary for a run."""
+    run_dir = Path(args.run_dir)
+    if not run_dir.is_dir():
+        raise FileNotFoundError(f"Run directory not found: {run_dir}")
+
+    entries = _load_metrics(run_dir)
+    if not entries:
+        print("No metrics recorded for this run.")
+        return
+
+    summary = _summarize_metrics(entries)
+
+    print(f"\n{'='*60}")
+    print(f"Agent Metrics — {run_dir.name}")
+    print(f"{'='*60}")
+    print(f"  Agents spawned:  {summary['agents']}")
+    print(f"  Total tokens:    {summary['total_tokens']:,}")
+    print(f"  Total tool uses: {summary['total_tool_uses']:,}")
+    total_sec = summary["total_duration_ms"] / 1000
+    print(f"  Total duration:  {total_sec:.0f}s ({total_sec/60:.1f}m)")
+
+    if summary["by_scope"]:
+        print(f"\n  By scope:")
+        for scope, stats in sorted(summary["by_scope"].items()):
+            pct = (stats["total_tokens"] / summary["total_tokens"] * 100) if summary["total_tokens"] else 0
+            print(f"    {scope:12s}  {stats['agents']} agents  {stats['total_tokens']:>8,} tokens ({pct:.0f}%)")
+
+    if summary["by_role"]:
+        print(f"\n  By role:")
+        for role, stats in sorted(summary["by_role"].items()):
+            pct = (stats["total_tokens"] / summary["total_tokens"] * 100) if summary["total_tokens"] else 0
+            print(f"    {role:16s}  {stats['agents']} agents  {stats['total_tokens']:>8,} tokens ({pct:.0f}%)")
+
+    # Per-agent detail
+    print(f"\n  Agent detail:")
+    for e in entries:
+        role = e.get("role", "")
+        scope = e.get("scope", "")
+        label = e["agent"]
+        if role:
+            label = f"{label}--{role}"
+        if scope:
+            label = f"{label} ({scope})"
+        print(f"    {label:40s}  {e.get('total_tokens', 0):>8,} tokens  {e.get('duration_ms', 0)/1000:.0f}s")
+
+    print()
+
+
+def inject_context(args: argparse.Namespace) -> None:
+    """Generate context for the next agent in a scoped run.
+
+    Combines settled decisions, clarity summary, prior-scope file lists,
+    and scope-specific instructions into a markdown file written to
+    ``context--<role>--<scope>--<stance>.md`` in the run directory.
+    Resolves custom scope names via canonical positional aliases.
+    """
+    run_dir = Path(args.run_dir)
+    if not run_dir.is_dir():
+        raise FileNotFoundError(f"Run directory not found: {run_dir}")
+
+    scope_name = args.scope
+    role = args.role
+    stance = args.stance
+
+    # Load run metadata
+    meta_path = run_dir / "run.json"
+    if not meta_path.is_file():
+        raise FileNotFoundError(f"run.json not found in {run_dir}")
+    meta = load_json(meta_path)
+    user_text = meta.get("input", "")
+
+    # Resolve scope config
+    studio_root = get_studio_root()
+    scopes_meta = meta.get("scopes")
+    scopes_config = None
+    scope = None
+    scope_index = 0
+
+    if scopes_meta:
+        scopes_path = Path(scopes_meta.get("config_path", ""))
+        if scopes_path.exists():
+            scopes_config = load_scopes_config(scopes_path)
+            scope = scopes_config.get_scope(scope_name)
+            if scope:
+                scope_index = next(
+                    (i for i, s in enumerate(scopes_config.scopes) if s.name == scope.name),
+                    0,
+                )
+
+    # Resolve role details from manifest via existing utility
+    manifest = load_manifest(studio_root)
+    try:
+        role_detail = get_role_spec(manifest, role)
+        advocate_focus = role_detail.advocate_focus
+        contrarian_focus = role_detail.contrarian_focus
+        deliverables = role_detail.deliverables
+        role_title = role_detail.title
+    except RoleConfigError:
+        # Graceful fallback for unknown roles
+        advocate_focus = ""
+        contrarian_focus = ""
+        deliverables = []
+        role_title = role.title()
+
+    # Check for prior-scope files
+    decisions_md_exists = (run_dir / "decisions.md").exists()
+    s2_brief_exists = (run_dir / "S2-brief.md").exists()
+
+    s1_files: List[str] | None = None
+    if scope_index >= 1:
+        s1_files = [f.name for f in sorted(run_dir.glob(f"*--{role}--S1-*.md"))]
+        if not s1_files:
+            # Also include all S1 files if role-specific ones don't exist
+            s1_files = [f.name for f in sorted(run_dir.glob("*--*--S1-*.md"))]
+
+    output_parts: List[str] = []
+
+    # 1. Scope-specific prompt (if scoped)
+    if scope:
+        output_parts.append(generate_scope_prompt(
+            scope=scope,
+            scope_index=scope_index,
+            role_title=role_title,
+            stance=stance,
+            run_dir=str(run_dir),
+            advocate_focus=advocate_focus,
+            contrarian_focus=contrarian_focus,
+            deliverables=deliverables,
+            user_text=user_text,
+            decisions_md_exists=decisions_md_exists,
+            s1_files=s1_files,
+            s2_brief_exists=s2_brief_exists,
+        ))
+
+    # 2. Settled decisions — only add if generate_scope_prompt didn't already cover it
+    if decisions_md_exists and not scope:
+        output_parts.extend([
+            "## Settled Decisions",
+            "",
+            f"Read `{run_dir}/decisions.md` for settled constraints. Treat as hard constraints — do not re-litigate.",
+            "",
+        ])
+
+    # 3. Clarity summary
+    root = get_artifact_root()
+    snapshot = clarity.load_project_clarity(root)
+    if snapshot is not None:
+        output_parts.append(clarity.generate_clarity_instructions(snapshot, scope_name))
+
+    if output_parts:
+        context_text = "\n".join(output_parts)
+        context_file = run_dir / f"context--{role}--{scope_name}--{stance}.md"
+        context_file.write_text(context_text, encoding="utf-8")
+        print(context_file)
+    else:
+        print(f"No prior context for {scope_name} {role} {stance} — starting fresh.", file=sys.stderr)
+
+
+def show_clarity(args: argparse.Namespace) -> None:
+    """Display current project clarity scores."""
+    root = Path(args.artifact_root).resolve() if args.artifact_root else get_artifact_root()
+    snapshot = clarity.load_project_clarity(root)
+    if snapshot is None:
+        print("No clarity data yet. Run a phase with decision points first.")
+        return
+    print(clarity.format_clarity_summary(snapshot))
+
+
+def set_clarity(args: argparse.Namespace) -> None:
+    """Override a topic's clarity score."""
+    root = Path(args.artifact_root).resolve() if args.artifact_root else get_artifact_root()
+    snapshot = clarity.load_project_clarity(root)
+    if snapshot is None:
+        print("No clarity data yet. Run a phase with decision points first.")
+        return
+    if args.reset:
+        snapshot = clarity.apply_user_overrides(snapshot, {args.topic: None})
+    elif args.score is not None:
+        snapshot = clarity.apply_user_overrides(snapshot, {args.topic: args.score})
+    else:
+        print("Provide --score VALUE or --reset")
+        return
+    clarity.save_project_clarity(root, snapshot)
+    print(clarity.format_clarity_summary(snapshot))
+
+
+def recompute_clarity(args: argparse.Namespace) -> None:
+    """Recompute clarity from a run's decisions.
+
+    Works with both finalized and in-progress runs. If decisions.json exists,
+    uses it. Otherwise extracts decisions from agent output files directly,
+    making this usable mid-run.
+    """
+    root = Path(args.artifact_root).resolve() if args.artifact_root else get_artifact_root()
+    phase = args.phase.lower()
+    run_id = args.run_id
+    run_dir = get_output_root() / phase / run_id
+    if not run_dir.is_dir():
+        raise FileNotFoundError(f"Run directory not found: {run_dir}")
+
+    # Load existing decisions from JSON, then merge any new ones from agent files
+    decisions = load_decisions_json(run_dir)
+    extracted = extract_decisions_from_run(run_dir)
+    merge_decisions(decisions, extracted)
+
+    meta_path = run_dir / "run.json"
+    input_text = ""
+    if meta_path.is_file():
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        input_text = meta.get("input", "")
+    context = clarity.detect_context_scope(input_text)
+    prior = clarity.load_project_clarity(root)
+    snapshot = clarity.compute_clarity_snapshot(decisions, context, run_id=run_id, prior_snapshot=prior)
+    clarity.save_clarity_json(run_dir / "clarity.json", snapshot)
+    clarity.save_project_clarity(root, snapshot)
+    print(clarity.format_clarity_summary(snapshot))
+
+
+def _do_init(args: argparse.Namespace) -> None:
+    """Install Studio into a target project."""
+    from install import install_studio
+    target = Path(args.target).resolve()
+    if not target.is_dir():
+        raise FileNotFoundError(f"Target directory not found: {target}")
+    dot_studio = install_studio(target)
+    print(f"Studio installed to {dot_studio}")
+    print(f"  Slash commands: {target / '.claude' / 'commands'}")
+    print(f"  Source: {dot_studio / 'source'}")
+    print(f"\nRun /studio-setup to configure roles, scopes, and cleanup.")
+    print(f"Then use /run-phase or /run-studio-phase — pause-and-ask included.")
+    print(f"NOTE: Start a NEW Claude Code session (not just /clear) to discover the commands.")
+
+
+def _do_check_install(args: argparse.Namespace) -> None:
+    """Check if installed Studio is up to date."""
+    from install import check_studio
+    target = Path(args.target).resolve()
+    status = check_studio(target)
+    if not status["installed"]:
+        print(f"Studio is NOT installed at {target}")
+        print("Run: python run_phase.py init --target " + str(target))
+        return
+    if status["up_to_date"]:
+        print(f"Studio at {target} is up to date.")
+    else:
+        print(f"Studio at {target} needs updating:")
+        if status["changed"]:
+            print(f"  Changed: {', '.join(status['changed'])}")
+        if status["missing"]:
+            print(f"  Missing: {', '.join(status['missing'])}")
+        print(f"\nRun: python run_phase.py update --target {target}")
+
+
+def _do_update(args: argparse.Namespace) -> None:
+    """Update installed Studio from source."""
+    from install import update_studio
+    target = Path(args.target).resolve()
+    result = update_studio(target)
+    if result["updated"] == 0 and result["added"] == 0:
+        print(f"Studio at {target} is already up to date.")
+    else:
+        print(f"Studio updated at {target}:")
+        if result["updated"]:
+            print(f"  Updated: {result['updated']} file(s)")
+        if result["added"]:
+            print(f"  Added: {result['added']} file(s)")
+        # Check for new setup steps
+        try:
+            import setup as _setup
+            state = _setup.load_setup_state(target)
+            pend = _setup.pending_steps(state)
+            if pend:
+                labels = ", ".join(s["label"] for s in pend)
+                print(f"\n  New features available: {labels}")
+                print("  Run /studio-setup to configure.")
+        except ImportError:
+            pass
+
+
+def _do_setup(args: argparse.Namespace) -> None:
+    """Configure Studio for a project."""
+    import setup as _setup
+
+    target = Path(args.target).resolve()
+
+    if args.status:
+        print(_setup.show_status(target))
+    elif args.defaults:
+        state = _setup.apply_defaults(target)
+        pend = _setup.pending_steps(state)
+        print(f"Applied default configuration ({len(state['completed_steps'])} steps).")
+        if pend:
+            print(f"  Pending: {', '.join(s['label'] for s in pend)}")
+    elif args.answers:
+        answers = json.loads(Path(args.answers).read_text(encoding="utf-8"))
+        _setup.apply_from_answers(target, answers)
+        print(f"Applied configuration from {args.answers}.")
+    elif args.role_pack:
+        _setup.apply_role_pack(target, args.role_pack, args.roles or [])
+        print(f"Role pack set to '{args.role_pack}'.")
+        if args.roles:
+            print(f"  Overrides: {' '.join(args.roles)}")
+    else:
+        print(_setup.show_status(target))
+
+
+def do_offload(args: argparse.Namespace) -> None:
+    """Analyze CLAUDE.md for offload opportunities."""
+    import offload as _offload
+
+    target = Path(args.target).resolve()
+    claude_md = target / "CLAUDE.md"
+
+    if args.rollback:
+        backup_dir = target / ".studio" / "offload-backup"
+        if not backup_dir.is_dir():
+            print("No backup directory found.")
+            return
+        # Find most recent backup
+        backups = sorted(backup_dir.iterdir(), reverse=True)
+        if not backups:
+            print("No backups found.")
+            return
+        restored = _offload.restore_backup(str(backups[0]))
+        print(f"Restored {len(restored)} file(s) from {backups[0].name}")
+    elif args.verify:
+        if not claude_md.exists():
+            print(f"No CLAUDE.md found at {target}")
+            return
+        content = claude_md.read_text(encoding="utf-8")
+        sections = _offload.classify_sections(content)
+        canaries = {
+            s["name"]: _offload.generate_canary_token(s["name"])
+            for s in sections if s["tier"] != _offload.TIER_ALWAYS_INLINE
+        }
+        leaked = _offload.verify_canary_isolation(content, list(canaries.values()))
+        if leaked:
+            print(f"WARNING: {len(leaked)} canary token(s) found in CLAUDE.md")
+        else:
+            print("Canary isolation verified — no tokens in CLAUDE.md")
+    else:
+        if not claude_md.exists():
+            print(f"No CLAUDE.md found at {target}")
+            return
+        content = claude_md.read_text(encoding="utf-8")
+        sections = _offload.classify_sections(content)
+        constraints = _offload.detect_embedded_constraints(sections)
+        context = _offload.detect_cross_repo_context()
+        companion_root = context.get("companion_root", ".")
+        existing = _offload.scan_existing_docs(companion_root)
+        reconciliation = _offload.reconcile_with_existing(sections, existing)
+        pointers = [
+            _offload.generate_pointer_stub(s, r.get("target", ""))
+            for s, r in zip(
+                [s for s in sections if s["tier"] != _offload.TIER_ALWAYS_INLINE],
+                reconciliation,
+            )
+        ]
+        canaries = {
+            s["name"]: _offload.generate_canary_token(s["name"])
+            for s in sections if s["tier"] != _offload.TIER_ALWAYS_INLINE
+        }
+        report = _offload.generate_report(
+            sections, constraints, pointers, canaries, reconciliation,
+        )
+        print(report)
+
+
 def main() -> None:
     args = parse_cli_args()
 
@@ -1306,6 +2342,34 @@ def main() -> None:
         _maybe_run_cleanup(dry_run=dry_run or _env_flag(CLEANUP_DRY_ENV))
     elif args.command == "validate":
         validate_run(args)
+    elif args.command == "record-decisions":
+        record_decisions(args)
+    elif args.command == "check-decisions":
+        check_decisions(args)
+    elif args.command == "extract-decisions":
+        extract_decisions(args)
+    elif args.command == "inject-context":
+        inject_context(args)
+    elif args.command == "init":
+        _do_init(args)
+    elif args.command == "check-install":
+        _do_check_install(args)
+    elif args.command == "update":
+        _do_update(args)
+    elif args.command == "show-clarity":
+        show_clarity(args)
+    elif args.command == "set-clarity":
+        set_clarity(args)
+    elif args.command == "recompute-clarity":
+        recompute_clarity(args)
+    elif args.command == "record-metrics":
+        record_metrics(args)
+    elif args.command == "show-metrics":
+        show_metrics(args)
+    elif args.command == "offload":
+        do_offload(args)
+    elif args.command == "setup":
+        _do_setup(args)
     else:
         raise ValueError("Unknown command")
 

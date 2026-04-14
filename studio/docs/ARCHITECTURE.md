@@ -28,12 +28,24 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 
 | Component | Purpose |
 | --- | --- |
-| `run_phase.py` | CLI entrypoint for `prepare` and `finalize`. Generates instructions, enforces artifact checklists, and keeps indexes current. |
-| `run_phase_roles.py` | Helper module that loads `studio.manifest.json`, applies role packs with dependency injection, and normalizes per-role filenames (flat and scoped). |
+| `run_phase.py` | CLI entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, clarity, install, decision, metrics, setup, and offload subcommands. |
+| `run_phase_roles.py` | Loads `studio.manifest.json`, applies role packs with dependency injection, applies project-local overrides, and normalizes per-role filenames. |
+| `role_overrides.py` | Project-local role customization: loads `.studio/roles/*.json` overlays, validates structure, shallow-merges with manifest roles. |
+| `decision_points.py` | Inline decision point parsing (P0/P1/P2 blockquote format), formatting, `decisions.md` generation, run directory scanning. |
+| `clarity.py` | Per-topic Clarity Score tracking from answered decisions. Controls agent question density and adapts to context scope. |
+| `question_mode.py` | Pre-flight question surfacing (`--mode questions`): generates decision-collection instructions for advocate/contrarian. |
 | `scopes.py` | Three-tier scope configuration: alignment → depth → polish, with output budgets and debate modes. |
+| `cleanup.py` | TTL-based (30 days) and budget-based (900 MB) run artifact cleanup, plus loose file removal for legacy artifacts outside run directories. |
+| `rerun.py` | Detects rejection context from prior runs and generates rerun instructions. |
+| `verdict.py` | Extracts APPROVED/REJECTED/UNKNOWN verdict from agent output. |
+| `install.py` | Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project. |
+| `offload.py` | CLAUDE.md analyzer: classifies sections, detects embedded constraints, scores pointer strength, generates offload reports, manages canary tokens. |
+| `setup.py` | Setup wizard: project configuration after install. Tracks setup state in `.studio/SETUP.json`, generates role overrides, scopes, and cleanup config with incremental versioned steps. |
+| `validators/` | `DocumentValidator` and `CodeValidator` for post-run quality checks. |
 | `studio.manifest.json` | Declarative description of phase-level personas, Studio role definitions, and role dependencies. |
 | `role_packs/*.json` | Curated sets of Studio roles (e.g., `studio_core`). Operators pick a pack, then add/remove roles with CLI flags. |
 | `config/scopes.toml` | Default scope configuration for studio phase runs. |
+| `.studio/roles/*.json` | Project-local role overrides. Shallow-merge with manifest roles (override keys replace base, unspecified keys inherit). |
 | `docs/role_prompts/*.md` | Long-form prompts for each role. Instructions link to these files rather than inlining pages of text. |
 | Active output root (`output/` or `.studio/output/`) | Run folders containing instructions, advocate/contrarian artifacts, integrator plans, summaries, and metadata. |
 | Active knowledge log (`knowledge/run_log.md` or `.studio/knowledge/run_log.md`) | Append-only log of finalized runs for easy reference across repos. |
@@ -95,8 +107,9 @@ No automation runs outside the assistant; the instructions are simply executed a
    - Non-Studio phases: glob `advocate_<n>.md` / `contrarian_<n>.md` / `implementation.md`.
    - Studio phase: iterate through the invited roles stored in `run.json["studio_roles"]["invited"]`, using `collect_role_artifacts` to confirm both advocate and contrarian files exist. Missing roles are recorded.
    - Verify `integrator.md` and `summary.md`.
-   - **Quality checks** (single-pass, warnings only): verdict presence, rubber-stamp detection (<200 chars), format validation, and token budget tracking per scope. Results stored in `run.json["quality"]` and `run.json["token_budget"]`.
-4. Finalize updates `run.json` with status, verdict, hours, cost, iterations, quality checks, token budget, and for Studio: `completed` + `missing` role lists.
+   - **Quality checks** (single-pass, warnings only): verdict presence, rubber-stamp detection (<200 chars), format validation, and scope stats tracking per scope. Results stored in `run.json["quality"]` and `run.json["scope_stats"]`.
+   - **Agent metrics aggregation**: if `metrics.json` exists (recorded by the orchestrator during the run), summarize into `run.json["metrics"]` with totals and breakdowns by scope and role.
+4. Finalize updates `run.json` with status, verdict, hours, cost, iterations, quality checks, scope stats, agent metrics, and for Studio: `completed` + `missing` role lists.
 5. The active index/log (`<active_output_root>/index.md` and `<active_knowledge_root>/run_log.md`) are refreshed, giving downstream repos searchable entries with summary links.
 
 ---
@@ -152,7 +165,7 @@ No direct imports or service layers are required—just CLI calls and Markdown a
 ## 9. Source of Truth
 
 1. Code: `run_phase.py`, `run_phase_roles.py`, manifest, role packs.
-2. Docs: README, STUDIO_INTERACTION_GUIDE, WINDSURF_USAGE, WINDSURF_QUICKREF, STUDIO_BRIDGE_TEMPLATE, API, INTEGRATION_GUIDE, AGENTS_REFERENCE, ARCHITECTURE (this file).
+2. Docs: README, CLAUDE_CODE_USAGE, WINDSURF_USAGE, WINDSURF_QUICKREF, STUDIO_BRIDGE_TEMPLATE, API, INTEGRATION_GUIDE, AGENTS_REFERENCE, ARCHITECTURE (this file).
 3. Outputs: `<active_output_root>/index.md`, `<active_knowledge_root>/run_log.md`.
 
 Whenever the workflow changes, update all of the above in one commit. Studio deliberately has no hidden runtime — everything is visible, reproducible, and assistant-agnostic.

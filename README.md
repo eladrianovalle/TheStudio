@@ -25,7 +25,14 @@ python studio/run_phase.py finalize --phase market --run-id <run_id> --status co
 **With Claude Code**, use slash commands instead:
 ```
 /run-phase --phase market --text "A cozy farming sim with time travel"
+/run-phase --phase design --text "A cozy farming sim" --mode questions
 /run-studio-phase --text "Evaluate our multiplayer architecture" --roles +engineering +qa
+```
+
+**Install into any project** (slash commands + source, no env vars needed):
+```bash
+python studio/run_phase.py init --target /path/to/your-project
+# Then from that project: /run-phase and /run-studio-phase just work
 ```
 
 ---
@@ -41,6 +48,16 @@ prepare ──→ instructions.md ──→ AI assistant executes ──→ fina
    │                                    │  it. Loop until       │
    │                                    │  VERDICT: APPROVED    │
 ```
+
+### Collaborative by Design
+
+Agents don't run autonomously to completion. When they hit gaps or forks, they **flag decision points** inline — and the orchestrator pauses to ask you:
+
+- **P0 (Blocking):** Run pauses. You answer before agents continue.
+- **P1 (Important):** Agent states an assumption. You can override.
+- **P2 (Context):** Logged for reference, no interruption.
+
+Your decisions accumulate in `decisions.md` and become hard constraints for all subsequent agents. **Clarity Scores** track per-topic confidence and automatically reduce question density as topics settle — early runs produce many questions, later runs focus only on genuine new gaps.
 
 ### Four Phases
 
@@ -106,6 +123,9 @@ Scope configuration lives in `config/scopes.toml` and can be overridden per-proj
 # Prepare a run
 python studio/run_phase.py prepare --phase <market|design|tech|studio> --text "description"
 
+# Prepare in question-surfacing mode (pre-flight decision collection)
+python studio/run_phase.py prepare --phase design --text "description" --mode questions
+
 # Prepare with role pack and overrides
 python studio/run_phase.py prepare --phase studio --text "..." \
   --role-pack studio_core --roles +product +engineering +qa
@@ -117,16 +137,52 @@ python studio/run_phase.py finalize --phase <phase> --run-id <run_id> \
 # Validate document quality and code
 python studio/run_phase.py validate --phase <phase> --run-id <run_id>
 
+# Decision management
+python studio/run_phase.py check-decisions --file path/to/advocate_1.md
+python studio/run_phase.py record-decisions --run-dir <run_dir> --decisions-file answers.json
+python studio/run_phase.py extract-decisions --run-dir <run_dir>
+python studio/run_phase.py inject-context --run-dir <run_dir> --scope alignment --role marketing --stance advocate
+
+# Clarity scores
+python studio/run_phase.py show-clarity
+python studio/run_phase.py set-clarity --topic core_loop_design --score 0.9
+python studio/run_phase.py set-clarity --topic core_loop_design --reset
+python studio/run_phase.py recompute-clarity --phase studio --run-id <run_id>
+
+# Agent metrics (token tracking per agent)
+python studio/run_phase.py record-metrics --run-dir <path> --agent advocate --total-tokens 5000 --role marketing --scope alignment
+python studio/run_phase.py show-metrics --run-dir <path>
+
+# Cross-repo install
+python studio/run_phase.py init --target /path/to/project
+python studio/run_phase.py check-install --target /path/to/project
+python studio/run_phase.py update --target /path/to/project
+
 # Preview / execute storage cleanup
 python studio/run_phase.py cleanup --dry-run
 python studio/run_phase.py cleanup
+
+# Setup wizard (configure roles, scopes, cleanup after install)
+python studio/run_phase.py setup --target . --status
+python studio/run_phase.py setup --target . --defaults
+
+# Offload analysis (analyze CLAUDE.md for offload opportunities)
+python studio/run_phase.py offload --target .
+python studio/run_phase.py offload --target . --apply
 ```
 
 ---
 
 ## Cross-Repo Usage
 
-Run Studio from any repo — artifacts stay with the calling repo:
+**Recommended:** Install Studio into your project. This copies slash commands and source so `/run-phase` and `/run-studio-phase` work natively with full pause-and-ask support:
+
+```bash
+python studio/run_phase.py init --target ~/my-game-project
+# Then from my-game-project: /run-phase --phase tech --text "Build lobby system"
+```
+
+**Alternative:** Set `STUDIO_ROOT` and run manually:
 
 ```bash
 export STUDIO_ROOT="/path/to/TheGameStudio/studio"
@@ -136,6 +192,8 @@ python $STUDIO_ROOT/run_phase.py prepare --phase tech --text "Build lobby system
 ```
 
 First run auto-scaffolds `.studio/` and creates a bridge doc. Override with `--artifact-root` or `STUDIO_ARTIFACT_ROOT` env var. Priority: flag > env > cwd detection.
+
+Keep installed copies current: `python studio/run_phase.py check-install --target <path>` and `update --target <path>`.
 
 ---
 
@@ -160,6 +218,10 @@ First run auto-scaffolds `.studio/` and creates a bridge doc. Override with `--a
       advocate--qa--S3-01.md           # Polish scope
       contrarian--qa--S3-01.md
       integrator.md                    # Integrated roadmap
+      decisions.json                   # Accumulated decision points + answers
+      decisions.md                     # Human-readable settled decisions
+      clarity.json                     # Per-topic clarity scores
+      metrics.json                     # Per-agent token usage (recorded during run)
       summary.md
       run.json
 ```
@@ -173,7 +235,8 @@ First run auto-scaffolds `.studio/` and creates a bridge doc. Override with `--a
 | `status` / `verdict` | `COMPLETED` + `APPROVED`/`REJECTED` after finalize |
 | `studio_roles` | `{pack, overrides, invited, completed, missing}` |
 | `quality` | Finalize-time quality checks: `{checks_run, warnings, errors}` |
-| `token_budget` | Per-scope output stats: `{files, total_chars, avg_words}` |
+| `scope_stats` | Per-scope output stats: `{files, total_chars, avg_words}` |
+| `metrics` | Agent token usage: `{agents, total_tokens, total_duration_ms, by_scope, by_role}` |
 
 ---
 
@@ -213,9 +276,9 @@ Finalize runs quality checks on every advocate/contrarian artifact (warnings onl
 - **Verdict presence**: Warns if contrarian files lack `VERDICT: APPROVED/REJECTED`
 - **Rubber-stamp detection**: Flags files under 200 characters
 - **Format validation**: Checks markdown structure, title presence, list formatting
-- **Token budget tracking**: Measures output per scope (chars, words, file count)
+- **Scope stats tracking**: Measures output per scope (chars, words, file count)
 
-Results are stored in `run.json["quality"]` and `run.json["token_budget"]`.
+Results are stored in `run.json["quality"]` and `run.json["scope_stats"]`.
 
 ---
 
@@ -234,19 +297,26 @@ Configure in `config/studio_settings.toml`. Use `--skip-cleanup` to bypass.
 
 ```
 studio/
-  run_phase.py              # CLI entrypoint: prepare, finalize, validate, cleanup
+  run_phase.py              # CLI entrypoint: prepare, finalize, validate, cleanup, decision, clarity, metrics, install, setup, offload
   run_phase_roles.py        # Role system: manifest, packs, dependencies, file naming
+  role_overrides.py         # Project-local role customization (.studio/roles/*.json)
   scopes.py                 # Three-tier scope allocation (alignment/depth/polish)
-  cleanup.py                # TTL + budget-based artifact cleanup
+  decision_points.py        # Inline decision point parsing, formatting, persistence
+  clarity.py                # Per-topic Clarity Score tracking and question density control
+  question_mode.py          # Pre-flight question surfacing (--mode questions)
+  install.py                # Cross-repo installer (init/check/update)
+  setup.py                  # Setup wizard: project config after install (roles, scopes, cleanup)
+  offload.py                # CLAUDE.md analyzer: section classification, pointer scoring, canary tokens
+  cleanup.py                # TTL + budget-based artifact cleanup + loose file removal
   rerun.py                  # Rejection context injection for iterate-on-failure
   verdict.py                # APPROVED/REJECTED extraction
   validators/               # DocumentValidator + CodeValidator
-  studio.manifest.json      # Role definitions (9 disciplines)
+  studio.manifest.json      # Role definitions (13 disciplines)
   role_packs/*.json          # Curated role sets (studio_core, etc.)
   config/scopes.toml         # Default scope configuration
   config/studio_settings.toml # Cleanup settings
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 204 tests (pytest)
+  tests/                    # 472 tests (pytest)
 ```
 
 ---
@@ -257,7 +327,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-204 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, scope allocation, rerun detection, verdict extraction, document validation, code validation, and cross-repo artifact routing.
+472 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, cross-repo artifact routing, install/update workflows, agent metrics tracking, CLAUDE.md offload analysis, and setup wizard configuration.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 
@@ -265,6 +335,7 @@ Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.
 
 ## Documentation
 
+- [CLAUDE_CODE_USAGE.md](./studio/docs/CLAUDE_CODE_USAGE.md) — slash commands, decision points, clarity scores, question mode
 - [ARCHITECTURE.md](./studio/docs/ARCHITECTURE.md) — system design and extensibility
 - [AGENTS_REFERENCE.md](./studio/docs/AGENTS_REFERENCE.md) — role definitions and debate flow
 - [MVI_METHODOLOGY.md](./studio/docs/MVI_METHODOLOGY.md) — Minimum Viable Interaction methodology

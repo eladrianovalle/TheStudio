@@ -523,7 +523,7 @@ We need to consider resource constraints.
 
 
 # ---------------------------------------------------------------------------
-# Blind spot tests (T1.7)
+# Blind spot tests
 # ---------------------------------------------------------------------------
 
 def test_check_verdict_case_insensitive(doc_validator, temp_dir):

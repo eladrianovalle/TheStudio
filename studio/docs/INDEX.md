@@ -2,8 +2,6 @@
 
 ## Getting Started
 - **[README.md](../../README.md)** - Overview, quick start, and workflow
-- **[STUDIO_INTERACTION_GUIDE.md](../STUDIO_INTERACTION_GUIDE.md)** - Complete workflow guide
-- **[DEFAULT_BEHAVIOR.md](../DEFAULT_BEHAVIOR.md)** - Default behaviors and customization
 
 ## Architecture & Reference
 - **[ARCHITECTURE.md](./ARCHITECTURE.md)** - System design and extensibility

@@ -139,6 +139,7 @@ def make_prepare_args(**overrides) -> SimpleNamespace:
         "roles": None,
         "scopes": None,
         "no_scopes": True,
+        "mode": "deliverables",
     }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)

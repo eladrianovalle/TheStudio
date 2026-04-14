@@ -57,6 +57,37 @@ def test_scopes_config_get_scope():
     assert missing is None
 
 
+def test_scopes_config_get_scope_canonical_alias():
+    """Test that canonical aliases (alignment/depth/polish) resolve by position."""
+    config = ScopesConfig(scopes=[
+        ScopeConfig("high_level", "Architecture", 3),
+        ScopeConfig("implementation", "Code", 2),
+        ScopeConfig("polish", "Polish", 1),
+    ])
+
+    # "alignment" should resolve to index 0 (high_level)
+    scope = config.get_scope("alignment")
+    assert scope is not None
+    assert scope.name == "high_level"
+
+    # "depth" should resolve to index 1 (implementation)
+    scope = config.get_scope("depth")
+    assert scope is not None
+    assert scope.name == "implementation"
+
+    # "polish" matches by name directly (exact match takes priority)
+    scope = config.get_scope("polish")
+    assert scope is not None
+    assert scope.name == "polish"
+
+    # Alias out of range returns None
+    two_scope = ScopesConfig(scopes=[
+        ScopeConfig("first", "First", 1),
+        ScopeConfig("second", "Second", 1),
+    ])
+    assert two_scope.get_scope("polish") is None
+
+
 def test_load_scopes_config_valid():
     """Test loading valid TOML config."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:

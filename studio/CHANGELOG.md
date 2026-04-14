@@ -2,6 +2,53 @@
 
 All notable changes to Studio will be documented in this file.
 
+## [3.1.0] - 2026-03-22
+
+### Added — Agent Metrics Tracking
+
+- **Per-agent token tracking** — `record-metrics` CLI records total tokens, tool uses, and duration from each agent invocation into `{run_dir}/metrics.json`.
+- **Metrics summary** — `show-metrics` CLI displays breakdowns by scope, role, and individual agent.
+- **Finalize aggregation** — metrics are summarized into `run.json["metrics"]` at finalize time with totals and per-scope/per-role breakdowns.
+- Slash commands (`/run-phase`, `/run-studio-phase`) now require metrics recording after every agent turn.
+
+### Fixed — Decision Point Surfacing
+
+- **S1 decisions surfaced per-agent** — alignment scope previously batched all decision points until every agent finished. Now extracts and surfaces after each individual agent, matching S2 and flat mode behavior.
+- All scopes consistently follow the same per-agent extraction pattern.
+
+### Stats
+
+- 400 tests (up from 372)
+- 11 Python modules in studio/ (plus validators/)
+
+---
+
+## [3.0.0] - 2026-03-19
+
+### Added — Collaboration Protocol (M1-M3)
+
+- **Decision Point Protocol** — agents flag inline decisions (P0/P1/P2) using blockquote format during normal deliverables runs. `decision_points.py` module for parsing, formatting, and persistence.
+- **Orchestrator Pause-and-Ask** — slash commands detect decision points after each agent, pause on P0s, show P1s as FYI, inject answers as constraints via `decisions.md`. New CLI: `check-decisions`, `record-decisions`.
+- **Clarity Scores** — per-topic confidence tracking from answered decisions. Controls agent question density: low clarity = more questions, high clarity = constraints. Adapts to context (broad game analysis vs narrow feature). New CLI: `show-clarity`, `set-clarity`, `recompute-clarity`.
+- **Question Mode** — `--mode questions` for pre-flight decision collection. Surfaces "what don't I know yet?" before committing to deliverables.
+
+### Added — Role Customization (M4)
+
+- Project-local role overrides via `.studio/roles/<role_name>.json` — shallow key-level merge with manifest roles.
+- `role_overrides.py` module with validation and `apply_role_overrides()`.
+
+### Added — Cross-Repo Install (M5)
+
+- `studio init --target <path>` — copies slash commands + source into any project. `/run-phase` and `/run-studio-phase` work natively with pause-and-ask.
+- `studio check-install` / `studio update` — SHA-256 comparison and refresh.
+
+### Stats
+
+- 372 tests (up from 204)
+- 11 Python modules in studio/ (plus validators/)
+
+---
+
 ## [2.0.1] - 2026-02-28
 
 ### Fixed - Critical Reliability Improvements
@@ -53,32 +100,9 @@ All notable changes to Studio will be documented in this file.
   - Tracks validation speed (1KB: 0.5ms, 10KB: 1ms, 100KB: 9.5ms)
   - Prevents performance regressions
 
-### Added - Token Tracking & Optimization
+### Planned - Token Tracking (Superseded)
 
-**Measure and Optimize Token Usage**:
-
-- **Token Tracking System** (`token_tracker.py`)
-  - Log token usage per operation (advocate, contrarian, integrator)
-  - Track input/output tokens and costs
-  - JSONL storage for detailed records
-  - JSON summaries for aggregated stats
-
-- **Analysis Tools** (`analyze_tokens.py`)
-  - `summary`: View detailed token usage for a run
-  - `compare`: Compare baseline vs. optimized runs
-  - `report`: Generate usage reports across runs
-  - `estimate`: Estimate token usage for planned runs
-
-- **Run Metadata Integration**
-  - Token fields added to `run.json`
-  - Tracks total input/output tokens and costs
-  - Enables historical analysis
-
-- **Documentation** (`docs/TOKEN_TRACKING.md`)
-  - Complete API reference
-  - Integration guide for Windsurf workflow
-  - Best practices for measuring savings
-  - Troubleshooting guide
+Token tracking modules (`token_tracker.py`, `analyze_tokens.py`) were planned but never implemented. This was superseded by the agent metrics system in v3.1.0, which tracks per-agent token usage via `record-metrics` / `show-metrics` CLI commands using data from the orchestrator's Agent tool results.
 
 ### Testing
 

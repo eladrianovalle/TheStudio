@@ -473,5 +473,5 @@ checks = ["pytest"]  # Only run pytest, skip mypy and ruff
 
 ## See Also
 
-- [STUDIO_INTERACTION_GUIDE.md](../STUDIO_INTERACTION_GUIDE.md) - Standard Studio workflow
+- [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) - Claude Code slash commands and workflow
 - [SCOPES_GUIDE.md](./SCOPES_GUIDE.md) - Scope-based iteration allocation

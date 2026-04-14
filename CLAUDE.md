@@ -13,10 +13,14 @@ Use the slash command to run a full advocate/contrarian debate:
 ```
 /run-phase --phase market --text "A cozy farming sim with social deduction mechanics"
 /run-phase --phase tech --text "Build multiplayer lobby system" --max-iterations 5
+/run-phase --phase design --text "A cozy farming sim" --mode questions
 /run-studio-phase --text "Add AI critique engine" --roles +marketing +engineering
+/run-studio-phase --text "Social deduction farming sim" --roles +product +design --mode questions
 ```
 
 Single-phase runs (`/run-phase`) spawn separate Advocate and Contrarian agents per iteration. Multi-role runs (`/run-studio-phase`) use a three-tier scoped debate by default: **alignment** (all roles, short, parallel) → **depth** (per-role, full, sequential) → **polish** (all roles, short, 1 pass) → integrator duel. Use `--no-scopes` for flat mode. See `studio/docs/CLAUDE_CODE_USAGE.md` for details.
+
+All runs (except `--mode questions`) include inline **decision point surfacing** — agents flag P0 (blocking), P1 (important), and P2 (context) decisions using a standard blockquote format. Use `--mode questions` as a pre-flight step to collect key decisions before committing to a full deliverables run.
 
 ## CLI Commands
 
@@ -30,6 +34,9 @@ cd studio && python -m pytest tests/test_run_phase.py::TestClassName::test_name 
 # Prepare a phase run (manual)
 python studio/run_phase.py prepare --phase <market|design|tech|studio> --text "description"
 
+# Prepare in question-surfacing mode (surfaces open questions instead of deliverables)
+python studio/run_phase.py prepare --phase design --text "description" --mode questions
+
 # Prepare with role pack (studio phase only)
 python studio/run_phase.py prepare --phase studio --text "..." --role-pack studio_core --roles +product +engineering +qa
 
@@ -39,9 +46,43 @@ python studio/run_phase.py finalize --phase <phase> --run-id <run_id> --status c
 # Validate a run
 python studio/run_phase.py validate --phase <phase> --run-id <run_id>
 
+# Decision management
+python studio/run_phase.py check-decisions --file path/to/advocate_1.md
+python studio/run_phase.py record-decisions --run-dir <run_dir> --decisions-file answers.json
+python studio/run_phase.py extract-decisions --run-dir <run_dir>          # unsettled only (default)
+python studio/run_phase.py extract-decisions --run-dir <run_dir> --all   # include already-settled
+python studio/run_phase.py inject-context --run-dir <run_dir> --scope alignment --role marketing --stance advocate
+
+# Clarity scores
+python studio/run_phase.py show-clarity
+python studio/run_phase.py set-clarity --topic core_loop_design --score 0.9
+python studio/run_phase.py set-clarity --topic core_loop_design --reset
+python studio/run_phase.py recompute-clarity --phase studio --run-id <run_id>
+
+# Agent metrics (token tracking per agent)
+python studio/run_phase.py record-metrics --run-dir <path> --agent advocate --total-tokens 5000 --tool-uses 10 --duration-ms 30000 --role marketing --scope alignment
+python studio/run_phase.py show-metrics --run-dir <path>
+
 # Storage cleanup
 python studio/run_phase.py cleanup --dry-run
 python studio/run_phase.py cleanup
+
+# Cross-repo install (installs slash commands + source into any project)
+python studio/run_phase.py init --target /path/to/project
+python studio/run_phase.py check-install --target /path/to/project
+python studio/run_phase.py update --target /path/to/project
+
+# Setup wizard (configure roles, scopes, cleanup after install)
+python studio/run_phase.py setup --target . --status
+python studio/run_phase.py setup --target . --defaults
+python studio/run_phase.py setup --target . --answers answers.json
+python studio/run_phase.py setup --target . --role-pack studio_core --roles +ml -art
+
+# Offload analysis (analyze CLAUDE.md for offload opportunities)
+python studio/run_phase.py offload --target .
+python studio/run_phase.py offload --target . --apply
+python studio/run_phase.py offload --target . --rollback
+python studio/run_phase.py offload --target . --verify
 ```
 
 ## Architecture
@@ -50,22 +91,30 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 
 ### Core modules (all in `studio/`)
 
-- **`run_phase.py`** — Primary entrypoint: `prepare`, `finalize`, `validate`, `cleanup` subcommands.
-- **`run_phase_roles.py`** — Role system: loads `studio.manifest.json`, resolves role packs, builds per-role file naming (`advocate--<role>--NN.md`).
-- **`cleanup.py`** — TTL-based (30 days) and budget-based (900MB) run artifact cleanup.
+- **`run_phase.py`** — Primary entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, decision, clarity, metrics, install, setup, and offload subcommands.
+- **`run_phase_roles.py`** — Role system: loads `studio.manifest.json`, resolves role packs, applies project-local overrides, builds per-role file naming (`advocate--<role>--NN.md`).
+- **`role_overrides.py`** — Project-local role customization: loads `.studio/roles/*.json` overlays, validates structure, shallow-merges with manifest roles.
+- **`cleanup.py`** — TTL-based (30 days) and budget-based (900MB) run artifact cleanup, plus loose file removal for legacy artifacts outside run directories.
 - **`scopes.py`** — Three-tier scope system (alignment / depth / polish) with output budgets and debate modes (`all_roles` vs `per_role`).
 - **`rerun.py`** — Detects rejection context from prior runs and generates rerun instructions.
+- **`question_mode.py`** — Question-surfacing mode: generates P0/P1/P2 question instructions for advocate/contrarian instead of deliverable prompts. Pure function library, no I/O.
+- **`decision_points.py`** — Parses and formats inline decision points (P0/P1/P2 blockquotes) from agent output. Extracts decisions from completed runs into a consolidated log.
+- **`clarity.py`** — Per-topic Clarity Score tracking. Computes confidence from answered decisions, controls agent question density, persists to `clarity.json`. CLI: `show-clarity`, `set-clarity`, `recompute-clarity`.
 - **`verdict.py`** — Extracts APPROVED/REJECTED/UNKNOWN verdict from text.
-- **`validators/`** — `DocumentValidator` and `CodeValidator` for post-run quality checks.
+- **`install.py`** — Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project.
+- **`offload.py`** — CLAUDE.md analyzer: classifies sections, detects embedded constraints, scores pointer strength, generates offload reports and manages canary tokens.
+- **`setup.py`** — Setup wizard: project configuration after install. Tracks setup state in `.studio/SETUP.json`, generates role overrides, scopes, and cleanup config. Supports incremental re-configuration when new features are added.
+- **`validators/`** — `DocumentValidator` (including `validate_question_mode()`) and `CodeValidator` for post-run quality checks.
 
 ### Configuration files
 
-- **`studio.manifest.json`** — Defines all disciplines (marketing, product, design, art, engineering, test_engineer, qa, ml, pmm) with advocate/contrarian focuses, deliverables, escalation cues, and role dependencies.
+- **`studio.manifest.json`** — Defines all disciplines (marketing, product, design, art, engineering, test_engineer, qa, web_engineering, web_test_engineer, web_qa, ml, ai_engineer, pmm) with advocate/contrarian focuses, deliverables, escalation cues, and role dependencies.
 - **`role_packs/*.json`** — Curated pod presets (e.g., `studio_core` = marketing + product + design + art + engineering + test_engineer + qa). Override with `--roles +role/-role`. Role dependencies in the manifest auto-inject co-required roles (e.g., engineering always brings test_engineer).
 - **`config/scopes.toml`** — Default three-tier scope configuration (alignment → depth → polish) with output budgets and debate modes.
 - **`config/studio_settings.toml`** — Cleanup TTL and storage limits.
 - **`.studio/scopes.toml`** — Scope-based iteration budgets (auto-loaded if present).
 - **`.studio/validation.toml`** — Validation configuration.
+- **`.studio/roles/*.json`** — Project-local role overrides. Shallow-merge with manifest roles (override keys replace base, unspecified keys inherit).
 
 ### Artifact structure
 
@@ -85,6 +134,6 @@ Four phases: `market`, `design`, `tech`, `studio`. Each has distinct advocate/co
 - **No heavy dependencies** — keep `run_phase.py` small and bash-friendly.
 - **MVI (Minimum Viable Interaction)** — every task, sprint, and milestone must end in something usable. "Build a skateboard, not a wheel." Product, Engineering, and Design contrarians enforce this. See `studio/docs/MVI_METHODOLOGY.md`.
 - **AI-TDD discipline** is mandatory for tech phase implementations. AI writes scenarios and boilerplate; humans own assertions. See `studio/docs/AI_TDD_METHODOLOGY.md` for the full methodology (scenario-first, stack boundary, mutation verification, anti-pattern detection).
-- **Documentation contract**: changes to workflow must update README, STUDIO_INTERACTION_GUIDE.md, and affected bridge docs simultaneously.
+- **Documentation contract**: changes to workflow must update README, CLAUDE_CODE_USAGE.md, and affected bridge docs simultaneously.
 - **Working directories**: `.scratch/` for temp files, `.private/` for sensitive data — both gitignored. Never commit `studio/output/` or `studio/knowledge/`.
 - Cross-repo usage: when run outside this repo, artifacts go to `<repo>/.studio/output/`. First run auto-scaffolds `.studio/` and a bridge doc. Override with `--artifact-root` flag or `STUDIO_ARTIFACT_ROOT` env var. Priority: flag > env > cwd detection.

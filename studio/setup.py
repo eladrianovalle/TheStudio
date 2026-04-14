@@ -1,0 +1,512 @@
+"""
+Studio setup wizard — project configuration after install.
+
+Tracks setup state in ``.studio/SETUP.json`` and generates configuration
+files (``.studio/roles/*.json``, ``.studio/scopes.toml``, etc.) based on
+user choices.  Supports incremental setup: when new configurable features
+are added (bumping ``CURRENT_SETUP_VERSION``), the wizard detects pending
+steps and prompts re-configuration.
+
+Usage via run_phase.py:
+    python run_phase.py setup --target /path/to/project --status
+    python run_phase.py setup --target /path/to/project --defaults
+    python run_phase.py setup --target /path/to/project --answers answers.json
+    python run_phase.py setup --target /path/to/project --role-pack studio_core
+"""
+from __future__ import annotations
+
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+# ---------------------------------------------------------------------------
+# Version & step registry
+# ---------------------------------------------------------------------------
+
+# Bump when adding new configurable features so the wizard detects them.
+CURRENT_SETUP_VERSION = 1
+
+SETUP_STEPS: List[Dict[str, Any]] = [
+    {"name": "role_pack", "introduced_at": 1, "label": "Role Pack Selection"},
+    {"name": "role_customization", "introduced_at": 1, "label": "Role Customization"},
+    {"name": "scopes", "introduced_at": 1, "label": "Scope Configuration"},
+    {"name": "cleanup", "introduced_at": 1, "label": "Cleanup Settings"},
+]
+
+# O(1) lookup by step name
+_STEPS_BY_NAME: Dict[str, Dict[str, Any]] = {s["name"]: s for s in SETUP_STEPS}
+
+SETUP_FILE = "SETUP.json"
+# Schema version for the SETUP.json format (bump on structural changes).
+SCHEMA_VERSION = 1
+
+DEFAULT_CLEANUP = {"ttl_days": 30, "size_limit_mb": 900}
+
+# ---------------------------------------------------------------------------
+# State management
+# ---------------------------------------------------------------------------
+
+
+def _empty_state() -> Dict[str, Any]:
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "setup_version": 0,
+        "completed_steps": {},
+        "choices": {},
+        "timestamps": {},
+    }
+
+
+def load_setup_state(target: Path) -> Dict[str, Any]:
+    """Read ``.studio/SETUP.json`` or return empty state."""
+    setup_path = Path(target).resolve() / ".studio" / SETUP_FILE
+    if not setup_path.exists():
+        return _empty_state()
+    try:
+        data = json.loads(setup_path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return _empty_state()
+        return data
+    except (json.JSONDecodeError, ValueError):
+        return _empty_state()
+
+
+def save_setup_state(target: Path, state: Dict[str, Any]) -> None:
+    """Write ``.studio/SETUP.json``."""
+    target = Path(target).resolve()
+    setup_path = target / ".studio" / SETUP_FILE
+    setup_path.parent.mkdir(parents=True, exist_ok=True)
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    state.setdefault("timestamps", {})
+    if "first_setup" not in state["timestamps"]:
+        state["timestamps"]["first_setup"] = now
+    state["timestamps"]["last_setup"] = now
+    state["setup_version"] = CURRENT_SETUP_VERSION
+    setup_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+
+def pending_steps(state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Return setup steps that need (re-)configuration."""
+    completed = state.get("completed_steps", {})
+    result: List[Dict[str, Any]] = []
+    for step in SETUP_STEPS:
+        completed_at = completed.get(step["name"], 0)
+        if completed_at < step["introduced_at"]:
+            result.append(step)
+    return result
+
+
+def _mark_step(state: Dict[str, Any], step_name: str) -> None:
+    """Record that *step_name* was configured at its ``introduced_at`` version."""
+    state.setdefault("completed_steps", {})
+    step = _STEPS_BY_NAME.get(step_name)
+    if step is not None:
+        state["completed_steps"][step_name] = step["introduced_at"]
+
+
+# ---------------------------------------------------------------------------
+# Manifest & pack helpers — delegates to run_phase_roles where possible
+# ---------------------------------------------------------------------------
+
+
+def _find_studio_dir(target: Path) -> Path:
+    """Locate the studio source directory for a target project.
+
+    Checks ``.studio/source/`` (cross-repo install) first, then falls
+    back to the directory containing this file (running from source).
+    """
+    installed = Path(target).resolve() / ".studio" / "source"
+    if (installed / "studio.manifest.json").exists():
+        return installed
+    return Path(__file__).resolve().parent
+
+
+def get_manifest_roles(studio_dir: Optional[Path] = None) -> Dict[str, Dict]:
+    """Return all roles from the manifest with their full definitions."""
+    if studio_dir is None:
+        studio_dir = Path(__file__).resolve().parent
+    from run_phase_roles import load_manifest
+    manifest = load_manifest(studio_dir)
+    return manifest.get("roles", {})
+
+
+def get_available_packs(studio_dir: Optional[Path] = None) -> List[Dict[str, Any]]:
+    """Return all role packs with name, description, and roles list."""
+    if studio_dir is None:
+        studio_dir = Path(__file__).resolve().parent
+    packs_dir = studio_dir / "role_packs"
+    if not packs_dir.is_dir():
+        return []
+    result: List[Dict[str, Any]] = []
+    for path in sorted(packs_dir.glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            result.append({
+                "name": data.get("name", path.stem),
+                "description": data.get("description", ""),
+                "roles": data.get("roles", []),
+            })
+        except (json.JSONDecodeError, ValueError):
+            continue
+    return result
+
+
+def get_default_pack_name(studio_dir: Optional[Path] = None) -> str:
+    """Return the default role pack name from the manifest."""
+    if studio_dir is None:
+        studio_dir = Path(__file__).resolve().parent
+    from run_phase_roles import load_manifest, default_role_pack_name
+    manifest = load_manifest(studio_dir)
+    try:
+        return default_role_pack_name(manifest)
+    except Exception:
+        return "studio_core"
+
+
+def _load_default_scopes() -> Dict[str, Dict[str, Any]]:
+    """Load default scope config from ``config/scopes.toml``."""
+    config_path = Path(__file__).resolve().parent / "config" / "scopes.toml"
+    if not config_path.exists():
+        # Fallback if config file is missing (shouldn't happen in practice)
+        return {
+            "alignment": {"focus": "Directional alignment.", "max_iterations": 2, "output_budget": 500, "debate_mode": "all_roles"},
+            "depth": {"focus": "Full analysis.", "max_iterations": 3, "debate_mode": "per_role"},
+            "polish": {"focus": "Cross-discipline conflicts.", "max_iterations": 1, "output_budget": 300, "debate_mode": "all_roles"},
+        }
+    from scopes import load_scopes_config
+    config = load_scopes_config(config_path)
+    result: Dict[str, Dict[str, Any]] = {}
+    for scope in config.scopes:
+        entry: Dict[str, Any] = {
+            "focus": scope.focus,
+            "max_iterations": scope.max_iterations,
+        }
+        if scope.output_budget is not None:
+            entry["output_budget"] = scope.output_budget
+        if scope.debate_mode != "per_role":
+            entry["debate_mode"] = scope.debate_mode
+        else:
+            entry["debate_mode"] = scope.debate_mode
+        result[scope.name] = entry
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Apply functions — each generates config files and updates state
+# ---------------------------------------------------------------------------
+
+
+def apply_role_pack(
+    target: Path,
+    pack_name: str,
+    overrides: Optional[List[str]] = None,
+    state: Optional[Dict[str, Any]] = None,
+    _save: bool = True,
+) -> Dict[str, Any]:
+    """Select a role pack and optional +/- overrides.
+
+    Stores the choice in state but does NOT generate role override files
+    (that's the role_customization step).
+
+    Returns the resolved role list.
+    """
+    from run_phase_roles import load_manifest, load_role_pack, resolve_role_list
+
+    target = Path(target).resolve()
+    studio_dir = _find_studio_dir(target)
+    manifest = load_manifest(studio_dir)
+
+    # load_role_pack raises RoleConfigError for invalid pack names
+    pack_data = load_role_pack(studio_dir, pack_name)
+    roles = resolve_role_list(manifest, pack_data, overrides)
+
+    if state is None:
+        state = load_setup_state(target)
+
+    state.setdefault("choices", {})
+    state["choices"]["role_pack"] = pack_name
+    state["choices"]["role_overrides"] = overrides or []
+    state["choices"]["resolved_roles"] = roles
+    _mark_step(state, "role_pack")
+    if _save:
+        save_setup_state(target, state)
+
+    return {"pack": pack_name, "roles": roles}
+
+
+def apply_role_customization(
+    target: Path,
+    customizations: Dict[str, Dict],
+    state: Optional[Dict[str, Any]] = None,
+    _save: bool = True,
+) -> None:
+    """Write per-role override files to ``.studio/roles/``.
+
+    ``customizations`` maps role name -> override fields dict.
+    Empty dict means "no customizations, accept defaults".
+    """
+    from role_overrides import validate_role_override
+
+    target = Path(target).resolve()
+    roles_dir = target / ".studio" / "roles"
+    roles_dir.mkdir(parents=True, exist_ok=True)
+
+    for role_name, fields in customizations.items():
+        validate_role_override(role_name, fields)
+        override_path = roles_dir / f"{role_name}.json"
+        override_path.write_text(
+            json.dumps(fields, indent=2), encoding="utf-8"
+        )
+
+    if state is None:
+        state = load_setup_state(target)
+    state.setdefault("choices", {})
+    state["choices"]["role_customizations"] = {
+        k: list(v.keys()) for k, v in customizations.items()
+    }
+    _mark_step(state, "role_customization")
+    if _save:
+        save_setup_state(target, state)
+
+
+def _format_scopes_toml(scopes: Dict[str, Dict[str, Any]]) -> str:
+    """Format a scopes dict as TOML content."""
+    lines = ["# Studio scope configuration (generated by setup wizard)\n"]
+    for name, cfg in scopes.items():
+        lines.append(f"[scopes.{name}]")
+        focus = cfg.get("focus", "")
+        # Escape backslashes and quotes for TOML
+        focus_escaped = focus.replace("\\", "\\\\").replace('"', '\\"')
+        lines.append(f'focus = "{focus_escaped}"')
+        lines.append(f"max_iterations = {cfg['max_iterations']}")
+        if "output_budget" in cfg:
+            lines.append(f"output_budget = {cfg['output_budget']}")
+        if "debate_mode" in cfg:
+            lines.append(f'debate_mode = "{cfg["debate_mode"]}"')
+        lines.append("")
+    return "\n".join(lines)
+
+
+def apply_scopes(
+    target: Path,
+    scopes_config: Optional[Dict[str, Dict[str, Any]]] = None,
+    state: Optional[Dict[str, Any]] = None,
+    _save: bool = True,
+) -> None:
+    """Write ``.studio/scopes.toml`` from a scopes config dict.
+
+    If ``scopes_config`` is None, loads defaults from ``config/scopes.toml``.
+    """
+    target = Path(target).resolve()
+    if scopes_config is None:
+        scopes_config = _load_default_scopes()
+
+    content = _format_scopes_toml(scopes_config)
+    scopes_path = target / ".studio" / "scopes.toml"
+    scopes_path.parent.mkdir(parents=True, exist_ok=True)
+    scopes_path.write_text(content, encoding="utf-8")
+
+    if state is None:
+        state = load_setup_state(target)
+    state.setdefault("choices", {})
+    state["choices"]["scopes"] = {
+        name: {
+            "max_iterations": cfg["max_iterations"],
+            "output_budget": cfg.get("output_budget"),
+            "debate_mode": cfg.get("debate_mode"),
+        }
+        for name, cfg in scopes_config.items()
+    }
+    _mark_step(state, "scopes")
+    if _save:
+        save_setup_state(target, state)
+
+
+def _format_settings_toml(ttl_days: int, size_limit_mb: int) -> str:
+    """Format cleanup settings as TOML content."""
+    return (
+        "# Studio settings (generated by setup wizard)\n"
+        "\n"
+        "[cleanup]\n"
+        f"ttl_days = {ttl_days}\n"
+        f"size_limit_mb = {size_limit_mb}\n"
+    )
+
+
+def apply_cleanup(
+    target: Path,
+    ttl_days: int = 30,
+    size_limit_mb: int = 900,
+    state: Optional[Dict[str, Any]] = None,
+    _save: bool = True,
+) -> None:
+    """Write ``.studio/config/studio_settings.toml``."""
+    target = Path(target).resolve()
+    content = _format_settings_toml(ttl_days, size_limit_mb)
+    settings_path = target / ".studio" / "config" / "studio_settings.toml"
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(content, encoding="utf-8")
+
+    if state is None:
+        state = load_setup_state(target)
+    state.setdefault("choices", {})
+    state["choices"]["cleanup"] = {
+        "ttl_days": ttl_days,
+        "size_limit_mb": size_limit_mb,
+    }
+    _mark_step(state, "cleanup")
+    if _save:
+        save_setup_state(target, state)
+
+
+# ---------------------------------------------------------------------------
+# Batch operations
+# ---------------------------------------------------------------------------
+
+
+def apply_defaults(target: Path) -> Dict[str, Any]:
+    """Apply all setup steps with default values.
+
+    Returns the resulting state.
+    """
+    target = Path(target).resolve()
+    state = load_setup_state(target)
+    studio_dir = _find_studio_dir(target)
+
+    default_pack = get_default_pack_name(studio_dir)
+    apply_role_pack(target, default_pack, state=state, _save=False)
+    apply_role_customization(target, {}, state=state, _save=False)
+    apply_scopes(target, state=state, _save=False)
+    apply_cleanup(target, state=state, _save=False)
+
+    save_setup_state(target, state)
+    return state
+
+
+def apply_from_answers(target: Path, answers: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply setup from an answers dict.
+
+    Expected keys (all optional):
+        role_pack: str — pack name
+        role_overrides: list[str] — e.g. ["+ml", "-art"]
+        role_customizations: dict[str, dict] — per-role override fields
+        scopes: dict[str, dict] — scope configs (or "defaults")
+        cleanup: dict with ttl_days and size_limit_mb
+    """
+    target = Path(target).resolve()
+    state = load_setup_state(target)
+
+    if "role_pack" in answers:
+        apply_role_pack(
+            target,
+            answers["role_pack"],
+            answers.get("role_overrides", []),
+            state=state,
+            _save=False,
+        )
+
+    if "role_customizations" in answers:
+        apply_role_customization(
+            target, answers["role_customizations"], state=state, _save=False,
+        )
+
+    scopes = answers.get("scopes")
+    if scopes is not None:
+        if scopes == "defaults":
+            apply_scopes(target, state=state, _save=False)
+        else:
+            apply_scopes(target, scopes, state=state, _save=False)
+
+    cleanup = answers.get("cleanup")
+    if cleanup is not None:
+        apply_cleanup(
+            target,
+            ttl_days=cleanup.get("ttl_days", DEFAULT_CLEANUP["ttl_days"]),
+            size_limit_mb=cleanup.get("size_limit_mb", DEFAULT_CLEANUP["size_limit_mb"]),
+            state=state,
+            _save=False,
+        )
+
+    save_setup_state(target, state)
+    return state
+
+
+# ---------------------------------------------------------------------------
+# Status display
+# ---------------------------------------------------------------------------
+
+
+def show_status(target: Path) -> str:
+    """Return a human-readable summary of setup state."""
+    target = Path(target).resolve()
+    state = load_setup_state(target)
+    pend = pending_steps(state)
+    choices = state.get("choices", {})
+
+    lines: List[str] = []
+
+    if not state.get("completed_steps"):
+        lines.append("Studio setup: NOT CONFIGURED")
+        lines.append(f"  {len(pend)} step(s) pending: {', '.join(s['label'] for s in pend)}")
+        lines.append("")
+        lines.append("Run /studio-setup or: python run_phase.py setup --target . --defaults")
+        return "\n".join(lines)
+
+    lines.append("Studio setup status:")
+    lines.append("")
+
+    # Role pack
+    if "role_pack" in choices:
+        pack = choices["role_pack"]
+        roles = choices.get("resolved_roles", [])
+        overrides = choices.get("role_overrides", [])
+        lines.append(f"  Role pack: {pack}")
+        lines.append(f"  Roles: {', '.join(roles)}")
+        if overrides:
+            lines.append(f"  Overrides: {' '.join(overrides)}")
+    else:
+        lines.append("  Role pack: not configured")
+
+    # Role customizations
+    custs = choices.get("role_customizations", {})
+    if custs:
+        lines.append(f"  Role customizations: {', '.join(custs.keys())}")
+    else:
+        lines.append("  Role customizations: none (using defaults)")
+
+    # Scopes
+    scopes = choices.get("scopes")
+    if scopes:
+        scope_summary = ", ".join(
+            f"{name}({cfg.get('max_iterations', '?')} iters)"
+            for name, cfg in scopes.items()
+        )
+        lines.append(f"  Scopes: {scope_summary}")
+    else:
+        lines.append("  Scopes: not configured")
+
+    # Cleanup
+    cleanup = choices.get("cleanup")
+    if cleanup:
+        lines.append(
+            f"  Cleanup: {cleanup.get('ttl_days', 30)}d TTL, "
+            f"{cleanup.get('size_limit_mb', 900)}MB limit"
+        )
+    else:
+        lines.append("  Cleanup: not configured")
+
+    # Pending
+    if pend:
+        lines.append("")
+        lines.append(f"  Pending: {', '.join(s['label'] for s in pend)}")
+        lines.append("  Run /studio-setup to configure new features.")
+    else:
+        lines.append("")
+        lines.append("  All steps configured.")
+
+    ts = state.get("timestamps", {})
+    if ts.get("last_setup"):
+        lines.append(f"  Last configured: {ts['last_setup']}")
+
+    return "\n".join(lines)
