@@ -978,7 +978,12 @@ def _resolve_scopes(args: argparse.Namespace):
             scopes_path = get_studio_root() / scopes_path
     else:
         default_scopes = get_studio_root() / ".studio" / "scopes.toml"
-        scopes_path = default_scopes if default_scopes.exists() else None
+        if default_scopes.exists():
+            scopes_path = default_scopes
+        else:
+            # Fall back to the shipped default config
+            shipped_scopes = get_studio_root() / "config" / "scopes.toml"
+            scopes_path = shipped_scopes if shipped_scopes.exists() else None
 
     if not scopes_path:
         return None, None, None
