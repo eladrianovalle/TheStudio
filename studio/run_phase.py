@@ -380,6 +380,27 @@ def _find_previous_run_dir(current_run_dir: Path) -> Path | None:
     return prior_runs[-1] if prior_runs else None
 
 
+def _is_same_objective(prev_run_dir: Path, current_input: str) -> bool:
+    """Check if the previous run targeted the same objective as the current one.
+
+    Returns True if the previous run's input text matches the current input
+    (case-insensitive, whitespace-normalized). This distinguishes genuine reruns
+    (same objective, new iteration) from fresh runs (different objective).
+    """
+    meta_path = prev_run_dir / "run.json"
+    if not meta_path.is_file():
+        return False
+    try:
+        meta = load_json(meta_path)
+        prev_input = meta.get("input", "")
+    except Exception:
+        return False
+    def _norm(s: str) -> str:
+        return " ".join(s.strip().lower().split())
+    normed_prev, normed_cur = _norm(prev_input), _norm(current_input)
+    return bool(normed_prev and normed_cur and normed_prev == normed_cur)
+
+
 def _ensure_summary_path(meta: Dict, run_dir: Path) -> Path:
     summary_path = meta.get("summary_path")
     if summary_path:
@@ -558,6 +579,7 @@ def build_instruction_doc(
     meta: Dict, run_dir: Path, studio_roles: List[RoleDetails] | None = None,
     scopes_config=None, scopes_allocations: Dict[str, int] | None = None,
     clarity_snapshot=None,
+    same_objective: bool | None = None,
 ) -> str:
     phase = meta["phase"]
     info = PHASE_DETAILS[phase]
@@ -630,13 +652,20 @@ def build_instruction_doc(
             "",
         ])
     
-    # Add rerun context if previous rejections exist in prior runs.
-    # Question mode bypasses rerun context — surfacing unknowns is not
-    # a response to prior rejections.
+    # Rerun context: only inject if same objective and previous run was rejected.
+    # Question mode and fresh runs (different objective) skip rerun context.
     rerun_section: List[str] = []
     is_qmode = is_question_mode(meta.get("output_type"))
-    prev_run_dir = _find_previous_run_dir(run_dir)
-    if not is_qmode and prev_run_dir and detect_rerun_mode(prev_run_dir):
+    if same_objective is None:
+        prev_run_dir = _find_previous_run_dir(run_dir)
+        same_objective = prev_run_dir is not None and _is_same_objective(
+            prev_run_dir, meta.get("input", "")
+        )
+    elif same_objective:
+        prev_run_dir = _find_previous_run_dir(run_dir)
+    else:
+        prev_run_dir = None
+    if not is_qmode and prev_run_dir and same_objective and detect_rerun_mode(prev_run_dir):
         rerun_instructions = generate_rerun_instructions(prev_run_dir)
         rerun_section.append(rerun_instructions)
         rerun_section.append("")
@@ -758,8 +787,13 @@ def build_instruction_doc(
             "### For Advocates",
             "You MUST surface at least 1 decision point (P0 or P1) per output. If nothing is genuinely unsettled, state that explicitly rather than omitting the section. Prefer fewer, high-quality P0/P1 flags over many P2s. Each decision point must name what it unblocks — if you can't articulate the impact, it's not worth flagging.",
             "",
+            "### Think-First Checkpoint (Advocates)",
+            "Before producing any analysis, state in 2-3 sentences: (1) what you understand the objective to be, (2) what constraints you are treating as fixed, and (3) what you are unsure about. This goes at the top of your output before any deliverable content.",
+            "",
             "### For Contrarians",
             "If the advocate assumed something that is actually unsettled, you MUST flag it as a decision point. Decision points are required output when assumptions are unsettled — do not let unexamined assumptions pass.",
+            "",
+            "If the advocate's stated understanding of the objective differs from yours, flag that FIRST — it outranks any deliverable critique. A correct analysis of the wrong problem is worse than an imperfect analysis of the right one.",
         ])
 
     # Clarity-guided focus section (skipped in question mode)
@@ -949,7 +983,12 @@ def _resolve_scopes(args: argparse.Namespace):
             scopes_path = get_studio_root() / scopes_path
     else:
         default_scopes = get_studio_root() / ".studio" / "scopes.toml"
-        scopes_path = default_scopes if default_scopes.exists() else None
+        if default_scopes.exists():
+            scopes_path = default_scopes
+        else:
+            # Fall back to the shipped default config
+            shipped_scopes = get_studio_root() / "config" / "scopes.toml"
+            scopes_path = shipped_scopes if shipped_scopes.exists() else None
 
     if not scopes_path:
         return None, None, None
@@ -1090,14 +1129,22 @@ def prepare_run(args: argparse.Namespace) -> str:
     scopes_config, scopes_allocations, scopes_meta = _resolve_scopes(args)
     meta = _build_run_meta(phase, text, now, run_id, args, studio_role_meta, scopes_meta)
 
-    # Load project-level clarity for instruction injection
-    project_clarity = clarity.load_project_clarity(artifact_root)
-    if project_clarity is None:
+    # If the previous run targeted a different objective, reset clarity so
+    # stale topic scores don't bleed in. Rebuilt via recompute-clarity.
+    prev_run = _find_previous_run_dir(run_dir)
+    objective_changed = prev_run is not None and not _is_same_objective(prev_run, text)
+    if objective_changed:
+        (artifact_root / ".studio" / "clarity.json").unlink(missing_ok=True)
         project_clarity = clarity.empty_snapshot(text, run_id, now)
+    else:
+        project_clarity = clarity.load_project_clarity(artifact_root)
+        if project_clarity is None:
+            project_clarity = clarity.empty_snapshot(text, run_id, now)
 
     instructions = build_instruction_doc(
         meta, run_dir, studio_role_details, scopes_config, scopes_allocations,
         clarity_snapshot=project_clarity,
+        same_objective=not objective_changed if prev_run else None,
     )
     instructions_path = run_dir / "instructions.md"
     instructions_path.write_text(instructions, encoding="utf-8")
@@ -1109,6 +1156,8 @@ def prepare_run(args: argparse.Namespace) -> str:
     print(f"Prepared {run_id} ({phase})")
     print(f"- Run directory: {run_dir_abs}")
     print(f"- Instructions: {instructions_abs_path}")
+    if objective_changed:
+        print(f"- Fresh run: cleared stale clarity from previous objective")
 
     if scopes_meta:
         print(f"\n💡 Tip: Scopes are active. Work through {scopes_meta['scopes'][0]['name']} scope first.")
