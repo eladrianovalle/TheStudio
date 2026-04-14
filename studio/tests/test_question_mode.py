@@ -80,6 +80,9 @@ def test_question_instructions_anti_generic_guardrails(sample_role_data):
 
     assert "do not ask questions" in advocate_str.lower()
     assert "answerable from the input" in advocate_str.lower()
+    # Karpathy simplicity + surgical principles
+    assert "assume complexity" in advocate_str.lower()
+    assert "single decision" in advocate_str.lower()
 
 
 def test_question_instructions_contain_role_title(sample_role_data):

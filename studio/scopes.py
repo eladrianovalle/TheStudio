@@ -263,6 +263,11 @@ def generate_scope_prompt(
             "",
             "Do NOT produce full deliverables — save detail for the Depth scope.",
             "",
+            "**Think-first principles:**",
+            "- State your assumptions about the input before analyzing. If you are confused about scope, audience, or constraints, say so explicitly — do not guess.",
+            "- Propose the simplest viable interpretation. Flag complexity only where it is unavoidable, not where it is interesting.",
+            "- This scope is complete when all participating roles have stated their high-level stance, surfaced fatal flaws, and named their assumptions.",
+            "",
         ])
     elif scope_index == 1:  # Depth
         lines.extend([
@@ -273,7 +278,13 @@ def generate_scope_prompt(
                 lines.append(f"- {d}")
         else:
             lines.append("- Thorough critique of the advocate's depth proposal")
-        lines.append("")
+        lines.extend([
+            "",
+            "**Depth principles:**",
+            "- Build on alignment decisions — do not re-derive what was settled. Address only what Alignment left open or what the rejection context requires.",
+            "- End each deliverable section with a verification sentence: \"This is complete when [testable condition].\"",
+            "",
+        ])
     elif scope_index >= 2:  # Polish
         lines.extend([
             "**Scope guidance:** This is the cross-discipline polish pass. Focus ONLY on:",
@@ -282,6 +293,11 @@ def generate_scope_prompt(
             "- Gaps between disciplines that no one owns",
             "",
             "Do NOT introduce new proposals or repeat depth analysis.",
+            "",
+            "**Polish principles:**",
+            "- Touch only cross-discipline seams. If a section works within its discipline, leave it alone even if you see improvements.",
+            "- Prefer removing ambiguity over adding detail. The simplest resolution that satisfies both disciplines wins.",
+            "- This scope is complete when no unresolved cross-discipline conflict remains unflagged.",
             "",
         ])
 

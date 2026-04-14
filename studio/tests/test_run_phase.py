@@ -127,6 +127,16 @@ def test_instruction_doc_uses_generic_title(studio_root):
     assert "Cascade" not in instructions
 
 
+def test_instruction_doc_has_think_first_checkpoint(studio_root):
+    """build_instruction_doc includes the Think-First Checkpoint for advocates."""
+    run_id = run_phase.prepare_run(make_prepare_args())
+    run_dir = studio_root / "output" / "market" / run_id
+    instructions = (run_dir / "instructions.md").read_text()
+    assert "Think-First Checkpoint" in instructions
+    assert "what you understand the objective to be" in instructions
+    assert "correct analysis of the wrong problem" in instructions
+
+
 def test_output_root_defaults_to_origin_repo_when_running_outside_studio(tmp_path, monkeypatch):
     studio_root = tmp_path / "studio"
     studio_root.mkdir()

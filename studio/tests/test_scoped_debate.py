@@ -72,6 +72,9 @@ class TestGenerateScopePrompt:
         assert "Do NOT produce full deliverables" in prompt
         assert "DECISION [P0]" in prompt
         assert "MUST surface at least 1 decision point" in prompt
+        # Karpathy think-first principles
+        assert "assumptions" in prompt
+        assert "simplest" in prompt
 
     def test_alignment_contrarian_has_verdict(self):
         prompt = generate_scope_prompt(
@@ -108,6 +111,9 @@ class TestGenerateScopePrompt:
         assert "Word cap" not in prompt
         assert "Core loop diagram" in prompt
         assert "Progression outline" in prompt
+        # Karpathy surgical + goal-driven principles
+        assert "alignment decisions" in prompt.lower()
+        assert "complete when" in prompt
 
     def test_depth_with_s1_files(self):
         prompt = generate_scope_prompt(
@@ -142,6 +148,9 @@ class TestGenerateScopePrompt:
         assert "POLISH" in prompt
         assert "cross-discipline" in prompt.lower()
         assert "under 300 words" in prompt
+        # Karpathy surgical + simplicity principles
+        assert "cross-discipline seams" in prompt.lower()
+        assert "ambiguity" in prompt
 
     def test_settled_decisions_included(self):
         prompt = generate_scope_prompt(

@@ -787,8 +787,13 @@ def build_instruction_doc(
             "### For Advocates",
             "You MUST surface at least 1 decision point (P0 or P1) per output. If nothing is genuinely unsettled, state that explicitly rather than omitting the section. Prefer fewer, high-quality P0/P1 flags over many P2s. Each decision point must name what it unblocks — if you can't articulate the impact, it's not worth flagging.",
             "",
+            "### Think-First Checkpoint (Advocates)",
+            "Before producing any analysis, state in 2-3 sentences: (1) what you understand the objective to be, (2) what constraints you are treating as fixed, and (3) what you are unsure about. This goes at the top of your output before any deliverable content.",
+            "",
             "### For Contrarians",
             "If the advocate assumed something that is actually unsettled, you MUST flag it as a decision point. Decision points are required output when assumptions are unsettled — do not let unexamined assumptions pass.",
+            "",
+            "If the advocate's stated understanding of the objective differs from yours, flag that FIRST — it outranks any deliverable critique. A correct analysis of the wrong problem is worse than an imperfect analysis of the right one.",
         ])
 
     # Clarity-guided focus section (skipped in question mode)

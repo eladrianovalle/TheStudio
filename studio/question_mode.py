@@ -68,6 +68,12 @@ def generate_question_instructions(role_data: Dict) -> Tuple[str, str]:
           (e.g., "Answering this determines whether we need server-side state").
         - Prefer questions that expose hidden assumptions over questions that
           request missing data.
+        - Do NOT surface questions that assume complexity. Phrase questions to
+          test whether the simple approach works before asking about the complex
+          one (e.g., GOOD: "Can a single database handle expected load?"
+          BAD: "Which sharding strategy should we use?").
+        - Each question must target a single decision. Compound questions
+          ("Should we do X and if so how should we handle Y?") must be split.
         - Do NOT produce deliverables, specs, or recommendations — only questions.
 
         ## Output format
