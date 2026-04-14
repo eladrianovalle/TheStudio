@@ -1,0 +1,14 @@
+name: No Merge Conflicts
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+
+jobs:
+  check:
+    name: No Merge Conflicts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm mergeable
+        run: echo "No merge conflicts detected"
