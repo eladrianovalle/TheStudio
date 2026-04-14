@@ -16,6 +16,11 @@ All notable changes to TheGameStudio are documented here.
 ### Fixed
 - `inject-context` now resolves custom scope names via canonical positional aliases (alignment→0, depth→1, polish→2)
 - `prepare` now resets stale clarity and skips rerun context when the new run has a different objective than the previous one — prevents orchestrator agents from inheriting irrelevant topic scores and rejection feedback
+- `_resolve_scopes` now falls back to shipped `config/scopes.toml` when no `.studio/scopes.toml` override exists — scoped runs work out of the box
+
+### Added
+- Karpathy AI principles integrated into agent instructions — Think-Before-Coding (alignment scope), Simplicity-First, Surgical-Changes (depth/polish scopes), Goal-Driven-Execution with verification checkpoints. Think-First Checkpoint requires advocates to state their understanding before analysis; contrarians verify framing before critiquing content.
+- `No Merge Conflicts` CI workflow (`.github/workflows/no-merge-conflicts.yml`) to satisfy branch ruleset
 
 ### Changed
 - Clarity module now mandatory — direct import replaces lazy-load, always active in every studio run

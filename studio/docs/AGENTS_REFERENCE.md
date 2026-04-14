@@ -45,6 +45,10 @@ Studio phase now hosts as many Advocate↔Contrarian duos as needed. The default
 | engineering | Principal Gameplay Engineer | Architecture, integrations, performance | Ops toil, technical risk | System outline, stack choices, ops checklist |
 | test_engineer | Staff Test Engineer — AI-TDD Integrity | Scenario-first test design, stack boundaries, mutation verification | Self-mocking tests, hallucinated assertions, green checkmark trap | Test spec (GWT), context boundary, mutation plan, anti-pattern audit |
 | qa | Release QA & Launch Ops Lead | Validation strategy, telemetry | Coverage breadth, environment readiness, support gaps | Test matrix, rollback plan, instrumentation gaps |
+| web_engineering | Lead Web Engineer — Next.js & Static Export | Architecture for App Router, static export, route structure | Hydration mismatches, route conflicts, static export limitations | Architecture evaluation, route validation, export verification |
+| web_test_engineer | Staff Test Engineer — Web & Static Export | Scenario-first testing for static export, route generation | False-confidence tests, dev-only passes, missing content verification | Static export test spec, route accessibility plan, SEO checklist |
+| web_qa | Release QA Lead — Static Site Deployment | GitHub Pages validation, route resolution, asset loading | Missing routes, broken asset paths, cache invalidation gaps | Deployment smoke test matrix, export completeness checklist |
+| ai_engineer | Staff AI Engineer — Prompt Architecture & Agent Optimization | Prompt structures, context management, token efficiency | Fragile prompt assumptions, context window blind spots, silent failures | Prompt architecture analysis, context efficiency, failure mode catalog |
 
 **Role dependencies:** The manifest declares co-requirements — `engineering → test_engineer`. When engineering is present, test_engineer is automatically injected after it. This ensures test integrity is always debated when technical work is proposed. Override with `-test_engineer` only when explicitly unwanted.
 

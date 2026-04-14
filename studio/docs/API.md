@@ -48,6 +48,8 @@ Supported commands:
 | `--scopes PATH` | ❌ | `.studio/scopes.toml` if present | Optional scopes config for iteration budget allocation. |
 | `--no-scopes` | ❌ | `False` | Disable scope-based allocation for this run. |
 | `--skip-cleanup` | ❌ | `False` | Skip automatic retention cleanup before preparing the run. |
+| `--mode` | ❌ | `deliverables` | Output mode: `deliverables` (default) produces specs; `questions` surfaces open questions. |
+| `--artifact-root` | ❌ | None | Override where artifacts are written. Defaults to cwd (external repo) or Studio root. |
 | `--cleanup-dry-run` | ❌ | `False` | Preview cleanup candidates without deleting files. |
 
 **Output files (under the active output root):**

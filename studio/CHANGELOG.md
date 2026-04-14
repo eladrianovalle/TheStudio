@@ -18,8 +18,8 @@ All notable changes to Studio will be documented in this file.
 
 ### Stats
 
-- 400 tests (up from 372)
-- 11 Python modules in studio/ (plus validators/)
+- 483 tests (up from 372)
+- 13 Python modules in studio/ (plus validators/)
 
 ---
 
@@ -45,7 +45,7 @@ All notable changes to Studio will be documented in this file.
 ### Stats
 
 - 372 tests (up from 204)
-- 11 Python modules in studio/ (plus validators/)
+- 13 Python modules in studio/ (plus validators/)
 
 ---
 
