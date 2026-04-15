@@ -43,6 +43,7 @@ SOURCE_FILES = [
     "config/scopes.toml",
     "config/studio_settings.toml",
     "docs/STUDIO_BRIDGE_TEMPLATE.md",
+    "docs/CODING_PRINCIPLES.md",
 ]
 
 # Glob patterns for additional files
@@ -59,6 +60,10 @@ SLASH_COMMANDS = [
     "offload.md",
     "studio-setup.md",
 ]
+
+# Sentinels for CLAUDE.md injection — update replaces content between these markers
+_SENTINEL_BEGIN = "<!-- STUDIO:CODING_PRINCIPLES:BEGIN -->"
+_SENTINEL_END = "<!-- STUDIO:CODING_PRINCIPLES:END -->"
 
 
 def _get_studio_root() -> Path:
@@ -125,6 +130,65 @@ def _build_manifest(
     return manifest
 
 
+def _build_principles_block(studio_dir: Path) -> str:
+    """Read CODING_PRINCIPLES.md and wrap in sentinel markers for CLAUDE.md injection.
+
+    The content is re-headed as a ## section (not #) so it sits naturally inside
+    an existing CLAUDE.md that starts with a top-level heading.
+    """
+    src = studio_dir / "docs" / "CODING_PRINCIPLES.md"
+    raw = src.read_text(encoding="utf-8")
+    # Downgrade headings: # → ##, ## → ###  (so it nests under CLAUDE.md's # heading)
+    lines = []
+    for line in raw.splitlines():
+        if line.startswith("## "):
+            lines.append("#" + line)  # ## → ###
+        elif line.startswith("# "):
+            lines.append("#" + line)  # # → ##
+        else:
+            lines.append(line)
+    body = "\n".join(lines)
+    return f"{_SENTINEL_BEGIN}\n{body}\n{_SENTINEL_END}"
+
+
+def _inject_principles_into_claude_md(target: Path, studio_dir: Path) -> None:
+    """Inject or update the coding principles block in the target's CLAUDE.md.
+
+    - If CLAUDE.md doesn't exist, creates it with just the principles block.
+    - If it exists and already has sentinels, replaces the block in place.
+    - If it exists without sentinels, prepends the block after the first heading
+      (or at the top if there's no heading).
+    """
+    block = _build_principles_block(studio_dir)
+    claude_md = target / "CLAUDE.md"
+
+    if not claude_md.exists():
+        claude_md.write_text(block + "\n", encoding="utf-8")
+        return
+
+    content = claude_md.read_text(encoding="utf-8")
+
+    if _SENTINEL_BEGIN in content:
+        # Replace existing block
+        before = content[: content.index(_SENTINEL_BEGIN)]
+        after = content[content.index(_SENTINEL_END) + len(_SENTINEL_END) :]
+        claude_md.write_text(before + block + after, encoding="utf-8")
+    else:
+        # Insert after the first heading line (# ...) or at the top
+        lines = content.split("\n")
+        insert_idx = 0
+        for i, line in enumerate(lines):
+            if line.startswith("# ") and not line.startswith("## "):
+                insert_idx = i + 1
+                # Skip blank lines after heading
+                while insert_idx < len(lines) and lines[insert_idx].strip() == "":
+                    insert_idx += 1
+                break
+
+        lines.insert(insert_idx, block + "\n")
+        claude_md.write_text("\n".join(lines), encoding="utf-8")
+
+
 def install_studio(target: Path, studio_dir: Optional[Path] = None) -> Path:
     """Install Studio into a target project directory.
 
@@ -188,6 +252,9 @@ def install_studio(target: Path, studio_dir: Optional[Path] = None) -> Path:
     version_path.write_text(
         json.dumps(version_info, indent=2), encoding="utf-8"
     )
+
+    # Inject coding principles into target's CLAUDE.md
+    _inject_principles_into_claude_md(target, studio_dir)
 
     return dot_studio
 
