@@ -6,6 +6,9 @@ project so that all slash commands (`/run-phase`, `/run-studio-phase`,
 `/unstale`, `/detest`, `/offload`, `/studio-update`, `/studio-setup`) work natively —
 including the pause-and-ask collaboration protocol.
 
+Also injects coding principles (from docs/CODING_PRINCIPLES.md) into the
+target project's CLAUDE.md using sentinel markers for idempotent updates.
+
 Usage via run_phase.py:
     python run_phase.py init --target /path/to/project
     python run_phase.py check-install --target /path/to/project

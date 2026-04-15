@@ -12,6 +12,8 @@ All notable changes to TheGameStudio are documented here.
 - `/unstale` Agent 5 — project tracking audit (GitHub Issues + local tracking files) with permission-gated destructive actions
 - `ai_engineer` role in manifest — Staff AI Engineer specializing in prompt architecture & agent optimization
 - `/studio-setup` slash command + `setup` CLI subcommand — post-install wizard for role pack selection, role customization, scope tuning, and cleanup settings with incremental versioned steps (`setup.py`, 43 tests)
+- `docs/CODING_PRINCIPLES.md` — standalone Karpathy-inspired principles file, shipped with cross-repo installs
+- Cross-repo install now injects coding principles into target's `CLAUDE.md` via sentinel markers (`<!-- STUDIO:CODING_PRINCIPLES:BEGIN/END -->`), with idempotent update support (6 tests)
 
 ### Fixed
 - `inject-context` now resolves custom scope names via canonical positional aliases (alignment→0, depth→1, polish→2)

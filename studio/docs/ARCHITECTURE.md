@@ -38,7 +38,7 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 | `cleanup.py` | TTL-based (30 days) and budget-based (900 MB) run artifact cleanup, plus loose file removal for legacy artifacts outside run directories. |
 | `rerun.py` | Detects rejection context from prior runs and generates rerun instructions. |
 | `verdict.py` | Extracts APPROVED/REJECTED/UNKNOWN verdict from agent output. |
-| `install.py` | Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project. |
+| `install.py` | Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project. Injects coding principles into target's `CLAUDE.md` via sentinel markers. |
 | `offload.py` | CLAUDE.md analyzer: classifies sections, detects embedded constraints, scores pointer strength, generates offload reports, manages canary tokens. |
 | `setup.py` | Setup wizard: project configuration after install. Tracks setup state in `.studio/SETUP.json`, generates role overrides, scopes, and cleanup config with incremental versioned steps. |
 | `validators/` | `DocumentValidator` and `CodeValidator` for post-run quality checks. |
@@ -165,7 +165,7 @@ No direct imports or service layers are required—just CLI calls and Markdown a
 ## 9. Source of Truth
 
 1. Code: `run_phase.py`, `run_phase_roles.py`, manifest, role packs.
-2. Docs: README, CLAUDE_CODE_USAGE, WINDSURF_USAGE, WINDSURF_QUICKREF, STUDIO_BRIDGE_TEMPLATE, API, INTEGRATION_GUIDE, AGENTS_REFERENCE, ARCHITECTURE (this file).
+2. Docs: README, CLAUDE_CODE_USAGE, WINDSURF_USAGE, WINDSURF_QUICKREF, STUDIO_BRIDGE_TEMPLATE, API, INTEGRATION_GUIDE, AGENTS_REFERENCE, ARCHITECTURE (this file), CODING_PRINCIPLES, MVI_METHODOLOGY, AI_TDD_METHODOLOGY, SCOPES_GUIDE, VALIDATION_GUIDE, TEST_DRIVEN_GUIDE, STORAGE_MANAGEMENT.
 3. Outputs: `<active_output_root>/index.md`, `<active_knowledge_root>/run_log.md`.
 
 Whenever the workflow changes, update all of the above in one commit. Studio deliberately has no hidden runtime — everything is visible, reproducible, and assistant-agnostic.

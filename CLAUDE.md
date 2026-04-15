@@ -167,7 +167,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 - **`decision_points.py`** — Parses and formats inline decision points (P0/P1/P2 blockquotes) from agent output. Extracts decisions from completed runs into a consolidated log.
 - **`clarity.py`** — Per-topic Clarity Score tracking. Computes confidence from answered decisions, controls agent question density, persists to `clarity.json`. CLI: `show-clarity`, `set-clarity`, `recompute-clarity`.
 - **`verdict.py`** — Extracts APPROVED/REJECTED/UNKNOWN verdict from text.
-- **`install.py`** — Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project.
+- **`install.py`** — Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project. Also injects coding principles into the target's `CLAUDE.md` via sentinel markers for safe updates.
 - **`offload.py`** — CLAUDE.md analyzer: classifies sections, detects embedded constraints, scores pointer strength, generates offload reports and manages canary tokens.
 - **`setup.py`** — Setup wizard: project configuration after install. Tracks setup state in `.studio/SETUP.json`, generates role overrides, scopes, and cleanup config. Supports incremental re-configuration when new features are added.
 - **`validators/`** — `DocumentValidator` (including `validate_question_mode()`) and `CodeValidator` for post-run quality checks.

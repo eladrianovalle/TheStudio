@@ -7,6 +7,7 @@
 - **[ARCHITECTURE.md](./ARCHITECTURE.md)** - System design and extensibility
 - **[AGENTS_REFERENCE.md](./AGENTS_REFERENCE.md)** - Agent roles and personas
 - **[API.md](./API.md)** - CLI reference for `run_phase.py`
+- **[CODING_PRINCIPLES.md](./CODING_PRINCIPLES.md)** - Karpathy-inspired coding principles (injected into target CLAUDE.md on install)
 
 ## Workflow Features
 - **[SCOPES_GUIDE.md](./SCOPES_GUIDE.md)** - Scope-based iteration allocation
