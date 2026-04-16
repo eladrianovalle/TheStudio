@@ -195,6 +195,18 @@ class TestUpdateStudio:
         assert content != "# tampered"
 
 
+    def test_update_from_installed_copy(self, target_dir, studio_dir):
+        """Update works when studio_dir points to the installed .studio/source/ (self-update)."""
+        install_studio(target_dir, studio_dir)
+
+        # Simulate running update from the installed copy itself
+        installed_source = target_dir / ".studio" / "source"
+        result = update_studio(target_dir, installed_source)
+        # Should succeed (no SameFileError) and report no changes
+        assert result["updated"] == 0
+        assert result["added"] == 0
+
+
 class TestSlashCommandsUseDirectPaths:
     """Verify slash commands use .studio/source/ paths directly (no rewriting needed)."""
 

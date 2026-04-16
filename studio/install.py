@@ -214,11 +214,14 @@ def install_studio(target: Path, studio_dir: Optional[Path] = None) -> Path:
     # Collect files
     source_files = _collect_source_files(studio_dir)
 
-    # Copy source files
+    # Copy source files (skip if src and dst are the same file,
+    # which happens when update is run from the installed copy)
     for rel in source_files:
         src = studio_dir / rel
         dst = source_dest / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
+        if dst.exists() and src.samefile(dst):
+            continue
         shutil.copy2(src, dst)
 
     # Copy slash commands verbatim (they use .studio/source/ paths directly)
@@ -228,7 +231,10 @@ def install_studio(target: Path, studio_dir: Optional[Path] = None) -> Path:
         src = commands_src / cmd_name
         if not src.exists():
             continue
-        shutil.copy2(src, commands_dest / cmd_name)
+        dst = commands_dest / cmd_name
+        if dst.exists() and src.samefile(dst):
+            continue
+        shutil.copy2(src, dst)
 
     # Ensure output and knowledge dirs exist
     (dot_studio / "output").mkdir(parents=True, exist_ok=True)
