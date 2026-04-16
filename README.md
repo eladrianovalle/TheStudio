@@ -1,4 +1,4 @@
-# The Game Studio
+# Studio
 
 Studio is an **instruction generator** for structured advocate/contrarian debates. It prepares run directories with instructions that an AI assistant (Claude Code, Windsurf/Cascade, or any capable agent) executes, then packages the results as versioned artifacts.
 
