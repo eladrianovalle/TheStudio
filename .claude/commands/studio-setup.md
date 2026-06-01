@@ -1,6 +1,6 @@
 # Studio Setup Wizard
 
-Configure this project's Studio installation — role packs, scope tuning, cleanup settings.
+Configure this project's Studio installation — role packs, role/phase-persona customization, scope tuning, cleanup settings.
 
 ## Arguments
 
@@ -107,7 +107,32 @@ If yes, for each role the user wants to customize:
 python ".studio/source/run_phase.py" setup --target . --answers '<json with role_customizations>'
 ```
 
-### Step 5: Scope Tuning
+### Step 5: Phase Persona Customization (Optional)
+
+The single-phase advocate / contrarian / implementer / integrator personas ship as
+stack-neutral defaults (e.g. tech advocate = "Technical Architect"). A project can
+tailor them per phase — writing `.studio/personas.toml` — so a Rust repo gets a
+"Rust Systems Architect" instead.
+
+Ask: **"Do you want to tailor the phase personas to your tech stack? Most users skip this — the neutral defaults are fine."**
+
+If the user says no/skip, apply empty customization to mark the step complete (no file written, neutral defaults stand):
+
+```bash
+python ".studio/source/run_phase.py" setup --target . --answers '{"persona_customizations": {}}'
+```
+
+If yes, for each phase the user wants to customize (`market`, `design`, `tech`, `studio`):
+
+1. Valid string keys per phase: `advocate`, `contrarian`, `notes`. `integrator` is allowed **only** under `studio`. A nested `implementer` table (keys `title`, `deliverables`) is allowed for `market`/`design`/`tech` only — not `studio`.
+
+2. Build a JSON answers file with the customizations and apply:
+
+```bash
+python ".studio/source/run_phase.py" setup --target . --answers '<json with persona_customizations>'
+```
+
+### Step 6: Scope Tuning
 
 Show the default scope configuration:
 
@@ -133,7 +158,7 @@ If yes, walk through each scope asking about:
 
 Build the scopes config and apply via answers JSON.
 
-### Step 6: Cleanup Settings
+### Step 7: Cleanup Settings
 
 Show the defaults:
 
@@ -153,7 +178,7 @@ python ".studio/source/run_phase.py" setup --target . --answers '{"cleanup": {"t
 
 If yes, ask for TTL (days) and size limit (MB), then apply.
 
-### Step 7: Summary
+### Step 8: Summary
 
 Show the final configuration:
 

@@ -130,6 +130,17 @@ class TestPendingSteps:
         pend = setup.pending_steps(state)
         assert pend == []
 
+    def test_v1_completed_returns_persona_step(self) -> None:
+        """A SETUP.json configured at v1 should surface the v2 persona step."""
+        state = setup._empty_state()
+        state["setup_version"] = 1
+        for step in setup.SETUP_STEPS:
+            if step["introduced_at"] <= 1:
+                state["completed_steps"][step["name"]] = step["introduced_at"]
+        pend = setup.pending_steps(state)
+        names = [s["name"] for s in pend]
+        assert names == ["persona_customization"]
+
     def test_detects_new_step(self, monkeypatch: pytest.MonkeyPatch) -> None:
         state = setup._empty_state()
         for step in setup.SETUP_STEPS:
@@ -375,6 +386,14 @@ class TestApplyDefaults:
         state = setup.apply_defaults(project)
         assert state["choices"]["role_pack"] == "studio_core"
 
+    def test_marks_persona_step_at_v2(self, project: Path) -> None:
+        state = setup.apply_defaults(project)
+        assert state["setup_version"] == 2
+        assert state["completed_steps"]["persona_customization"] == 2
+        assert setup.pending_steps(state) == []
+        # Empty defaults => no personas.toml written.
+        assert not (project / ".studio" / "personas.toml").exists()
+
 
 # ---------------------------------------------------------------------------
 # Batch: from answers
@@ -403,6 +422,19 @@ class TestApplyFromAnswers:
         pend = setup.pending_steps(state)
         pending_names = [s["name"] for s in pend]
         assert "scopes" in pending_names
+
+    def test_persona_customizations_in_answers(self, project: Path) -> None:
+        import persona_overrides
+
+        answers = {
+            "persona_customizations": {
+                "tech": {"advocate": "Rust Systems Architect"},
+            },
+        }
+        state = setup.apply_from_answers(project, answers)
+        assert state["choices"]["persona_customizations"]["tech"] == ["advocate"]
+        loaded = persona_overrides.load_persona_overrides(project)
+        assert loaded == {"tech": {"advocate": "Rust Systems Architect"}}
 
     def test_custom_scopes_in_answers(self, project: Path) -> None:
         answers = {
@@ -443,6 +475,19 @@ class TestShowStatus:
         assert "+ml" in output
         assert "-art" in output
 
+    def test_shows_neutral_personas_by_default(self, project: Path) -> None:
+        setup.apply_defaults(project)
+        output = setup.show_status(project)
+        assert "Phase personas: none (using neutral defaults)" in output
+
+    def test_shows_customized_personas(self, project: Path) -> None:
+        setup.apply_role_pack(project, "studio_core")
+        setup.apply_persona_customization(
+            project, {"tech": {"advocate": "Rust Systems Architect"}}
+        )
+        output = setup.show_status(project)
+        assert "Phase personas: tech" in output
+
 
 # ---------------------------------------------------------------------------
 # TOML formatting
@@ -471,3 +516,118 @@ class TestFormatScopesToml:
         result = setup._format_scopes_toml(scopes)
         assert "output_budget" not in result
         assert "debate_mode" not in result
+
+
+class TestFormatPersonasToml:
+    def test_emits_phase_and_implementer_tables(self) -> None:
+        custs = {
+            "tech": {
+                "advocate": "Arch.",
+                "implementer": {
+                    "title": "Code Gen",
+                    "deliverables": ["A", "B"],
+                },
+            },
+        }
+        result = setup._format_personas_toml(custs)
+        assert "[tech]" in result
+        assert 'advocate = "Arch."' in result
+        assert "[tech.implementer]" in result
+        assert 'title = "Code Gen"' in result
+        assert 'deliverables = ["A", "B"]' in result
+
+    def test_roundtrips_via_tomllib(self) -> None:
+        try:
+            import tomllib
+        except ModuleNotFoundError:
+            import tomli as tomllib  # type: ignore
+        custs = {
+            "tech": {
+                "advocate": 'A "quoted" \\ value',
+                "implementer": {"deliverables": ["x", "y"]},
+            },
+            "market": {"contrarian": "Skeptic"},
+        }
+        parsed = tomllib.loads(setup._format_personas_toml(custs))
+        assert parsed == custs
+
+
+class TestSuggestPersonasFromStack:
+    def test_rust(self, tmp_path: Path) -> None:
+        (tmp_path / "Cargo.toml").write_text("[package]", encoding="utf-8")
+        suggested = setup.suggest_personas_from_stack(tmp_path)
+        assert "Rust" in suggested["tech"]["advocate"]
+
+    def test_js(self, tmp_path: Path) -> None:
+        (tmp_path / "package.json").write_text("{}", encoding="utf-8")
+        suggested = setup.suggest_personas_from_stack(tmp_path)
+        assert "tech" in suggested
+
+    def test_unity_csproj(self, tmp_path: Path) -> None:
+        (tmp_path / "Game.csproj").write_text("<Project/>", encoding="utf-8")
+        suggested = setup.suggest_personas_from_stack(tmp_path)
+        assert "Unity" in suggested["tech"]["advocate"]
+
+    def test_no_stack(self, tmp_path: Path) -> None:
+        assert setup.suggest_personas_from_stack(tmp_path) == {}
+
+
+# ---------------------------------------------------------------------------
+# Apply: persona customization
+# ---------------------------------------------------------------------------
+
+
+class TestApplyPersonaCustomization:
+    def test_writes_and_roundtrips(self, project: Path) -> None:
+        import persona_overrides
+
+        custs = {
+            "tech": {
+                "advocate": "Rust Systems Architect",
+                "contrarian": "Senior Systems SRE",
+                "notes": "Hold AI-TDD discipline.",
+                "implementer": {
+                    "title": "Rust Systems Architect & Code Generator",
+                    "deliverables": ["Crate layout", "ECS schedule", "Impl code"],
+                },
+            },
+            "studio": {"integrator": "Systems Integrator & Ops Lead"},
+        }
+        setup.apply_persona_customization(project, custs)
+
+        path = project / ".studio" / "personas.toml"
+        assert path.exists()
+
+        # Round-trips through the persona_overrides loader (contract cross-check).
+        loaded = persona_overrides.load_persona_overrides(project)
+        assert loaded == custs
+
+        state = setup.load_setup_state(project)
+        assert state["completed_steps"]["persona_customization"] == 2
+        assert set(state["choices"]["persona_customizations"]["tech"]) == {
+            "advocate", "contrarian", "notes", "implementer",
+        }
+
+    def test_escapes_quotes_and_backslashes(self, project: Path) -> None:
+        import persona_overrides
+
+        custs = {"tech": {"advocate": 'Architect with "quotes" and a \\ slash'}}
+        setup.apply_persona_customization(project, custs)
+        loaded = persona_overrides.load_persona_overrides(project)
+        assert loaded == custs
+
+    def test_empty_writes_no_file_but_marks_step(self, project: Path) -> None:
+        setup.apply_persona_customization(project, {})
+        assert not (project / ".studio" / "personas.toml").exists()
+        state = setup.load_setup_state(project)
+        assert state["completed_steps"]["persona_customization"] == 2
+        assert state["choices"]["persona_customizations"] == {}
+
+    def test_invalid_customization_propagates(self, project: Path) -> None:
+        from persona_overrides import PersonaOverrideError
+
+        with pytest.raises(PersonaOverrideError):
+            # integrator is valid only under [studio], not [tech]
+            setup.apply_persona_customization(
+                project, {"tech": {"integrator": "Nope"}}
+            )

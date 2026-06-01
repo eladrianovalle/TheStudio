@@ -24,6 +24,7 @@ from cleanup import (
 )
 from validators.document_validator import DocumentValidator
 from role_overrides import load_role_overrides
+from persona_overrides import load_persona_overrides, apply_persona_overrides
 from run_phase_roles import (
     RoleConfigError,
     RoleDetails,
@@ -606,9 +607,10 @@ def build_instruction_doc(
     scopes_config=None, scopes_allocations: Dict[str, int] | None = None,
     clarity_snapshot=None,
     same_objective: bool | None = None,
+    phase_details: Dict | None = None,
 ) -> str:
     phase = meta["phase"]
-    info = PHASE_DETAILS[phase]
+    info = (phase_details or PHASE_DETAILS)[phase]
     rel_dir = run_dir.as_posix()
     base_section = [
         f"# Studio Instructions — {meta['run_id']}",
@@ -1127,6 +1129,9 @@ def prepare_run(args: argparse.Namespace) -> str:
 
     # Auto-scaffold external repos on first use
     artifact_root = get_artifact_root()
+    effective_details = apply_persona_overrides(
+        PHASE_DETAILS, load_persona_overrides(artifact_root)
+    )
     studio_root = get_studio_root()
     if artifact_root != studio_root:
         _scaffold_external_repo(artifact_root, studio_root)
@@ -1171,6 +1176,7 @@ def prepare_run(args: argparse.Namespace) -> str:
         meta, run_dir, studio_role_details, scopes_config, scopes_allocations,
         clarity_snapshot=project_clarity,
         same_objective=(not objective_changed) if had_prior else None,
+        phase_details=effective_details,
     )
     instructions_path = run_dir / "instructions.md"
     instructions_path.write_text(instructions, encoding="utf-8")

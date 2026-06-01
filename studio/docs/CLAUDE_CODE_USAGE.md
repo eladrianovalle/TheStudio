@@ -327,4 +327,4 @@ In addition to phase runners, these slash commands are available:
 | `/detest` | Audits the repo's test suite against AI-TDD methodology — finds anti-patterns, fixes them. |
 | `/offload` | Analyzes CLAUDE.md for content safe to move to companion docs, with canary token verification. |
 | `/studio-update` | One-step update of installed Studio source and slash commands. |
-| `/studio-setup` | Configure project's Studio installation — role packs, scope tuning, cleanup settings. |
+| `/studio-setup` | Configure project's Studio installation — role packs, role/phase-persona customization (`.studio/personas.toml`), scope tuning, cleanup settings. |

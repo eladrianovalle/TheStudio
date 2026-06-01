@@ -205,6 +205,32 @@ class TestTechPhaseE2E:
         assert meta["iterations_run"] == 1
 
 
+class TestPersonaOverrides:
+    """Verify a project-local .studio/personas.toml retargets phase personas."""
+
+    def test_personas_toml_overrides_tech_advocate(self, studio_root):
+        studio_dir = studio_root / ".studio"
+        studio_dir.mkdir(exist_ok=True)
+        (studio_dir / "personas.toml").write_text(
+            "[tech]\n"
+            'advocate = "Rust Systems Architect — define a performant ECS '
+            'architecture for the Turbo Genesis SDK."\n'
+            "\n"
+            "[tech.implementer]\n"
+            'title = "Rust Systems Architect & Code Generator"\n',
+            encoding="utf-8",
+        )
+
+        run_id = run_phase.prepare_run(
+            make_prepare_args(phase="tech", text="Build multiplayer lobby system")
+        )
+        run_dir = studio_root / "output" / "tech" / run_id
+        instructions = (run_dir / "instructions.md").read_text()
+
+        assert "Rust Systems Architect" in instructions
+        assert "Technical Architect" not in instructions
+
+
 class TestInstructionContent:
     """Test that generated instructions have Claude-Code-relevant content."""
 
