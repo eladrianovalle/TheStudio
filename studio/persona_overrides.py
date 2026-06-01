@@ -186,7 +186,7 @@ def apply_persona_overrides(
     for phase, base_fields in base.items():
         override = overrides.get(phase)
         if not override:
-            merged[phase] = base_fields
+            merged[phase] = copy.deepcopy(base_fields)
             continue
 
         new_fields = copy.deepcopy(base_fields)

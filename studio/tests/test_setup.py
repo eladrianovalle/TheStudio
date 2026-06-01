@@ -551,6 +551,25 @@ class TestFormatPersonasToml:
         parsed = tomllib.loads(setup._format_personas_toml(custs))
         assert parsed == custs
 
+    def test_roundtrips_with_control_chars(self) -> None:
+        """A multi-line/tabbed persona value must still produce parseable TOML.
+
+        Regression: the escaper only handled backslash and quote, so a literal
+        newline/tab wrote a file tomllib refused to parse on the next load.
+        """
+        try:
+            import tomllib
+        except ModuleNotFoundError:
+            import tomli as tomllib  # type: ignore
+        custs = {
+            "tech": {
+                "notes": "Hold AI-TDD discipline.\nAccount for native\tbuild constraints.\r",
+                "implementer": {"deliverables": ["line one\nline two"]},
+            },
+        }
+        parsed = tomllib.loads(setup._format_personas_toml(custs))
+        assert parsed == custs
+
 
 class TestSuggestPersonasFromStack:
     def test_rust(self, tmp_path: Path) -> None:

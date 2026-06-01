@@ -542,7 +542,9 @@ def save_clarity_json(path: Path, snapshot: ClaritySnapshot) -> Path:
 def load_clarity_json(path: Path) -> ClaritySnapshot | None:
     """Load a clarity snapshot from a JSON file.
 
-    Returns ``None`` if the file does not exist.
+    Returns ``None`` if the file does not exist OR cannot be parsed — a
+    corrupt or schema-drifted clarity.json is treated as absent so callers
+    (e.g. ``prepare``) self-heal by rebuilding rather than crashing.
 
     Args:
         path: Path to clarity.json.
@@ -555,12 +557,15 @@ def load_clarity_json(path: Path) -> ClaritySnapshot | None:
     except FileNotFoundError:
         return None
 
-    data = json.loads(raw)
-    context = ClarityContext(
-        scope_label=data["context"]["scope_label"],
-        scope_description=data["context"]["scope_description"],
-    )
-    topics = [_topic_from_dict(d) for d in data.get("topics", [])]
+    try:
+        data = json.loads(raw)
+        context = ClarityContext(
+            scope_label=data["context"]["scope_label"],
+            scope_description=data["context"]["scope_description"],
+        )
+        topics = [_topic_from_dict(d) for d in data.get("topics", [])]
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return None
 
     return ClaritySnapshot(
         topics=topics,

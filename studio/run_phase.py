@@ -691,6 +691,13 @@ def build_instruction_doc(
         )
     elif same_objective:
         prev_run_dir = _find_previous_run_dir(run_dir)
+        # The incoming same_objective may be a project-wide (clarity-based,
+        # cross-phase) decision. Rerun context must be phase-local: only
+        # inject from this phase's previous run if it targeted this objective.
+        if prev_run_dir is not None and not _is_same_objective(
+            prev_run_dir, meta.get("input", "")
+        ):
+            prev_run_dir = None
     else:
         prev_run_dir = None
     if not is_qmode and prev_run_dir and same_objective and detect_rerun_mode(prev_run_dir):
