@@ -2,6 +2,72 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Coding Principles
+
+Behavioral guidelines to reduce common LLM coding mistakes. These apply to ALL work in this repository — not just Studio runs.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+### 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them — don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+### 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+### 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it — don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+### 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
+*Adapted from [Andrej Karpathy's coding principles](https://github.com/forrestchang/andrej-karpathy-skills).*
+
 ## What This Is
 
 TheGameStudio is an **instruction generator** for structured advocate/contrarian debates in game development workflows. It produces run directories with instructions that an AI assistant (Claude Code, Windsurf/Cascade) executes, then packages results as versioned artifacts. There is no AI runtime — all intelligence lives in the assistant's execution.
@@ -101,7 +167,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 - **`decision_points.py`** — Parses and formats inline decision points (P0/P1/P2 blockquotes) from agent output. Extracts decisions from completed runs into a consolidated log.
 - **`clarity.py`** — Per-topic Clarity Score tracking. Computes confidence from answered decisions, controls agent question density, persists to `clarity.json`. CLI: `show-clarity`, `set-clarity`, `recompute-clarity`.
 - **`verdict.py`** — Extracts APPROVED/REJECTED/UNKNOWN verdict from text.
-- **`install.py`** — Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project.
+- **`install.py`** — Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project. Also injects coding principles into the target's `CLAUDE.md` via sentinel markers for safe updates.
 - **`offload.py`** — CLAUDE.md analyzer: classifies sections, detects embedded constraints, scores pointer strength, generates offload reports and manages canary tokens.
 - **`setup.py`** — Setup wizard: project configuration after install. Tracks setup state in `.studio/SETUP.json`, generates role overrides, scopes, and cleanup config. Supports incremental re-configuration when new features are added.
 - **`validators/`** — `DocumentValidator` (including `validate_question_mode()`) and `CodeValidator` for post-run quality checks.
@@ -115,6 +181,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 - **`.studio/scopes.toml`** — Scope-based iteration budgets (auto-loaded if present).
 - **`.studio/validation.toml`** — Validation configuration.
 - **`.studio/roles/*.json`** — Project-local role overrides. Shallow-merge with manifest roles (override keys replace base, unspecified keys inherit).
+- **`.studio/personas.toml`** — Project-local single-phase persona overrides (market/design/tech/studio advocate, contrarian, notes, implementer, integrator). Per-phase shallow merge over the shipped `PHASE_DETAILS` defaults; loaded via `persona_overrides.py`, authored by the setup wizard.
 
 ### Artifact structure
 
