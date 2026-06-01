@@ -94,7 +94,10 @@ Contrarians must always end with `VERDICT: APPROVED` or `VERDICT: REJECTED`. Fin
 2. **Adjust role packs (`role_packs/*.json`)**  
    - Create additional packs (e.g., `liveops_hotfix.json` or `monetization_review.json`).  
    - Operators select them via `--role-pack` and override attendance with `--roles` tokens (typically additions like `+product +engineering +qa`; use `-role` only when you need to remove one).
-3. **Document changes**  
+3. **Override single-phase personas (`.studio/personas.toml`)**  
+   - The `market`/`design`/`tech`/`studio` advocate, contrarian, notes, implementer, and (studio-only) integrator personas ship as stack-neutral defaults in `PHASE_DETAILS`.
+   - A project tailors them per-phase via `.studio/personas.toml` — `persona_overrides.py` shallow-merges each table over the defaults (e.g. swap the tech advocate's default "Technical Architect" for a "Rust Systems Architect"). Author it interactively with `/studio-setup` (which can also sniff the stack and suggest one).
+4. **Document changes**  
    - Update README, Interaction Guide, API, and Bridge Template whenever roles or packs shift.  
    - Mention the new pack in downstream bridge docs so the assistant loads it explicitly.
 

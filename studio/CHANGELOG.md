@@ -2,6 +2,18 @@
 
 All notable changes to Studio will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Project-overridable single-phase personas via `.studio/personas.toml` (`persona_overrides.py`) — per-phase shallow-merge over the shipped `PHASE_DETAILS` defaults; setup wizard `persona_customization` step (`CURRENT_SETUP_VERSION` 2) with stack-sniffing suggestions.
+- 14 Python modules in `studio/` (added `persona_overrides.py`); 517 tests.
+
+### Fixed
+- Stack-neutral phase personas — removed hardcoded "Three.js / WebGL" and "Steam hook" wording from `PHASE_DETAILS`.
+- Phase-independent clarity reset (compares against the objective stored in the project-level `clarity.json`); corrupt `clarity.json` is treated as absent and self-heals instead of crashing `prepare`.
+- Rerun context injection gated on a phase-local objective match.
+- `persona_overrides.py` added to cross-repo install `SOURCE_FILES`.
+
 ## [3.1.0] - 2026-03-22
 
 ### Added — Agent Metrics Tracking

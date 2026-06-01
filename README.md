@@ -300,6 +300,7 @@ studio/
   run_phase.py              # CLI entrypoint: prepare, finalize, validate, cleanup, decision, clarity, metrics, install, setup, offload
   run_phase_roles.py        # Role system: manifest, packs, dependencies, file naming
   role_overrides.py         # Project-local role customization (.studio/roles/*.json)
+  persona_overrides.py      # Project-local phase persona overrides (.studio/personas.toml)
   scopes.py                 # Three-tier scope allocation (alignment/depth/polish)
   decision_points.py        # Inline decision point parsing, formatting, persistence
   clarity.py                # Per-topic Clarity Score tracking and question density control
@@ -316,7 +317,7 @@ studio/
   config/scopes.toml         # Default scope configuration
   config/studio_settings.toml # Cleanup settings
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 483 tests (pytest)
+  tests/                    # 517 tests (pytest)
 ```
 
 ---
@@ -327,7 +328,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-483 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run context reset, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, cross-repo artifact routing, install/update workflows, agent metrics tracking, CLAUDE.md offload analysis, and setup wizard configuration.
+517 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows, agent metrics tracking, CLAUDE.md offload analysis, and setup wizard configuration.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 

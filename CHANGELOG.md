@@ -7,6 +7,7 @@ All notable changes to TheGameStudio are documented here.
 ## [Unreleased]
 
 ### Added
+- Project-overridable single-phase personas via `.studio/personas.toml` — `persona_overrides.py` per-phase shallow-merges advocate/contrarian/notes/implementer/integrator overrides over the shipped `PHASE_DETAILS` defaults; setup wizard gains a `persona_customization` step (`CURRENT_SETUP_VERSION` 2) that authors the file and can sniff the project stack (`Cargo.toml`/`package.json`/`*.csproj`) to suggest a fitting persona
 - `/offload` slash command — analyzes CLAUDE.md for content safe to move to companion docs, with section classification, pointer strength scoring, canary token verification, and reconciliation against existing docs (`offload.py`, 23 tests)
 - `/detest` slash command — audits test suites against AI-TDD methodology, finds anti-patterns, fixes them
 - `/unstale` Agent 5 — project tracking audit (GitHub Issues + local tracking files) with permission-gated destructive actions
@@ -14,6 +15,10 @@ All notable changes to TheGameStudio are documented here.
 - `/studio-setup` slash command + `setup` CLI subcommand — post-install wizard for role pack selection, role customization, scope tuning, and cleanup settings with incremental versioned steps (`setup.py`, 43 tests)
 
 ### Fixed
+- Stack-neutral phase personas — removed the hardcoded "Three.js Technical Architect / WebGL" tech persona and "Steam hook" market wording from `PHASE_DETAILS` so runs in any codebase (Rust, Unity, etc.) get a fitting default
+- Clarity reset is now phase-independent — the fresh-run check compares the current objective against the one stored in the project-level `clarity.json`, so a prior objective under one phase no longer leaks stale topics into a new objective under another phase. A corrupt/unparseable `clarity.json` is now treated as absent (self-heals) instead of crashing `prepare`
+- Rerun context injection is gated on a phase-local objective match, so a project-wide same-objective decision can't pull rejection feedback from an unrelated previous run
+- `persona_overrides.py` added to cross-repo install `SOURCE_FILES` (was missing — would `ImportError` on target installs)
 - `inject-context` now resolves custom scope names via canonical positional aliases (alignment→0, depth→1, polish→2)
 - `prepare` now resets stale clarity and skips rerun context when the new run has a different objective than the previous one — prevents orchestrator agents from inheriting irrelevant topic scores and rejection feedback
 - `_resolve_scopes` now falls back to shipped `config/scopes.toml` when no `.studio/scopes.toml` override exists — scoped runs work out of the box

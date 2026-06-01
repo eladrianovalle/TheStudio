@@ -31,7 +31,7 @@ Supported commands:
 | `init` | Installs Studio into a target project directory. |
 | `check-install` | Checks if installed Studio is up to date. |
 | `update` | Updates installed Studio from source. |
-| `setup` | Configure Studio for a project — role pack selection, scope tuning, cleanup settings. Supports `--status`, `--defaults`, `--answers`, `--role-pack`. |
+| `setup` | Configure Studio for a project — role pack selection, role + phase-persona customization (`.studio/personas.toml`), scope tuning, cleanup settings. Supports `--status`, `--defaults`, `--answers`, `--role-pack`. |
 
 ---
 

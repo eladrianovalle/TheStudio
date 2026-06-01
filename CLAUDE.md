@@ -160,6 +160,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 - **`run_phase.py`** — Primary entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, decision, clarity, metrics, install, setup, and offload subcommands.
 - **`run_phase_roles.py`** — Role system: loads `studio.manifest.json`, resolves role packs, applies project-local overrides, builds per-role file naming (`advocate--<role>--NN.md`).
 - **`role_overrides.py`** — Project-local role customization: loads `.studio/roles/*.json` overlays, validates structure, shallow-merges with manifest roles.
+- **`persona_overrides.py`** — Project-local single-phase persona overrides: loads `.studio/personas.toml`, validates structure, per-phase shallow-merges over the shipped `PHASE_DETAILS` defaults (advocate/contrarian/notes/implementer/integrator).
 - **`cleanup.py`** — TTL-based (30 days) and budget-based (900MB) run artifact cleanup, plus loose file removal for legacy artifacts outside run directories.
 - **`scopes.py`** — Three-tier scope system (alignment / depth / polish) with output budgets and debate modes (`all_roles` vs `per_role`).
 - **`rerun.py`** — Detects rejection context from prior runs and generates rerun instructions.
