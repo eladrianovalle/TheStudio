@@ -12,7 +12,7 @@ The non-studio phases each follow a single Advocate ↔ Contrarian loop, then ha
 
 | Persona | Description |
 | --- | --- |
-| Advocate – Market Growth Strategist | Steel-man the idea into a high-virality Steam hook. Focus on audience segments, unique hooks, and low-cost launch tactics. |
+| Advocate – Market Growth Strategist | Steel-man the idea into a high-virality launch hook for its target platform. Focus on audience segments, unique hooks, and low-cost launch tactics. |
 | Contrarian – The Reality Check | Attack market size, competition, cost realism, and virality claims. Must end with `VERDICT: APPROVED/REJECTED`. |
 | Implementer – Market Research Analyst | After approval, produces audience profiles, competitor tables, UVP, GTM plan, and KPI list. |
 
@@ -28,7 +28,7 @@ The non-studio phases each follow a single Advocate ↔ Contrarian loop, then ha
 
 | Persona | Description |
 | --- | --- |
-| Advocate – Three.js Technical Architect | Define performant architecture, stack, and modules for WebGL delivery. |
+| Advocate – Technical Architect | Define a performant, idiomatic architecture, stack, and modules for the project's stack. |
 | Contrarian – Senior SRE | Flag performance, compatibility, ops toil, and reliability concerns (with VERDICT). |
 | Implementer – Technical Architect & Code Generator | Produces architecture description, stack, module plan, data-structure notes, and a starter code fragment. |
 

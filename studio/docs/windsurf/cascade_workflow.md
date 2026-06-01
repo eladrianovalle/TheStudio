@@ -22,7 +22,7 @@ Examples:
 
 ### Market Phase
 **Advocate**: Market Growth Strategist
-- Goal: Steel-man the idea into a high-virality Steam hook
+- Goal: Steel-man the idea into a high-virality launch hook for its target platform
 - Backstory: Specializes in indie trends and "screenshot-ability"
 
 **Contrarian**: The Reality Check
@@ -47,8 +47,8 @@ Examples:
 - Triggers after APPROVED verdict
 
 ### Tech Phase
-**Advocate**: Three.js Technical Architect
-- Goal: Define performant WebGL architecture
+**Advocate**: Technical Architect
+- Goal: Define a performant, idiomatic architecture for the project's stack
 - Backstory: Wizard of ECS and shader optimization
 
 **Contrarian**: Senior SRE
