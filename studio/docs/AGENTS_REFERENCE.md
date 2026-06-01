@@ -34,7 +34,7 @@ The non-studio phases each follow a single Advocate ↔ Contrarian loop, then ha
 
 ### Studio Phase (Role Packs)
 
-Studio phase now hosts as many Advocate↔Contrarian duos as needed. The default `studio_core` pack includes:
+Studio phase now hosts as many Advocate↔Contrarian duos as needed. The full role menu (all 13 manifest roles) is below; the default `studio_core` pack uses the first seven — marketing, product, design, art, engineering, test_engineer, qa — and you add others with `--roles +<role>`:
 
 | Role Key | Title | Advocate Focus | Contrarian Focus | Deliverables (examples) |
 | --- | --- | --- | --- | --- |
@@ -49,6 +49,8 @@ Studio phase now hosts as many Advocate↔Contrarian duos as needed. The default
 | web_test_engineer | Staff Test Engineer — Web & Static Export | Scenario-first testing for static export, route generation | False-confidence tests, dev-only passes, missing content verification | Static export test spec, route accessibility plan, SEO checklist |
 | web_qa | Release QA Lead — Static Site Deployment | GitHub Pages validation, route resolution, asset loading | Missing routes, broken asset paths, cache invalidation gaps | Deployment smoke test matrix, export completeness checklist |
 | ai_engineer | Staff AI Engineer — Prompt Architecture & Agent Optimization | Prompt structures, context management, token efficiency | Fragile prompt assumptions, context window blind spots, silent failures | Prompt architecture analysis, context efficiency, failure mode catalog |
+| ml | ML Systems Lead | AI critique engine quality + cost control | Model reliability, cost predictability, quality validation | Critique pipeline outline, model choices + fallbacks, benchmark/calibration plan |
+| pmm | Product Marketing Lead | Product narrative from MVP to launch | Launch realism, messaging integrity | Positioning brief, launch plan, readiness checklist |
 
 **Role dependencies:** The manifest declares co-requirements — `engineering → test_engineer`. When engineering is present, test_engineer is automatically injected after it. This ensures test integrity is always debated when technical work is proposed. Override with `-test_engineer` only when explicitly unwanted.
 
