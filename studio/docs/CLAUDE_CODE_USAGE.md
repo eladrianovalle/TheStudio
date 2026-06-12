@@ -323,8 +323,8 @@ In addition to phase runners, these slash commands are available:
 
 | Command | Purpose |
 |---------|---------|
-| `/unstale` | Comprehensive staleness audit — aligns all docs, code comments, memory, and project tracking to current reality. |
+| `/unstale` | Comprehensive staleness audit — aligns all docs, code comments, memory, and project tracking to current reality. Stack-agnostic: self-detects Rust/Unity/Node/Python/Go from marker files, or reads `.studio/unstale.toml` to pin exact snapshot commands and audit globs. |
 | `/detest` | Audits the repo's test suite against AI-TDD methodology — finds anti-patterns, fixes them. |
 | `/offload` | Analyzes CLAUDE.md for content safe to move to companion docs, with canary token verification. |
 | `/studio-update` | One-step update of installed Studio source and slash commands. |
-| `/studio-setup` | Configure project's Studio installation — role packs, role/phase-persona customization (`.studio/personas.toml`), scope tuning, cleanup settings. |
+| `/studio-setup` | Configure project's Studio installation — role packs, role/phase-persona customization (`.studio/personas.toml`), unstale audit config (`.studio/unstale.toml`), scope tuning, cleanup settings. |
