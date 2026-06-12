@@ -183,6 +183,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 - **`.studio/validation.toml`** — Validation configuration.
 - **`.studio/roles/*.json`** — Project-local role overrides. Shallow-merge with manifest roles (override keys replace base, unspecified keys inherit).
 - **`.studio/personas.toml`** — Project-local single-phase persona overrides (market/design/tech/studio advocate, contrarian, notes, implementer, integrator). Per-phase shallow merge over the shipped `PHASE_DETAILS` defaults; loaded via `persona_overrides.py`, authored by the setup wizard.
+- **`.studio/unstale.toml`** — Optional per-repo override for the `/unstale` staleness audit: `[snapshot]` commands (`test_count`, `module_inventory`, `cli_help`) and `[audit]` globs (`doc_globs`, `source_globs`, `cross_refs`). When absent, `/unstale` self-detects the stack (Rust/Unity/Node/Python/Go) from marker files. Read directly by the `/unstale` command, not Python code.
 
 ### Artifact structure
 

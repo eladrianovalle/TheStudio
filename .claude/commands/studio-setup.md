@@ -132,7 +132,31 @@ If yes, for each phase the user wants to customize (`market`, `design`, `tech`, 
 python ".studio/source/run_phase.py" setup --target . --answers '<json with persona_customizations>'
 ```
 
-### Step 6: Scope Tuning
+### Step 6: Unstale Audit Configuration (Optional)
+
+The `/unstale` staleness audit self-detects your stack (Rust / Unity / Node / Python / Go) from marker files at run time, so this step is optional. Pin exact commands and file globs only when detection isn't precise enough — it writes `.studio/unstale.toml`.
+
+Ask: **"Want to pin the `/unstale` audit's commands and file globs for this repo? Most users skip this — `/unstale` auto-detects the stack."**
+
+If the user says no/skip, mark the step complete (no file written, self-detection stands):
+
+```bash
+python ".studio/source/run_phase.py" setup --target . --answers '{"unstale_config": {}}'
+```
+
+If yes, sniff the stack to get a starting point and show it:
+
+```bash
+python -c "import sys; sys.path.insert(0, '.studio/source'); import json, setup; print(json.dumps(setup.suggest_unstale_from_stack('.'), indent=2))"
+```
+
+Present the suggested `snapshot` commands and `audit` globs. Let the user edit any of: `snapshot.test_count`, `snapshot.module_inventory`, `snapshot.cli_help`, `audit.doc_globs`, `audit.source_globs`, `audit.cross_refs`. If the sniff returns `{}` (unknown stack), ask the user for the test command and source globs directly, or let them skip. Then apply:
+
+```bash
+python ".studio/source/run_phase.py" setup --target . --answers '<json with unstale_config>'
+```
+
+### Step 7: Scope Tuning
 
 Show the default scope configuration:
 
@@ -158,7 +182,7 @@ If yes, walk through each scope asking about:
 
 Build the scopes config and apply via answers JSON.
 
-### Step 7: Cleanup Settings
+### Step 8: Cleanup Settings
 
 Show the defaults:
 
@@ -178,7 +202,7 @@ python ".studio/source/run_phase.py" setup --target . --answers '{"cleanup": {"t
 
 If yes, ask for TTL (days) and size limit (MB), then apply.
 
-### Step 8: Summary
+### Step 9: Summary
 
 Show the final configuration:
 
