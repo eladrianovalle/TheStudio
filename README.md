@@ -1,4 +1,4 @@
-# The Game Studio
+# Studio
 
 Studio is an **instruction generator** for structured advocate/contrarian debates. It prepares run directories with instructions that an AI assistant (Claude Code, Windsurf/Cascade, or any capable agent) executes, then packages the results as versioned artifacts.
 
@@ -317,7 +317,7 @@ studio/
   config/scopes.toml         # Default scope configuration
   config/studio_settings.toml # Cleanup settings
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 517 tests (pytest)
+  tests/                    # 539 tests (pytest)
 ```
 
 ---
@@ -328,7 +328,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-517 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows, agent metrics tracking, CLAUDE.md offload analysis, and setup wizard configuration.
+539 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows, CLAUDE.md principles injection, agent metrics tracking, CLAUDE.md offload analysis, unstale audit configuration, and setup wizard configuration.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 

@@ -14,6 +14,8 @@ from install import (
     install_studio,
     check_studio,
     update_studio,
+    _SENTINEL_BEGIN,
+    _SENTINEL_END,
 )
 
 
@@ -193,6 +195,18 @@ class TestUpdateStudio:
         assert content != "# tampered"
 
 
+    def test_update_from_installed_copy(self, target_dir, studio_dir):
+        """Update works when studio_dir points to the installed .studio/source/ (self-update)."""
+        install_studio(target_dir, studio_dir)
+
+        # Simulate running update from the installed copy itself
+        installed_source = target_dir / ".studio" / "source"
+        result = update_studio(target_dir, installed_source)
+        # Should succeed (no SameFileError) and report no changes
+        assert result["updated"] == 0
+        assert result["added"] == 0
+
+
 class TestSlashCommandsUseDirectPaths:
     """Verify slash commands use .studio/source/ paths directly (no rewriting needed)."""
 
@@ -211,3 +225,74 @@ class TestSlashCommandsUseDirectPaths:
         run_phase_cmd = commands_dir / "run-phase.md"
         content = run_phase_cmd.read_text(encoding="utf-8")
         assert ".studio/source/run_phase.py" in content
+
+
+class TestClaudeMdInjection:
+    """Tests for coding principles injection into target CLAUDE.md."""
+
+    def test_creates_claude_md_when_missing(self, target_dir, studio_dir):
+        """Install creates CLAUDE.md with principles when none exists."""
+        install_studio(target_dir, studio_dir)
+        claude_md = target_dir / "CLAUDE.md"
+        assert claude_md.is_file()
+        content = claude_md.read_text()
+        assert _SENTINEL_BEGIN in content
+        assert _SENTINEL_END in content
+        assert "Think Before Coding" in content
+
+    def test_injects_into_existing_claude_md(self, target_dir, studio_dir):
+        """Install injects principles into existing CLAUDE.md without clobbering."""
+        claude_md = target_dir / "CLAUDE.md"
+        claude_md.write_text("# My Game\n\nThis is my game project.\n", encoding="utf-8")
+
+        install_studio(target_dir, studio_dir)
+
+        content = claude_md.read_text()
+        assert "# My Game" in content
+        assert "This is my game project." in content
+        assert _SENTINEL_BEGIN in content
+        assert "Think Before Coding" in content
+
+    def test_principles_inserted_after_heading(self, target_dir, studio_dir):
+        """Principles block appears after the first heading, not before it."""
+        claude_md = target_dir / "CLAUDE.md"
+        claude_md.write_text("# My Game\n\nProject description.\n", encoding="utf-8")
+
+        install_studio(target_dir, studio_dir)
+
+        content = claude_md.read_text()
+        heading_pos = content.index("# My Game")
+        sentinel_pos = content.index(_SENTINEL_BEGIN)
+        assert sentinel_pos > heading_pos
+
+    def test_update_replaces_sentinel_block(self, target_dir, studio_dir):
+        """Re-install replaces the sentinel block in place, not duplicating."""
+        claude_md = target_dir / "CLAUDE.md"
+        claude_md.write_text("# My Game\n\nProject description.\n", encoding="utf-8")
+
+        install_studio(target_dir, studio_dir)
+        install_studio(target_dir, studio_dir)
+
+        content = claude_md.read_text()
+        assert content.count(_SENTINEL_BEGIN) == 1
+        assert content.count(_SENTINEL_END) == 1
+
+    def test_preserves_content_around_sentinels(self, target_dir, studio_dir):
+        """Content before and after the sentinel block is preserved on update."""
+        claude_md = target_dir / "CLAUDE.md"
+        claude_md.write_text(
+            "# My Game\n\nProject description.\n\n## Architecture\n\nSome details.\n",
+            encoding="utf-8",
+        )
+
+        install_studio(target_dir, studio_dir)
+
+        content = claude_md.read_text()
+        assert "Project description." in content
+        assert "## Architecture" in content
+        assert "Some details." in content
+
+    def test_copies_principles_source_file(self, target_dir, studio_dir):
+        """CODING_PRINCIPLES.md is also copied into .studio/source/docs/."""
+        install_studio(target_dir, studio_dir)
+        assert (target_dir / ".studio" / "source" / "docs" / "CODING_PRINCIPLES.md").is_file()
