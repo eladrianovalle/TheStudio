@@ -13,7 +13,7 @@ From any project, ask Cascade:
 Examples:
 - "Run Studio market phase on: A bite-sized puzzle roguelike for web"
 - "Run Studio design phase on: Cozy farming sim with time travel mechanics"
-- "Run Studio tech phase on: WebGL-based 3D stealth horror game"
+- "Run Studio tech phase on: Real-time multiplayer lobby for a co-op survival game"
 - "Run Studio studio phase on: Critique the Studio tool and identify improvements"
 
 ---
@@ -22,7 +22,7 @@ Examples:
 
 ### Market Phase
 **Advocate**: Market Growth Strategist
-- Goal: Steel-man the idea into a high-virality Steam hook
+- Goal: Steel-man the idea into a high-virality launch hook for its target platform
 - Backstory: Specializes in indie trends and "screenshot-ability"
 
 **Contrarian**: The Reality Check
@@ -47,8 +47,8 @@ Examples:
 - Triggers after APPROVED verdict
 
 ### Tech Phase
-**Advocate**: Three.js Technical Architect
-- Goal: Define performant WebGL architecture
+**Advocate**: Technical Architect
+- Goal: Define a performant, idiomatic architecture for the project's stack
 - Backstory: Wizard of ECS and shader optimization
 
 **Contrarian**: Senior SRE

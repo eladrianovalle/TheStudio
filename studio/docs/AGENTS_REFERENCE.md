@@ -12,7 +12,7 @@ The non-studio phases each follow a single Advocate ↔ Contrarian loop, then ha
 
 | Persona | Description |
 | --- | --- |
-| Advocate – Market Growth Strategist | Steel-man the idea into a high-virality Steam hook. Focus on audience segments, unique hooks, and low-cost launch tactics. |
+| Advocate – Market Growth Strategist | Steel-man the idea into a high-virality launch hook for its target platform. Focus on audience segments, unique hooks, and low-cost launch tactics. |
 | Contrarian – The Reality Check | Attack market size, competition, cost realism, and virality claims. Must end with `VERDICT: APPROVED/REJECTED`. |
 | Implementer – Market Research Analyst | After approval, produces audience profiles, competitor tables, UVP, GTM plan, and KPI list. |
 
@@ -28,13 +28,13 @@ The non-studio phases each follow a single Advocate ↔ Contrarian loop, then ha
 
 | Persona | Description |
 | --- | --- |
-| Advocate – Three.js Technical Architect | Define performant architecture, stack, and modules for WebGL delivery. |
+| Advocate – Technical Architect | Define a performant, idiomatic architecture, stack, and modules for the project's stack. |
 | Contrarian – Senior SRE | Flag performance, compatibility, ops toil, and reliability concerns (with VERDICT). |
 | Implementer – Technical Architect & Code Generator | Produces architecture description, stack, module plan, data-structure notes, and a starter code fragment. |
 
 ### Studio Phase (Role Packs)
 
-Studio phase now hosts as many Advocate↔Contrarian duos as needed. The default `studio_core` pack includes:
+Studio phase now hosts as many Advocate↔Contrarian duos as needed. The full role menu (all 13 manifest roles) is below; the default `studio_core` pack uses the first seven — marketing, product, design, art, engineering, test_engineer, qa — and you add others with `--roles +<role>`:
 
 | Role Key | Title | Advocate Focus | Contrarian Focus | Deliverables (examples) |
 | --- | --- | --- | --- | --- |
@@ -49,6 +49,8 @@ Studio phase now hosts as many Advocate↔Contrarian duos as needed. The default
 | web_test_engineer | Staff Test Engineer — Web & Static Export | Scenario-first testing for static export, route generation | False-confidence tests, dev-only passes, missing content verification | Static export test spec, route accessibility plan, SEO checklist |
 | web_qa | Release QA Lead — Static Site Deployment | GitHub Pages validation, route resolution, asset loading | Missing routes, broken asset paths, cache invalidation gaps | Deployment smoke test matrix, export completeness checklist |
 | ai_engineer | Staff AI Engineer — Prompt Architecture & Agent Optimization | Prompt structures, context management, token efficiency | Fragile prompt assumptions, context window blind spots, silent failures | Prompt architecture analysis, context efficiency, failure mode catalog |
+| ml | ML Systems Lead | AI critique engine quality + cost control | Model reliability, cost predictability, quality validation | Critique pipeline outline, model choices + fallbacks, benchmark/calibration plan |
+| pmm | Product Marketing Lead | Product narrative from MVP to launch | Launch realism, messaging integrity | Positioning brief, launch plan, readiness checklist |
 
 **Role dependencies:** The manifest declares co-requirements — `engineering → test_engineer`. When engineering is present, test_engineer is automatically injected after it. This ensures test integrity is always debated when technical work is proposed. Override with `-test_engineer` only when explicitly unwanted.
 
@@ -94,7 +96,10 @@ Contrarians must always end with `VERDICT: APPROVED` or `VERDICT: REJECTED`. Fin
 2. **Adjust role packs (`role_packs/*.json`)**  
    - Create additional packs (e.g., `liveops_hotfix.json` or `monetization_review.json`).  
    - Operators select them via `--role-pack` and override attendance with `--roles` tokens (typically additions like `+product +engineering +qa`; use `-role` only when you need to remove one).
-3. **Document changes**  
+3. **Override single-phase personas (`.studio/personas.toml`)**  
+   - The `market`/`design`/`tech`/`studio` advocate, contrarian, notes, implementer, and (studio-only) integrator personas ship as stack-neutral defaults in `PHASE_DETAILS`.
+   - A project tailors them per-phase via `.studio/personas.toml` — `persona_overrides.py` shallow-merges each table over the defaults (e.g. swap the tech advocate's default "Technical Architect" for a "Rust Systems Architect"). Author it interactively with `/studio-setup` (which can also sniff the stack and suggest one).
+4. **Document changes**  
    - Update README, Interaction Guide, API, and Bridge Template whenever roles or packs shift.  
    - Mention the new pack in downstream bridge docs so the assistant loads it explicitly.
 

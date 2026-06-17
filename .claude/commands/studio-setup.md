@@ -1,6 +1,6 @@
 # Studio Setup Wizard
 
-Configure this project's Studio installation — role packs, scope tuning, cleanup settings.
+Configure this project's Studio installation — role packs, role/phase-persona customization, scope tuning, cleanup settings.
 
 ## Arguments
 
@@ -107,7 +107,56 @@ If yes, for each role the user wants to customize:
 python ".studio/source/run_phase.py" setup --target . --answers '<json with role_customizations>'
 ```
 
-### Step 5: Scope Tuning
+### Step 5: Phase Persona Customization (Optional)
+
+The single-phase advocate / contrarian / implementer / integrator personas ship as
+stack-neutral defaults (e.g. tech advocate = "Technical Architect"). A project can
+tailor them per phase — writing `.studio/personas.toml` — so a Rust repo gets a
+"Rust Systems Architect" instead.
+
+Ask: **"Do you want to tailor the phase personas to your tech stack? Most users skip this — the neutral defaults are fine."**
+
+If the user says no/skip, apply empty customization to mark the step complete (no file written, neutral defaults stand):
+
+```bash
+python ".studio/source/run_phase.py" setup --target . --answers '{"persona_customizations": {}}'
+```
+
+If yes, for each phase the user wants to customize (`market`, `design`, `tech`, `studio`):
+
+1. Valid string keys per phase: `advocate`, `contrarian`, `notes`. `integrator` is allowed **only** under `studio`. A nested `implementer` table (keys `title`, `deliverables`) is allowed for `market`/`design`/`tech` only — not `studio`.
+
+2. Build a JSON answers file with the customizations and apply:
+
+```bash
+python ".studio/source/run_phase.py" setup --target . --answers '<json with persona_customizations>'
+```
+
+### Step 6: Unstale Audit Configuration (Optional)
+
+The `/unstale` staleness audit self-detects your stack (Rust / Unity / Node / Python / Go) from marker files at run time, so this step is optional. Pin exact commands and file globs only when detection isn't precise enough — it writes `.studio/unstale.toml`.
+
+Ask: **"Want to pin the `/unstale` audit's commands and file globs for this repo? Most users skip this — `/unstale` auto-detects the stack."**
+
+If the user says no/skip, mark the step complete (no file written, self-detection stands):
+
+```bash
+python ".studio/source/run_phase.py" setup --target . --answers '{"unstale_config": {}}'
+```
+
+If yes, sniff the stack to get a starting point and show it:
+
+```bash
+python -c "import sys; sys.path.insert(0, '.studio/source'); import json, setup; print(json.dumps(setup.suggest_unstale_from_stack('.'), indent=2))"
+```
+
+Present the suggested `snapshot` commands and `audit` globs. Let the user edit any of: `snapshot.test_count`, `snapshot.module_inventory`, `snapshot.cli_help`, `audit.doc_globs`, `audit.source_globs`, `audit.cross_refs`. If the sniff returns `{}` (unknown stack), ask the user for the test command and source globs directly, or let them skip. Then apply:
+
+```bash
+python ".studio/source/run_phase.py" setup --target . --answers '<json with unstale_config>'
+```
+
+### Step 7: Scope Tuning
 
 Show the default scope configuration:
 
@@ -133,7 +182,7 @@ If yes, walk through each scope asking about:
 
 Build the scopes config and apply via answers JSON.
 
-### Step 6: Cleanup Settings
+### Step 8: Cleanup Settings
 
 Show the defaults:
 
@@ -153,7 +202,7 @@ python ".studio/source/run_phase.py" setup --target . --answers '{"cleanup": {"t
 
 If yes, ask for TTL (days) and size limit (MB), then apply.
 
-### Step 7: Summary
+### Step 9: Summary
 
 Show the final configuration:
 

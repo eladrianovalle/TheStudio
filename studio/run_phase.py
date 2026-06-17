@@ -24,6 +24,7 @@ from cleanup import (
 )
 from validators.document_validator import DocumentValidator
 from role_overrides import load_role_overrides
+from persona_overrides import load_persona_overrides, apply_persona_overrides
 from run_phase_roles import (
     RoleConfigError,
     RoleDetails,
@@ -122,7 +123,7 @@ def get_storage_stats() -> dict:
 
 PHASE_DETAILS = {
     "market": {
-        "advocate": "Market Growth Strategist — steel-man the idea into a high-virality Steam hook.",
+        "advocate": "Market Growth Strategist — steel-man the idea into a high-virality launch hook for its target platform.",
         "contrarian": "The Reality Check — hunt for fatal market flaws and issue VERDICT: APPROVED/REJECTED.",
         "implementer": {
             "title": "Market Research Analyst",
@@ -152,7 +153,7 @@ PHASE_DETAILS = {
         "notes": "Keep scope laser-focused on what can be shipped in weeks, not months.",
     },
     "tech": {
-        "advocate": "Three.js Technical Architect — define performant WebGL architecture.",
+        "advocate": "Technical Architect — define a performant, idiomatic architecture for the project's stack.",
         "contrarian": "Senior SRE — flag performance, compatibility, and ops risks.",
         "implementer": {
             "title": "Technical Architect & Code Generator",
@@ -167,7 +168,7 @@ PHASE_DETAILS = {
                 "Instructions to run tests and verify the implementation.",
             ],
         },
-        "notes": "Test-driven discipline: Define testable requirements, write tests first, then implement to pass tests. Don't forget mobile/browser constraints and ops toil when approving.",
+        "notes": "Test-driven discipline: Define testable requirements, write tests first, then implement to pass tests. Account for the target platform's runtime, performance, and ops constraints when approving.",
     },
     "studio": {
         "advocate": "Studio Workflow Producer — articulate the inspiring yet actionable vision.",
@@ -401,6 +402,32 @@ def _is_same_objective(prev_run_dir: Path, current_input: str) -> bool:
     return bool(normed_prev and normed_cur and normed_prev == normed_cur)
 
 
+def _norm_objective(s: str) -> str:
+    return " ".join(s.strip().lower().split())
+
+
+def _objective_changed(
+    project_clarity: "clarity.ClaritySnapshot | None",
+    prev_run_dir: Path | None,
+    current_input: str,
+) -> bool:
+    """Decide whether the current objective differs from the prior one.
+
+    Prefers the objective stored in the project-level clarity.json
+    (``context.scope_description``), which is shared across phases — so a
+    prior run under a different phase still counts. Falls back to the
+    same-phase previous run's input when no clarity snapshot exists.
+    Returns False when there is no prior context to compare against.
+    """
+    normed_cur = _norm_objective(current_input)
+    if project_clarity is not None:
+        prev = _norm_objective(project_clarity.context.scope_description)
+        return bool(prev and normed_cur and prev != normed_cur)
+    if prev_run_dir is not None:
+        return not _is_same_objective(prev_run_dir, current_input)
+    return False
+
+
 def _ensure_summary_path(meta: Dict, run_dir: Path) -> Path:
     summary_path = meta.get("summary_path")
     if summary_path:
@@ -580,9 +607,10 @@ def build_instruction_doc(
     scopes_config=None, scopes_allocations: Dict[str, int] | None = None,
     clarity_snapshot=None,
     same_objective: bool | None = None,
+    phase_details: Dict | None = None,
 ) -> str:
     phase = meta["phase"]
-    info = PHASE_DETAILS[phase]
+    info = (phase_details or PHASE_DETAILS)[phase]
     rel_dir = run_dir.as_posix()
     base_section = [
         f"# Studio Instructions — {meta['run_id']}",
@@ -663,6 +691,13 @@ def build_instruction_doc(
         )
     elif same_objective:
         prev_run_dir = _find_previous_run_dir(run_dir)
+        # The incoming same_objective may be a project-wide (clarity-based,
+        # cross-phase) decision. Rerun context must be phase-local: only
+        # inject from this phase's previous run if it targeted this objective.
+        if prev_run_dir is not None and not _is_same_objective(
+            prev_run_dir, meta.get("input", "")
+        ):
+            prev_run_dir = None
     else:
         prev_run_dir = None
     if not is_qmode and prev_run_dir and same_objective and detect_rerun_mode(prev_run_dir):
@@ -1101,6 +1136,9 @@ def prepare_run(args: argparse.Namespace) -> str:
 
     # Auto-scaffold external repos on first use
     artifact_root = get_artifact_root()
+    effective_details = apply_persona_overrides(
+        PHASE_DETAILS, load_persona_overrides(artifact_root)
+    )
     studio_root = get_studio_root()
     if artifact_root != studio_root:
         _scaffold_external_repo(artifact_root, studio_root)
@@ -1129,22 +1167,23 @@ def prepare_run(args: argparse.Namespace) -> str:
     scopes_config, scopes_allocations, scopes_meta = _resolve_scopes(args)
     meta = _build_run_meta(phase, text, now, run_id, args, studio_role_meta, scopes_meta)
 
-    # If the previous run targeted a different objective, reset clarity so
-    # stale topic scores don't bleed in. Rebuilt via recompute-clarity.
+    # Reset clarity when the objective changes so stale topic scores don't
+    # bleed in (rebuilt via recompute-clarity). The objective is compared
+    # against the one stored in the project-level clarity.json, which is
+    # phase-independent — a prior run under a different phase still counts.
+    project_clarity = clarity.load_project_clarity(artifact_root)
     prev_run = _find_previous_run_dir(run_dir)
-    objective_changed = prev_run is not None and not _is_same_objective(prev_run, text)
-    if objective_changed:
+    had_prior = project_clarity is not None or prev_run is not None
+    objective_changed = _objective_changed(project_clarity, prev_run, text)
+    if objective_changed or project_clarity is None:
         (artifact_root / ".studio" / "clarity.json").unlink(missing_ok=True)
         project_clarity = clarity.empty_snapshot(text, run_id, now)
-    else:
-        project_clarity = clarity.load_project_clarity(artifact_root)
-        if project_clarity is None:
-            project_clarity = clarity.empty_snapshot(text, run_id, now)
 
     instructions = build_instruction_doc(
         meta, run_dir, studio_role_details, scopes_config, scopes_allocations,
         clarity_snapshot=project_clarity,
-        same_objective=not objective_changed if prev_run else None,
+        same_objective=(not objective_changed) if had_prior else None,
+        phase_details=effective_details,
     )
     instructions_path = run_dir / "instructions.md"
     instructions_path.write_text(instructions, encoding="utf-8")

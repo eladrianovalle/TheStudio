@@ -504,7 +504,7 @@ class TestFreshRunClarityReset:
         # Simulate clarity data from run 1
         clarity_path = studio_root / ".studio" / "clarity.json"
         clarity_path.parent.mkdir(parents=True, exist_ok=True)
-        clarity_path.write_text('{"run_id": "old", "topics": [], "context": {"objective": "Objective A", "scope_label": "test", "scope_description": "test"}, "created_iso": "2026-01-01T00:00:00"}', encoding="utf-8")
+        clarity_path.write_text('{"run_id": "old", "topics": [], "context": {"scope_label": "broad", "scope_description": "Objective A"}, "created_iso": "2026-01-01T00:00:00"}', encoding="utf-8")
         assert clarity_path.is_file()
 
         time.sleep(1.1)  # avoid timestamp collision
@@ -524,13 +524,83 @@ class TestFreshRunClarityReset:
         run_id_1 = run_phase.prepare_run(make_prepare_args(text="Same objective"))
 
         # Write clarity after run 1 (using correct schema field names)
-        clarity_path.write_text('{"run_id": "existing", "topics": [{"topic": "core_loop", "display_name": "Core Loop", "score": 0.8, "answered_count": 3, "total_count": 5, "challenged_count": 0}], "context": {"objective": "Same objective", "scope_label": "test", "scope_description": "test"}, "created_iso": "2026-01-01T00:00:00"}', encoding="utf-8")
+        clarity_path.write_text('{"run_id": "existing", "topics": [{"topic": "core_loop", "display_name": "Core Loop", "score": 0.8, "answered_count": 3, "total_count": 5, "challenged_count": 0}], "context": {"scope_label": "broad", "scope_description": "Same objective"}, "created_iso": "2026-01-01T00:00:00"}', encoding="utf-8")
 
         time.sleep(1.1)  # avoid timestamp collision
 
         # Run 2: same objective — should preserve clarity
         run_id_2 = run_phase.prepare_run(make_prepare_args(text="Same objective"))
         assert clarity_path.is_file(), "clarity.json should be preserved for same-objective rerun"
+
+    def test_cross_phase_objective_change_clears_clarity(self, studio_root):
+        """Stale clarity from a different phase's objective must be cleared.
+
+        Regression: previous-run detection is phase-scoped, but clarity.json
+        is project-level. A 'maze' objective run under one phase used to leak
+        into a different objective run under another phase.
+        """
+        import time
+
+        # Prior run under the 'design' phase wrote project-level clarity.
+        clarity_path = studio_root / ".studio" / "clarity.json"
+        clarity_path.parent.mkdir(parents=True, exist_ok=True)
+        run_phase.prepare_run(make_prepare_args(phase="design", text="A maze game"))
+        clarity_path.write_text('{"run_id": "maze", "topics": [], "context": {"scope_label": "broad", "scope_description": "A maze game"}, "created_iso": "2026-01-01T00:00:00"}', encoding="utf-8")
+
+        time.sleep(1.1)
+
+        # New run under a *different* phase with a different objective.
+        run_phase.prepare_run(make_prepare_args(phase="tech", text="Build multiplayer lobby"))
+        assert not clarity_path.is_file(), "cross-phase stale clarity should be cleared"
+
+    def test_corrupt_clarity_self_heals(self, studio_root):
+        """A corrupt clarity.json is treated as absent so prepare doesn't crash.
+
+        Regression: load_project_clarity is now called unconditionally at the
+        top of prepare's reset block. An interrupted/truncated write used to
+        crash every subsequent prepare (incl. the reset that would clean it up).
+        """
+        import time
+
+        clarity_path = studio_root / ".studio" / "clarity.json"
+        clarity_path.parent.mkdir(parents=True, exist_ok=True)
+        run_phase.prepare_run(make_prepare_args(phase="tech", text="Objective A"))
+        # Simulate a truncated/interrupted write.
+        clarity_path.write_text('{"run_id": "x", "topics": [], "cont', encoding="utf-8")
+
+        time.sleep(1.1)
+
+        # Must not raise; the corrupt file is treated as absent and rebuilt.
+        run_phase.prepare_run(make_prepare_args(phase="tech", text="Objective B"))
+        assert not clarity_path.is_file(), "corrupt clarity should be cleared, not crash"
+
+    def test_global_same_objective_does_not_inject_cross_objective_rerun(self, studio_root):
+        """Global (clarity) same-objective must not pull rerun context from a
+        phase-local previous run that targeted a *different* objective."""
+        import time
+
+        # Prior tech run for objective A, rejected.
+        run_id_a = run_phase.prepare_run(make_prepare_args(phase="tech", text="Build lobby A"))
+        run_dir_a = studio_root / "output" / "tech" / run_id_a
+        (run_dir_a / "contrarian_1.md").write_text(
+            "VERDICT: REJECTED\n1. This is terrible\n", encoding="utf-8"
+        )
+
+        # Project clarity says the current objective is B (e.g. reset by an
+        # intervening different-phase run) — matches the new run's text, so the
+        # cross-phase comparison yields same_objective=True.
+        clarity_path = studio_root / ".studio" / "clarity.json"
+        clarity_path.parent.mkdir(parents=True, exist_ok=True)
+        clarity_path.write_text('{"run_id": "b", "topics": [], "context": {"scope_label": "broad", "scope_description": "Build lobby B"}, "created_iso": "2026-01-01T00:00:00"}', encoding="utf-8")
+
+        time.sleep(1.1)
+
+        # New tech run, objective B: global same_objective is True, but the
+        # phase-local previous run was objective A — no rerun context allowed.
+        run_id_b = run_phase.prepare_run(make_prepare_args(phase="tech", text="Build lobby B"))
+        run_dir_b = studio_root / "output" / "tech" / run_id_b
+        instructions = (run_dir_b / "instructions.md").read_text()
+        assert "This is terrible" not in instructions
 
     def test_fresh_run_skips_rerun_context(self, studio_root):
         """A new objective should not inject rerun context from the previous run."""
