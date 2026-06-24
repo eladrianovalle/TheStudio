@@ -117,7 +117,12 @@ def generate_question_instructions(role_data: Dict) -> Tuple[str, str]:
            reveal but do not explicitly name.
         4. Identify at least **2 missing decision points** the advocate failed
            to surface.
-        5. Remove any duplicate or overly generic questions.
+        5. Remove duplicate or overly generic questions. Judge each remaining
+           question on *relevance* — does answering it move us toward the best,
+           simplest system? Do NOT drop a genuinely-open question just to keep
+           the list short. At this stage, missing a real question is worse than
+           carrying one extra; the bias toward cutting belongs in the
+           deliverable phases, not in deciding what to ask.
 
         ## Output format
 

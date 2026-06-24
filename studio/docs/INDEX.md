@@ -13,11 +13,15 @@
 - **[SCOPES_GUIDE.md](./SCOPES_GUIDE.md)** - Scope-based iteration allocation
 - **[VALIDATION_GUIDE.md](./VALIDATION_GUIDE.md)** - Document and code validation
 - **[TEST_DRIVEN_GUIDE.md](./TEST_DRIVEN_GUIDE.md)** - Test-driven discipline for tech phase
+- **[AI_TDD_METHODOLOGY.md](./AI_TDD_METHODOLOGY.md)** - Full AI-TDD methodology (scenario-first, stack boundary, mutation verification)
+- **[MVI_METHODOLOGY.md](./MVI_METHODOLOGY.md)** - Minimum Viable Interaction — every milestone ends in something usable
 - **[STORAGE_MANAGEMENT.md](./STORAGE_MANAGEMENT.md)** - Cleanup, TTL, and storage budgets
 
 ## Integration
 - **[INTEGRATION_GUIDE.md](./INTEGRATION_GUIDE.md)** - Using Studio from other repos
 - **[STUDIO_BRIDGE_TEMPLATE.md](./STUDIO_BRIDGE_TEMPLATE.md)** - Bridge doc template for downstream repos
+- **[BRIDGE_COMMANDS_TEMPLATE.md](./BRIDGE_COMMANDS_TEMPLATE.md)** - Slash command files to copy into a downstream repo's `.claude/commands/`
+- **[CROSS_REPO_CHECK_MVI.md](./CROSS_REPO_CHECK_MVI.md)** - `studio check` version comparison against the source repo
 
 ## Execution Guides
 - **[CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md)** - Claude Code slash commands and agent workflow

@@ -20,6 +20,23 @@ from typing import Dict, List
 VALID_DEBATE_MODES = {"all_roles", "per_role"}
 
 
+# Shared contrarian identity, injected into every deliverable-producing contrarian
+# prompt (single-phase, flat studio, and scoped studio alike). The contrarian is not
+# only a flaw-hunter — it is an editor with a bias toward removal. The advocate adds;
+# the contrarian carves out the essence. This is always on by default.
+CONTRARIAN_MANDATE = [
+    "**Contrarian Mandate — you are an editor, not only a critic.**",
+    "",
+    "Hunting flaws and edge cases is half your job. The other half is carving the proposal down to its essence. The advocate's instinct is to add; yours is to cut.",
+    "",
+    "- **Default to deletion.** Every feature, abstraction, step, and dependency the advocate proposed must justify its existence. If it does not clearly earn its keep, recommend removing it.",
+    "- **Name the cut, specifically.** Do not just say \"this is complex\" — point at the exact feature, layer, option, or step and say what to delete or merge, and what (if anything) is actually lost.",
+    "- **Simpler beats more complete.** A shorter, clearer proposal that still solves the real problem is a better outcome than a thorough one that does more than the problem requires.",
+    "- **Collapse, don't accumulate.** Prefer merging two things into one over adding a third. Prefer removing an option over adding configuration to support it.",
+    "- **Guard the essence.** Cutting serves clarity and the core problem — never amputate what the problem genuinely requires. If a cut would break the core, say so and stop.",
+]
+
+
 @dataclass
 class ScopeConfig:
     """Configuration for a single scope level."""
@@ -209,6 +226,7 @@ def generate_scope_prompt(
     s1_files: List[str] | None = None,
     s2_brief_exists: bool = False,
     rejection_context: str | None = None,
+    question_mode: bool = False,
 ) -> str:
     """Generate scope-specific agent instructions for a single agent prompt.
 
@@ -230,6 +248,9 @@ def generate_scope_prompt(
         s1_files: For S2/S3: list of S1 file paths this agent should read.
         s2_brief_exists: Whether S2-brief.md exists in run_dir.
         rejection_context: Rejection reasons from prior iteration, if any.
+        question_mode: When True, this is a question-surfacing run — the
+            contrarian editor mandate (bias toward cutting) is suppressed so it
+            does not drop genuinely-open questions.
 
     Returns:
         Markdown prompt fragment for inclusion in agent instructions.
@@ -247,6 +268,12 @@ def generate_scope_prompt(
         f"**Input/objective:** {user_text}",
         "",
     ]
+
+    # Contrarian editor mandate — always on for the contrarian stance, except in
+    # question-surfacing mode where cutting questions is exactly wrong.
+    if stance == "contrarian" and not question_mode:
+        lines.extend(CONTRARIAN_MANDATE)
+        lines.append("")
 
     # Word cap
     if scope.output_budget:

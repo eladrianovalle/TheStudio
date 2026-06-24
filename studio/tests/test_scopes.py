@@ -6,13 +6,59 @@ from pathlib import Path
 import pytest
 
 from scopes import (
+    CONTRARIAN_MANDATE,
     ScopeConfig,
     ScopesConfig,
     VALID_DEBATE_MODES,
     allocate_iterations,
     generate_scope_instructions,
+    generate_scope_prompt,
     load_scopes_config,
 )
+
+
+def _scope_prompt(stance, scope_index=1, question_mode=False):
+    scope = ScopeConfig(name="depth", focus="Full analysis", max_iterations=2)
+    return generate_scope_prompt(
+        scope=scope,
+        scope_index=scope_index,
+        role_title="Engineering",
+        stance=stance,
+        run_dir="output/studio/run_x",
+        advocate_focus="Build it",
+        contrarian_focus="Break it",
+        deliverables=["A spec"],
+        user_text="A cozy farming sim",
+        decisions_md_exists=False,
+        question_mode=question_mode,
+    )
+
+
+def test_scope_prompt_contrarian_has_editor_mandate():
+    """Contrarian scope prompts carry the always-on editor mandate."""
+    prompt = _scope_prompt("contrarian")
+    assert "Contrarian Mandate" in prompt
+    assert "Default to deletion" in prompt
+    # Mandate constant is fully rendered.
+    for line in CONTRARIAN_MANDATE:
+        if line:
+            assert line in prompt
+
+
+def test_scope_prompt_advocate_has_no_editor_mandate():
+    """The editor mandate must not leak into advocate prompts."""
+    prompt = _scope_prompt("advocate")
+    assert "Contrarian Mandate" not in prompt
+    assert "Default to deletion" not in prompt
+
+
+def test_scope_prompt_contrarian_omits_mandate_in_question_mode():
+    """In question-surfacing runs the contrarian must not get the cut-bias mandate."""
+    prompt = _scope_prompt("contrarian", question_mode=True)
+    assert "Contrarian Mandate" not in prompt
+    assert "Default to deletion" not in prompt
+    # Still produces a contrarian scope prompt (verdict line remains).
+    assert "VERDICT" in prompt
 
 
 def test_scope_config_validation():
