@@ -5,8 +5,11 @@ All notable changes to Studio will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Contrarian editor mandate** (always on) — a shared `CONTRARIAN_MANDATE` (`scopes.py`) injected into every deliverable-producing contrarian prompt (single-phase, flat studio, and scoped studio). The contrarian now carries a bias toward removal/merge/simplification alongside flaw-hunting; the four `PHASE_DETAILS` contrarians are reframed as editors. Deliberately omitted in `--mode questions`, where the contrarian instead judges question *relevance* and must not drop genuinely-open questions.
+- **Open-Questions Pre-Flight** (Step 0) — every deliverable run now opens with a required questions pass that surfaces what is unsettled, pauses on P0 blockers, and records answers (raising the clarity score) before the iteration loop. Reuses the existing decision/clarity machinery — no new module. The Decision Point Protocol now states explicitly that every later pass must keep raising new questions.
 - Project-overridable single-phase personas via `.studio/personas.toml` (`persona_overrides.py`) — per-phase shallow-merge over the shipped `PHASE_DETAILS` defaults; setup wizard `persona_customization` step (`CURRENT_SETUP_VERSION` 2) with stack-sniffing suggestions.
-- 14 Python modules in `studio/` (added `persona_overrides.py`); 517 tests.
+- Stack-agnostic `/unstale` — the command self-detects the stack (Rust/Unity/Node/Python/Go) from marker files, with an optional per-repo `.studio/unstale.toml` override (`[snapshot]` commands + `[audit]` globs). Setup wizard `unstale_config` step (`CURRENT_SETUP_VERSION` 3) with `suggest_unstale_from_stack` sniffing; shared `_toml_quote` helper.
+- 14 Python modules in `studio/` (added `persona_overrides.py`); 546 tests.
 
 ### Fixed
 - Stack-neutral phase personas — removed hardcoded "Three.js / WebGL" and "Steam hook" wording from `PHASE_DETAILS`.

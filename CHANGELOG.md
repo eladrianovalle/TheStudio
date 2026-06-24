@@ -7,10 +7,13 @@ All notable changes to TheGameStudio are documented here.
 ## [Unreleased]
 
 ### Added
+- Contrarian editor mandate (always on) — every deliverable run's contrarian now carries a built-in bias toward removal, merge, and simplification on top of flaw-hunting. The advocate piles it on; the contrarian carves out the essence. Shared `CONTRARIAN_MANDATE` injected across single-phase, flat, and scoped studio prompts; phase contrarians reframed as editors. Off in `--mode questions` (there the contrarian judges question relevance, never cuts genuinely-open questions)
+- Open-Questions Pre-Flight (Step 0) — every deliverable run opens by surfacing what is genuinely unsettled, pausing on P0 blockers, and recording answers before the iteration loop, so no run silently assumes; later passes keep raising new questions as they surface. Reuses existing decision/clarity machinery
 - Project-overridable single-phase personas via `.studio/personas.toml` — `persona_overrides.py` per-phase shallow-merges advocate/contrarian/notes/implementer/integrator overrides over the shipped `PHASE_DETAILS` defaults; setup wizard gains a `persona_customization` step (`CURRENT_SETUP_VERSION` 2) that authors the file and can sniff the project stack (`Cargo.toml`/`package.json`/`*.csproj`) to suggest a fitting persona
 - `/offload` slash command — analyzes CLAUDE.md for content safe to move to companion docs, with section classification, pointer strength scoring, canary token verification, and reconciliation against existing docs (`offload.py`, 23 tests)
 - `/detest` slash command — audits test suites against AI-TDD methodology, finds anti-patterns, fixes them
 - `/unstale` Agent 5 — project tracking audit (GitHub Issues + local tracking files) with permission-gated destructive actions
+- Stack-agnostic `/unstale` — the command now self-detects the project stack (Rust/Unity/Node/Python/Go) from marker files instead of assuming the Studio Python layout, so it works in any installed repo. Optional per-repo `.studio/unstale.toml` override pins exact snapshot commands and audit globs; authored by a new setup wizard `unstale_config` step (`CURRENT_SETUP_VERSION` 3) via `suggest_unstale_from_stack`
 - `ai_engineer` role in manifest — Staff AI Engineer specializing in prompt architecture & agent optimization
 - `/studio-setup` slash command + `setup` CLI subcommand — post-install wizard for role pack selection, role customization, scope tuning, and cleanup settings with incremental versioned steps (`setup.py`, 43 tests)
 - `docs/CODING_PRINCIPLES.md` — standalone Karpathy-inspired principles file, shipped with cross-repo installs

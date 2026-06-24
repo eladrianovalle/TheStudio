@@ -86,7 +86,9 @@ Use the slash command to run a full advocate/contrarian debate:
 
 Single-phase runs (`/run-phase`) spawn separate Advocate and Contrarian agents per iteration. Multi-role runs (`/run-studio-phase`) use a three-tier scoped debate by default: **alignment** (all roles, short, parallel) → **depth** (per-role, full, sequential) → **polish** (all roles, short, 1 pass) → integrator duel. Use `--no-scopes` for flat mode. See `studio/docs/CLAUDE_CODE_USAGE.md` for details.
 
-All runs (except `--mode questions`) include inline **decision point surfacing** — agents flag P0 (blocking), P1 (important), and P2 (context) decisions using a standard blockquote format. Use `--mode questions` as a pre-flight step to collect key decisions before committing to a full deliverables run.
+All runs (except `--mode questions`) include inline **decision point surfacing** — agents flag P0 (blocking), P1 (important), and P2 (context) decisions using a standard blockquote format. Every deliverable run also opens with a built-in **Open-Questions Pre-Flight** (Step 0): a fast pass that surfaces what is genuinely unsettled, pauses on P0 blockers, and records the answers before the iteration loop begins — so no run silently assumes. The standalone `--mode questions` remains a heavier, questions-only run for when you want a full prioritized decision set with no deliverables.
+
+The **Contrarian is an editor by default** — beyond hunting flaws and edge cases, it carries an always-on mandate to remove, merge, and simplify. The advocate piles it on; the contrarian carves out the essence (bias toward deletion, clarity, conciseness). This mandate is on in every deliverable run and stance, but deliberately **off in `--mode questions`**, where the contrarian instead judges question *relevance* and must not drop genuinely-open questions to keep the list lean.
 
 ## CLI Commands
 

@@ -40,6 +40,7 @@ from run_phase_roles import (
     resolve_role_list,
 )
 from scopes import (
+    CONTRARIAN_MANDATE,
     allocate_iterations,
     generate_scope_instructions,
     generate_scope_prompt,
@@ -124,7 +125,7 @@ def get_storage_stats() -> dict:
 PHASE_DETAILS = {
     "market": {
         "advocate": "Market Growth Strategist — steel-man the idea into a high-virality launch hook for its target platform.",
-        "contrarian": "The Reality Check — hunt for fatal market flaws and issue VERDICT: APPROVED/REJECTED.",
+        "contrarian": "The Reality Check & Editor — cut the pitch to its essential hook, kill fatal market flaws, and issue VERDICT: APPROVED/REJECTED.",
         "implementer": {
             "title": "Market Research Analyst",
             "deliverables": [
@@ -139,7 +140,7 @@ PHASE_DETAILS = {
     },
     "design": {
         "advocate": "Lead Systems Designer — craft the Minimum Viable Fun core loop.",
-        "contrarian": "Scope-Creep Police — attack complexity, timeline, and missing UX safeguards.",
+        "contrarian": "Scope-Creep Police & Editor — cut the loop to its essence; attack complexity, timeline, and missing UX safeguards.",
         "implementer": {
             "title": "Game Design Documenter",
             "deliverables": [
@@ -154,7 +155,7 @@ PHASE_DETAILS = {
     },
     "tech": {
         "advocate": "Technical Architect — define a performant, idiomatic architecture for the project's stack.",
-        "contrarian": "Senior SRE — flag performance, compatibility, and ops risks.",
+        "contrarian": "Senior SRE & Editor — delete needless moving parts; flag performance, compatibility, and ops risks.",
         "implementer": {
             "title": "Technical Architect & Code Generator",
             "deliverables": [
@@ -172,7 +173,7 @@ PHASE_DETAILS = {
     },
     "studio": {
         "advocate": "Studio Workflow Producer — articulate the inspiring yet actionable vision.",
-        "contrarian": "Bootstrapped Reality Auditor — interrogate costs, scope, and maintenance burden.",
+        "contrarian": "Bootstrapped Reality Auditor & Editor — cut scope to the essential; interrogate costs, scope, and maintenance burden.",
         "integrator": "Systems Integrator & Ops Lead — merge inspiration + constraints into a pragmatic upgrade plan after approval.",
         "notes": (
             "Iterate like every other phase until the Contrarian issues VERDICT: APPROVED. "
@@ -726,6 +727,12 @@ def build_instruction_doc(
         f"- **Advocate:** {info['advocate']}",
         f"- **Contrarian:** {info['contrarian']}",
     ]
+    # Editor mandate is always on for deliverable runs; in question-surfacing mode
+    # the contrarian judges question relevance instead and must not cut questions.
+    if not is_qmode:
+        roles_section.append("")
+        roles_section.extend(CONTRARIAN_MANDATE)
+        roles_section.append("")
     if phase != "studio":
         if is_qmode:
             roles_section.extend([
@@ -759,6 +766,30 @@ def build_instruction_doc(
             roles_section.append(
                 "- Integrator runs its own capped duel (Advocate vs. Contrarian) inside `integrator.md` once the pods approve."
             )
+
+    # Open-Questions Pre-Flight — every deliverable run opens by surfacing what is
+    # genuinely unsettled before anyone dives in. Reuses the decision/clarity machinery
+    # so answers raise the clarity score and later passes only re-ask what is still open.
+    preflight_section: List[str] = []
+    if not is_qmode:
+        preflight_section.extend([
+            "",
+            "## Step 0: Open-Questions Pre-Flight (required before the loop)",
+            "",
+            "Before anyone produces deliverables, run a fast reconnaissance pass to surface what is genuinely unsettled. The point is to stop building on silent assumptions — not to gate progress. Keep it lean.",
+            "",
+            "1. Across the participating role(s), surface the **open questions** that must be answered to build the *simplest system that actually solves the problem*. Tag each P0/P1/P2 using the Decision Point format (defined under **Decision Point Protocol** below).",
+            "2. **Pause on every P0** and ask the user — batch all P0s into a single message. For P1s, state your assumption and proceed but flag it for override. Log P2s only.",
+            "3. Record the answers so every later pass treats them as settled:",
+            "",
+            "```bash",
+            f'python "{get_studio_root()}/run_phase.py" record-decisions --run-dir {rel_dir} --decisions-file <answers.json>',
+            "```",
+            "",
+            "4. If nothing is genuinely open, say so in one line and proceed. Then begin the Iteration Loop.",
+            "",
+            "In scoped studio runs, fold this into the start of the **Alignment** scope (S1). This pre-flight front-loads the obvious questions; it does **not** replace ongoing flagging — every later pass must keep raising new questions as they surface.",
+        ])
 
     loop_section = [
         "",
@@ -801,7 +832,7 @@ def build_instruction_doc(
             "",
             "## Decision Point Protocol",
             "",
-            "When you encounter a gap, ambiguity, or fork that could meaningfully change your approach, flag it as a decision point. Do NOT silently assume — surface it.",
+            "When you encounter a gap, ambiguity, or fork that could meaningfully change your approach, flag it as a decision point. Do NOT silently assume — surface it. This applies to **every pass** — the pre-flight front-loads the obvious questions, but each later pass must keep raising new ones as they surface.",
             "",
             "### Format",
             "",
@@ -957,6 +988,7 @@ def build_instruction_doc(
                 + scope_section
                 + rerun_section
                 + roles_section
+                + preflight_section
                 + loop_section
                 + decision_point_section
                 + clarity_section
@@ -1725,7 +1757,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # --- Setup wizard ---
     setup_parser = subparsers.add_parser(
-        "setup", help="Configure Studio for a project (roles, scopes, cleanup)."
+        "setup", help="Configure Studio for a project (roles, personas, scopes, cleanup, unstale)."
     )
     setup_parser.add_argument(
         "--target", type=Path, default=Path("."),
@@ -2115,6 +2147,7 @@ def inject_context(args: argparse.Namespace) -> None:
         raise FileNotFoundError(f"run.json not found in {run_dir}")
     meta = load_json(meta_path)
     user_text = meta.get("input", "")
+    qmode = is_question_mode(meta.get("output_type"))
 
     # Resolve scope config
     studio_root = get_studio_root()
@@ -2177,6 +2210,7 @@ def inject_context(args: argparse.Namespace) -> None:
             decisions_md_exists=decisions_md_exists,
             s1_files=s1_files,
             s2_brief_exists=s2_brief_exists,
+            question_mode=qmode,
         ))
 
     # 2. Settled decisions — only add if generate_scope_prompt didn't already cover it
@@ -2273,7 +2307,7 @@ def _do_init(args: argparse.Namespace) -> None:
     print(f"Studio installed to {dot_studio}")
     print(f"  Slash commands: {target / '.claude' / 'commands'}")
     print(f"  Source: {dot_studio / 'source'}")
-    print(f"\nRun /studio-setup to configure roles, scopes, and cleanup.")
+    print(f"\nRun /studio-setup to configure roles, personas, scopes, cleanup, and unstale audit.")
     print(f"Then use /run-phase or /run-studio-phase — pause-and-ask included.")
     print(f"NOTE: Start a NEW Claude Code session (not just /clear) to discover the commands.")
 

@@ -137,6 +137,34 @@ def test_instruction_doc_has_think_first_checkpoint(studio_root):
     assert "correct analysis of the wrong problem" in instructions
 
 
+def test_instruction_doc_has_contrarian_editor_mandate(studio_root):
+    """Deliverable runs carry the always-on contrarian editor mandate."""
+    run_id = run_phase.prepare_run(make_prepare_args())
+    run_dir = studio_root / "output" / "market" / run_id
+    instructions = (run_dir / "instructions.md").read_text()
+    assert "Contrarian Mandate" in instructions
+    assert "Default to deletion" in instructions
+
+
+def test_instruction_doc_has_open_questions_preflight(studio_root):
+    """Deliverable runs open with a required open-questions pre-flight."""
+    run_id = run_phase.prepare_run(make_prepare_args())
+    run_dir = studio_root / "output" / "market" / run_id
+    instructions = (run_dir / "instructions.md").read_text()
+    assert "Open-Questions Pre-Flight" in instructions
+    assert "Pause on every P0" in instructions
+
+
+def test_question_mode_omits_editor_mandate_and_preflight(studio_root):
+    """Question-surfacing runs must not cut questions or front-load a separate pass."""
+    run_id = run_phase.prepare_run(make_prepare_args(mode="questions"))
+    run_dir = studio_root / "output" / "market" / run_id
+    instructions = (run_dir / "instructions.md").read_text()
+    assert "Contrarian Mandate" not in instructions
+    assert "Default to deletion" not in instructions
+    assert "Open-Questions Pre-Flight" not in instructions
+
+
 def test_output_root_defaults_to_origin_repo_when_running_outside_studio(tmp_path, monkeypatch):
     studio_root = tmp_path / "studio"
     studio_root.mkdir()

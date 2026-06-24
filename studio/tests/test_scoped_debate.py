@@ -423,6 +423,43 @@ class TestInjectContextCLI:
         )
         inject_context(args)
 
+    def test_inject_context_contrarian_mandate_gated_by_question_mode(self, tmp_path, monkeypatch):
+        """inject-context emits the editor mandate for a normal contrarian but
+        suppresses it when the run is in question-surfacing mode."""
+        studio_root = Path(__file__).resolve().parent.parent
+        scopes_path = studio_root / "config" / "scopes.toml"
+        monkeypatch.setenv("STUDIO_ROOT", str(studio_root))
+
+        import argparse
+        from run_phase import inject_context, set_artifact_root
+        set_artifact_root(tmp_path)
+
+        def _run(output_type):
+            run_dir = tmp_path / f"run_{output_type}"
+            run_dir.mkdir()
+            meta = {
+                "run_id": run_dir.name,
+                "phase": "studio",
+                "input": "A cozy farming sim",
+                "max_iterations": 3,
+                "output_type": output_type,
+                "scopes": {
+                    "config_path": str(scopes_path),
+                    "scopes": [{"name": "depth", "focus": "Detail", "allocated_iterations": 3}],
+                    "total_iterations": 3,
+                },
+            }
+            (run_dir / "run.json").write_text(json.dumps(meta))
+            args = argparse.Namespace(
+                run_dir=run_dir, scope="depth", role="engineering",
+                stance="contrarian", artifact_root=tmp_path,
+            )
+            inject_context(args)
+            return (run_dir / "context--engineering--depth--contrarian.md").read_text()
+
+        assert "Default to deletion" in _run("deliverables")
+        assert "Default to deletion" not in _run("questions")
+
     def test_inject_context_missing_run_dir(self, tmp_path):
         """inject-context raises on missing run directory."""
         import argparse

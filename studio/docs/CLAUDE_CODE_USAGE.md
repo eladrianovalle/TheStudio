@@ -10,19 +10,22 @@ Run Studio phase debates natively in Claude Code using slash commands.
 
 This triggers the full advocate/contrarian loop:
 1. Prepares a run directory with instructions
-2. Spawns an Advocate agent to build the case
-3. Spawns a separate Contrarian agent to stress-test it
-4. Iterates until APPROVED or max iterations exhausted
-5. Generates implementation deliverables (if approved)
-6. Writes summary and finalizes the run
+2. Runs the **Open-Questions Pre-Flight** (Step 0) — surfaces what is genuinely unsettled, pauses on P0 blockers, records the answers
+3. Spawns an Advocate agent to build the case
+4. Spawns a separate Contrarian agent to stress-test it
+5. Iterates until APPROVED or max iterations exhausted
+6. Generates implementation deliverables (if approved)
+7. Writes summary and finalizes the run
+
+The **Contrarian is an editor by default**: alongside flaws and edge cases it carries an always-on mandate to cut, merge, and simplify — the advocate adds, the contrarian carves out the essence. (This mandate is off in `--mode questions`, where the contrarian instead judges whether each surfaced question is *relevant* and must not drop genuinely-open questions.)
 
 ## Available Phases
 
 | Phase | Advocate | Contrarian | Output |
 |-------|----------|------------|--------|
-| `market` | Market Growth Strategist | Reality Check | Audience profile, competitor analysis, GTM plan |
-| `design` | Lead Systems Designer | Scope-Creep Police | Core loop, progression, mechanics, UX |
-| `tech` | Technical Architect | Senior SRE | Architecture, stack, tests, implementation |
+| `market` | Market Growth Strategist | Reality Check & Editor | Audience profile, competitor analysis, GTM plan |
+| `design` | Lead Systems Designer | Scope-Creep Police & Editor | Core loop, progression, mechanics, UX |
+| `tech` | Technical Architect | Senior SRE & Editor | Architecture, stack, tests, implementation |
 
 ## Options
 
