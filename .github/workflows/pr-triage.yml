@@ -1,0 +1,130 @@
+name: PR triage (heuristic)
+
+# Phase 1 of the agent-driven PR review pipeline. This workflow is the cheap
+# gate: every open non-draft PR gets one of the `triage:*` labels based on
+# size + which paths it touches. NO LLM calls; NO merges; NO comments. The
+# label is the audit trail. Phase 2 (the Multica review agent) consumes the
+# labels: only `triage:small` PRs get an LLM review; `triage:trivial` is
+# mergeable with green checks; `triage:medium`/`large` ping a human.
+#
+# Stack-agnostic: file-type heuristics below match docs/tests across TS, C#,
+# Rust, Python. Only HIGH_RISK_GLOBS is tuned per repo.
+
+on:
+  schedule:
+    # Twice daily safety sweep for PRs that slipped a label. Cheap on Actions.
+    - cron: "0 13,22 * * *"
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
+  workflow_dispatch:
+
+permissions:
+  pull-requests: write
+  contents: read
+
+concurrency:
+  group: pr-triage
+  cancel-in-progress: false
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Triage open PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Comma-separated path prefixes/globs that force `triage:medium`
+          # regardless of LOC — changes here always deserve human eyes.
+          HIGH_RISK_GLOBS: "studio/config/,studio/role_packs/,studio/validators/,studio/studio.manifest.json,studio/pyproject.toml,.github/workflows/,CLAUDE.md"
+          # LOC bands. additions+deletions. Tuned for small solo PRs.
+          TRIVIAL_MAX_LOC: 20
+          SMALL_MAX_LOC: 100
+          LARGE_MIN_LOC: 500
+        run: |
+          set -euo pipefail
+          REPO="${GITHUB_REPOSITORY}"
+
+          if [[ -n "${{ github.event.pull_request.number || '' }}" ]]; then
+            PR_NUMS="${{ github.event.pull_request.number }}"
+          else
+            PR_NUMS=$(gh pr list --repo "$REPO" --state open --limit 50 \
+                      --json number --jq '.[].number' | tr '\n' ' ')
+          fi
+          echo "Triaging PRs: ${PR_NUMS:-(none)}"
+
+          is_high_risk_path() {
+            local path="$1"
+            IFS=',' read -ra patterns <<< "$HIGH_RISK_GLOBS"
+            for pat in "${patterns[@]}"; do
+              [[ -z "$pat" ]] && continue
+              # shellcheck disable=SC2254
+              case "$path" in $pat*) return 0 ;; esac
+              # shellcheck disable=SC2254
+              case "$path" in $pat) return 0 ;; esac
+            done
+            return 1
+          }
+
+          # Stack-agnostic "docs or tests only" detection.
+          is_docs_or_test() {
+            case "$1" in
+              *.md|*.mdx|*.txt|docs/*|*/docs/*) return 0 ;;
+              *test*|*spec*|tests/*|*/tests/*|Tests/*|*/Tests/*|__tests__/*|*/__tests__/*) return 0 ;;
+              *.test.*|*.spec.*|*_test.*|*Test.cs|*Tests.cs) return 0 ;;
+            esac
+            return 1
+          }
+
+          for num in $PR_NUMS; do
+            echo "::group::PR #$num"
+            meta=$(gh pr view "$num" --repo "$REPO" \
+                   --json isDraft,additions,deletions,labels,files,baseRefName)
+
+            is_draft=$(jq -r '.isDraft' <<< "$meta")
+            additions=$(jq -r '.additions' <<< "$meta")
+            deletions=$(jq -r '.deletions' <<< "$meta")
+            loc=$((additions + deletions))
+            current_labels=$(jq -r '[.labels[].name] | join(",")' <<< "$meta")
+
+            echo "draft=$is_draft loc=$loc labels=$current_labels"
+
+            target=""
+            if [[ "$is_draft" == "true" ]] \
+               || [[ "$current_labels" == *"wip"* ]] \
+               || [[ "$current_labels" == *"do-not-review"* ]]; then
+              target="triage:skip"
+            else
+              high_risk=0
+              only_docs_or_tests=1
+              while IFS= read -r path; do
+                if is_high_risk_path "$path"; then high_risk=1; fi
+                if ! is_docs_or_test "$path"; then only_docs_or_tests=0; fi
+              done < <(jq -r '.files[].path' <<< "$meta")
+
+              if (( high_risk == 1 )); then
+                target="triage:medium"
+              elif (( loc >= LARGE_MIN_LOC )); then
+                target="triage:large"
+              elif (( loc <= TRIVIAL_MAX_LOC )) && (( only_docs_or_tests == 1 )); then
+                target="triage:trivial"
+              elif (( loc <= SMALL_MAX_LOC )); then
+                target="triage:small"
+              else
+                target="triage:medium"
+              fi
+            fi
+
+            echo "decision=$target"
+
+            for old in triage:trivial triage:small triage:medium triage:large triage:skip; do
+              if [[ ",$current_labels," == *",$old,"* ]] && [[ "$old" != "$target" ]]; then
+                gh pr edit "$num" --repo "$REPO" --remove-label "$old" >/dev/null
+                echo "  removed $old"
+              fi
+            done
+            if [[ ",$current_labels," != *",$target,"* ]]; then
+              gh pr edit "$num" --repo "$REPO" --add-label "$target" >/dev/null
+              echo "  added $target"
+            fi
+            echo "::endgroup::"
+          done
