@@ -18,8 +18,10 @@ Do this once there are ~10+ finalized runs and a handful of ratings.
 ### A. Is data accumulating?
 1. `python studio/run_phase.py stats` — sanity-check the totals against reality.
 2. Are runs getting **rated**? If `Rated 0/N`, the loop is open — the human signal is the whole
-   point. Decide: is rating friction too high? Should `finalize` print a "rate this run" nudge
-   with the exact command? (small change, high leverage — consider promoting to its own ticket).
+   point. The auto rate-prompt already shipped (finalize prompts interactively at a TTY / nudges
+   otherwise; `/run-phase` + `/run-studio-phase` ask conversationally). So if adoption is still
+   low *despite* the prompt, the friction is elsewhere — is the prompt being skipped reflexively?
+   Should ratings be required before `validate` passes? Note what's actually blocking adoption.
 3. Is `.studio/usage.log` populating (it only logs `prepare`)? Confirm the usage block isn't
    silently empty.
 

@@ -82,8 +82,9 @@ Inside each run directory:
 | `--hours FLOAT` | ❌ | `None` | Time spent; stored in `run.json` + `run_log.md`. |
 | `--cost FLOAT` | ❌ | `None` | Monetary cost in USD (typically `0`). |
 | `--summary PATH` | ❌ | auto-detected | Provide a custom summary path if you store it elsewhere. |
+| `--no-rate-prompt` | ❌ | `false` | Suppress the end-of-run quality-rating prompt/nudge (the slash commands pass this and ask conversationally instead). |
 
-`finalize` enforces the artifact checklist (see Section 3). Missing files raise a `FileNotFoundError` describing the gaps.
+`finalize` enforces the artifact checklist (see Section 3). Missing files raise a `FileNotFoundError` describing the gaps. On a `COMPLETED` run it closes with a rating prompt — interactive at a TTY, otherwise a copy-paste `rate` nudge — unless `--no-rate-prompt` is given.
 
 ---
 

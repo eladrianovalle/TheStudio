@@ -600,6 +600,90 @@ def test_format_stats_smoke():
     assert "No runs rated yet" in out
 
 
+class _FakeStdin:
+    def __init__(self, tty):
+        self._tty = tty
+
+    def isatty(self):
+        return self._tty
+
+
+def test_prompt_for_rating_nudge_when_non_tty(tmp_path, monkeypatch, capsys):
+    """Non-interactive finalize prints a copy-paste nudge, never blocks, writes nothing."""
+    run_dir = tmp_path / "run_market_001"
+    run_dir.mkdir()
+    monkeypatch.setattr(run_phase.sys, "stdin", _FakeStdin(False))
+
+    run_phase._prompt_for_rating(run_dir)
+
+    out = capsys.readouterr().out
+    assert "rate --run-dir" in out
+    assert run_phase._load_rating(run_dir) is None
+
+
+def test_prompt_for_rating_interactive_records(tmp_path, monkeypatch):
+    """At a TTY, a valid score + note is recorded."""
+    run_dir = tmp_path / "run_market_001"
+    run_dir.mkdir()
+    monkeypatch.setattr(run_phase.sys, "stdin", _FakeStdin(True))
+    answers = iter(["4", "solid positioning"])
+    monkeypatch.setattr("builtins.input", lambda *a: next(answers))
+
+    run_phase._prompt_for_rating(run_dir)
+
+    rating = run_phase._load_rating(run_dir)
+    assert rating["score"] == 4
+    assert rating["note"] == "solid positioning"
+
+
+def test_prompt_for_rating_skip_blank(tmp_path, monkeypatch):
+    """Pressing Enter at the prompt skips without writing a rating."""
+    run_dir = tmp_path / "run_market_001"
+    run_dir.mkdir()
+    monkeypatch.setattr(run_phase.sys, "stdin", _FakeStdin(True))
+    monkeypatch.setattr("builtins.input", lambda *a: "")
+
+    run_phase._prompt_for_rating(run_dir)
+    assert run_phase._load_rating(run_dir) is None
+
+
+def test_prompt_for_rating_out_of_range_skips(tmp_path, monkeypatch):
+    """An out-of-range score is rejected, not clamped."""
+    run_dir = tmp_path / "run_market_001"
+    run_dir.mkdir()
+    monkeypatch.setattr(run_phase.sys, "stdin", _FakeStdin(True))
+    monkeypatch.setattr("builtins.input", lambda *a: "9")
+
+    run_phase._prompt_for_rating(run_dir)
+    assert run_phase._load_rating(run_dir) is None
+
+
+def test_finalize_prints_rate_nudge_by_default(studio_root, capsys):
+    """finalize closes with a rating nudge unless suppressed."""
+    run_id = run_phase.prepare_run(make_prepare_args())
+    run_dir = studio_root / "output" / "market" / run_id
+    (run_dir / "advocate_1.md").write_text("a", encoding="utf-8")
+    (run_dir / "contrarian_1.md").write_text("c", encoding="utf-8")
+    (run_dir / "summary.md").write_text("s", encoding="utf-8")
+
+    run_phase.finalize_run(make_finalize_args(run_id=run_id))
+    assert "Rate this run" in capsys.readouterr().out
+
+
+def test_finalize_no_rate_prompt_flag(studio_root, capsys):
+    """--no-rate-prompt suppresses the closing nudge (used by the slash commands)."""
+    run_id = run_phase.prepare_run(make_prepare_args())
+    run_dir = studio_root / "output" / "market" / run_id
+    (run_dir / "advocate_1.md").write_text("a", encoding="utf-8")
+    (run_dir / "contrarian_1.md").write_text("c", encoding="utf-8")
+    (run_dir / "summary.md").write_text("s", encoding="utf-8")
+
+    args = make_finalize_args(run_id=run_id)
+    args.no_rate_prompt = True
+    run_phase.finalize_run(args)
+    assert "Rate this run" not in capsys.readouterr().out
+
+
 # ---------------------------------------------------------------------------
 # Fresh run context reset tests
 # ---------------------------------------------------------------------------

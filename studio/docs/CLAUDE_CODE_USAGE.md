@@ -234,6 +234,10 @@ python studio/run_phase.py rate --run-dir <path> --score 4 --note "solid market 
 ```
 This writes `{run_dir}/rating.json` — the human counterpart to the agent verdict. Re-running `rate` overwrites the prior score (e.g. after a rerun improves things).
 
+**You don't have to remember to do it.** Rating is auto-prompted at the end of a run:
+- The `/run-phase` and `/run-studio-phase` flows close with a "rate this run" step — the assistant asks you for a 1–5 + optional note and records it (skippable; it won't nag).
+- Running `finalize` yourself in a terminal prompts interactively (`Rate this run 1-5 (Enter to skip)`). When `finalize` runs non-interactively (automation, or the assistant via a non-TTY shell), it instead prints a copy-paste `rate` command rather than blocking on stdin. Suppress either with `finalize --no-rate-prompt`.
+
 **View the cross-run dashboard:**
 ```bash
 python studio/run_phase.py stats                # all runs

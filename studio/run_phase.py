@@ -1355,6 +1355,10 @@ def finalize_run(args: argparse.Namespace) -> None:
         print(f"   2. Prepare a rerun with revised approach")
         print(f"   3. Rerun will automatically inject failure context")
 
+    # Invite a human quality rating to close the feedback loop (skippable).
+    if meta['status'] == 'COMPLETED' and not getattr(args, 'no_rate_prompt', False):
+        _prompt_for_rating(run_dir)
+
 
 def _maybe_notify(run_dir: Path) -> None:
     """Auto-fire the run digest on finalize if a webhook target is enabled.
@@ -1547,6 +1551,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--cost",
         type=float,
         help="Optional cost (in USD) attributed to this run.",
+    )
+    finalize_parser.add_argument(
+        "--no-rate-prompt",
+        action="store_true",
+        help="Suppress the end-of-run quality-rating prompt/nudge.",
     )
     _add_artifact_root_arg(finalize_parser)
 
@@ -2198,6 +2207,17 @@ def _load_rating(run_dir: Path) -> Optional[Dict]:
         return None
 
 
+def _write_rating(run_dir: Path, score: int, note: str) -> Dict:
+    """Write rating.json (the human counterpart to the agent verdict)."""
+    rating = {
+        "score": score,
+        "note": (note or "").strip(),
+        "rated_iso": utc_now().isoformat(timespec="seconds"),
+    }
+    write_json(run_dir / "rating.json", rating)
+    return rating
+
+
 def record_rating(args: argparse.Namespace) -> None:
     """Record a human quality rating (1-5) for a completed run.
 
@@ -2209,14 +2229,49 @@ def record_rating(args: argparse.Namespace) -> None:
     if not run_dir.is_dir():
         raise FileNotFoundError(f"Run directory not found: {run_dir}")
 
-    rating = {
-        "score": args.score,
-        "note": (args.note or "").strip(),
-        "rated_iso": utc_now().isoformat(timespec="seconds"),
-    }
-    write_json(run_dir / "rating.json", rating)
+    rating = _write_rating(run_dir, args.score, args.note)
     suffix = f' — "{rating["note"]}"' if rating["note"] else ""
     print(f"Recorded rating {rating['score']}/5 for {run_dir.name}{suffix}")
+
+
+def _prompt_for_rating(run_dir: Path) -> None:
+    """Invite a human quality rating at the end of finalize.
+
+    Interactive when attached to a TTY (a human running ``finalize`` directly);
+    otherwise prints a copy-paste nudge so automation — and the assistant driving
+    finalize via a non-interactive shell — never blocks on stdin.
+    """
+    nudge = (
+        f"   python run_phase.py rate --run-dir {run_dir} "
+        f"--score <1-5> --note \"...\""
+    )
+    if not sys.stdin.isatty():
+        print("\n📊 Rate this run (feeds `stats` + tuning over time):")
+        print(nudge)
+        return
+
+    try:
+        raw = input("\n📊 Rate this run 1-5 (Enter to skip): ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return
+    if not raw:
+        return
+    try:
+        score = int(raw)
+    except ValueError:
+        print(f"   Not a number — skipped. Rate later with:\n{nudge}")
+        return
+    if not 1 <= score <= 5:
+        print("   Score must be 1-5 — skipped.")
+        return
+    try:
+        note = input("   Note (optional, Enter to skip): ").strip()
+    except (EOFError, KeyboardInterrupt):
+        note = ""
+        print()
+    _write_rating(run_dir, score, note)
+    print(f"   Recorded {score}/5.")
 
 
 def _parse_usage_log(text: str) -> Dict:
