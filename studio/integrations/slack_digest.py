@@ -1,0 +1,297 @@
+"""
+Post a run digest to a Slack Incoming Webhook and/or an n8n Webhook node.
+
+Both targets are "HTTP POST a JSON body to a URL", so a single stdlib
+``urllib`` transport (:func:`post_json`) serves both; only the payload schema
+and auth differ. Slack gets a Block Kit message (:func:`build_slack_blocks`);
+n8n gets a flat run-digest JSON (:func:`build_n8n_payload`) it can fan out from.
+
+Configuration lives in ``.studio/integrations.toml`` (loaded with the same
+tomllib pattern as ``persona_overrides.py``). Webhook URLs are secrets and are
+resolved from environment variables named in the config — never stored in the
+repo. The integration is disabled unless a target is explicitly enabled.
+
+File schema (all tables/keys optional; absent → that target is off)::
+
+    [slack]
+    enabled = true
+    webhook_url_env = "SLACK_WEBHOOK_URL"   # env var holding the secret URL
+
+    [n8n]
+    enabled = false
+    webhook_url_env = "N8N_WEBHOOK_URL"
+    auth_header = "X-API-Key"               # optional (n8n Header Auth)
+    auth_value_env = "N8N_WEBHOOK_KEY"      # optional secret for that header
+
+Notification failures are soft: :func:`post_json` never raises and
+:func:`notify_run` only returns human-readable result strings, so a webhook
+problem can never break the run it is reporting on.
+"""
+from __future__ import annotations
+
+try:
+    import tomllib  # Python 3.11+
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore[no-redefine]  # Python 3.10 fallback
+
+import json
+import os
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+
+INTEGRATIONS_FILENAME = "integrations.toml"
+_SUMMARY_MAX_CHARS = 600
+_USER_AGENT = "TheGameStudio-digest/1.0"
+
+
+class IntegrationsConfigError(RuntimeError):
+    """Raised when ``.studio/integrations.toml`` is present but invalid."""
+
+
+# --------------------------------------------------------------------------- #
+# Config
+# --------------------------------------------------------------------------- #
+def load_integrations_config(project_root: Path) -> Dict[str, Dict]:
+    """Load ``<project_root>/.studio/integrations.toml``.
+
+    Returns an empty dict when the file is absent. Raises
+    :class:`IntegrationsConfigError` on malformed TOML.
+    """
+    path = Path(project_root) / ".studio" / INTEGRATIONS_FILENAME
+    if not path.is_file():
+        return {}
+
+    try:
+        with path.open("rb") as fh:
+            data = tomllib.load(fh)
+    except tomllib.TOMLDecodeError as exc:
+        raise IntegrationsConfigError(
+            f"Integrations config at {path} is not valid TOML: {exc}"
+        ) from exc
+
+    if not isinstance(data, dict):
+        raise IntegrationsConfigError(
+            f"Integrations config at {path} must be a table."
+        )
+    return data
+
+
+def _resolve_secret(target_cfg: Dict, key: str) -> Optional[str]:
+    """Resolve a secret strictly from the ``<key>_env`` env-var indirection.
+
+    Secrets (webhook URLs, auth values) must never live in the committed config,
+    so there is deliberately no literal ``<key>`` fallback — only the named
+    environment variable is read. Returns None if unset/empty.
+    """
+    env_name = target_cfg.get(f"{key}_env")
+    if not env_name:
+        return None
+    value = os.environ.get(env_name)
+    return value.strip() if value and value.strip() else None
+
+
+# --------------------------------------------------------------------------- #
+# Transport
+# --------------------------------------------------------------------------- #
+def post_json(
+    url: str,
+    payload: Dict,
+    *,
+    headers: Optional[Dict[str, str]] = None,
+    timeout: float = 10.0,
+    max_retries: int = 2,
+) -> Tuple[bool, str]:
+    """POST ``payload`` as JSON to ``url``. Never raises.
+
+    Returns ``(ok, detail)`` where ``ok`` is True for any 2xx response.
+    Honors HTTP 429 by sleeping ``Retry-After`` seconds and retrying.
+    """
+    data = json.dumps(payload).encode("utf-8")
+    base_headers = {"Content-Type": "application/json", "User-Agent": _USER_AGENT}
+    if headers:
+        base_headers.update(headers)
+
+    for attempt in range(max_retries + 1):
+        req = urllib.request.Request(
+            url, data=data, headers=base_headers, method="POST"
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                body = resp.read().decode("utf-8", "replace").strip()
+                ok = 200 <= resp.status < 300
+                return ok, f"HTTP {resp.status} {body[:120]!r}"
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", "replace").strip()
+            if exc.code == 429 and attempt < max_retries:
+                retry_after = _retry_after_seconds(exc)
+                time.sleep(retry_after)
+                continue
+            return False, f"HTTP {exc.code} {body[:120]!r}"
+        except (urllib.error.URLError, TimeoutError) as exc:
+            return False, f"unreachable: {exc}"
+
+    return False, "exhausted retries"
+
+
+def _retry_after_seconds(exc: urllib.error.HTTPError) -> int:
+    raw = exc.headers.get("Retry-After", "1") if exc.headers else "1"
+    try:
+        return max(1, int(raw))
+    except (TypeError, ValueError):
+        return 1
+
+
+# --------------------------------------------------------------------------- #
+# Payload builders
+# --------------------------------------------------------------------------- #
+def _status_icon(status: str) -> str:
+    return ":white_check_mark:" if status.upper() == "COMPLETED" else ":warning:"
+
+
+def build_slack_blocks(meta: Dict) -> Dict:
+    """Build a Slack Block Kit digest payload from a run.json ``meta`` dict.
+
+    Includes a top-level ``text`` fallback (required by Slack) plus a header,
+    a two-column field section, and a context footer.
+    """
+    phase = str(meta.get("phase", "?"))
+    run_id = str(meta.get("run_id", "?"))
+    status = str(meta.get("status", "?"))
+    verdict = str(meta.get("verdict") or "N/A")
+    when = str(meta.get("updated_iso") or meta.get("created_display") or "")
+    iterations = meta.get("iterations_run")
+
+    footer = "TheGameStudio digest"
+    if iterations is not None:
+        footer += f" · {iterations} iteration(s)"
+    if when:
+        footer += f" · {when}"
+
+    return {
+        "text": f"Studio run summary — {phase} — {verdict}",
+        "blocks": [
+            {
+                "type": "header",
+                "text": {"type": "plain_text", "text": "Run Summary", "emoji": True},
+            },
+            {
+                "type": "section",
+                "fields": [
+                    {"type": "mrkdwn", "text": f"*Status:*\n{_status_icon(status)} {status}"},
+                    {"type": "mrkdwn", "text": f"*Verdict:*\n{verdict}"},
+                    {"type": "mrkdwn", "text": f"*Phase:*\n{phase}"},
+                    {"type": "mrkdwn", "text": f"*Run ID:*\n`{run_id}`"},
+                ],
+            },
+            {"type": "divider"},
+            {"type": "context", "elements": [{"type": "mrkdwn", "text": footer}]},
+        ],
+    }
+
+
+def build_n8n_payload(meta: Dict, summary_text: str = "") -> Dict:
+    """Build a flat run-digest payload for an n8n Webhook node.
+
+    Flat keys are addressable downstream as ``$json.body.<field>``.
+    """
+    return {
+        "source": "TheGameStudio",
+        "event": "run.completed",
+        "phase": meta.get("phase"),
+        "run_id": meta.get("run_id"),
+        "status": meta.get("status"),
+        "verdict": meta.get("verdict") or "N/A",
+        "iterations_run": meta.get("iterations_run"),
+        "summary_path": meta.get("summary_path"),
+        "summary_text": summary_text[:_SUMMARY_MAX_CHARS],
+        "timestamp": meta.get("updated_iso") or meta.get("created_iso"),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Orchestration
+# --------------------------------------------------------------------------- #
+def _read_summary_text(run_dir: Path, meta: Dict) -> str:
+    name = meta.get("summary_path") or "summary.md"
+    summary_path = Path(name)
+    if not summary_path.is_absolute():
+        summary_path = run_dir / summary_path.name
+    if summary_path.is_file():
+        return summary_path.read_text(encoding="utf-8").strip()
+    return ""
+
+
+def notify_run(
+    run_dir: Path,
+    config: Dict,
+    *,
+    dry_run: bool = False,
+) -> List[str]:
+    """Post the run digest to every enabled target. Returns result strings.
+
+    Reads ``run.json`` from ``run_dir``. Each enabled target is posted
+    independently; a failure on one is reported but does not affect the other.
+    With ``dry_run=True`` the payloads are built and reported but not sent.
+    """
+    run_dir = Path(run_dir)
+    meta_path = run_dir / "run.json"
+    if not meta_path.is_file():
+        raise FileNotFoundError(f"No run.json at {meta_path}")
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+
+    results: List[str] = []
+
+    slack_cfg = config.get("slack", {})
+    if slack_cfg.get("enabled"):
+        results.append(
+            _dispatch(
+                "slack",
+                _resolve_secret(slack_cfg, "webhook_url"),
+                build_slack_blocks(meta),
+                headers=None,
+                dry_run=dry_run,
+            )
+        )
+
+    n8n_cfg = config.get("n8n", {})
+    if n8n_cfg.get("enabled"):
+        headers = None
+        auth_header = n8n_cfg.get("auth_header")
+        if auth_header:
+            auth_value = _resolve_secret(n8n_cfg, "auth_value")
+            if auth_value:
+                headers = {auth_header: auth_value}
+        results.append(
+            _dispatch(
+                "n8n",
+                _resolve_secret(n8n_cfg, "webhook_url"),
+                build_n8n_payload(meta, _read_summary_text(run_dir, meta)),
+                headers=headers,
+                dry_run=dry_run,
+            )
+        )
+
+    if not results:
+        results.append("no targets enabled (see .studio/integrations.toml)")
+    return results
+
+
+def _dispatch(
+    name: str,
+    url: Optional[str],
+    payload: Dict,
+    *,
+    headers: Optional[Dict[str, str]],
+    dry_run: bool,
+) -> str:
+    if not url:
+        return f"{name}: skipped (no webhook URL configured)"
+    if dry_run:
+        return f"{name}: dry-run → {json.dumps(payload)}"
+    ok, detail = post_json(url, payload, headers=headers)
+    status = "ok" if ok else "FAILED"
+    return f"{name}: {status} ({detail})"

@@ -70,6 +70,7 @@ from rerun import (
 from validators.code_validator import CodeValidator
 
 import clarity
+from integrations.slack_digest import load_integrations_config, notify_run
 
 try:
     import tomllib  # Python 3.11+
@@ -200,6 +201,7 @@ SUBCOMMANDS = {
     "init", "check-install", "update",
     "show-clarity", "set-clarity", "recompute-clarity",
     "record-metrics", "show-metrics", "offload", "setup",
+    "notify",
 }
 
 
@@ -1301,6 +1303,7 @@ def finalize_run(args: argparse.Namespace) -> None:
     write_json(meta_path, meta)
     rebuild_index()
     _append_run_log(meta)
+    _maybe_notify(run_dir)
 
     if metrics_entries:
         total_tokens = meta["metrics"]["total_tokens"]
@@ -1351,6 +1354,26 @@ def finalize_run(args: argparse.Namespace) -> None:
         print(f"   1. Review rejection reasons in contrarian files")
         print(f"   2. Prepare a rerun with revised approach")
         print(f"   3. Rerun will automatically inject failure context")
+
+
+def _maybe_notify(run_dir: Path) -> None:
+    """Auto-fire the run digest on finalize if a webhook target is enabled.
+
+    Default-disabled: no-op unless ``.studio/integrations.toml`` enables a
+    target. Soft-fail — any error is reported but never breaks finalize.
+    """
+    try:
+        config = load_integrations_config(get_artifact_root())
+    except Exception as exc:  # malformed config shouldn't break finalize
+        print(f"Notify skipped (config error): {exc}", file=sys.stderr)
+        return
+    if not any(config.get(t, {}).get("enabled") for t in ("slack", "n8n")):
+        return
+    try:
+        for line in notify_run(run_dir, config):
+            print(f"Notify: {line}")
+    except Exception as exc:
+        print(f"Notify failed: {exc}", file=sys.stderr)
 
 
 def rebuild_index() -> None:
@@ -1746,6 +1769,17 @@ def build_parser() -> argparse.ArgumentParser:
         "show-metrics", help="Display token usage summary for a run."
     )
     show_metrics_parser.add_argument("--run-dir", type=Path, required=True, help="Path to the run directory.")
+
+    # --- Outbound notification (Slack / n8n run digest) ---
+    notify_parser = subparsers.add_parser(
+        "notify", help="Post a run digest to configured Slack/n8n webhooks."
+    )
+    notify_parser.add_argument("--run-dir", type=Path, required=True, help="Path to the run directory.")
+    notify_parser.add_argument("--dry-run", action="store_true", help="Build and print payloads without posting.")
+    notify_parser.add_argument(
+        "--artifact-root", type=Path, default=None,
+        help="Override artifact root directory (where .studio/integrations.toml lives).",
+    )
 
     offload_parser = subparsers.add_parser(
         "offload", help="Analyze CLAUDE.md for offload opportunities."
@@ -2237,6 +2271,14 @@ def inject_context(args: argparse.Namespace) -> None:
         print(f"No prior context for {scope_name} {role} {stance} — starting fresh.", file=sys.stderr)
 
 
+def notify(args: argparse.Namespace) -> None:
+    """Post a run digest to configured Slack/n8n webhooks."""
+    root = Path(args.artifact_root).resolve() if args.artifact_root else get_artifact_root()
+    config = load_integrations_config(root)
+    for line in notify_run(args.run_dir, config, dry_run=args.dry_run):
+        print(line)
+
+
 def show_clarity(args: argparse.Namespace) -> None:
     """Display current project clarity scores."""
     root = Path(args.artifact_root).resolve() if args.artifact_root else get_artifact_root()
@@ -2488,6 +2530,8 @@ def main() -> None:
         record_metrics(args)
     elif args.command == "show-metrics":
         show_metrics(args)
+    elif args.command == "notify":
+        notify(args)
     elif args.command == "offload":
         do_offload(args)
     elif args.command == "setup":
