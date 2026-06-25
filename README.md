@@ -169,6 +169,10 @@ python studio/run_phase.py setup --target . --defaults
 # Offload analysis (analyze CLAUDE.md for offload opportunities)
 python studio/run_phase.py offload --target .
 python studio/run_phase.py offload --target . --apply
+
+# Outbound run digest (Slack / n8n webhooks — see studio/docs/INTEGRATIONS.md)
+python studio/run_phase.py notify --run-dir <run_dir>            # post digest to enabled webhooks
+python studio/run_phase.py notify --run-dir <run_dir> --dry-run  # print payloads without posting
 ```
 
 ---
@@ -297,7 +301,7 @@ Configure in `config/studio_settings.toml`. Use `--skip-cleanup` to bypass.
 
 ```
 studio/
-  run_phase.py              # CLI entrypoint: prepare, finalize, validate, cleanup, decision, clarity, metrics, install, setup, offload
+  run_phase.py              # CLI entrypoint: prepare, finalize, validate, cleanup, decision, clarity, metrics, install, setup, offload, notify
   run_phase_roles.py        # Role system: manifest, packs, dependencies, file naming
   role_overrides.py         # Project-local role customization (.studio/roles/*.json)
   persona_overrides.py      # Project-local phase persona overrides (.studio/personas.toml)
@@ -311,13 +315,14 @@ studio/
   cleanup.py                # TTL + budget-based artifact cleanup + loose file removal
   rerun.py                  # Rejection context injection for iterate-on-failure
   verdict.py                # APPROVED/REJECTED extraction
+  integrations/             # Outbound run-digest webhooks (slack_digest.py → Slack/n8n)
   validators/               # DocumentValidator + CodeValidator
   studio.manifest.json      # Role definitions (13 disciplines)
   role_packs/*.json          # Curated role sets (studio_core, etc.)
   config/scopes.toml         # Default scope configuration
   config/studio_settings.toml # Cleanup settings
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 539 tests (pytest)
+  tests/                    # 563 tests (pytest)
 ```
 
 ---
@@ -328,7 +333,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-539 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows, CLAUDE.md principles injection, agent metrics tracking, CLAUDE.md offload analysis, unstale audit configuration, and setup wizard configuration.
+563 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows, CLAUDE.md principles injection, agent metrics tracking, CLAUDE.md offload analysis, unstale audit configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 

@@ -28,7 +28,7 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 
 | Component | Purpose |
 | --- | --- |
-| `run_phase.py` | CLI entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, clarity, install, decision, metrics, setup, and offload subcommands. |
+| `run_phase.py` | CLI entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, clarity, install, decision, metrics, setup, offload, and `notify` subcommands. |
 | `run_phase_roles.py` | Loads `studio.manifest.json`, applies role packs with dependency injection, applies project-local overrides, and normalizes per-role filenames. |
 | `role_overrides.py` | Project-local role customization: loads `.studio/roles/*.json` overlays, validates structure, shallow-merges with manifest roles. |
 | `persona_overrides.py` | Project-local single-phase persona overrides: loads `.studio/personas.toml`, per-phase shallow-merges over the shipped `PHASE_DETAILS` defaults. |
@@ -43,12 +43,14 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 | `offload.py` | CLAUDE.md analyzer: classifies sections, detects embedded constraints, scores pointer strength, generates offload reports, manages canary tokens. |
 | `setup.py` | Setup wizard: project configuration after install. Tracks setup state in `.studio/SETUP.json`, generates role overrides, scopes, and cleanup config with incremental versioned steps. |
 | `validators/` | `DocumentValidator` and `CodeValidator` for post-run quality checks. |
+| `integrations/slack_digest.py` | Outbound run-digest notifier. Posts a finalized run's status/verdict/summary to a Slack Incoming Webhook (Block Kit) and/or an n8n Webhook node (flat JSON), stdlib `urllib` only. Config from `.studio/integrations.toml`; fires via the `notify` subcommand and auto-fires on `finalize` (soft-fail). |
 | `studio.manifest.json` | Declarative description of phase-level personas, Studio role definitions, and role dependencies. |
 | `role_packs/*.json` | Curated sets of Studio roles (e.g., `studio_core`). Operators pick a pack, then add/remove roles with CLI flags. |
 | `config/scopes.toml` | Default scope configuration for studio phase runs. |
 | `.studio/roles/*.json` | Project-local role overrides. Shallow-merge with manifest roles (override keys replace base, unspecified keys inherit). |
 | `.studio/personas.toml` | Project-local single-phase persona overrides. Per-phase shallow-merge over the shipped `PHASE_DETAILS` defaults (loaded by `persona_overrides.py`, authored by the setup wizard). |
 | `.studio/unstale.toml` | Optional per-repo override for the `/unstale` audit (`[snapshot]` commands + `[audit]` globs). Read by the `/unstale` command; absent it self-detects the stack. Authored by the setup wizard. |
+| `.studio/integrations.toml` | Optional outbound-webhook config for run digests. `[slack]` and `[n8n]` tables, each with `enabled` and `webhook_url_env` (env var holding the secret URL); `[n8n]` also takes optional `auth_header`/`auth_value_env` for Header Auth. Loaded by `integrations/slack_digest.py`. |
 | `docs/role_prompts/*.md` | Long-form prompts for each role. Instructions link to these files rather than inlining pages of text. |
 | Active output root (`output/` or `.studio/output/`) | Run folders containing instructions, advocate/contrarian artifacts, integrator plans, summaries, and metadata. |
 | Active knowledge log (`knowledge/run_log.md` or `.studio/knowledge/run_log.md`) | Append-only log of finalized runs for easy reference across repos. |
