@@ -79,16 +79,22 @@ def test_load_config_invalid_toml_raises(tmp_path):
         sd.load_integrations_config(tmp_path)
 
 
-def test_resolve_secret_prefers_env(monkeypatch):
+def test_resolve_secret_reads_env(monkeypatch):
     monkeypatch.setenv("MY_HOOK", "https://hooks.slack.com/services/x")
-    cfg = {"webhook_url_env": "MY_HOOK", "webhook_url": "literal"}
+    cfg = {"webhook_url_env": "MY_HOOK"}
     assert sd._resolve_secret(cfg, "webhook_url").endswith("/x")
 
 
-def test_resolve_secret_falls_back_to_literal(monkeypatch):
+def test_resolve_secret_no_literal_fallback(monkeypatch):
+    # A literal URL in config must NOT be honored — secrets are env-only.
     monkeypatch.delenv("MY_HOOK", raising=False)
-    cfg = {"webhook_url_env": "MY_HOOK", "webhook_url": "literal-url"}
-    assert sd._resolve_secret(cfg, "webhook_url") == "literal-url"
+    cfg = {"webhook_url_env": "MY_HOOK", "webhook_url": "https://hooks.slack.com/services/leaked"}
+    assert sd._resolve_secret(cfg, "webhook_url") is None
+
+
+def test_resolve_secret_no_env_key(monkeypatch):
+    # Without the *_env indirection there is no secret to resolve.
+    assert sd._resolve_secret({"webhook_url": "literal"}, "webhook_url") is None
 
 
 # --------------------------------------------------------------------------- #
@@ -186,6 +192,7 @@ def test_notify_run_dry_run_does_not_post(run_dir, monkeypatch):
 def test_notify_run_posts_to_enabled_targets(run_dir, monkeypatch):
     monkeypatch.setenv("SLACK_HOOK", "http://slack")
     monkeypatch.setenv("N8N_HOOK", "http://n8n")
+    monkeypatch.setenv("N8N_KEY", "sekret")
     sent = []
 
     def capture(req, *a, **k):
@@ -199,7 +206,7 @@ def test_notify_run_posts_to_enabled_targets(run_dir, monkeypatch):
             "enabled": True,
             "webhook_url_env": "N8N_HOOK",
             "auth_header": "X-API-Key",
-            "auth_value": "sekret",
+            "auth_value_env": "N8N_KEY",
         },
     }
     results = sd.notify_run(run_dir, cfg)

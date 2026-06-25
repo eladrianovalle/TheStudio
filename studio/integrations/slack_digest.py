@@ -81,19 +81,17 @@ def load_integrations_config(project_root: Path) -> Dict[str, Dict]:
 
 
 def _resolve_secret(target_cfg: Dict, key: str) -> Optional[str]:
-    """Resolve a secret from ``<key>_env`` (env var) or a literal ``<key>``.
+    """Resolve a secret strictly from the ``<key>_env`` env-var indirection.
 
-    Prefers the env-var indirection so secrets stay out of the repo.
+    Secrets (webhook URLs, auth values) must never live in the committed config,
+    so there is deliberately no literal ``<key>`` fallback — only the named
+    environment variable is read. Returns None if unset/empty.
     """
     env_name = target_cfg.get(f"{key}_env")
-    if env_name:
-        value = os.environ.get(env_name)
-        if value:
-            return value.strip()
-    literal = target_cfg.get(key)
-    if isinstance(literal, str) and literal.strip():
-        return literal.strip()
-    return None
+    if not env_name:
+        return None
+    value = os.environ.get(env_name)
+    return value.strip() if value and value.strip() else None
 
 
 # --------------------------------------------------------------------------- #
