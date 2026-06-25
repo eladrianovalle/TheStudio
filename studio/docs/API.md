@@ -27,6 +27,8 @@ Supported commands:
 | `recompute-clarity` | Recomputes clarity from a run's decisions. |
 | `record-metrics` | Records token usage for a single agent invocation into `metrics.json`. |
 | `show-metrics` | Displays aggregated agent token usage for a run (by scope, role, per-agent). |
+| `rate` | Records a human quality rating (1-5, optional note) for a run into `rating.json`. |
+| `stats` | Cross-run diagnostics dashboard: verdict/approval rate, avg + lowest human ratings, token/cost efficiency, decision priority mix + answer rate, and prepare-usage counts. Supports `--phase`, `--json`, `--artifact-root`. |
 | `offload` | Analyzes CLAUDE.md for content safe to offload to companion docs. Classifies sections, scores pointer strength, generates reports. |
 | `init` | Installs Studio into a target project directory. |
 | `check-install` | Checks if installed Studio is up to date. |
@@ -108,6 +110,30 @@ Appends an entry to `{run_dir}/metrics.json`. Called by the orchestrator after e
 | `--run-dir PATH` | Yes | – | Path to the run directory. |
 
 Displays a formatted summary of all recorded metrics: total tokens, tool uses, duration, breakdowns by scope and role, and per-agent detail.
+
+---
+
+### 1.5 `rate` arguments
+
+| Flag | Required | Default | Description |
+| --- | --- | --- | --- |
+| `--run-dir PATH` | Yes | – | Path to the run directory. |
+| `--score {1,2,3,4,5}` | Yes | – | Human quality score: 1 (poor) to 5 (excellent). |
+| `--note TEXT` | No | `None` | Optional note on what was good or bad. |
+
+Writes `{run_dir}/rating.json` (`{score, note, rated_iso}`), overwriting any prior rating. This human score is the counterpart to the agent-emitted `verdict` and is the primary signal `stats` uses to gauge quality.
+
+---
+
+### 1.6 `stats` arguments
+
+| Flag | Required | Default | Description |
+| --- | --- | --- | --- |
+| `--phase {market,design,tech,studio}` | No | `None` | Filter the dashboard to a single phase. |
+| `--json` | No | `false` | Emit the aggregated stats dict as JSON instead of the text dashboard. |
+| `--artifact-root PATH` | No | auto | Override artifact root (where `output/` and `.studio/usage.log` live). |
+
+Reads every run's `run.json`, `rating.json`, and `decisions.json` under the output root, plus `.studio/usage.log`, and aggregates: total/by-phase/by-status run counts, verdict distribution + approval rate, human-rating count/avg/by-phase + lowest-rated runs, token/cost/hours efficiency, decision priority mix + answer rate, and prepare-usage counts. Pure aggregation lives in `aggregate_stats()`; rendering in `format_stats()`.
 
 ---
 

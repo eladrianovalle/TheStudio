@@ -470,6 +470,137 @@ def test_finalize_aggregates_metrics(studio_root):
 
 
 # ---------------------------------------------------------------------------
+# Human quality ratings & cross-run stats
+# ---------------------------------------------------------------------------
+
+
+def test_record_rating_writes_rating_json(tmp_path):
+    """rate writes score + note + timestamp to rating.json."""
+    run_dir = tmp_path / "run_market_001"
+    run_dir.mkdir()
+
+    run_phase.record_rating(argparse.Namespace(run_dir=run_dir, score=4, note="solid market read"))
+
+    rating = run_phase._load_rating(run_dir)
+    assert rating["score"] == 4
+    assert rating["note"] == "solid market read"
+    assert "rated_iso" in rating
+
+
+def test_record_rating_overwrites(tmp_path):
+    """Re-rating a run replaces the prior rating."""
+    run_dir = tmp_path / "run_market_001"
+    run_dir.mkdir()
+    run_phase.record_rating(argparse.Namespace(run_dir=run_dir, score=2, note=""))
+    run_phase.record_rating(argparse.Namespace(run_dir=run_dir, score=5, note="much better on rerun"))
+
+    rating = run_phase._load_rating(run_dir)
+    assert rating["score"] == 5
+    assert rating["note"] == "much better on rerun"
+
+
+def test_load_rating_absent(tmp_path):
+    """_load_rating returns None when no rating exists."""
+    run_dir = tmp_path / "run_market_001"
+    run_dir.mkdir()
+    assert run_phase._load_rating(run_dir) is None
+
+
+def test_record_rating_missing_dir(tmp_path):
+    """rate raises on a non-existent run directory."""
+    with pytest.raises(FileNotFoundError):
+        run_phase.record_rating(argparse.Namespace(run_dir=tmp_path / "nope", score=3, note=None))
+
+
+class _DP:
+    """Minimal DecisionPoint stand-in for aggregate_stats tests."""
+
+    def __init__(self, priority, answer=None):
+        self.priority = priority
+        self.answer = answer
+
+
+def test_aggregate_stats_empty():
+    """No runs yields a zeroed summary."""
+    agg = run_phase.aggregate_stats([])
+    assert agg["total_runs"] == 0
+    assert agg["approval_rate"] is None
+    assert agg["ratings"]["count"] == 0
+
+
+def test_aggregate_stats_full():
+    """aggregate_stats rolls up phases, verdicts, ratings, tokens, decisions."""
+    runs = [
+        {
+            "run_id": "run_market_1", "phase": "market", "status": "COMPLETED",
+            "verdict": "APPROVED", "metrics": {"total_tokens": 10000}, "cost": 1.5,
+            "_rating": {"score": 4, "note": "good"},
+            "_decisions": [_DP("P0", answer="yes"), _DP("P2")],
+        },
+        {
+            "run_id": "run_market_2", "phase": "market", "status": "COMPLETED",
+            "verdict": "REJECTED", "metrics": {"total_tokens": 20000},
+            "_rating": {"score": 2, "note": "thin"},
+            "_decisions": [_DP("P1")],
+        },
+        {
+            "run_id": "run_tech_1", "phase": "tech", "status": "PENDING",
+            "verdict": "UNKNOWN", "metrics": {},
+            "_rating": None, "_decisions": [],
+        },
+    ]
+    agg = run_phase.aggregate_stats(runs)
+
+    assert agg["total_runs"] == 3
+    assert agg["by_phase"] == {"market": 2, "tech": 1}
+    assert agg["by_status"] == {"COMPLETED": 2, "PENDING": 1}
+    assert agg["verdicts"] == {"APPROVED": 1, "REJECTED": 1, "UNKNOWN": 1}
+    assert agg["approval_rate"] == 0.5  # 1 approved of 2 decided
+
+    assert agg["ratings"]["count"] == 2
+    assert agg["ratings"]["avg"] == 3.0
+    assert agg["ratings"]["by_phase_avg"]["market"] == 3.0
+    assert agg["ratings"]["lowest"][0]["score"] == 2  # lowest first
+
+    assert agg["tokens"]["total"] == 30000
+    assert agg["tokens"]["runs"] == 2  # tech run had no tokens
+    assert agg["tokens"]["avg"] == 15000
+    assert agg["cost"]["total"] == 1.5
+
+    assert agg["decisions"]["total"] == 3
+    assert agg["decisions"]["by_priority"] == {"P0": 1, "P1": 1, "P2": 1}
+    assert agg["decisions"]["answered"] == 1
+    assert agg["decisions"]["answer_rate"] == 1 / 3
+
+
+def test_parse_usage_log():
+    """_parse_usage_log resurrects the prepare log into counts."""
+    text = (
+        "2026-01-01T00:00:00 | prepare | market | deliverables | roles= | scoped=false\n"
+        "2026-01-02T00:00:00 | prepare | studio | deliverables | roles=product,design | scoped=true\n"
+        "2026-01-03T00:00:00 | prepare | market | questions | roles= | scoped=false\n"
+        "garbage line that should be skipped\n"
+    )
+    usage = run_phase._parse_usage_log(text)
+    assert usage["total"] == 3
+    assert usage["by_phase"] == {"market": 2, "studio": 1}
+    assert usage["by_mode"] == {"deliverables": 2, "questions": 1}
+    assert usage["scoped"] == {"true": 1, "false": 2}
+
+
+def test_format_stats_smoke():
+    """format_stats renders without error and surfaces a rating hint when unrated."""
+    agg = run_phase.aggregate_stats([
+        {"run_id": "r1", "phase": "market", "status": "COMPLETED",
+         "verdict": "APPROVED", "metrics": {"total_tokens": 5000},
+         "_rating": None, "_decisions": []},
+    ])
+    out = run_phase.format_stats(agg)
+    assert "Studio Cross-Run Stats" in out
+    assert "No runs rated yet" in out
+
+
+# ---------------------------------------------------------------------------
 # Fresh run context reset tests
 # ---------------------------------------------------------------------------
 

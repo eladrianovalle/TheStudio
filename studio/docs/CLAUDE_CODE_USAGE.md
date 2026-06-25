@@ -224,6 +224,57 @@ At finalize, metrics are aggregated into `run.json["metrics"]` for permanent rec
 
 ---
 
+### Quality Ratings & Cross-Run Stats
+
+The agent **verdict** (APPROVED/REJECTED) tells you what the debate concluded — not whether the run was actually *useful to you*. To gauge how well Studio is doing and improve it as you use it, record your own judgment and look across runs.
+
+**Rate a run** (1 = poor, 5 = excellent) after you've reviewed its output:
+```bash
+python studio/run_phase.py rate --run-dir <path> --score 4 --note "solid market read, weak on monetization"
+```
+This writes `{run_dir}/rating.json` — the human counterpart to the agent verdict. Re-running `rate` overwrites the prior score (e.g. after a rerun improves things).
+
+**View the cross-run dashboard:**
+```bash
+python studio/run_phase.py stats                # all runs
+python studio/run_phase.py stats --phase studio # one phase
+python studio/run_phase.py stats --json         # machine-readable
+```
+
+Example output:
+```
+Studio Cross-Run Stats
+Total runs: 12
+  By phase:  design=3, market=4, studio=4, tech=1
+  By status: COMPLETED=11, PENDING=1
+
+Verdicts (agent):
+  APPROVED=8  REJECTED=3  UNKNOWN=1
+  Approval rate: 73% (of decided runs)
+
+Quality ratings (human):
+  Rated 9/12 runs — avg 3.6/5
+  By phase: design=4.0, market=3.5, studio=3.3, tech=2.0
+  Lowest-rated (improvement targets):
+    2/5  run_tech_20260601_120000 — missed netcode tradeoffs
+
+Efficiency:
+  Tokens: 612,000 across 11 runs (avg 55,636/run)
+
+Decision points:
+  41 total — P0=6 P1=18 P2=17
+  Answered: 33/41 (80%)
+
+Usage (prepare log):
+  12 prepares — design=3, market=4, studio=4, tech=1
+  Modes: deliverables=10, questions=2
+  Scoped: 4 / Flat: 8
+```
+
+**The fine-tuning loop:** `stats` surfaces *where* the system underperforms (low-rated phases, runs you flagged, expensive scopes, unanswered decisions). Use those signals to adjust the knobs that actually shape runs — phase/role personas (`.studio/personas.toml`, `.studio/roles/*.json`), scope budgets (`.studio/scopes.toml`), and clarity thresholds — then re-rate to confirm the change helped. There's no model to train; calibration is judgment-driven, and the ratings are the evidence.
+
+---
+
 ## Cross-Repo Usage
 
 Studio can be invoked from any external repository. Artifacts land in the calling repo, not in Studio.
