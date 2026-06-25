@@ -135,6 +135,10 @@ python studio/run_phase.py show-metrics --run-dir <path>
 python studio/run_phase.py cleanup --dry-run
 python studio/run_phase.py cleanup
 
+# Outbound notifications (Slack / n8n run digest — see studio/docs/INTEGRATIONS.md)
+python studio/run_phase.py notify --run-dir <run_dir>            # post digest to enabled webhooks
+python studio/run_phase.py notify --run-dir <run_dir> --dry-run  # print payloads without posting
+
 # Cross-repo install (installs slash commands + source into any project)
 python studio/run_phase.py init --target /path/to/project
 python studio/run_phase.py check-install --target /path/to/project
@@ -174,6 +178,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 - **`offload.py`** — CLAUDE.md analyzer: classifies sections, detects embedded constraints, scores pointer strength, generates offload reports and manages canary tokens.
 - **`setup.py`** — Setup wizard: project configuration after install. Tracks setup state in `.studio/SETUP.json`, generates role overrides, scopes, and cleanup config. Supports incremental re-configuration when new features are added.
 - **`validators/`** — `DocumentValidator` (including `validate_question_mode()`) and `CodeValidator` for post-run quality checks.
+- **`integrations/slack_digest.py`** — Outbound run-digest notifier. Posts a finalized run's status/verdict/summary to a Slack Incoming Webhook (Block Kit) and/or an n8n Webhook node (flat JSON), stdlib `urllib` only. Config from `.studio/integrations.toml`; webhook URLs resolved from env vars (secrets never committed). Fires via the `notify` subcommand and, when enabled, auto-fires on `finalize` (soft-fail). See `studio/docs/INTEGRATIONS.md`.
 
 ### Configuration files
 
@@ -185,6 +190,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 - **`.studio/validation.toml`** — Validation configuration.
 - **`.studio/roles/*.json`** — Project-local role overrides. Shallow-merge with manifest roles (override keys replace base, unspecified keys inherit).
 - **`.studio/personas.toml`** — Project-local single-phase persona overrides (market/design/tech/studio advocate, contrarian, notes, implementer, integrator). Per-phase shallow merge over the shipped `PHASE_DETAILS` defaults; loaded via `persona_overrides.py`, authored by the setup wizard.
+- **`.studio/integrations.toml`** — Optional outbound-webhook config for run digests. `[slack]` and `[n8n]` tables, each with `enabled` and `webhook_url_env` (env var holding the secret URL); `[n8n]` also takes optional `auth_header`/`auth_value_env` for Header Auth. Absent or no target `enabled` → notifications are off. Loaded by `integrations/slack_digest.py`.
 - **`.studio/unstale.toml`** — Optional per-repo override for the `/unstale` staleness audit: `[snapshot]` commands (`test_count`, `module_inventory`, `cli_help`) and `[audit]` globs (`doc_globs`, `source_globs`, `cross_refs`). When absent, `/unstale` self-detects the stack (Rust/Unity/Node/Python/Go) from marker files. Read directly by the `/unstale` command, not Python code.
 
 ### Artifact structure
