@@ -5,11 +5,13 @@ All notable changes to Studio will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Slack / n8n run-digest integration** — first `studio/integrations/` subpackage (`slack_digest.py`). Posts a finalized run's status/verdict/summary to a Slack Incoming Webhook (Block Kit) and/or an n8n Webhook node (flat JSON), stdlib `urllib` only. New `notify` CLI subcommand (`--run-dir`, `--dry-run`); auto-fires on `finalize` when a target is enabled (default-disabled, soft-fail). Config in `.studio/integrations.toml`; webhook URLs/auth resolved strictly from env vars named by `*_env` keys (no literal fallback — secrets never committed). Companion doc `studio/docs/INTEGRATIONS.md`.
+- **CI: Phase-1 PR triage gate** — `.github/workflows/pr-triage.yml` (No-Merge-Conflicts + triage checks).
 - **Contrarian editor mandate** (always on) — a shared `CONTRARIAN_MANDATE` (`scopes.py`) injected into every deliverable-producing contrarian prompt (single-phase, flat studio, and scoped studio). The contrarian now carries a bias toward removal/merge/simplification alongside flaw-hunting; the four `PHASE_DETAILS` contrarians are reframed as editors. Deliberately omitted in `--mode questions`, where the contrarian instead judges question *relevance* and must not drop genuinely-open questions.
 - **Open-Questions Pre-Flight** (Step 0) — every deliverable run now opens with a required questions pass that surfaces what is unsettled, pauses on P0 blockers, and records answers (raising the clarity score) before the iteration loop. Reuses the existing decision/clarity machinery — no new module. The Decision Point Protocol now states explicitly that every later pass must keep raising new questions.
 - Project-overridable single-phase personas via `.studio/personas.toml` (`persona_overrides.py`) — per-phase shallow-merge over the shipped `PHASE_DETAILS` defaults; setup wizard `persona_customization` step (`CURRENT_SETUP_VERSION` 2) with stack-sniffing suggestions.
 - Stack-agnostic `/unstale` — the command self-detects the stack (Rust/Unity/Node/Python/Go) from marker files, with an optional per-repo `.studio/unstale.toml` override (`[snapshot]` commands + `[audit]` globs). Setup wizard `unstale_config` step (`CURRENT_SETUP_VERSION` 3) with `suggest_unstale_from_stack` sniffing; shared `_toml_quote` helper.
-- 14 Python modules in `studio/` (added `persona_overrides.py`); 546 tests.
+- 14 top-level Python modules in `studio/` plus the new `integrations/` subpackage (`slack_digest.py`); 563 tests.
 
 ### Fixed
 - Stack-neutral phase personas — removed hardcoded "Three.js / WebGL" and "Steam hook" wording from `PHASE_DETAILS`.

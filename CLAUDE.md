@@ -163,7 +163,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 
 ### Core modules (all in `studio/`)
 
-- **`run_phase.py`** — Primary entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, decision, clarity, metrics, install, setup, and offload subcommands.
+- **`run_phase.py`** — Primary entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, decision, clarity, metrics, install, setup, offload, and notify subcommands.
 - **`run_phase_roles.py`** — Role system: loads `studio.manifest.json`, resolves role packs, applies project-local overrides, builds per-role file naming (`advocate--<role>--NN.md`).
 - **`role_overrides.py`** — Project-local role customization: loads `.studio/roles/*.json` overlays, validates structure, shallow-merges with manifest roles.
 - **`persona_overrides.py`** — Project-local single-phase persona overrides: loads `.studio/personas.toml`, validates structure, per-phase shallow-merges over the shipped `PHASE_DETAILS` defaults (advocate/contrarian/notes/implementer/integrator).

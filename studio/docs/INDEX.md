@@ -18,6 +18,7 @@
 - **[STORAGE_MANAGEMENT.md](./STORAGE_MANAGEMENT.md)** - Cleanup, TTL, and storage budgets
 
 ## Integration
+- **[INTEGRATIONS.md](./INTEGRATIONS.md)** - Slack / n8n run-digest webhooks (config, payloads, security)
 - **[INTEGRATION_GUIDE.md](./INTEGRATION_GUIDE.md)** - Using Studio from other repos
 - **[STUDIO_BRIDGE_TEMPLATE.md](./STUDIO_BRIDGE_TEMPLATE.md)** - Bridge doc template for downstream repos
 - **[BRIDGE_COMMANDS_TEMPLATE.md](./BRIDGE_COMMANDS_TEMPLATE.md)** - Slash command files to copy into a downstream repo's `.claude/commands/`

@@ -1,7 +1,9 @@
 # TICKET: Slack / n8n webhook digest for completed runs
 
 **Type:** Feature · **Component:** `studio/integrations/` (new) · **Priority:** P2
-**Status:** Proposed · **Author:** Adriano Valle · **Date:** 2026-06-25
+**Status:** ✅ Shipped — PR #21 (merged 2026-06-25). Slack target verified live (HTTP 200).
+n8n target: code shipped; activation tracked in `TICKET-n8n-activation.md`.
+**Author:** Adriano Valle · **Date:** 2026-06-25
 
 > **Decisions (locked):** `notify` CLI is the primary trigger; auto-fire-on-finalize
 > ships in the same PR but **default-disabled**. Both **Slack + n8n** targets in v1.
