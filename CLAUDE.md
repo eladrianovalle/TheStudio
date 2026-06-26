@@ -131,6 +131,12 @@ python studio/run_phase.py recompute-clarity --phase studio --run-id <run_id>
 python studio/run_phase.py record-metrics --run-dir <path> --agent advocate --total-tokens 5000 --tool-uses 10 --duration-ms 30000 --role marketing --scope alignment
 python studio/run_phase.py show-metrics --run-dir <path>
 
+# Quality ratings & cross-run stats (diagnostics + fine-tuning feedback loop)
+python studio/run_phase.py rate --run-dir <path> --score 4 --note "solid market read"  # human 1-5 quality score
+python studio/run_phase.py stats                       # cross-run dashboard: verdicts, ratings, tokens, decisions, usage
+python studio/run_phase.py stats --phase studio        # filter to one phase
+python studio/run_phase.py stats --json                # machine-readable aggregate
+
 # Storage cleanup
 python studio/run_phase.py cleanup --dry-run
 python studio/run_phase.py cleanup
@@ -163,7 +169,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 
 ### Core modules (all in `studio/`)
 
-- **`run_phase.py`** — Primary entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, decision, clarity, metrics, install, setup, offload, and notify subcommands.
+- **`run_phase.py`** — Primary entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, decision, clarity, metrics, rate, stats, install, setup, offload, and notify subcommands. The `rate`/`stats` pair is the diagnostics + fine-tuning feedback loop: `rate` records a human 1-5 quality score per run (`rating.json`, the human counterpart to the agent verdict); `stats` reads every run's `run.json`/`rating.json`/`decisions.json` plus the `.studio/usage.log` and prints a cross-run dashboard (verdict/approval rate, avg rating + lowest-rated improvement targets, token/cost efficiency, decision priority mix + answer rate, usage). All per-run data already existed; `stats` is the first thing that aggregates it across runs.
 - **`run_phase_roles.py`** — Role system: loads `studio.manifest.json`, resolves role packs, applies project-local overrides, builds per-role file naming (`advocate--<role>--NN.md`).
 - **`role_overrides.py`** — Project-local role customization: loads `.studio/roles/*.json` overlays, validates structure, shallow-merges with manifest roles.
 - **`persona_overrides.py`** — Project-local single-phase persona overrides: loads `.studio/personas.toml`, validates structure, per-phase shallow-merges over the shipped `PHASE_DETAILS` defaults (advocate/contrarian/notes/implementer/integrator).
