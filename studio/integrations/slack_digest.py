@@ -36,6 +36,7 @@ except ModuleNotFoundError:
 
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -45,6 +46,9 @@ from typing import Dict, List, Optional, Tuple
 
 INTEGRATIONS_FILENAME = "integrations.toml"
 _SUMMARY_MAX_CHARS = 600
+# Slack section text objects cap at 3000 chars; leave headroom for the
+# truncation notice appended below.
+_SLACK_SUMMARY_MAX_CHARS = 2700
 _USER_AGENT = "TheGameStudio-digest/1.0"
 
 
@@ -152,11 +156,39 @@ def _status_icon(status: str) -> str:
     return ":white_check_mark:" if status.upper() == "COMPLETED" else ":warning:"
 
 
-def build_slack_blocks(meta: Dict) -> Dict:
+def _md_to_slack(md: str, *, max_chars: int = _SLACK_SUMMARY_MAX_CHARS) -> str:
+    """Convert a markdown summary into Slack ``mrkdwn``, truncated to ``max_chars``.
+
+    Slack mrkdwn is not CommonMark: headings (``#``) don't render, bold is
+    ``*one-star*`` not ``**two-star**``, and ``-``/``*`` bullets show literally.
+    This does the minimal, robust conversion so the digest reads cleanly:
+    headings → bold lines, ``- ``/``* `` bullets → ``• ``, ``**x**`` → ``*x*``.
+    """
+    lines: List[str] = []
+    for raw in md.splitlines():
+        line = raw.rstrip()
+        heading = re.match(r"^\s*#{1,6}\s+(.*)$", line)
+        if heading:
+            lines.append(f"*{heading.group(1).strip()}*")
+            continue
+        line = re.sub(r"^(\s*)[-*]\s+", r"\1• ", line)
+        lines.append(line)
+    text = "\n".join(lines)
+    # Collapse CommonMark bold/italic markers to Slack's single-star bold.
+    text = text.replace("**", "*")
+    if len(text) > max_chars:
+        text = text[:max_chars].rstrip() + "\n\n_… truncated — see the full doc below._"
+    return text
+
+
+def build_slack_blocks(
+    meta: Dict, summary_text: str = "", doc_path: str = ""
+) -> Dict:
     """Build a Slack Block Kit digest payload from a run.json ``meta`` dict.
 
-    Includes a top-level ``text`` fallback (required by Slack) plus a header,
-    a two-column field section, and a context footer.
+    Includes a top-level ``text`` fallback (required by Slack), a header, a
+    two-column field section, the run ``summary`` body (converted to Slack
+    mrkdwn and truncated), a pointer to the final doc, and a context footer.
     """
     phase = str(meta.get("phase", "?"))
     run_id = str(meta.get("run_id", "?"))
@@ -171,25 +203,43 @@ def build_slack_blocks(meta: Dict) -> Dict:
     if when:
         footer += f" · {when}"
 
-    return {
-        "text": f"Studio run summary — {phase} — {verdict}",
-        "blocks": [
-            {
-                "type": "header",
-                "text": {"type": "plain_text", "text": "Run Summary", "emoji": True},
-            },
+    blocks: List[Dict] = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": "Run Summary", "emoji": True},
+        },
+        {
+            "type": "section",
+            "fields": [
+                {"type": "mrkdwn", "text": f"*Status:*\n{_status_icon(status)} {status}"},
+                {"type": "mrkdwn", "text": f"*Verdict:*\n{verdict}"},
+                {"type": "mrkdwn", "text": f"*Phase:*\n{phase}"},
+                {"type": "mrkdwn", "text": f"*Run ID:*\n`{run_id}`"},
+            ],
+        },
+    ]
+
+    body = _md_to_slack(summary_text) if summary_text else ""
+    if body:
+        blocks.append({"type": "divider"})
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": body}})
+
+    if doc_path:
+        blocks.append(
             {
                 "type": "section",
-                "fields": [
-                    {"type": "mrkdwn", "text": f"*Status:*\n{_status_icon(status)} {status}"},
-                    {"type": "mrkdwn", "text": f"*Verdict:*\n{verdict}"},
-                    {"type": "mrkdwn", "text": f"*Phase:*\n{phase}"},
-                    {"type": "mrkdwn", "text": f"*Run ID:*\n`{run_id}`"},
-                ],
-            },
-            {"type": "divider"},
-            {"type": "context", "elements": [{"type": "mrkdwn", "text": footer}]},
-        ],
+                "text": {"type": "mrkdwn", "text": f"*Final doc:*\n`{doc_path}`"},
+            }
+        )
+
+    blocks.append({"type": "divider"})
+    blocks.append(
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": footer}]}
+    )
+
+    return {
+        "text": f"Studio run summary — {phase} — {verdict}",
+        "blocks": blocks,
     }
 
 
@@ -215,6 +265,15 @@ def build_n8n_payload(meta: Dict, summary_text: str = "") -> Dict:
 # --------------------------------------------------------------------------- #
 # Orchestration
 # --------------------------------------------------------------------------- #
+def _summary_doc_path(run_dir: Path, meta: Dict) -> str:
+    """Absolute path to the run's summary doc, for a pointer in the digest."""
+    name = meta.get("summary_path") or "summary.md"
+    p = Path(name)
+    if not p.is_absolute():
+        p = run_dir / p.name
+    return str(p.resolve())
+
+
 def _read_summary_text(run_dir: Path, meta: Dict) -> str:
     name = meta.get("summary_path") or "summary.md"
     summary_path = Path(name)
@@ -247,11 +306,14 @@ def notify_run(
 
     slack_cfg = config.get("slack", {})
     if slack_cfg.get("enabled"):
+        summary_text = _read_summary_text(run_dir, meta)
         results.append(
             _dispatch(
                 "slack",
                 _resolve_secret(slack_cfg, "webhook_url"),
-                build_slack_blocks(meta),
+                build_slack_blocks(
+                    meta, summary_text, _summary_doc_path(run_dir, meta)
+                ),
                 headers=None,
                 dry_run=dry_run,
             )
