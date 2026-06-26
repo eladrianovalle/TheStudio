@@ -284,6 +284,23 @@ def _read_summary_text(run_dir: Path, meta: Dict) -> str:
     return ""
 
 
+# The Slack body prefers a short, plain-language digest when the run authored
+# one — the full summary.md is often dense/technical and gets truncated. The
+# "Final doc" pointer always targets the full summary regardless.
+_DIGEST_CANDIDATES = ("digest.md", "summary_human.md")
+
+
+def _read_digest_text(run_dir: Path, meta: Dict) -> str:
+    """Prefer a plain-language ``digest.md`` for the Slack body; else the summary."""
+    for name in _DIGEST_CANDIDATES:
+        candidate = run_dir / name
+        if candidate.is_file():
+            text = candidate.read_text(encoding="utf-8").strip()
+            if text:
+                return text
+    return _read_summary_text(run_dir, meta)
+
+
 def notify_run(
     run_dir: Path,
     config: Dict,
@@ -306,13 +323,13 @@ def notify_run(
 
     slack_cfg = config.get("slack", {})
     if slack_cfg.get("enabled"):
-        summary_text = _read_summary_text(run_dir, meta)
+        body_text = _read_digest_text(run_dir, meta)
         results.append(
             _dispatch(
                 "slack",
                 _resolve_secret(slack_cfg, "webhook_url"),
                 build_slack_blocks(
-                    meta, summary_text, _summary_doc_path(run_dir, meta)
+                    meta, body_text, _summary_doc_path(run_dir, meta)
                 ),
                 headers=None,
                 dry_run=dry_run,
