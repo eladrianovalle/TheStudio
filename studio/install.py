@@ -44,6 +44,8 @@ SOURCE_FILES = [
     "validators/__init__.py",
     "validators/document_validator.py",
     "validators/code_validator.py",
+    "integrations/__init__.py",
+    "integrations/slack_digest.py",
     "config/scopes.toml",
     "config/studio_settings.toml",
     "docs/STUDIO_BRIDGE_TEMPLATE.md",
