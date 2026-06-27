@@ -110,6 +110,40 @@ def test_build_slack_blocks_shape():
     assert "APPROVED" in field_text and "design" in field_text
 
 
+def test_build_slack_blocks_includes_body_and_doc():
+    meta = {"phase": "design", "run_id": "r1", "status": "COMPLETED", "verdict": "APPROVED"}
+    payload = sd.build_slack_blocks(meta, "# Heading\n- a bullet", "/runs/r1/summary.md")
+    types = [b["type"] for b in payload["blocks"]]
+    # header, fields, divider, body, doc pointer, divider, context
+    assert types == ["header", "section", "divider", "section", "section", "divider", "context"]
+    body = payload["blocks"][3]["text"]["text"]
+    assert "*Heading*" in body and "• a bullet" in body
+    assert "/runs/r1/summary.md" in payload["blocks"][4]["text"]["text"]
+
+
+def test_md_to_slack_conversions():
+    out = sd._md_to_slack("## Title\n* item\n- item2\nsome **bold** text")
+    assert "*Title*" in out
+    assert "• item" in out and "• item2" in out
+    assert "*bold*" in out and "**bold**" not in out
+
+
+def test_md_to_slack_truncates():
+    out = sd._md_to_slack("x" * 5000, max_chars=100)
+    assert len(out) <= 100 + len("\n\n_… truncated — see the full doc below._")
+    assert "truncated" in out
+
+
+def test_read_digest_prefers_digest_md(run_dir):
+    (run_dir / "digest.md").write_text("plain language digest", encoding="utf-8")
+    assert sd._read_digest_text(run_dir, {"summary_path": "summary.md"}) == "plain language digest"
+
+
+def test_read_digest_falls_back_to_summary(run_dir):
+    text = sd._read_digest_text(run_dir, {"summary_path": "summary.md"})
+    assert "cozy farming sim" in text
+
+
 def test_build_n8n_payload_is_flat():
     meta = {"phase": "tech", "run_id": "r2", "status": "COMPLETED", "verdict": "REJECTED"}
     payload = sd.build_n8n_payload(meta, "x" * 5000)
