@@ -22,7 +22,7 @@ import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 # Files to copy from studio/ into .studio/source/
 SOURCE_FILES = [
@@ -102,6 +102,66 @@ def _git_info(studio_root: Path) -> dict:
     except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
     return info
+
+
+def _resolve_source_dir(
+    target: Path, studio_dir: Optional[Path]
+) -> Tuple[Path, Optional[str]]:
+    """Resolve the live Studio source directory to compare/copy from.
+
+    When ``check``/``update`` is invoked through the *installed snapshot*
+    (``<target>/.studio/source/run_phase.py``), the default source root IS that
+    snapshot — so comparing it against the installed ``MANIFEST.json`` compares
+    the snapshot against itself and always reports "up to date", silently
+    masking real upstream changes (see issue #20).
+
+    To fix this, when the detected source root is the snapshot, fall back to the
+    upstream ``source_path`` recorded in ``VERSION`` so we compare against the
+    live source instead.
+
+    Returns ``(source_dir, warning)``. ``warning`` is non-None when the live
+    source could not be resolved, so the caller can surface it loudly instead of
+    silently trusting the (possibly stale) snapshot.
+    """
+    if studio_dir is not None:
+        # Explicit source (tests, or an upstream invocation that already knows
+        # where the live source is) — trust it.
+        return studio_dir, None
+
+    root = _get_studio_root()
+    snapshot = (target / ".studio" / "source").resolve()
+    if root.resolve() != snapshot:
+        # Running from a real upstream working copy, not the snapshot.
+        return root, None
+
+    upstream = (
+        "Re-run from the upstream repo instead: "
+        f"python studio/run_phase.py check-install --target {target}"
+    )
+    version_path = target / ".studio" / "VERSION"
+    try:
+        version = json.loads(version_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError):
+        return root, (
+            "running from the installed snapshot and VERSION is unreadable; "
+            f"cannot compare against live source. {upstream}"
+        )
+
+    source_path = version.get("source_path")
+    if not source_path:
+        return root, (
+            "running from the installed snapshot and VERSION has no "
+            f"source_path; cannot compare against live source. {upstream}"
+        )
+
+    live = Path(source_path)
+    if live.resolve() == snapshot or not (live / "run_phase.py").is_file():
+        return root, (
+            "running from the installed snapshot and the recorded source_path "
+            f"({source_path}) is missing, moved, or points back to the "
+            f"snapshot; cannot compare against live source. {upstream}"
+        )
+    return live, None
 
 
 def _collect_source_files(studio_dir: Path) -> List[Path]:
@@ -280,17 +340,18 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
         changed: list[str] — files that differ
         missing: list[str] — files in source but not installed
         extra: list[str] — files installed but not in source
+        warning: str | None — set when the live source could not be resolved
+            (e.g. run from a stale snapshot), so the result may be unreliable
     """
-    if studio_dir is None:
-        studio_dir = _get_studio_root()
-
     target = Path(target).resolve()
     dot_studio = target / ".studio"
     version_path = dot_studio / "VERSION"
     manifest_path = dot_studio / "MANIFEST.json"
 
     if not version_path.exists():
-        return {"installed": False, "up_to_date": False, "changed": [], "missing": [], "extra": []}
+        return {"installed": False, "up_to_date": False, "changed": [], "missing": [], "extra": [], "warning": None}
+
+    studio_dir, warning = _resolve_source_dir(target, studio_dir)
 
     # Load installed manifest
     installed_manifest: Dict[str, str] = {}
@@ -328,6 +389,7 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
         "changed": changed,
         "missing": missing,
         "extra": extra,
+        "warning": warning,
     }
 
 
@@ -339,9 +401,6 @@ def update_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
 
     Returns dict with counts of updated/added/removed files.
     """
-    if studio_dir is None:
-        studio_dir = _get_studio_root()
-
     target = Path(target).resolve()
     dot_studio = target / ".studio"
 
@@ -350,17 +409,22 @@ def update_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
             f"Studio not installed at {target}. Run 'init' first."
         )
 
+    # Resolve the live source up front so both the check and the re-install copy
+    # from upstream — not from the (possibly stale) installed snapshot (#20).
+    source_dir, warning = _resolve_source_dir(target, studio_dir)
+
     # Check what needs updating
-    status = check_studio(target, studio_dir)
+    status = check_studio(target, source_dir)
 
     if status["up_to_date"]:
-        return {"updated": 0, "added": 0, "removed": 0}
+        return {"updated": 0, "added": 0, "removed": 0, "warning": warning}
 
     # Re-install (install_studio is idempotent and preserves user dirs)
-    install_studio(target, studio_dir)
+    install_studio(target, source_dir)
 
     return {
         "updated": len(status["changed"]),
         "added": len(status["missing"]),
         "removed": 0,  # We don't remove extra files
+        "warning": warning,
     }

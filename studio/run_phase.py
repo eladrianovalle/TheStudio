@@ -2715,6 +2715,8 @@ def _do_check_install(args: argparse.Namespace) -> None:
         print(f"Studio is NOT installed at {target}")
         print("Run: python run_phase.py init --target " + str(target))
         return
+    if status.get("warning"):
+        print(f"WARNING: {status['warning']}\n")
     if status["up_to_date"]:
         print(f"Studio at {target} is up to date.")
     else:
@@ -2731,6 +2733,8 @@ def _do_update(args: argparse.Namespace) -> None:
     from install import update_studio
     target = Path(args.target).resolve()
     result = update_studio(target)
+    if result.get("warning"):
+        print(f"WARNING: {result['warning']}\n")
     if result["updated"] == 0 and result["added"] == 0:
         print(f"Studio at {target} is already up to date.")
     else:
