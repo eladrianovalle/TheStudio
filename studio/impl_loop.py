@@ -84,21 +84,9 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
     explicit or end-of-chain) yields the default LoopConfig rather than an error —
     the loop ships with a working default, so absence is not a failure.
 
-    Expected format (all tables/keys optional; unspecified keys inherit defaults):
-    ```toml
-    [loop]
-    deliver_on_gate_fail = true
-
-    [gate]
-    test_command = "pytest -q"
-    static_checks = ["ruff"]
-    require_mutation_check = true
-
-    [editor]
-    mandate = "contrarian"
-    read_scope = "touched+importers"
-    output_budget = 400
-    ```
+    All tables/keys are optional; unspecified keys inherit the LoopConfig defaults.
+    See config/implementation_loop.toml (the shipped default) and SPEC §4 for the
+    canonical table shape.
 
     Args:
         path: Explicit path to a .toml config. When None, the resolution chain runs.
