@@ -51,7 +51,7 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 | `.studio/personas.toml` | Project-local single-phase persona overrides. Per-phase shallow-merge over the shipped `PHASE_DETAILS` defaults (loaded by `persona_overrides.py`, authored by the setup wizard). |
 | `.studio/unstale.toml` | Optional per-repo override for the `/unstale` audit (`[snapshot]` commands + `[audit]` globs). Read by the `/unstale` command; absent it self-detects the stack. Authored by the setup wizard. |
 | `.studio/integrations.toml` | Optional outbound-webhook config for run digests. `[slack]` and `[n8n]` tables, each with `enabled` and `webhook_url_env` (env var holding the secret URL); `[n8n]` also takes optional `auth_header`/`auth_value_env` for Header Auth. Loaded by `integrations/slack_digest.py`. |
-| `docs/role_prompts/*.md` | Long-form prompts for each role. Instructions link to these files rather than inlining pages of text. |
+| Role `prompt_doc` (optional) | Per-role pointer to a long-form prompt doc, surfaced as a link in the Role Menu. Studio ships none — projects supply their own and set the path via a `.studio/roles/*.json` override; unset renders as `-`. |
 | Active output root (`output/` or `.studio/output/`) | Run folders containing instructions, advocate/contrarian artifacts, integrator plans, summaries, and metadata. |
 | Active knowledge log (`knowledge/run_log.md` or `.studio/knowledge/run_log.md`) | Append-only log of finalized runs for easy reference across repos. |
 
@@ -126,7 +126,7 @@ No automation runs outside the assistant; the instructions are simply executed a
   - `advocate_focus` / `contrarian_focus`
   - `deliverables`
   - `escalate_on`
-  - `prompt_doc` (Markdown file inside `docs/role_prompts/`)
+  - `prompt_doc` (optional pointer to a project-supplied Markdown file; Studio ships none)
 - **Role packs** enforce consistent combinations. Example `studio_core` includes marketing, product, design, art, engineering, test_engineer, and QA.
 - **Role dependencies** are declared in `defaults.role_dependencies` (e.g., `engineering → test_engineer`). After resolving overrides, `resolve_role_list` injects co-required roles immediately after their trigger role — unless the operator explicitly removed them with `-role`. This guarantees that test integrity is always debated when engineering is present.
 - Operators select a pack via `--role-pack` and tweak attendance with `--roles` additions/removals. This keeps instructions concise while maintaining a single source of truth.

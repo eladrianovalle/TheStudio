@@ -97,12 +97,16 @@ class TestInstallStudio:
         packs = list((target_dir / ".studio" / "source" / "role_packs").glob("*.json"))
         assert len(packs) > 0
 
-    def test_copies_prompt_docs(self, target_dir, studio_dir):
-        """Install copies role prompt docs."""
+    def test_no_prompt_docs_shipped(self, target_dir, studio_dir):
+        """Studio ships no role-prompt docs (they're project-supplied), but the
+        prompt-doc glob mechanism stays wired for projects that add their own."""
         install_studio(target_dir, studio_dir)
         prompts = target_dir / ".studio" / "source" / "docs" / "role_prompts"
-        assert prompts.is_dir()
-        assert len(list(prompts.glob("*.md"))) > 0
+        # Decoupled from product-specific prompts — none shipped.
+        assert not prompts.exists() or not list(prompts.glob("*.md"))
+        # Mechanism preserved.
+        from install import PROMPT_DOC_GLOB
+        assert PROMPT_DOC_GLOB == "docs/role_prompts/*.md"
 
     def test_idempotent(self, target_dir, studio_dir):
         """Running install twice doesn't break anything."""

@@ -69,8 +69,8 @@ In flat mode (`--no-scopes`), each role writes `advocate--<role>--NN.md` and `co
 
 ## 2. Role Menu & Prompt Docs
 
-- `run_phase.py prepare --phase studio` renders a **Role Menu** listing every invited role, deliverables, filenames, and a link to its prompt doc (`docs/role_prompts/<role>.md`).
-- Prompt docs hold the long-form guidance that used to clog instructions. Update them whenever you change a role’s responsibilities.
+- `run_phase.py prepare --phase studio` renders a **Role Menu** listing every invited role, deliverables, filenames, and a link to its `prompt_doc` when set (`-` otherwise).
+- Prompt docs are **optional and project-supplied** — Studio ships none, keeping the shared core stack-neutral. A project adds long-form role guidance and points `prompt_doc` at it via a `.studio/roles/<role>.json` override. The manifest's `advocate_focus`/`contrarian_focus`/`deliverables` drive every role regardless.
 - Escalation cues in the manifest tell the assistant when to invite additional roles (e.g., Marketing escalates Legal when policies are at risk).
 
 ---
@@ -92,7 +92,7 @@ Contrarians must always end with `VERDICT: APPROVED` or `VERDICT: REJECTED`. Fin
 
 1. **Update `studio.manifest.json`**  
    - Add new roles, tweak focuses, amend deliverables, or adjust escalation cues.  
-   - Keep `prompt_doc` paths in sync with `docs/role_prompts/`.
+   - Leave `prompt_doc` empty unless the project ships its own role-prompt doc (Studio ships none).
 2. **Adjust role packs (`role_packs/*.json`)**  
    - Create additional packs (e.g., `liveops_hotfix.json` or `monetization_review.json`).  
    - Operators select them via `--role-pack` and override attendance with `--roles` tokens (typically additions like `+product +engineering +qa`; use `-role` only when you need to remove one).
@@ -131,7 +131,7 @@ Roles enforce two methodologies via their contrarian focuses and escalation trig
 | Contrarian forgets VERDICT | Remind the assistant mid-run; instructions require it. If missing, add a short follow-up prompt to capture `VERDICT: ...` and append to the same file. |
 | Role pack missing expected expert | Update the pack JSON or call `prepare` with `--roles +<role>`. |
 | Finalize says roles are missing | Inspect `run.json["studio_roles"]["missing"]` for the guilty roles. Either add the artifacts or document why they’re intentionally absent before re-running finalize. |
-| Prompt doc drift | Every manifest change should ship with updated `docs/role_prompts/*.md` and doc references. |
+| Prompt doc drift | If a project ships its own role-prompt docs, keep them in sync with manifest focus changes; Studio itself ships none. |
 
 ---
 

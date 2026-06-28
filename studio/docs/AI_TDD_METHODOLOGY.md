@@ -108,7 +108,7 @@ This methodology applies everywhere AI generates or reviews test code in our Stu
 - **Code validators** should flag common anti-patterns (mock-of-SUT, assertTrue(true))
 
 See `TEST_DRIVEN_GUIDE.md` for the full tech phase TDD workflow.
-See `role_prompts/qa.md` for QA role-specific enforcement.
+See the `test_engineer` and `qa` role focuses in `studio.manifest.json` for role-specific enforcement.
 
 ---
 
