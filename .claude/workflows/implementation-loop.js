@@ -74,11 +74,12 @@ const WRITER_HANDOFF = {
 
 const EDITOR_HANDOFF = {
   type: 'object',
-  required: ['unit_id', 'tests', 'mvi_verdict', 'edits', 'reverted', 'stage'],
+  required: ['unit_id', 'tests', 'mvi_verdict', 'edits', 'reverted', 'committed', 'stage'],
   additionalProperties: false,
   properties: {
     unit_id: { type: 'string' },
     files_touched: { type: 'array', items: { type: 'string' } },
+    committed: { type: 'boolean', description: 'true if the editor committed its kept edits; false if it reverted (writer_sha already holds the state)' },
     tests: {
       type: 'object',
       required: ['command', 'passed', 'exit_code'],
@@ -143,6 +144,9 @@ function editorPrompt(u, writer) {
     ``,
     `Then render mvi_verdict: AUTHORITATIVELY judge "if we stopped here, could someone use this unit?" against`,
     `the title "${u.title}". This can overturn the writer's claim.`,
+    ``,
+    `Deliver: if you KEPT your edits (tests green, not reverted), commit them — \`git commit -am "editor: ${u.unit_id}"\``,
+    `— and set committed=true. If you reverted, do NOT commit (writer_sha already holds the delivered state); set committed=false.`,
     `Persist your handoff to ${runDir(u)}/impl--${u.unit_id}--editor.json, and return the editor handoff object.`,
   ].join('\n')
 }
@@ -150,7 +154,12 @@ function editorPrompt(u, writer) {
 // ---------------------------------------------------------------------------
 // Orchestration: writer -> entry gate -> editor -> exit gate (revert) -> deliver
 // ---------------------------------------------------------------------------
-const unit = (args && args.unit_id) ? args : DEFAULT_UNIT
+// Merge any provided args over the default unit field-by-field: provided keys win,
+// unspecified keys fall back to DEFAULT_UNIT (so partial args are safe). The log
+// makes the resolved unit visible — if args didn't arrive, this shows the default.
+const overrides = (args && typeof args === 'object' && !Array.isArray(args)) ? args : {}
+const unit = { ...DEFAULT_UNIT, ...overrides }
+log(`Unit: ${unit.unit_id} — ${unit.title}`)
 
 phase('Writer')
 const writer = await agent(writerPrompt(unit), { schema: WRITER_HANDOFF, label: `writer:${unit.unit_id}`, phase: 'Writer' })
@@ -183,7 +192,16 @@ if (editor && editor.tests && editor.tests.passed === false && !editor.reverted)
   )
 }
 
-log(`Done. editorRan=${!!editor} editHeld=${editHeld} mvi_verdict=${editor?.mvi_verdict} reverted=${editor?.reverted}`)
+// Safety net: if the editor kept its edits but didn't commit them, commit now so delivery is complete.
+if (editHeld && editor && !editor.committed) {
+  log(`Editor kept edits but did not commit — committing now.`)
+  await agent(
+    `Run \`git commit -am "editor: ${unit.unit_id}"\` to commit the editor's kept changes for ${unit.unit_id}. If git reports nothing to commit, say so. Return a one-line confirmation.`,
+    { label: `commit:${unit.unit_id}`, phase: 'Edit' },
+  )
+}
+
+log(`Done. editorRan=${!!editor} editHeld=${editHeld} mvi_verdict=${editor?.mvi_verdict} reverted=${editor?.reverted} committed=${editor?.committed}`)
 return {
   delivered: true,
   flagged: !exitGate,                // delivered, but editor couldn't confirm a usable green unit
