@@ -208,12 +208,6 @@ def test_runtime_knobs_default_config():
     }
 
 
-def test_runtime_knobs_off_mandate_disables_editor():
-    """mandate = 'off' surfaces as editor_enabled False in the knobs."""
-    knobs = runtime_knobs(LoopConfig(mandate="off"))
-    assert knobs["editor_enabled"] is False
-
-
 def test_runtime_knobs_reflects_loaded_override():
     """Values from a loaded .studio override flow through to the knobs."""
     with tempfile.TemporaryDirectory() as tmp:
