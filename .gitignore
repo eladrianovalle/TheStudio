@@ -9,9 +9,10 @@ studio/output/
 .studio/
 studio/.studio/
 
-# Claude Code local config/memory (keep slash commands tracked)
+# Claude Code local config/memory (keep slash commands + workflows tracked)
 .claude/*
 !.claude/commands/
+!.claude/workflows/
 
 # Studio input files (may contain sensitive analysis)
 studio/input/
