@@ -132,8 +132,8 @@ function editorPrompt(u, writer) {
     `applied to code: default to deletion, name the specific cut, collapse don't accumulate, guard the essence.`,
     ``,
     `Scope of review: \`git diff ${writer.writer_sha}..\` — these are the writer's changes. Read the touched`,
-    `files (${(writer.files_touched || []).join(', ') || 'see the diff'}) and their direct importers. Do not`,
-    `wander beyond that read scope.`,
+    `files (${(writer.files_touched || []).join(', ') || 'see the diff'})${u.read_scope === 'touched' ? '' : ' and their direct importers'}.`,
+    `Do not wander beyond that read scope.`,
     ``,
     `Hard bounds:`,
     `- BEHAVIOR PRESERVATION: you may restructure and delete freely ONLY as long as the unit's tests stay green.`,
@@ -145,6 +145,7 @@ function editorPrompt(u, writer) {
     `Then render mvi_verdict: AUTHORITATIVELY judge "if we stopped here, could someone use this unit?" against`,
     `the title "${u.title}". This can overturn the writer's claim.`,
     ``,
+    `Keep your edits rationale under ${u.output_budget || 400} words.`,
     `Deliver: if you KEPT your edits (tests green, not reverted), commit them — \`git commit -am "editor: ${u.unit_id}"\``,
     `— and set committed=true. If you reverted, do NOT commit (writer_sha already holds the delivered state); set committed=false.`,
     `Persist your handoff to ${runDir(u)}/impl--${u.unit_id}--editor.json, and return the editor handoff object.`,
@@ -180,6 +181,13 @@ if (!entryGate) {
   // deliver_on_gate_fail: do not spin. Leave the writer's state, flag it.
   log(`Entry gate failed (mvi_claimed=${writer.mvi_claimed}, tests.passed=${writer.tests?.passed}). Delivering flagged, no editor pass.`)
   return { delivered: true, flagged: true, editorRan: false, writer }
+}
+
+// Config knob (editor.mandate="off" → editor_enabled=false, merged into args by /studio-implement):
+// skip the editor pass entirely and deliver the writer's version.
+if (unit.editor_enabled === false) {
+  log(`editor_enabled=false (mandate off) — delivering the writer's version, no editor pass.`)
+  return { delivered: true, flagged: false, editorRan: false, finalVersion: 'writer', writer }
 }
 
 phase('Edit')
