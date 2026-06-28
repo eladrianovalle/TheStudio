@@ -157,7 +157,13 @@ function editorPrompt(u, writer) {
 // Merge any provided args over the default unit field-by-field: provided keys win,
 // unspecified keys fall back to DEFAULT_UNIT (so partial args are safe). The log
 // makes the resolved unit visible — if args didn't arrive, this shows the default.
-const overrides = (args && typeof args === 'object' && !Array.isArray(args)) ? args : {}
+// NOTE: args arrives as a JSON-encoded STRING (the runtime serializes it when forwarding),
+// not a parsed object — normalize before merging, else everything falls back to DEFAULT_UNIT.
+let parsedArgs = args
+if (typeof parsedArgs === 'string') {
+  try { parsedArgs = JSON.parse(parsedArgs) } catch { parsedArgs = {} }
+}
+const overrides = (parsedArgs && typeof parsedArgs === 'object' && !Array.isArray(parsedArgs)) ? parsedArgs : {}
 const unit = { ...DEFAULT_UNIT, ...overrides }
 log(`Unit: ${unit.unit_id} — ${unit.title}`)
 
