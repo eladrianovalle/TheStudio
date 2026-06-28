@@ -217,7 +217,7 @@ Generated instructions follow a consistent layout:
 2. **Artifacts list** — file destinations. Studio instructions highlight per-role filenames.
 3. **Agent Roles** — Advocate, Contrarian, Implementer (non-studio) or Integrator (studio).
 4. **Iteration Loop** — numbered steps for Advocate/Contrarian exchanges. Studio loop points to the Integrator duel hand-off after approval.
-5. **Role Menu** (Studio only) — table describing each invited role, deliverables, file naming, and links to `docs/role_prompts/*.md`.
+5. **Role Menu** (Studio only) — table describing each invited role, deliverables, file naming, and a link to each role's `prompt_doc` when set (optional, project-supplied; `-` otherwise).
 6. **Integrator Duel** (Studio only) — explains `### Integrator Advocate`, `### Integrator Contrarian (VERDICT)`, and `### Integrated Plan` sections inside `integrator.md`.
 7. **Summary & Packaging** — reminders to fill out `summary.md` and run the finalize command.
 

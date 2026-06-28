@@ -7,6 +7,9 @@ All notable changes to TheGameStudio are documented here.
 ## [Unreleased]
 
 ### Added
+- Quality ratings & cross-run stats — the diagnostics + fine-tuning feedback loop. `rate` records a human 1-5 quality score + note per run (`rating.json`, the human counterpart to the agent verdict); `stats` is the first cross-run dashboard, aggregating every run's `run.json`/`rating.json`/`decisions.json` plus `.studio/usage.log` into verdict/approval rate, rating avg + lowest-rated targets, token/cost efficiency, decision priority mix, and usage (`--phase`, `--json`). `finalize` ends with an auto rate-prompt (TTY-interactive or copy-paste nudge; `--no-rate-prompt` to suppress)
+- Slack / n8n run-digest integration — first `studio/integrations/` subpackage (`slack_digest.py`). Posts a finalized run's status/verdict/summary to a Slack Incoming Webhook (Block Kit) and/or n8n Webhook node (flat JSON), stdlib `urllib` only. New `notify` subcommand; auto-fires on `finalize` when enabled (default-disabled, soft-fail). Config in `.studio/integrations.toml`; webhook secrets resolved strictly from env vars (`*_env` keys, no literal fallback)
+- CI: Phase-1 PR triage gate (`.github/workflows/pr-triage.yml`)
 - Contrarian editor mandate (always on) — every deliverable run's contrarian now carries a built-in bias toward removal, merge, and simplification on top of flaw-hunting. The advocate piles it on; the contrarian carves out the essence. Shared `CONTRARIAN_MANDATE` injected across single-phase, flat, and scoped studio prompts; phase contrarians reframed as editors. Off in `--mode questions` (there the contrarian judges question relevance, never cuts genuinely-open questions)
 - Open-Questions Pre-Flight (Step 0) — every deliverable run opens by surfacing what is genuinely unsettled, pausing on P0 blockers, and recording answers before the iteration loop, so no run silently assumes; later passes keep raising new questions as they surface. Reuses existing decision/clarity machinery
 - Project-overridable single-phase personas via `.studio/personas.toml` — `persona_overrides.py` per-phase shallow-merges advocate/contrarian/notes/implementer/integrator overrides over the shipped `PHASE_DETAILS` defaults; setup wizard gains a `persona_customization` step (`CURRENT_SETUP_VERSION` 2) that authors the file and can sniff the project stack (`Cargo.toml`/`package.json`/`*.csproj`) to suggest a fitting persona
@@ -18,8 +21,13 @@ All notable changes to TheGameStudio are documented here.
 - `/studio-setup` slash command + `setup` CLI subcommand — post-install wizard for role pack selection, role customization, scope tuning, and cleanup settings with incremental versioned steps (`setup.py`, 43 tests)
 - `docs/CODING_PRINCIPLES.md` — standalone Karpathy-inspired principles file, shipped with cross-repo installs
 - Cross-repo install now injects coding principles into target's `CLAUDE.md` via sentinel markers (`<!-- STUDIO:CODING_PRINCIPLES:BEGIN/END -->`), with idempotent update support (6 tests)
+- Karpathy AI principles integrated into agent instructions — Think-Before-Coding (alignment scope), Simplicity-First, Surgical-Changes (depth/polish scopes), Goal-Driven-Execution with verification checkpoints. Think-First Checkpoint requires advocates to state their understanding before analysis; contrarians verify framing before critiquing content
+- `No Merge Conflicts` CI workflow (`.github/workflows/no-merge-conflicts.yml`) to satisfy branch ruleset
 
 ### Fixed
+- `check-install`/`update` stale-snapshot detection (#20) — run through the installed snapshot, both compared it against its own manifest and always reported "up to date", silently blocking updates. Now resolves the live upstream from `VERSION.source_path`, warning loudly when it can't
+- Installer omitted the `integrations` subpackage — `init`/`update` shipped without `integrations/__init__.py` + `slack_digest.py`, breaking every command in installed projects
+- Slack digest body now includes the run summary + final-doc pointer, prefers a plain-language `digest.md` over the dense `summary.md`, and renders markdown as Slack `mrkdwn`
 - Stack-neutral phase personas — removed the hardcoded "Three.js Technical Architect / WebGL" tech persona and "Steam hook" market wording from `PHASE_DETAILS` so runs in any codebase (Rust, Unity, etc.) get a fitting default
 - Clarity reset is now phase-independent — the fresh-run check compares the current objective against the one stored in the project-level `clarity.json`, so a prior objective under one phase no longer leaks stale topics into a new objective under another phase. A corrupt/unparseable `clarity.json` is now treated as absent (self-heals) instead of crashing `prepare`
 - Rerun context injection is gated on a phase-local objective match, so a project-wide same-objective decision can't pull rejection feedback from an unrelated previous run
@@ -27,10 +35,6 @@ All notable changes to TheGameStudio are documented here.
 - `inject-context` now resolves custom scope names via canonical positional aliases (alignment→0, depth→1, polish→2)
 - `prepare` now resets stale clarity and skips rerun context when the new run has a different objective than the previous one — prevents orchestrator agents from inheriting irrelevant topic scores and rejection feedback
 - `_resolve_scopes` now falls back to shipped `config/scopes.toml` when no `.studio/scopes.toml` override exists — scoped runs work out of the box
-
-### Added
-- Karpathy AI principles integrated into agent instructions — Think-Before-Coding (alignment scope), Simplicity-First, Surgical-Changes (depth/polish scopes), Goal-Driven-Execution with verification checkpoints. Think-First Checkpoint requires advocates to state their understanding before analysis; contrarians verify framing before critiquing content.
-- `No Merge Conflicts` CI workflow (`.github/workflows/no-merge-conflicts.yml`) to satisfy branch ruleset
 
 ### Changed
 - Clarity module now mandatory — direct import replaces lazy-load, always active in every studio run
@@ -126,7 +130,18 @@ All notable changes to TheGameStudio are documented here.
 
 ---
 
-## 2026-02-27 — 2026-02-28
+## 2026-02-28
+
+### Fixed — Critical Reliability Improvements
+- Concurrent-run protection — collision detection before directory creation prevents silent data corruption from simultaneous `prepare` commands
+- File-size limit (1MB) for document validation — graceful failure with actionable messages instead of performance cliffs
+- Added `tests/test_integration.py` — end-to-end workflow tests across scopes, rerun, validation
+
+### Added — Clarity & Discoverability
+- Actionable error messages with fix suggestions (scopes config, common issues)
+- Contextual post-prepare / post-finalize hints suggesting next steps
+- Interactive setup wizard for scopes configuration (later superseded by `setup.py`)
+- Performance benchmarks (`tests/test_benchmarks.py`)
 
 ### Changed
 - Repository restructured — modules moved under `studio/`
@@ -134,11 +149,30 @@ All notable changes to TheGameStudio are documented here.
 
 ---
 
+## 2026-02-27 — Concentric-Iteration Strategy
+
+### Added
+- **Scope-based iteration allocation** — TOML-configured (`.studio/scopes.toml`) proportional iteration budgets, sequential high→medium→low execution (~20-30% token savings)
+- **Failure context injection** (`rerun.py`) — automatic rerun detection, rejection-reason extraction, context injection into advocate prompts (role-aware for studio phase)
+- **Phase-appropriate validation** (`validate` CLI) — document validation (completeness, consistency, format, verdict) and code validation (pytest/mypy/ruff/black), config-driven via `.studio/validation.toml`
+
+### Changed
+- Scope-based iteration enabled by default when config exists; `--no-scopes` to disable
+- No breaking changes — all features opt-in or with graceful fallbacks
+
+---
+
 ## 2025-12-20 — 2025-12-28
 
 ### Added
-- Initial Studio implementation — instruction generator for structured advocate/contrarian debates
+- Initial Studio implementation — instruction generator for structured advocate/contrarian debates (originally CrewAI-based, later rewritten to stdlib-only)
 - Four phases: market, design, tech, studio
 - Role system with manifest-driven disciplines
 - Windsurf/Cascade agent support
 - Scoped iteration system
+
+---
+
+## Version Numbering
+
+Studio follows [Semantic Versioning](https://semver.org/): **MAJOR** for breaking changes, **MINOR** for backward-compatible features, **PATCH** for backward-compatible fixes. Dated sections above predate strict version tagging.

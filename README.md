@@ -153,6 +153,12 @@ python studio/run_phase.py recompute-clarity --phase studio --run-id <run_id>
 python studio/run_phase.py record-metrics --run-dir <path> --agent advocate --total-tokens 5000 --role marketing --scope alignment
 python studio/run_phase.py show-metrics --run-dir <path>
 
+# Quality ratings & cross-run stats (diagnostics + fine-tuning feedback loop)
+python studio/run_phase.py rate --run-dir <path> --score 4 --note "solid market read"  # human 1-5 quality score
+python studio/run_phase.py stats                  # cross-run dashboard: verdicts, ratings, tokens, decisions, usage
+python studio/run_phase.py stats --phase studio   # filter to one phase
+python studio/run_phase.py stats --json           # machine-readable aggregate
+
 # Cross-repo install
 python studio/run_phase.py init --target /path/to/project
 python studio/run_phase.py check-install --target /path/to/project
@@ -226,6 +232,7 @@ Keep installed copies current: `python studio/run_phase.py check-install --targe
       decisions.md                     # Human-readable settled decisions
       clarity.json                     # Per-topic clarity scores
       metrics.json                     # Per-agent token usage (recorded during run)
+      rating.json                      # Human 1-5 quality score (written by `rate`)
       summary.md
       run.json
 ```
@@ -301,7 +308,7 @@ Configure in `config/studio_settings.toml`. Use `--skip-cleanup` to bypass.
 
 ```
 studio/
-  run_phase.py              # CLI entrypoint: prepare, finalize, validate, cleanup, decision, clarity, metrics, install, setup, offload, notify
+  run_phase.py              # CLI entrypoint: prepare, finalize, validate, cleanup, decision, clarity, metrics, rate, stats, install, setup, offload, notify
   run_phase_roles.py        # Role system: manifest, packs, dependencies, file naming
   role_overrides.py         # Project-local role customization (.studio/roles/*.json)
   persona_overrides.py      # Project-local phase persona overrides (.studio/personas.toml)
@@ -322,7 +329,7 @@ studio/
   config/scopes.toml         # Default scope configuration
   config/studio_settings.toml # Cleanup settings
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 563 tests (pytest)
+  tests/                    # 585 tests (pytest)
 ```
 
 ---
@@ -333,7 +340,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-563 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows, CLAUDE.md principles injection, agent metrics tracking, CLAUDE.md offload analysis, unstale audit configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
+585 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, agent metrics tracking, quality ratings and cross-run stats, CLAUDE.md offload analysis, unstale audit configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 
@@ -348,6 +355,7 @@ Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.
 - [AI_TDD_METHODOLOGY.md](./studio/docs/AI_TDD_METHODOLOGY.md) — AI-assisted testing methodology
 - [TEST_DRIVEN_GUIDE.md](./studio/docs/TEST_DRIVEN_GUIDE.md) — tech phase TDD workflow
 - [INTEGRATION_GUIDE.md](./studio/docs/INTEGRATION_GUIDE.md) — cross-repo setup
+- [INTEGRATIONS.md](./studio/docs/INTEGRATIONS.md) — outbound Slack/n8n run-digest webhooks
 - [STUDIO_BRIDGE_TEMPLATE.md](./studio/docs/STUDIO_BRIDGE_TEMPLATE.md) — template for downstream repos
 
 ---

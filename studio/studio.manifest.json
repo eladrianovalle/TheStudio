@@ -24,7 +24,7 @@
       "title": "Head of Growth Marketing",
       "advocate_focus": "Craft the viral hook, audience segmentation, and go-to-market ladders that give the pitch oxygen.",
       "contrarian_focus": "Stress test TAM/TAR math, UA costs, and attention economics so we do not promise impossible growth.",
-      "prompt_doc": "docs/role_prompts/marketing.md",
+      "prompt_doc": "",
       "deliverables": [
         "Audience + psychographic ladder",
         "Go-to-market swim lanes (earned/owned/paid)",
@@ -39,7 +39,7 @@
       "title": "Group Product Manager",
       "advocate_focus": "Align the concept with roadmap sequencing, measurable outcomes, and staffing envelopes. Every milestone must end in an MVI (Minimum Viable Interaction) — something usable, not a partial component.",
       "contrarian_focus": "Challenge priority tradeoffs, ownership gaps, unclear success metrics, and MVI compliance. Reject milestone plans where any milestone ends in an unusable state.",
-      "prompt_doc": "docs/role_prompts/product.md",
+      "prompt_doc": "",
       "deliverables": [
         "Milestone plan with staffing callouts",
         "Success/kill metrics dashboard",
@@ -55,7 +55,7 @@
       "title": "Lead Systems Designer",
       "advocate_focus": "Define the fantasy, core loop, and experiential pillars that make the idea shippable. Each experience tier must be playable/usable on its own (MVI).",
       "contrarian_focus": "Call out scope bloat, UX ambiguity, missing experiential guardrails, and MVI violations. Reject designs that require all systems online before any interaction works.",
-      "prompt_doc": "docs/role_prompts/design.md",
+      "prompt_doc": "",
       "deliverables": [
         "Experience pillars + player promise",
         "Core loop sketch",
@@ -70,7 +70,7 @@
       "title": "Art Director",
       "advocate_focus": "Translate the idea into a visual north star, reference mood boards, and asset expectations.",
       "contrarian_focus": "Question production feasibility, tooling readiness, and brand cohesion.",
-      "prompt_doc": "docs/role_prompts/art.md",
+      "prompt_doc": "",
       "deliverables": [
         "Mood/reference board",
         "Style guardrails & constraints",
@@ -85,7 +85,7 @@
       "title": "Principal Gameplay Engineer",
       "advocate_focus": "Lay out the technical architecture, integrations, and performance budgets. Decompose work into tasks that each produce an interactable result (MVI).",
       "contrarian_focus": "Highlight ops toil, reliability risks, tech debt implications, and MVI compliance. Reject task breakdowns that are 'backend then frontend' or require multiple tasks to complete before anything is usable.",
-      "prompt_doc": "docs/role_prompts/engineering.md",
+      "prompt_doc": "",
       "deliverables": [
         "High-level architecture outline",
         "Tech stack choices + fallbacks",
@@ -101,7 +101,7 @@
       "title": "Staff Test Engineer — AI-TDD Integrity",
       "advocate_focus": "Enforce scenario-first test design: demand Given-When-Then specifications before any test code, declare context boundaries (exact stack and banned frameworks), design parameterized data tables for AI-generated test inputs, and require mutation verification evidence that tests genuinely detect regressions.",
       "contrarian_focus": "Hunt and kill AI-TDD anti-patterns: self-mocking tests that mock the system under test, hallucinated assertions that pass regardless of behavior, tests coupled to implementation details instead of observable behavior, and the green checkmark trap where passing tests create false confidence without meaningful coverage.",
-      "prompt_doc": "docs/role_prompts/test_engineer.md",
+      "prompt_doc": "",
       "deliverables": [
         "Scenario-first test specification (Given-When-Then before code)",
         "Context boundary declaration (stack, frameworks, banned patterns)",
@@ -118,7 +118,7 @@
       "title": "Release QA & Launch Ops Lead",
       "advocate_focus": "Plan validation strategy, tooling hooks, and telemetry coverage.",
       "contrarian_focus": "Attack blind spots in test coverage breadth, environment parity, and support readiness. Defer test methodology integrity (mock correctness, assertion quality, anti-patterns) to Test Engineer when present; escalate to add +test_engineer if methodology concerns arise without one.",
-      "prompt_doc": "docs/role_prompts/qa.md",
+      "prompt_doc": "",
       "deliverables": [
         "Test matrix + gate criteria",
         "Issue triage/rollback plan",
@@ -185,7 +185,7 @@
       "title": "ML Systems Lead",
       "advocate_focus": "Design and deliver the AI critique engine with measurable quality and cost control.",
       "contrarian_focus": "Stress test model reliability, cost predictability, and quality validation.",
-      "prompt_doc": "docs/role_prompts/ml.md",
+      "prompt_doc": "",
       "deliverables": [
         "Critique pipeline outline",
         "Model choices + fallbacks",
@@ -217,7 +217,7 @@
       "title": "Product Marketing Lead",
       "advocate_focus": "Shepherd the product narrative from MVP to public launch.",
       "contrarian_focus": "Pressure-test launch realism and messaging integrity.",
-      "prompt_doc": "docs/role_prompts/pmm.md",
+      "prompt_doc": "",
       "deliverables": [
         "Positioning Brief",
         "Launch Plan",

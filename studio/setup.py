@@ -186,10 +186,7 @@ def _load_default_scopes() -> Dict[str, Dict[str, Any]]:
         }
         if scope.output_budget is not None:
             entry["output_budget"] = scope.output_budget
-        if scope.debate_mode != "per_role":
-            entry["debate_mode"] = scope.debate_mode
-        else:
-            entry["debate_mode"] = scope.debate_mode
+        entry["debate_mode"] = scope.debate_mode
         result[scope.name] = entry
     return result
 
