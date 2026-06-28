@@ -207,6 +207,78 @@ class TestUpdateStudio:
         assert result["added"] == 0
 
 
+class TestSnapshotStaleDetection:
+    """Regression tests for #20: check/update run via the installed snapshot
+    must compare against live upstream source, not the snapshot itself."""
+
+    def _stale_install(self, target_dir, studio_dir):
+        """Install, then make the snapshot+manifest agree on a value that
+        DIFFERS from live source — i.e. a stale install that snapshot-vs-self
+        would wrongly call up to date."""
+        import hashlib
+
+        install_studio(target_dir, studio_dir)
+        snap_file = target_dir / ".studio" / "source" / "verdict.py"
+        snap_file.write_text("# stale snapshot", encoding="utf-8")
+        manifest_path = target_dir / ".studio" / "MANIFEST.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["verdict.py"] = hashlib.sha256(b"# stale snapshot").hexdigest()
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    def test_check_detects_stale_via_version_source_path(
+        self, target_dir, studio_dir, monkeypatch
+    ):
+        """check_studio (studio_dir=None) run from the snapshot resolves live
+        source from VERSION and detects the drift instead of trusting itself."""
+        import install
+
+        self._stale_install(target_dir, studio_dir)
+        snapshot = target_dir / ".studio" / "source"
+        # Simulate invocation through the installed snapshot.
+        monkeypatch.setattr(install, "_get_studio_root", lambda: snapshot)
+
+        status = check_studio(target_dir)  # default source resolution
+        assert status["up_to_date"] is False
+        assert "verdict.py" in status["changed"]
+        assert status["warning"] is None  # live source resolved cleanly
+
+    def test_update_refreshes_via_resolved_live_source(
+        self, target_dir, studio_dir, monkeypatch
+    ):
+        """update_studio run from the snapshot copies from live source and
+        restores the stale file."""
+        import install
+
+        self._stale_install(target_dir, studio_dir)
+        snapshot = target_dir / ".studio" / "source"
+        monkeypatch.setattr(install, "_get_studio_root", lambda: snapshot)
+
+        result = update_studio(target_dir)
+        assert result["updated"] >= 1
+        restored = (snapshot / "verdict.py").read_text()
+        assert restored != "# stale snapshot"
+
+    def test_warns_when_source_path_unresolvable(
+        self, target_dir, studio_dir, monkeypatch
+    ):
+        """If VERSION.source_path is gone, surface a warning rather than a
+        silent (and unreliable) 'up to date'."""
+        import install
+
+        install_studio(target_dir, studio_dir)
+        version_path = target_dir / ".studio" / "VERSION"
+        version = json.loads(version_path.read_text())
+        version["source_path"] = str(target_dir / "does_not_exist")
+        version_path.write_text(json.dumps(version), encoding="utf-8")
+
+        snapshot = target_dir / ".studio" / "source"
+        monkeypatch.setattr(install, "_get_studio_root", lambda: snapshot)
+
+        status = check_studio(target_dir)
+        assert status["warning"] is not None
+        assert "snapshot" in status["warning"]
+
+
 class TestSlashCommandsUseDirectPaths:
     """Verify slash commands use .studio/source/ paths directly (no rewriting needed)."""
 
