@@ -50,8 +50,12 @@ printed but never breaks finalize. With no target enabled, finalize is unchanged
 ## Payloads
 
 - **Slack** — Block Kit message: a header, a two-column field section
-  (status / verdict / phase / run id), a divider, and a context footer. A
-  top-level `text` fallback is always included (required by Slack).
+  (status / verdict / phase / run id), the run summary body (markdown converted
+  to Slack `mrkdwn` and truncated to ~2700 chars), a pointer to the full final
+  doc, and a context footer. A top-level `text` fallback is always included
+  (required by Slack). The body prefers a short plain-language `digest.md` (or
+  `summary_human.md`) when the run authored one, falling back to `summary.md`;
+  the "Final doc" pointer always targets the full `summary.md`.
 - **n8n** — flat JSON addressable downstream as `$json.body.<field>`:
   `source`, `event` (`"run.completed"`), `phase`, `run_id`, `status`,
   `verdict`, `iterations_run`, `summary_path`, `summary_text` (truncated),
