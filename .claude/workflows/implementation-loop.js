@@ -171,7 +171,10 @@ phase('Writer')
 const writer = await agent(writerPrompt(unit), { schema: WRITER_HANDOFF, label: `writer:${unit.unit_id}`, phase: 'Writer' })
 
 // Entry gate — purely mechanical: writer declared done AND machine checks pass.
-// static check is required unless config disabled it (static_checks=[]).
+// NOTE the static-check duality: `static_checks` (config array) gates WHETHER static checking is
+// required; `static_check` (per-unit command string, used in writerPrompt) is WHAT runs. They
+// travel together today. If the schema ever consolidates on the array, drive the command off it
+// here and in writerPrompt too, so the two don't drift.
 const staticRequired = !(Array.isArray(unit.static_checks) && unit.static_checks.length === 0)
 const entryGate = !!(writer && writer.mvi_claimed && writer.tests && writer.tests.passed && (!staticRequired || writer.static_ok !== false))
 if (!writer) {
