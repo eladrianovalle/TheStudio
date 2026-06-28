@@ -39,6 +39,7 @@ From `$ARGUMENTS`, construct the workflow `args`:
   - Node (`package.json`): `npm test` or the project's test script.
   - Rust (`Cargo.toml`): `cargo test`.
   - Unity / other: ask if you cannot infer a runnable command.
+  - If you cannot infer one, fall back to the config knob `test_command` from `python -m impl_loop` (Step 4).
 - `static_check` — `ruff check <path>` for Python; the project linter otherwise; omit if none.
 
 ### Step 2 — Pick the target branch (safety)
@@ -82,14 +83,21 @@ python -m impl_loop   # prints knobs JSON, e.g. {"editor_enabled": true, "read_s
 ```
 
 Then call the **Workflow** tool **by `scriptPath`** (NOT `name` — see Gotchas), merging the
-relevant knobs (`editor_enabled`, `read_scope`, `output_budget`) into the unit args:
+config knobs into the unit args:
 
 ```
 Workflow({ scriptPath: "<repo>/.claude/workflows/implementation-loop.js", args: {
-  unit_id, title, instructions, test_command, static_check,
-  editor_enabled, read_scope, output_budget   // from `python -m impl_loop`
+  unit_id, title, instructions, static_check,
+  test_command,            // per-unit inferred; if none, use the knob test_command
+  editor_enabled, read_scope, output_budget,           // from `python -m impl_loop`
+  static_checks, require_mutation_check                // from `python -m impl_loop`
 }})
 ```
+
+How the workflow consumes each knob: `editor_enabled=false` → skip the editor pass;
+`read_scope`/`output_budget` → shape the editor prompt; `require_mutation_check=false` → writer
+skips the mutation check; `static_checks=[]` → writer skips the static check and the entry gate
+doesn't require it. So passing all knobs makes `implementation_loop.toml` fully live.
 
 The workflow runs in the background and notifies on completion. Do not re-run it or poll;
 wait for the completion notification.

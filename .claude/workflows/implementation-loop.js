@@ -111,9 +111,8 @@ function writerPrompt(u) {
     ``,
     `Discipline:`,
     `- Build a usable interaction, not a partial component (MVI). No speculative scope beyond the unit.`,
-    `- Hold AI-TDD: write the tests, run them, and do a mutation check — break 2-3 critical assertions,`,
-    `  confirm the tests FAIL, then restore. Report it in mutation_check.`,
-    `- Run the unit tests: \`${u.test_command}\`  and the static check: \`${u.static_check}\`.`,
+    `- Hold AI-TDD: write the tests and run them.${u.require_mutation_check === false ? ' (Mutation check disabled by config: require_mutation_check=false.)' : ' Then a mutation check — break 2-3 critical assertions, confirm the tests FAIL, then restore; report it in mutation_check.'}`,
+    `- Run the unit tests: \`${u.test_command}\`${(Array.isArray(u.static_checks) && u.static_checks.length === 0) ? ' (static check skipped — config static_checks=[]).' : `  and the static check: \`${u.static_check}\`.`}`,
     `- When (and only when) tests pass, COMMIT the passing state on the current branch`,
     `  (\`git add -A && git commit -m "writer: ${u.unit_id}"\`) and capture the short SHA — that is writer_sha.`,
     `- Persist your handoff: \`mkdir -p ${runDir(u)}\` then write it to ${runDir(u)}/impl--${u.unit_id}--writer.json.`,
@@ -172,7 +171,9 @@ phase('Writer')
 const writer = await agent(writerPrompt(unit), { schema: WRITER_HANDOFF, label: `writer:${unit.unit_id}`, phase: 'Writer' })
 
 // Entry gate — purely mechanical: writer declared done AND machine checks pass.
-const entryGate = !!(writer && writer.mvi_claimed && writer.tests && writer.tests.passed && writer.static_ok !== false)
+// static check is required unless config disabled it (static_checks=[]).
+const staticRequired = !(Array.isArray(unit.static_checks) && unit.static_checks.length === 0)
+const entryGate = !!(writer && writer.mvi_claimed && writer.tests && writer.tests.passed && (!staticRequired || writer.static_ok !== false))
 if (!writer) {
   log('Writer agent failed to return a handoff — aborting.')
   return { delivered: false, reason: 'writer_failed' }
