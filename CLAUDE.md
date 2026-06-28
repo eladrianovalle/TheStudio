@@ -90,6 +90,16 @@ All runs (except `--mode questions`) include inline **decision point surfacing**
 
 The **Contrarian is an editor by default** — beyond hunting flaws and edge cases, it carries an always-on mandate to remove, merge, and simplify. The advocate piles it on; the contrarian carves out the essence (bias toward deletion, clarity, conciseness). This mandate is on in every deliverable run and stance, but deliberately **off in `--mode questions`**, where the contrarian instead judges question *relevance* and must not drop genuinely-open questions to keep the list lean.
 
+## Implementation Loop (Claude Code)
+
+The same advocate/contrarian cadence also runs during **implementation**, via `/studio-implement`:
+
+```
+/studio-implement Users can create and view a profile (hardcoded storage)
+```
+
+A **writer** agent builds one complete MVI unit and commits its passing state; a fresh **editor** agent (the `CONTRARIAN_MANDATE` applied to code) cuts/refines it against the writer's diff and reverts if an edit breaks green — a one-way pipeline gated on **"MVI unit complete AND tests green."** It runs the `.claude/workflows/implementation-loop.js` Claude Code Workflow, config-driven via `implementation_loop.toml` (editor on/off, read scope, output budget, mutation/static gates), with knobs exposed through `python -m impl_loop`. It is the executor described in `studio/docs/IMPLEMENTATION_LOOP_SPEC.md`. Status: executor + config shipped; cadence tuning (gate granularity vs. editor yield) is ongoing.
+
 ## CLI Commands
 
 ```bash
@@ -183,6 +193,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 - **`install.py`** — Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project. Also injects coding principles into the target's `CLAUDE.md` via sentinel markers for safe updates.
 - **`offload.py`** — CLAUDE.md analyzer: classifies sections, detects embedded constraints, scores pointer strength, generates offload reports and manages canary tokens.
 - **`setup.py`** — Setup wizard: project configuration after install. Tracks setup state in `.studio/SETUP.json`, generates role overrides, scopes, and cleanup config. Supports incremental re-configuration when new features are added.
+- **`impl_loop.py`** — Implementation-loop config: `LoopConfig` dataclass + `load_loop_config()` (tomllib/tomli fallback, resolution chain explicit → `.studio/` → shipped → defaults, patterned on `scopes.py`). `runtime_knobs()` + a `python -m impl_loop` JSON CLI project the resolved config into the knobs the `.claude/workflows/implementation-loop.js` Workflow consumes (editor on/off, read scope, output budget, mutation/static gates). The only Python piece of the writer/editor implementation loop; see `studio/docs/IMPLEMENTATION_LOOP_SPEC.md`.
 - **`validators/`** — `DocumentValidator` (including `validate_question_mode()`) and `CodeValidator` for post-run quality checks.
 - **`integrations/slack_digest.py`** — Outbound run-digest notifier. Posts a finalized run's status/verdict/summary to a Slack Incoming Webhook (Block Kit) and/or an n8n Webhook node (flat JSON), stdlib `urllib` only. Config from `.studio/integrations.toml`; webhook URLs resolved from env vars (secrets never committed). Fires via the `notify` subcommand and, when enabled, auto-fires on `finalize` (soft-fail). See `studio/docs/INTEGRATIONS.md`.
 
@@ -192,12 +203,14 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 - **`role_packs/*.json`** — Curated pod presets (e.g., `studio_core` = marketing + product + design + art + engineering + test_engineer + qa). Override with `--roles +role/-role`. Role dependencies in the manifest auto-inject co-required roles (e.g., engineering always brings test_engineer).
 - **`config/scopes.toml`** — Default three-tier scope configuration (alignment → depth → polish) with output budgets and debate modes.
 - **`config/studio_settings.toml`** — Cleanup TTL and storage limits.
+- **`config/implementation_loop.toml`** — Shipped defaults for the implementation writer/editor loop: `[loop]` (`deliver_on_gate_fail`), `[gate]` (`test_command`, `static_checks`, `require_mutation_check`), `[editor]` (`mandate`, `read_scope`, `output_budget`). Override with `.studio/implementation_loop.toml`. Loaded by `impl_loop.py`.
 - **`.studio/scopes.toml`** — Scope-based iteration budgets (auto-loaded if present).
 - **`.studio/validation.toml`** — Validation configuration.
 - **`.studio/roles/*.json`** — Project-local role overrides. Shallow-merge with manifest roles (override keys replace base, unspecified keys inherit).
 - **`.studio/personas.toml`** — Project-local single-phase persona overrides (market/design/tech/studio advocate, contrarian, notes, implementer, integrator). Per-phase shallow merge over the shipped `PHASE_DETAILS` defaults; loaded via `persona_overrides.py`, authored by the setup wizard.
 - **`.studio/integrations.toml`** — Optional outbound-webhook config for run digests. `[slack]` and `[n8n]` tables, each with `enabled` and `webhook_url_env` (env var holding the secret URL); `[n8n]` also takes optional `auth_header`/`auth_value_env` for Header Auth. Absent or no target `enabled` → notifications are off. Loaded by `integrations/slack_digest.py`.
 - **`.studio/unstale.toml`** — Optional per-repo override for the `/unstale` staleness audit: `[snapshot]` commands (`test_count`, `module_inventory`, `cli_help`) and `[audit]` globs (`doc_globs`, `source_globs`, `cross_refs`). When absent, `/unstale` self-detects the stack (Rust/Unity/Node/Python/Go) from marker files. Read directly by the `/unstale` command, not Python code.
+- **`.studio/implementation_loop.toml`** — Optional per-repo override for the implementation writer/editor loop config (shallow over `config/implementation_loop.toml`). Loaded by `impl_loop.py`; consumed by the `implementation-loop.js` Workflow via `python -m impl_loop`.
 
 ### Artifact structure
 

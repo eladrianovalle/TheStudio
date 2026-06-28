@@ -375,6 +375,28 @@ Override keys replace the base; unspecified keys inherit from the manifest. Vali
 
 ---
 
+## Implementation Loop (`/studio-implement`)
+
+Brings the advocate/contrarian cadence into **implementation** — the writer/editor analogue of the planning-phase debate. One agent writes a complete unit; a fresh editor agent refines it; then it's delivered.
+
+```
+/studio-implement Users can create and view a profile (hardcoded storage)
+```
+
+How it runs:
+1. **Parse** — your request becomes one MVI unit (title, build instructions, inferred `test_command`).
+2. **Branch** — runs on a feature branch (creates `impl/<unit>` if you're on `main`); refuses a dirty tree.
+3. **Plan echo** — prints the unit + branch + test command, then runs (no separate confirmation step).
+4. **Writer** — builds the unit, runs tests + a mutation check, commits its passing state (`writer_sha`).
+5. **Editor** — a fresh agent (the `CONTRARIAN_MANDATE` applied to code) diffs against `writer_sha`, cuts/refines, re-runs tests, and **reverts** if an edit breaks green. One-way pipeline — no ping-pong.
+6. **Report** — what was built, what the editor cut, the MVI verdict, whether anything reverted.
+
+The gate is **"MVI unit complete AND tests green"**, split into an *entry* gate (writer declares done + tests/static pass → triggers the editor) and an *exit* gate (the editor's authoritative MVI verdict, which can overturn the writer's claim).
+
+**Config** — `implementation_loop.toml` (override at `.studio/implementation_loop.toml`): `mandate = "off"` disables the editor pass; `read_scope`, `output_budget`, `require_mutation_check`, `static_checks`, and `test_command` tune the loop. Knobs reach the workflow via `python -m impl_loop`.
+
+Full design, gate semantics, and portability rationale: [`IMPLEMENTATION_LOOP_SPEC.md`](IMPLEMENTATION_LOOP_SPEC.md). (Implementation note: the command invokes the `.claude/workflows/implementation-loop.js` Workflow by `scriptPath`, not by `name` — the latter resolves a frozen registry snapshot.)
+
 ## Utility Slash Commands
 
 In addition to phase runners, these slash commands are available:
