@@ -190,15 +190,22 @@ if (editor && editor.tests && editor.tests.passed === false && !editor.reverted)
     `Run \`git reset --hard ${writer.writer_sha}\` to restore the writer's passing state for ${unit.unit_id}, then confirm \`${unit.test_command}\` passes. Return a one-line confirmation.`,
     { label: `revert:${unit.unit_id}`, phase: 'Edit' },
   )
+  // The tree is now back at writer_sha; reflect that in the payload so the log/return don't misreport.
+  editor.reverted = true
 }
 
 // Safety net: if the editor kept its edits but didn't commit them, commit now so delivery is complete.
+// NOTE: `git commit -am` stages only tracked, modified files — intentional. The editor's contract is to
+// refine/cut EXISTING files; a new file is out-of-contract, so it's left uncommitted to surface (not
+// silently swept in via `git add -A`). Widen this only if editors are ever allowed to create files.
 if (editHeld && editor && !editor.committed) {
   log(`Editor kept edits but did not commit — committing now.`)
   await agent(
     `Run \`git commit -am "editor: ${unit.unit_id}"\` to commit the editor's kept changes for ${unit.unit_id}. If git reports nothing to commit, say so. Return a one-line confirmation.`,
     { label: `commit:${unit.unit_id}`, phase: 'Edit' },
   )
+  // Reflect the safety-net commit in the payload.
+  editor.committed = true
 }
 
 log(`Done. editorRan=${!!editor} editHeld=${editHeld} mvi_verdict=${editor?.mvi_verdict} reverted=${editor?.reverted} committed=${editor?.committed}`)
