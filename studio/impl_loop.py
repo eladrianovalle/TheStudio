@@ -23,6 +23,8 @@ STUDIO_ROOT = Path(__file__).resolve().parent
 
 VALID_MANDATES = {"contrarian", "off"}
 
+VALID_READ_SCOPES = {"touched", "touched+importers"}
+
 
 @dataclass
 class LoopConfig:
@@ -51,6 +53,16 @@ class LoopConfig:
             raise ValueError("gate.static_checks must be a list")
         if not isinstance(self.output_budget, int) or isinstance(self.output_budget, bool):
             raise ValueError("editor.output_budget must be an integer")
+        if self.read_scope not in VALID_READ_SCOPES:
+            raise ValueError(
+                f"editor.read_scope must be one of {VALID_READ_SCOPES}, got '{self.read_scope}'"
+            )
+        if not isinstance(self.test_command, str):
+            raise ValueError("gate.test_command must be a string")
+        if not isinstance(self.deliver_on_gate_fail, bool):
+            raise ValueError("loop.deliver_on_gate_fail must be a boolean")
+        if not isinstance(self.require_mutation_check, bool):
+            raise ValueError("gate.require_mutation_check must be a boolean")
 
     @property
     def editor_enabled(self) -> bool:
@@ -80,9 +92,11 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
     Load loop configuration from TOML, mirroring load_scopes_config().
 
     Resolution chain: explicit ``path`` → ``.studio/implementation_loop.toml`` →
-    ``config/implementation_loop.toml`` → built-in defaults. A missing file (whether
-    explicit or end-of-chain) yields the default LoopConfig rather than an error —
-    the loop ships with a working default, so absence is not a failure.
+    ``config/implementation_loop.toml`` → built-in defaults. An end-of-chain miss
+    (no ``path`` given and nothing found) yields the default LoopConfig — the loop
+    ships with a working default, so absence is not a failure. But an explicit
+    ``path`` that does not exist raises FileNotFoundError: a typo'd config path is an
+    error, not a silent request for defaults.
 
     All tables/keys are optional; unspecified keys inherit the LoopConfig defaults.
     See config/implementation_loop.toml (the shipped default) and SPEC §4 for the
@@ -97,8 +111,12 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
         LoopConfig with parsed values merged over defaults.
 
     Raises:
+        FileNotFoundError: If an explicit ``path`` is given but does not exist.
         ValueError: If the resolved file has invalid TOML or invalid field values.
     """
+    if path is not None and not Path(path).exists():
+        raise FileNotFoundError(f"Loop config not found at explicit path: {path}")
+
     root = studio_root if studio_root is not None else STUDIO_ROOT
     config_path = _resolve_config_path(path, root)
 

@@ -8,6 +8,7 @@ import pytest
 from impl_loop import (
     LoopConfig,
     VALID_MANDATES,
+    VALID_READ_SCOPES,
     load_loop_config,
 )
 
@@ -59,6 +60,21 @@ def test_loop_config_invalid_static_checks_type():
         LoopConfig(static_checks="ruff")  # type: ignore[arg-type]
 
 
+def test_loop_config_invalid_read_scope():
+    """read_scope must be one of the known values, not an arbitrary string."""
+    with pytest.raises(ValueError, match="read_scope"):
+        LoopConfig(read_scope="everything")
+    assert "touched+importers" in VALID_READ_SCOPES
+
+
+def test_loop_config_invalid_bool_fields():
+    """The boolean knobs reject non-bool values (e.g. a stray TOML string)."""
+    with pytest.raises(ValueError, match="deliver_on_gate_fail"):
+        LoopConfig(deliver_on_gate_fail="yes")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="require_mutation_check"):
+        LoopConfig(require_mutation_check="no")  # type: ignore[arg-type]
+
+
 def test_load_loop_config_valid():
     """A valid TOML file parses into a LoopConfig."""
     config_path = _write_toml("""
@@ -107,10 +123,13 @@ output_budget = 999
         config_path.unlink()
 
 
-def test_load_loop_config_missing_file_returns_defaults():
-    """A missing file yields defaults, not an error (unlike scopes)."""
-    config = load_loop_config(Path("/nonexistent/implementation_loop.toml"))
-    assert config == LoopConfig()
+def test_load_loop_config_explicit_missing_path_raises():
+    """An explicit path that doesn't exist is an error (a typo), not a silent default.
+
+    End-of-chain absence still yields defaults — see the no_config_anywhere test below.
+    """
+    with pytest.raises(FileNotFoundError):
+        load_loop_config(Path("/nonexistent/implementation_loop.toml"))
 
 
 def test_load_loop_config_no_config_anywhere_returns_defaults():
