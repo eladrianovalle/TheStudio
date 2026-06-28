@@ -11,8 +11,9 @@ Example decision point in agent output::
     > **Unblocks:** Core loop design — fundamentally different gameplay
     > **Options:** (a) Real-time (b) Turn-based
 
-Pure function library — no side effects except extract_decisions_from_run
-which reads files from a run directory.
+Mostly a pure function library. The exceptions touch the filesystem:
+extract_decisions_from_run reads a run directory, and
+save_decisions_json/load_decisions_json write and read decisions.json.
 """
 from __future__ import annotations
 

@@ -201,7 +201,7 @@ SUBCOMMANDS = {
     "init", "check-install", "update",
     "show-clarity", "set-clarity", "recompute-clarity",
     "record-metrics", "show-metrics", "offload", "setup",
-    "notify",
+    "rate", "stats", "notify",
 }
 
 

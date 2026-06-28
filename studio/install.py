@@ -73,7 +73,10 @@ _SENTINEL_END = "<!-- STUDIO:CODING_PRINCIPLES:END -->"
 
 
 def _get_studio_root() -> Path:
-    """Get the root of the Studio source repo (parent of studio/)."""
+    """Get the Studio source directory (the ``studio/`` dir this file lives in).
+
+    Callers reach the repo root via ``.parent`` (e.g. for git metadata).
+    """
     return Path(__file__).resolve().parent
 
 
@@ -399,7 +402,9 @@ def update_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
     Preserves user customizations in .studio/ (roles/, scopes.toml, etc.)
     by only overwriting source/ and slash commands.
 
-    Returns dict with counts of updated/added/removed files.
+    Returns dict with counts of updated/added/removed files, plus a ``warning``
+    key (str | None) when the live source could not be resolved (e.g. run from a
+    stale snapshot — see ``_resolve_source_dir``).
     """
     target = Path(target).resolve()
     dot_studio = target / ".studio"

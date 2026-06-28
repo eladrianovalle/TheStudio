@@ -5,7 +5,8 @@ Classifies sections, detects embedded constraints, scores pointer strength,
 generates reports, and evaluates validation protocol results.
 
 Pure function library — no side effects except explicit I/O functions
-(generate_report, create_backup, restore_backup, and file-scan helpers).
+(create_backup, restore_backup, and the file-scan helpers scan_existing_docs,
+scan_slash_commands, detect_cross_repo_context).
 """
 from __future__ import annotations
 
