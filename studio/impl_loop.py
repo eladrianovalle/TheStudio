@@ -14,6 +14,7 @@ try:
     import tomllib  # Python 3.11+
 except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore[no-redefine]  # Python 3.10 fallback
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List
@@ -146,3 +147,24 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
         read_scope=editor.get("read_scope", defaults.read_scope),
         output_budget=editor.get("output_budget", defaults.output_budget),
     )
+
+
+def runtime_knobs(config: LoopConfig) -> dict:
+    """Project a resolved LoopConfig onto the runtime knobs the JS workflow needs.
+
+    This is the consume side of load_loop_config(): the /studio-implement command
+    shells out to ``python -m impl_loop``, reads this dict, and merges it into the
+    workflow args. Only already-resolved config is exposed — no new fields.
+    """
+    return {
+        "editor_enabled": config.editor_enabled,
+        "test_command": config.test_command,
+        "static_checks": config.static_checks,
+        "require_mutation_check": config.require_mutation_check,
+        "read_scope": config.read_scope,
+        "output_budget": config.output_budget,
+    }
+
+
+if __name__ == "__main__":
+    print(json.dumps(runtime_knobs(load_loop_config())))

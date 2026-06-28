@@ -111,9 +111,8 @@ function writerPrompt(u) {
     ``,
     `Discipline:`,
     `- Build a usable interaction, not a partial component (MVI). No speculative scope beyond the unit.`,
-    `- Hold AI-TDD: write the tests, run them, and do a mutation check — break 2-3 critical assertions,`,
-    `  confirm the tests FAIL, then restore. Report it in mutation_check.`,
-    `- Run the unit tests: \`${u.test_command}\`  and the static check: \`${u.static_check}\`.`,
+    `- Hold AI-TDD: write the tests and run them.${u.require_mutation_check === false ? ' (Mutation check disabled by config: require_mutation_check=false.)' : ' Then a mutation check — break 2-3 critical assertions, confirm the tests FAIL, then restore; report it in mutation_check.'}`,
+    `- Run the unit tests: \`${u.test_command}\`${(Array.isArray(u.static_checks) && u.static_checks.length === 0) ? ' (static check skipped — config static_checks=[]).' : `  and the static check: \`${u.static_check}\`.`}`,
     `- When (and only when) tests pass, COMMIT the passing state on the current branch`,
     `  (\`git add -A && git commit -m "writer: ${u.unit_id}"\`) and capture the short SHA — that is writer_sha.`,
     `- Persist your handoff: \`mkdir -p ${runDir(u)}\` then write it to ${runDir(u)}/impl--${u.unit_id}--writer.json.`,
@@ -132,8 +131,8 @@ function editorPrompt(u, writer) {
     `applied to code: default to deletion, name the specific cut, collapse don't accumulate, guard the essence.`,
     ``,
     `Scope of review: \`git diff ${writer.writer_sha}..\` — these are the writer's changes. Read the touched`,
-    `files (${(writer.files_touched || []).join(', ') || 'see the diff'}) and their direct importers. Do not`,
-    `wander beyond that read scope.`,
+    `files (${(writer.files_touched || []).join(', ') || 'see the diff'})${u.read_scope === 'touched' ? '' : ' and their direct importers'}.`,
+    `Do not wander beyond that read scope.`,
     ``,
     `Hard bounds:`,
     `- BEHAVIOR PRESERVATION: you may restructure and delete freely ONLY as long as the unit's tests stay green.`,
@@ -145,6 +144,7 @@ function editorPrompt(u, writer) {
     `Then render mvi_verdict: AUTHORITATIVELY judge "if we stopped here, could someone use this unit?" against`,
     `the title "${u.title}". This can overturn the writer's claim.`,
     ``,
+    `Keep your edits rationale under ${u.output_budget || 400} words.`,
     `Deliver: if you KEPT your edits (tests green, not reverted), commit them — \`git commit -am "editor: ${u.unit_id}"\``,
     `— and set committed=true. If you reverted, do NOT commit (writer_sha already holds the delivered state); set committed=false.`,
     `Persist your handoff to ${runDir(u)}/impl--${u.unit_id}--editor.json, and return the editor handoff object.`,
@@ -157,7 +157,13 @@ function editorPrompt(u, writer) {
 // Merge any provided args over the default unit field-by-field: provided keys win,
 // unspecified keys fall back to DEFAULT_UNIT (so partial args are safe). The log
 // makes the resolved unit visible — if args didn't arrive, this shows the default.
-const overrides = (args && typeof args === 'object' && !Array.isArray(args)) ? args : {}
+// NOTE: args arrives as a JSON-encoded STRING (the runtime serializes it when forwarding),
+// not a parsed object — normalize before merging, else everything falls back to DEFAULT_UNIT.
+let parsedArgs = args
+if (typeof parsedArgs === 'string') {
+  try { parsedArgs = JSON.parse(parsedArgs) } catch { parsedArgs = {} }
+}
+const overrides = (parsedArgs && typeof parsedArgs === 'object' && !Array.isArray(parsedArgs)) ? parsedArgs : {}
 const unit = { ...DEFAULT_UNIT, ...overrides }
 log(`Unit: ${unit.unit_id} — ${unit.title}`)
 
@@ -165,7 +171,12 @@ phase('Writer')
 const writer = await agent(writerPrompt(unit), { schema: WRITER_HANDOFF, label: `writer:${unit.unit_id}`, phase: 'Writer' })
 
 // Entry gate — purely mechanical: writer declared done AND machine checks pass.
-const entryGate = !!(writer && writer.mvi_claimed && writer.tests && writer.tests.passed && writer.static_ok !== false)
+// NOTE the static-check duality: `static_checks` (config array) gates WHETHER static checking is
+// required; `static_check` (per-unit command string, used in writerPrompt) is WHAT runs. They
+// travel together today. If the schema ever consolidates on the array, drive the command off it
+// here and in writerPrompt too, so the two don't drift.
+const staticRequired = !(Array.isArray(unit.static_checks) && unit.static_checks.length === 0)
+const entryGate = !!(writer && writer.mvi_claimed && writer.tests && writer.tests.passed && (!staticRequired || writer.static_ok !== false))
 if (!writer) {
   log('Writer agent failed to return a handoff — aborting.')
   return { delivered: false, reason: 'writer_failed' }
@@ -174,6 +185,13 @@ if (!entryGate) {
   // deliver_on_gate_fail: do not spin. Leave the writer's state, flag it.
   log(`Entry gate failed (mvi_claimed=${writer.mvi_claimed}, tests.passed=${writer.tests?.passed}). Delivering flagged, no editor pass.`)
   return { delivered: true, flagged: true, editorRan: false, writer }
+}
+
+// Config knob (editor.mandate="off" → editor_enabled=false, merged into args by /studio-implement):
+// skip the editor pass entirely and deliver the writer's version.
+if (unit.editor_enabled === false) {
+  log(`editor_enabled=false (mandate off) — delivering the writer's version, no editor pass.`)
+  return { delivered: true, flagged: false, editorRan: false, finalVersion: 'writer', writer }
 }
 
 phase('Edit')

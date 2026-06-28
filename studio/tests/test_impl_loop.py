@@ -10,6 +10,7 @@ from impl_loop import (
     VALID_MANDATES,
     VALID_READ_SCOPES,
     load_loop_config,
+    runtime_knobs,
 )
 
 
@@ -192,6 +193,46 @@ def test_explicit_path_beats_resolution_chain():
             assert config.output_budget == 777
         finally:
             explicit.unlink()
+
+
+def test_runtime_knobs_default_config():
+    """runtime_knobs maps a default LoopConfig to the expected knob dict."""
+    knobs = runtime_knobs(LoopConfig())
+    assert knobs == {
+        "editor_enabled": True,
+        "test_command": "pytest -q",
+        "static_checks": ["ruff"],
+        "require_mutation_check": True,
+        "read_scope": "touched+importers",
+        "output_budget": 400,
+    }
+
+
+def test_runtime_knobs_reflects_loaded_override():
+    """Values from a loaded .studio override flow through to the knobs."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / ".studio").mkdir()
+        (root / ".studio" / "implementation_loop.toml").write_text(
+            "[gate]\n"
+            'test_command = "python -m pytest tests/ -q"\n'
+            'static_checks = ["ruff", "mypy"]\n'
+            "require_mutation_check = false\n"
+            "[editor]\n"
+            'mandate = "off"\n'
+            'read_scope = "touched"\n'
+            "output_budget = 250\n"
+        )
+        config = load_loop_config(studio_root=root)
+        knobs = runtime_knobs(config)
+        assert knobs == {
+            "editor_enabled": False,
+            "test_command": "python -m pytest tests/ -q",
+            "static_checks": ["ruff", "mypy"],
+            "require_mutation_check": False,
+            "read_scope": "touched",
+            "output_budget": 250,
+        }
 
 
 def test_load_default_loop_config():

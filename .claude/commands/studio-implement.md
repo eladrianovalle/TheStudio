@@ -39,6 +39,7 @@ From `$ARGUMENTS`, construct the workflow `args`:
   - Node (`package.json`): `npm test` or the project's test script.
   - Rust (`Cargo.toml`): `cargo test`.
   - Unity / other: ask if you cannot infer a runnable command.
+  - If you cannot infer one, fall back to the config knob `test_command` from `python -m impl_loop` (Step 4).
 - `static_check` — `ruff check <path>` for Python; the project linter otherwise; omit if none.
 
 ### Step 2 — Pick the target branch (safety)
@@ -72,19 +73,44 @@ Print a short block, then proceed (unless `--plan`):
 
 If `--plan`, stop here.
 
-### Step 4 — Run the loop
+### Step 4 — Load config knobs, then run the loop
 
-Call the **Workflow** tool with the `implementation-loop` workflow, passing the parsed unit as
-`args`:
+First read the loop config so the run honors `implementation_loop.toml` (run from the `studio/`
+package dir):
+
+```bash
+python -m impl_loop   # prints knobs JSON, e.g. {"editor_enabled": true, "read_scope": "touched+importers", "output_budget": 400, ...}
+```
+
+Then call the **Workflow** tool **by `scriptPath`** (NOT `name` — see Gotchas), merging the
+config knobs into the unit args:
 
 ```
-Workflow({ name: "implementation-loop", args: {
-  unit_id, title, instructions, test_command, static_check
+Workflow({ scriptPath: "<repo>/.claude/workflows/implementation-loop.js", args: {
+  unit_id, title, instructions, static_check,
+  test_command,            // per-unit inferred; if none, use the knob test_command
+  editor_enabled, read_scope, output_budget,           // from `python -m impl_loop`
+  static_checks, require_mutation_check                // from `python -m impl_loop`
 }})
 ```
 
+How the workflow consumes each knob: `editor_enabled=false` → skip the editor pass;
+`read_scope`/`output_budget` → shape the editor prompt; `require_mutation_check=false` → writer
+skips the mutation check; `static_checks=[]` → writer skips the static check and the entry gate
+doesn't require it. So passing all knobs makes `implementation_loop.toml` fully live.
+
 The workflow runs in the background and notifies on completion. Do not re-run it or poll;
 wait for the completion notification.
+
+#### Gotchas (learned the hard way — do not regress these)
+
+- **Invoke by `scriptPath`, never `name`.** `Workflow({name})` resolves a FROZEN registry snapshot
+  captured early in the session; it ignores on-disk edits to the workflow file. `scriptPath` (the
+  absolute path to `.claude/workflows/implementation-loop.js`) reads the live file.
+- **`args` reaches the workflow as a JSON string**, not an object — the workflow `JSON.parse`s it.
+  Pass args as a normal object here; just don't be surprised the workflow normalizes a string.
+- If `editor_enabled` is false (config `mandate = "off"`), the loop skips the editor pass and
+  delivers the writer's version (`editorRan: false`).
 
 ### Step 5 — Report the result
 
