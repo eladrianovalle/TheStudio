@@ -1,0 +1,17 @@
+# Default configuration for the implementation writer/editor loop.
+#
+# Follows the scopes.toml pattern: shipped default, overridable by
+# .studio/implementation_loop.toml. See studio/docs/IMPLEMENTATION_LOOP_SPEC.md §4.
+
+[loop]
+deliver_on_gate_fail = true   # if the writer can't reach green, deliver flagged (uncommitted) rather than spin
+
+[gate]
+test_command = "pytest -q"    # per-repo; the only stack-specific knob. Runs the unit-scoped tests.
+static_checks = ["ruff"]      # CodeValidator static/lint half (mypy opt-in, off by default)
+require_mutation_check = true # records the attested mutation signal; not machine-enforced yet
+
+[editor]
+mandate = "contrarian"        # reuse CONTRARIAN_MANDATE; "off" disables the editor pass
+read_scope = "touched+importers"  # bound the editor's reads: diff + files_touched + direct importers
+output_budget = 400           # word cap on the editor's rationale (matches scope output budgets)
