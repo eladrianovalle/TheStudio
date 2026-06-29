@@ -43,10 +43,11 @@ Read the generated `instructions.md` file. Pay attention to:
 
 2. **Extract decision points** — Run this command (do NOT manually scan files):
    ```bash
-   python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir}
+   python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir} --json
    ```
+   `--json` emits `{"count": N, "decisions": [...]}`.
 
-3. **If the output is non-empty**, you MUST pause and present ALL decision points to the user. Do not spawn the next agent until the user has responded. Present each as:
+3. **If `count > 0`**, you MUST pause and present ALL decision points to the user. Do not spawn the next agent until the user has responded. Present each as:
    - **Decision [priority]:** [question]
    - Unblocks: [context]
    - Options: [options if present]
@@ -180,9 +181,9 @@ python ".studio/source/run_phase.py" inject-context --run-dir {run_dir} --scope 
 
 **Check decision points** — After each S2 advocate and contrarian saves output, run:
 ```bash
-python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir} --scope S2
+python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir} --scope S2 --json
 ```
-If non-empty, follow the Decision Point Handling protocol above. Since S2 is sequential, decisions from earlier roles inform later roles.
+If `count > 0`, follow the Decision Point Handling protocol above. Since S2 is sequential, decisions from earlier roles inform later roles.
 
 **Brief update cadence — MANDATORY:** After every 2-3 roles complete:
 1. Run `python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir}` to gather all decisions

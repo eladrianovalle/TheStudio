@@ -239,6 +239,20 @@ def _entrypoint() -> str:
     return f"python {argv0}"
 
 
+def _phase_from_run_id(run_id: str) -> str:
+    """Derive the phase from a run_id (format ``run_<phase>_<timestamp>``).
+
+    Lets run-scoped commands (finalize/validate/recompute-clarity) make ``--phase``
+    optional — it's redundant with ``--run-id``, which already encodes it.
+    """
+    parts = run_id.split("_")
+    if len(parts) >= 3 and parts[0] == "run" and parts[1] in PHASE_DETAILS:
+        return parts[1]
+    raise ValueError(
+        f"Cannot derive phase from run_id '{run_id}' — pass --phase explicitly."
+    )
+
+
 _artifact_root_override: Path | None = None
 _artifact_root_warned: bool = False
 
@@ -282,20 +296,20 @@ def get_artifact_root() -> Path:
 
     studio_root = get_studio_root().resolve()
     cwd = Path.cwd().resolve()
-    installed_root = _installed_repo_root(studio_root)
 
     if cwd == studio_root or _is_within(cwd, studio_root):
         # Running from the source tree (or from inside an installed snapshot).
         # In the source repo the artifact root IS the studio dir; in an installed
         # snapshot it's the consuming repo root, never the snapshot itself.
+        installed_root = _installed_repo_root(studio_root)
         return installed_root if installed_root is not None else studio_root
 
-    # Anywhere under an init'd repo (e.g. a monorepo subdir): resolve to its root.
+    # The next two branches are distinct on purpose: an init'd repo is marked by
+    # .studio/VERSION (walk UP for it — handles monorepo subdirs), whereas a merely
+    # scaffolded repo has a bare .studio/ and no VERSION (check cwd ONLY). Don't merge.
     found = _find_installed_root_upwards(cwd)
     if found is not None:
         return found
-
-    # cwd is already a scaffolded/installed repo root — defaulting to it is correct.
     if (cwd / ".studio").is_dir():
         return cwd
 
@@ -1294,17 +1308,28 @@ def prepare_run(args: argparse.Namespace) -> str:
     write_json(run_dir / "run.json", meta)
     rebuild_index()
 
-    print(f"Prepared {run_id} ({phase})")
-    print(f"- Run directory: {run_dir_abs}")
-    print(f"- Instructions: {instructions_abs_path}")
-    if objective_changed:
-        print(f"- Fresh run: cleared stale clarity from previous objective")
-
-    if scopes_meta:
-        print(f"\n💡 Tip: Scopes are active. Work through {scopes_meta['scopes'][0]['name']} scope first.")
+    emit_json = getattr(args, "json", False)
+    if emit_json:
+        print(json.dumps({
+            "run_id": run_id,
+            "phase": phase,
+            "run_dir": str(run_dir_abs),
+            "instructions": str(instructions_abs_path),
+            "scoped": bool(scopes_meta),
+            "objective_changed": bool(objective_changed),
+        }))
     else:
-        print(f"\n💡 Tip: Want to optimize iteration budgets? Create .studio/scopes.toml")
-        print(f"   See: .studio/source/docs/SCOPES_GUIDE.md")
+        print(f"Prepared {run_id} ({phase})")
+        print(f"- Run directory: {run_dir_abs}")
+        print(f"- Instructions: {instructions_abs_path}")
+        if objective_changed:
+            print(f"- Fresh run: cleared stale clarity from previous objective")
+
+        if scopes_meta:
+            print(f"\n💡 Tip: Scopes are active. Work through {scopes_meta['scopes'][0]['name']} scope first.")
+        else:
+            print(f"\n💡 Tip: Want to optimize iteration budgets? Create .studio/scopes.toml")
+            print(f"   See: .studio/source/docs/SCOPES_GUIDE.md")
 
     # Append to usage log (fail silently — don't break prepare over logging)
     try:
@@ -1320,7 +1345,7 @@ def prepare_run(args: argparse.Namespace) -> str:
         pass  # Usage logging must never block prepare
 
     storage_stats = meta.get("storage", {})
-    if storage_stats.get("cleanup_suggested", False):
+    if storage_stats.get("cleanup_suggested", False) and not emit_json:
         print(f"\n🧹 Storage Tip: You have {storage_stats['total_size_mb']}MB of Studio artifacts")
         print(f"   (oldest: {storage_stats['oldest_artifact_days']} days ago). Consider cleanup:")
         print(f"   {_entrypoint()} cleanup --dry-run  # Preview what would be deleted")
@@ -1330,8 +1355,8 @@ def prepare_run(args: argparse.Namespace) -> str:
 
 
 def finalize_run(args: argparse.Namespace) -> None:
-    phase = args.phase.lower()
     run_id = args.run_id
+    phase = (args.phase or _phase_from_run_id(run_id)).lower()
     run_dir = get_output_root() / phase / run_id
     meta_path = run_dir / "run.json"
     if not meta_path.exists():
@@ -1578,14 +1603,21 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Preview cleanup deletions without removing any files.",
     )
+    prepare_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit a machine-readable JSON object {run_id, run_dir, instructions, phase, ...} "
+             "as the final line of stdout (instead of the prose summary + tips).",
+    )
     _add_artifact_root_arg(prepare_parser)
 
     finalize_parser = subparsers.add_parser("finalize", help="Mark an existing run as completed and refresh index.")
     finalize_parser.add_argument(
         "--phase",
-        required=True,
+        required=False,
+        default=None,
         choices=sorted(PHASE_DETAILS.keys()),
-        help="Phase the run belongs to.",
+        help="Phase the run belongs to (optional — derived from --run-id when omitted).",
     )
     finalize_parser.add_argument(
         "--run-id",
@@ -1642,9 +1674,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     validate_parser.add_argument(
         "--phase",
-        required=True,
+        required=False,
+        default=None,
         choices=sorted(PHASE_DETAILS.keys()),
-        help="Phase the run belongs to.",
+        help="Phase the run belongs to (optional — derived from --run-id when omitted).",
     )
     validate_parser.add_argument(
         "--run-id",
@@ -1737,6 +1770,11 @@ def build_parser() -> argparse.ArgumentParser:
         dest="show_all",
         help="Show all decisions including already-settled ones (default: only unsettled).",
     )
+    extract_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON {count, decisions:[...]} instead of markdown (gate on count, not empty stdout).",
+    )
 
     inject_parser = subparsers.add_parser(
         "inject-context", help="Generate context block for the next agent in a scoped run."
@@ -1822,7 +1860,10 @@ def build_parser() -> argparse.ArgumentParser:
     recompute_clarity_parser = subparsers.add_parser(
         "recompute-clarity", help="Recompute clarity from a run's decisions."
     )
-    recompute_clarity_parser.add_argument("--phase", required=True, choices=sorted(PHASE_DETAILS.keys()))
+    recompute_clarity_parser.add_argument(
+        "--phase", required=False, default=None, choices=sorted(PHASE_DETAILS.keys()),
+        help="Phase the run belongs to (optional — derived from --run-id when omitted).",
+    )
     recompute_clarity_parser.add_argument("--run-id", required=True)
     recompute_clarity_parser.add_argument(
         "--artifact-root", type=Path, default=None,
@@ -1925,8 +1966,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def validate_run(args: argparse.Namespace) -> None:
     """Validate Studio run outputs."""
-    phase = args.phase.lower()
     run_id = args.run_id
+    phase = (args.phase or _phase_from_run_id(run_id)).lower()
     run_dir = get_output_root() / phase / run_id
     
     if not run_dir.exists():
@@ -2086,6 +2127,18 @@ def record_decisions(args: argparse.Namespace) -> None:
     print(f"  decisions.md:   {run_dir / 'decisions.md'}")
 
 
+def _decision_to_dict(dp) -> dict:
+    """Serialize a DecisionPoint — single source of truth for the machine-readable
+    shape shared by `check-decisions` and `extract-decisions --json`."""
+    return {
+        "priority": dp.priority,
+        "question": dp.question,
+        "unblocks": dp.unblocks,
+        "options": dp.options,
+        "source_file": dp.source_file,
+    }
+
+
 def check_decisions(args: argparse.Namespace) -> None:
     """Parse decision points from a single agent output file and print as JSON."""
     file_path = Path(args.file)
@@ -2097,13 +2150,8 @@ def check_decisions(args: argparse.Namespace) -> None:
 
     grouped: dict[str, list[dict]] = {"P0": [], "P1": [], "P2": []}
     for dp in points:
-        entry = {
-            "question": dp.question,
-            "unblocks": dp.unblocks,
-            "options": dp.options,
-            "source_file": dp.source_file,
-        }
-        grouped[dp.priority].append(entry)
+        entry = _decision_to_dict(dp)
+        grouped[entry.pop("priority")].append(entry)  # grouped by priority → drop it from the entry
 
     print(json.dumps(grouped, indent=2))
 
@@ -2134,6 +2182,12 @@ def extract_decisions(args: argparse.Namespace) -> None:
     if not getattr(args, "show_all", False):
         settled = load_decisions_json(run_dir)
         all_decisions = filter_unsettled(all_decisions, settled)
+
+    if getattr(args, "json", False):
+        # Machine-readable: always emit (count lets callers gate on a number, not empty stdout).
+        decisions = [_decision_to_dict(dp) for dp in all_decisions]
+        print(json.dumps({"count": len(decisions), "decisions": decisions}, indent=2))
+        return
 
     if not all_decisions:
         # Silent exit — no decisions found is normal
@@ -2743,8 +2797,8 @@ def recompute_clarity(args: argparse.Namespace) -> None:
     making this usable mid-run.
     """
     root = Path(args.artifact_root).resolve() if args.artifact_root else get_artifact_root()
-    phase = args.phase.lower()
     run_id = args.run_id
+    phase = (args.phase or _phase_from_run_id(run_id)).lower()
     run_dir = get_output_root() / phase / run_id
     if not run_dir.is_dir():
         raise FileNotFoundError(f"Run directory not found: {run_dir}")

@@ -1,5 +1,6 @@
 """Unit tests for run_phase.py core functions."""
 import argparse
+import json
 
 import pytest
 
@@ -920,3 +921,46 @@ def test_bridge_doc_created_even_when_studio_dir_exists(tmp_path):
     (repo / ".studio").mkdir(parents=True)  # simulates an init'd repo
     run_phase._scaffold_external_repo(repo, studio_root)
     assert (repo / "docs" / "studio-bridge.md").is_file()
+
+
+# --- CLI ergonomics: --json output + --phase derivable from run_id ---
+
+def test_phase_from_run_id():
+    assert run_phase._phase_from_run_id("run_market_20260101_120000") == "market"
+    assert run_phase._phase_from_run_id("run_studio_20260101_120000") == "studio"
+    with pytest.raises(ValueError):
+        run_phase._phase_from_run_id("not_a_valid_id")
+
+
+def test_prepare_json_output(studio_root, capsys):
+    """prepare --json emits a parseable object as the final stdout line."""
+    run_phase.prepare_run(make_prepare_args(text="json test", json=True))
+    lines = [ln for ln in capsys.readouterr().out.strip().splitlines() if ln.strip()]
+    payload = json.loads(lines[-1])
+    assert payload["phase"] == "market"
+    assert payload["run_id"].startswith("run_market_")
+    assert payload["run_dir"] and payload["instructions"]
+
+
+def test_finalize_derives_phase_when_omitted(studio_root):
+    """finalize works with --phase omitted (derived from run_id)."""
+    run_id = run_phase.prepare_run(make_prepare_args())
+    run_dir = studio_root / "output" / "market" / run_id
+    (run_dir / "advocate_1.md").write_text("a", encoding="utf-8")
+    (run_dir / "contrarian_1.md").write_text("c", encoding="utf-8")
+    (run_dir / "summary.md").write_text("s", encoding="utf-8")
+    run_phase.finalize_run(make_finalize_args(phase=None, run_id=run_id))
+    meta = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert meta["status"] == "COMPLETED"
+
+
+def test_extract_decisions_json_emits_count(studio_root, capsys):
+    """extract-decisions --json always emits {count, decisions} (count, not empty stdout, gates)."""
+    run_id = run_phase.prepare_run(make_prepare_args())
+    run_dir = studio_root / "output" / "market" / run_id
+    capsys.readouterr()  # discard prepare's prose so we read only extract's output
+    run_phase.extract_decisions(
+        argparse.Namespace(run_dir=run_dir, scope=None, show_all=False, json=True)
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {"count": 0, "decisions": []}
