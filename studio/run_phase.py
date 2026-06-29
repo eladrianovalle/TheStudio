@@ -1836,6 +1836,11 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Path to the target project directory.",
     )
+    update_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite even locally-modified snapshot files (default: refuse and list them).",
+    )
 
     # --- Clarity commands ---
     show_clarity_parser = subparsers.add_parser(
@@ -2857,14 +2862,31 @@ def _do_check_install(args: argparse.Namespace) -> None:
             print(f"  Missing: {', '.join(status['missing'])}")
         print(f"\nRun: {_entrypoint()} update --target {target}")
 
+    locally_modified = status.get("locally_modified", [])
+    if locally_modified:
+        print(f"\n⚠️  {len(locally_modified)} installed file(s) have LOCAL EDITS that update would overwrite:")
+        for rel in locally_modified:
+            print(f"   - .studio/source/{rel}")
+        print("   If any is project config, move it to <repo>/.studio/<name>.toml (update never")
+        print("   touches that). update will refuse to clobber these unless run with --force.")
+
 
 def _do_update(args: argparse.Namespace) -> None:
     """Update installed Studio from source."""
     from install import update_studio
     target = Path(args.target).resolve()
-    result = update_studio(target)
+    result = update_studio(target, force=getattr(args, "force", False))
     if result.get("warning"):
         print(f"WARNING: {result['warning']}\n")
+    if result.get("blocked"):
+        mods = result["locally_modified"]
+        print(f"Update BLOCKED: {len(mods)} installed file(s) have local edits that would be overwritten:")
+        for rel in mods:
+            print(f"   - .studio/source/{rel}")
+        print("\nThese are edits to the Studio snapshot (it gets replaced on update). If any is")
+        print("project config, move it to <repo>/.studio/<name>.toml — the project-override location")
+        print(f"update never touches. To overwrite anyway: {_entrypoint()} update --target {target} --force")
+        return
     if result["updated"] == 0 and result["added"] == 0:
         print(f"Studio at {target} is already up to date.")
     else:

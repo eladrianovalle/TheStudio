@@ -26,13 +26,21 @@ real upstream — so it may report "up to date" when it isn't. In that case, tel
 update from the upstream Studio source repo instead:
 `python studio/run_phase.py update --target <this-repo>`. Do not trust the result until then.
 
+**If the output contains a `⚠️ … LOCAL EDITS` block** (installed snapshot files the user edited),
+this is the clobber preview — **STOP and surface it to the user before updating.** `update` will
+refuse to overwrite these unless `--force` is passed. For each listed file: if it's project config,
+the fix is to move it to `<repo>/.studio/<name>.toml` (the project-override location update never
+touches); otherwise confirm with the user whether to keep the edit (back it up) or discard it.
+
 ### Step 3: Update
 
 ```bash
 python ".studio/source/run_phase.py" update --target .
 ```
 
-Show the user what was updated (files changed, added, removed).
+If `update` prints `Update BLOCKED`, do NOT pass `--force` on your own — relay the listed files to
+the user and let them decide (move config out, back up, or explicitly approve `--force`). Otherwise
+show the user what was updated (files changed, added, removed).
 
 ### Step 4: Remind about restart
 
