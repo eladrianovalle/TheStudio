@@ -127,8 +127,9 @@ function editorPrompt(u, writer) {
   return [
     `You are the EDITOR in an implementation writer/editor loop — a fresh agent reviewing the writer's unit.`,
     ``,
-    `Your mandate IS the CONTRARIAN_MANDATE defined in studio/scopes.py (read lines ~27-37 and adopt it),`,
-    `applied to code: default to deletion, name the specific cut, collapse don't accumulate, guard the essence.`,
+    `Your mandate IS the CONTRARIAN_MANDATE defined in scopes.py — read it at \`.studio/source/scopes.py\``,
+    `(installed repos) or \`studio/scopes.py\` (the Studio source repo), and adopt it: applied to code,`,
+    `default to deletion, name the specific cut, collapse don't accumulate, guard the essence.`,
     ``,
     `Scope of review: \`git diff ${writer.writer_sha}..\` — these are the writer's changes. Read the touched`,
     `files (${(writer.files_touched || []).join(', ') || 'see the diff'})${u.read_scope === 'touched' ? '' : ' and their direct importers'}.`,

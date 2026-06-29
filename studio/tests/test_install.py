@@ -91,6 +91,21 @@ class TestInstallStudio:
         assert (source / "config" / "scopes.toml").is_file()
         assert (source / "studio.manifest.json").is_file()
 
+    def test_ships_implementation_loop(self, target_dir, studio_dir):
+        """Install ships the writer/editor loop: source, config, command, workflow."""
+        install_studio(target_dir, studio_dir)
+        source = target_dir / ".studio" / "source"
+        # Python source + shipped config default
+        assert (source / "impl_loop.py").is_file()
+        assert (source / "config" / "implementation_loop.toml").is_file()
+        # Slash command
+        assert (target_dir / ".claude" / "commands" / "studio-implement.md").is_file()
+        # Claude Code workflow (copied verbatim, like commands)
+        wf = target_dir / ".claude" / "workflows" / "implementation-loop.js"
+        assert wf.is_file()
+        src_wf = studio_dir.parent / ".claude" / "workflows" / "implementation-loop.js"
+        assert wf.read_text() == src_wf.read_text()
+
     def test_copies_role_packs(self, target_dir, studio_dir):
         """Install copies role pack JSON files."""
         install_studio(target_dir, studio_dir)

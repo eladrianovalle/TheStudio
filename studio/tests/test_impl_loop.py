@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Tests for the implementation writer/editor loop config loader."""
+import json
 import tempfile
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from impl_loop import (
     LoopConfig,
     VALID_MANDATES,
     VALID_READ_SCOPES,
+    _cli,
     load_loop_config,
     runtime_knobs,
 )
@@ -249,3 +251,31 @@ def test_load_default_loop_config():
     assert config.mandate == "contrarian"
     assert config.read_scope == "touched+importers"
     assert config.output_budget == 400
+
+
+def test_cli_no_arg_emits_default_knobs():
+    """`impl_loop.py` with no arg prints the default runtime knobs as JSON."""
+    knobs = json.loads(_cli(["impl_loop.py"]))
+    assert knobs["editor_enabled"] is True
+    assert knobs["read_scope"] == "touched+importers"
+    assert knobs["output_budget"] == 400
+
+
+def test_cli_explicit_path_reflects_override():
+    """An explicit config path arg flows into the emitted knobs.
+
+    This is how /studio-implement passes an installed repo's project override
+    (`.studio/implementation_loop.toml`), which lives outside the snapshot chain.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg = Path(tmp) / "implementation_loop.toml"
+        cfg.write_text('[editor]\nmandate = "off"\noutput_budget = 99\n')
+        knobs = json.loads(_cli(["impl_loop.py", str(cfg)]))
+        assert knobs["editor_enabled"] is False
+        assert knobs["output_budget"] == 99
+
+
+def test_cli_explicit_missing_path_raises():
+    """A typo'd explicit config path is loud, not silently defaulted."""
+    with pytest.raises(FileNotFoundError):
+        _cli(["impl_loop.py", "/nonexistent/implementation_loop.toml"])
