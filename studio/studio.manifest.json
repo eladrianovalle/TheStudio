@@ -181,6 +181,24 @@
         "Asset loading failures on GitHub Pages"
       ]
     },
+    "web_product": {
+      "title": "Director of Product — Web Platforms & Creator Tools",
+      "advocate_focus": "Frame the opportunity for a web product/platform: who it's for (ICP), the job-to-be-done, positioning vs existing tools, build-vs-fork-vs-buy tradeoffs, monetization and licensing fit, and a roadmap where every milestone ends in a shippable MVI (Minimum Viable Interaction) — something a user can actually use, not a partial component.",
+      "contrarian_focus": "Challenge market assumptions, undifferentiated 'me too' positioning, vague ICP, licensing/IP traps (e.g. copyleft/AGPL obligations when forking), monetization hand-waving, and MVI violations. Reject roadmaps where any milestone ends in an unusable state, or where 'extract as a reusable platform' is assumed before the single-user product is proven.",
+      "prompt_doc": "",
+      "deliverables": [
+        "Opportunity framing (ICP, JTBD, positioning vs alternatives)",
+        "Build-vs-fork-vs-buy recommendation with explicit licensing implications",
+        "Phased roadmap where every milestone ends in a usable MVI",
+        "Success/kill metrics and explicit scope cuts"
+      ],
+      "escalate_on": [
+        "Licensing/IP obligations that conflict with the product's distribution model",
+        "Platform/extraction work prioritized before the core single-user product is validated",
+        "Milestone that ends in an unusable state (violates MVI)",
+        "No differentiation vs existing open-source or commercial tools"
+      ]
+    },
     "ml": {
       "title": "ML Systems Lead",
       "advocate_focus": "Design and deliver the AI critique engine with measurable quality and cost control.",

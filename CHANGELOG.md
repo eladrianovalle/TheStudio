@@ -18,6 +18,7 @@ All notable changes to TheGameStudio are documented here.
 - `/unstale` Agent 5 — project tracking audit (GitHub Issues + local tracking files) with permission-gated destructive actions
 - Stack-agnostic `/unstale` — the command now self-detects the project stack (Rust/Unity/Node/Python/Go) from marker files instead of assuming the Studio Python layout, so it works in any installed repo. Optional per-repo `.studio/unstale.toml` override pins exact snapshot commands and audit globs; authored by a new setup wizard `unstale_config` step (`CURRENT_SETUP_VERSION` 3) via `suggest_unstale_from_stack`
 - `ai_engineer` role in manifest — Staff AI Engineer specializing in prompt architecture & agent optimization
+- `web_product` role in manifest — Director of Product (Web Platforms & Creator Tools): opportunity framing (ICP/JTBD), build-vs-fork-vs-buy with licensing implications, MVI-gated roadmaps. Completes the `web_*` role set so downstream packs that list it survive updates (#35)
 - `/studio-setup` slash command + `setup` CLI subcommand — post-install wizard for role pack selection, role customization, scope tuning, and cleanup settings with incremental versioned steps (`setup.py`, 43 tests)
 - `docs/CODING_PRINCIPLES.md` — standalone Karpathy-inspired principles file, shipped with cross-repo installs
 - Cross-repo install now injects coding principles into target's `CLAUDE.md` via sentinel markers (`<!-- STUDIO:CODING_PRINCIPLES:BEGIN/END -->`), with idempotent update support (6 tests)
