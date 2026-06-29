@@ -152,7 +152,7 @@ python ".studio/source/run_phase.py" inject-context --run-dir {run_dir} --scope 
 > - {List specific S2 files this role needs per the dependency map}
 > - Condensed brief of all other roles: `{run_dir}/S2-brief.md`
 >
-> {If this role has a prompt doc, read it at `.studio/source/{prompt_doc}` for detailed guidance.}
+> {If this role has a prompt doc (the `prompt_doc` shown in the Role Menu), read it at that path — it is relative to the repo root (a doc that lives in THIS project), not the Studio snapshot.}
 >
 > Write a thorough proposal covering all required deliverables. No word cap — this is the full analysis.
 > Save to `{run_dir}/advocate--{role}--S2-01.md`.

@@ -864,3 +864,59 @@ class TestFreshRunClarityReset:
         # Should NOT contain rerun context from the old objective
         assert "This is terrible" not in instructions
         assert "Prior Run" not in instructions
+
+
+# --- Cross-repo CLI hardening (installed-layout path resolution) ---
+
+def _installed(tmp_path, monkeypatch, *, version=True):
+    """Set up an installed-layout repo: <repo>/.studio/source as STUDIO_ROOT."""
+    repo = tmp_path / "repo"
+    snapshot = repo / ".studio" / "source"
+    snapshot.mkdir(parents=True)
+    if version:
+        (repo / ".studio" / "VERSION").write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("STUDIO_ROOT", str(snapshot))
+    monkeypatch.delenv("STUDIO_ARTIFACT_ROOT", raising=False)
+    monkeypatch.setattr(run_phase, "_artifact_root_override", None)
+    return repo, snapshot
+
+
+def test_artifact_root_from_inside_snapshot_returns_repo_root(tmp_path, monkeypatch):
+    """Running from inside <repo>/.studio/source resolves to the repo root, not the snapshot."""
+    repo, snapshot = _installed(tmp_path, monkeypatch)
+    monkeypatch.chdir(snapshot)
+    assert run_phase.get_artifact_root() == repo
+
+
+def test_artifact_root_walks_up_to_installed_root(tmp_path, monkeypatch):
+    """A CLI call from a monorepo subdirectory resolves to the repo root via .studio/VERSION."""
+    repo, _ = _installed(tmp_path, monkeypatch)
+    subdir = repo / "packages" / "app"
+    subdir.mkdir(parents=True)
+    monkeypatch.chdir(subdir)
+    assert run_phase.get_artifact_root() == repo
+
+
+def test_scopes_config_read_from_artifact_root(tmp_path, monkeypatch):
+    """Project-local .studio/scopes.toml is read from the artifact root, not the source snapshot."""
+    repo, _ = _installed(tmp_path, monkeypatch)
+    (repo / ".studio" / "scopes.toml").write_text(
+        '[scopes.alignment]\nfocus = "x"\nmax_iterations = 99\n', encoding="utf-8"
+    )
+    monkeypatch.chdir(repo)
+    _, _, meta = run_phase._resolve_scopes(
+        argparse.Namespace(scopes=None, no_scopes=False, max_iterations=6)
+    )
+    assert meta is not None
+    assert meta["config_path"] == (repo / ".studio" / "scopes.toml").as_posix()
+
+
+def test_bridge_doc_created_even_when_studio_dir_exists(tmp_path):
+    """init'd repos (where .studio/ already exists) still get a bridge doc on scaffold."""
+    studio_root = tmp_path / "studio"
+    (studio_root / "docs").mkdir(parents=True)
+    (studio_root / "docs" / "STUDIO_BRIDGE_TEMPLATE.md").write_text("# Bridge\n", encoding="utf-8")
+    repo = tmp_path / "repo"
+    (repo / ".studio").mkdir(parents=True)  # simulates an init'd repo
+    run_phase._scaffold_external_repo(repo, studio_root)
+    assert (repo / "docs" / "studio-bridge.md").is_file()

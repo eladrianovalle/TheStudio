@@ -13,7 +13,13 @@ from __future__ import annotations
 try:
     import tomllib  # Python 3.11+
 except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[no-redefine]  # Python 3.10 fallback
+    try:
+        import tomli as tomllib  # type: ignore[no-redefine]  # Python 3.10 fallback
+    except ModuleNotFoundError:
+        raise SystemExit(
+            "Studio needs the 'tomli' package on Python 3.10. "
+            "Install it with: python -m pip install tomli  (or upgrade to Python 3.11+)."
+        )
 import json
 from dataclasses import dataclass, field
 from pathlib import Path

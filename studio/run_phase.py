@@ -75,7 +75,13 @@ from integrations.slack_digest import load_integrations_config, notify_run
 try:
     import tomllib  # Python 3.11+
 except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[no-redefine]  # Python 3.10 fallback
+    try:
+        import tomli as tomllib  # type: ignore[no-redefine]  # Python 3.10 fallback
+    except ModuleNotFoundError:
+        raise SystemExit(
+            "Studio needs the 'tomli' package on Python 3.10. "
+            "Install it with: python -m pip install tomli  (or upgrade to Python 3.11+)."
+        )
 
 
 def get_storage_stats() -> dict:
@@ -224,6 +230,15 @@ def get_studio_root() -> Path:
     return Path(__file__).resolve().parent
 
 
+def _entrypoint() -> str:
+    """How to invoke this CLI in next-step hints — echoes the path as actually called,
+    so hints copy-paste correctly in both the source repo (``studio/run_phase.py``) and
+    installed repos (``.studio/source/run_phase.py``) instead of a bare ``run_phase.py``.
+    """
+    argv0 = sys.argv[0] if sys.argv and sys.argv[0] else "run_phase.py"
+    return f"python {argv0}"
+
+
 _artifact_root_override: Path | None = None
 _artifact_root_warned: bool = False
 
@@ -232,6 +247,29 @@ def set_artifact_root(path: Path | None) -> None:
     """Set an explicit artifact root (used by --artifact-root CLI flag)."""
     global _artifact_root_override
     _artifact_root_override = path
+
+
+def _installed_repo_root(studio_root: Path) -> Path | None:
+    """Return the consuming repo root when studio_root is an installed snapshot.
+
+    Installed layout places the source at ``<repo>/.studio/source``; the artifact
+    root is then ``<repo>``, not the snapshot dir.
+    """
+    if studio_root.name == "source" and studio_root.parent.name == ".studio":
+        return studio_root.parent.parent
+    return None
+
+
+def _find_installed_root_upwards(start: Path) -> Path | None:
+    """Walk up from ``start`` for an installed repo root (has ``.studio/VERSION``).
+
+    Lets a CLI call from a monorepo subdirectory resolve to the real repo root
+    instead of scaffolding a fresh, unconfigured ``.studio/`` in the subdir.
+    """
+    for d in [start, *start.parents]:
+        if (d / ".studio" / "VERSION").is_file():
+            return d
+    return None
 
 
 def get_artifact_root() -> Path:
@@ -244,8 +282,24 @@ def get_artifact_root() -> Path:
 
     studio_root = get_studio_root().resolve()
     cwd = Path.cwd().resolve()
+    installed_root = _installed_repo_root(studio_root)
+
     if cwd == studio_root or _is_within(cwd, studio_root):
-        return studio_root
+        # Running from the source tree (or from inside an installed snapshot).
+        # In the source repo the artifact root IS the studio dir; in an installed
+        # snapshot it's the consuming repo root, never the snapshot itself.
+        return installed_root if installed_root is not None else studio_root
+
+    # Anywhere under an init'd repo (e.g. a monorepo subdir): resolve to its root.
+    found = _find_installed_root_upwards(cwd)
+    if found is not None:
+        return found
+
+    # cwd is already a scaffolded/installed repo root — defaulting to it is correct.
+    if (cwd / ".studio").is_dir():
+        return cwd
+
+    # Genuine first run in a fresh external repo with no .studio/: default to cwd, warn once.
     global _artifact_root_warned
     if not _artifact_root_warned:
         print(
@@ -1045,13 +1099,15 @@ def _resolve_scopes(args: argparse.Namespace):
     if args.no_scopes:
         return None, None, None
 
-    # Determine scopes path
+    # Determine scopes path. Project-local config lives at the artifact root
+    # (<repo>/.studio/), like roles/personas/clarity/integrations — NOT the source
+    # snapshot. The shipped default stays under the source dir.
     if args.scopes:
         scopes_path = Path(args.scopes)
         if not scopes_path.is_absolute():
-            scopes_path = get_studio_root() / scopes_path
+            scopes_path = get_artifact_root() / scopes_path
     else:
-        default_scopes = get_studio_root() / ".studio" / "scopes.toml"
+        default_scopes = get_artifact_root() / ".studio" / "scopes.toml"
         if default_scopes.exists():
             scopes_path = default_scopes
         else:
@@ -1084,7 +1140,7 @@ def _resolve_scopes(args: argparse.Namespace):
             f"To fix:\n"
             f"1. Create .studio/scopes.toml with scope definitions, or\n"
             f"2. Use --no-scopes to disable scope-based iteration, or\n"
-            f"3. See docs/SCOPES_GUIDE.md for examples"
+            f"3. See .studio/source/docs/SCOPES_GUIDE.md for examples"
         ) from exc
     except ValueError as exc:
         raise RuntimeError(
@@ -1092,7 +1148,7 @@ def _resolve_scopes(args: argparse.Namespace):
             f"To fix:\n"
             f"1. Check TOML syntax in your scopes config\n"
             f"2. Ensure all scopes have 'focus' and 'max_iterations' fields\n"
-            f"3. See docs/SCOPES_GUIDE.md for valid examples"
+            f"3. See .studio/source/docs/SCOPES_GUIDE.md for valid examples"
         ) from exc
 
 
@@ -1128,36 +1184,48 @@ def _build_run_meta(
     return meta
 
 
-def _scaffold_external_repo(artifact_root: Path, studio_root: Path) -> None:
-    """Create .studio/ structure and bridge doc in an external repo on first use."""
-    studio_dir = artifact_root / ".studio"
-    if studio_dir.exists():
+def _ensure_bridge_doc(artifact_root: Path, studio_root: Path) -> None:
+    """Create the project bridge doc if none exists yet.
+
+    Kept separate from the .studio/ scaffold guard: an ``init``-installed repo already
+    has .studio/ (so the scaffold short-circuits), but still needs its bridge doc — so
+    this runs regardless of whether .studio/ pre-existed.
+    """
+    bridge_candidates = [
+        artifact_root / "docs" / "studio-bridge.md",
+        artifact_root / "studio-bridge.md",
+    ]
+    if any(c.exists() for c in bridge_candidates):
         return
+    template_path = studio_root / "docs" / "STUDIO_BRIDGE_TEMPLATE.md"
+    if not template_path.exists():
+        return
+    dest = artifact_root / "docs" / "studio-bridge.md"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    template = template_path.read_text(encoding="utf-8")
+    template = template.replace(
+        'export STUDIO_ROOT="/path/to/studio"',
+        f'export STUDIO_ROOT="{studio_root}"',
+    )
+    dest.write_text(template, encoding="utf-8")
+    print(f"  Created bridge doc: {dest}")
+    print(f"  Fill in the canon table and project summary.")
+
+
+def _scaffold_external_repo(artifact_root: Path, studio_root: Path) -> None:
+    """Ensure .studio/ structure and the bridge doc exist in an external repo."""
+    studio_dir = artifact_root / ".studio"
+    fresh = not studio_dir.exists()
 
     studio_dir.mkdir(parents=True, exist_ok=True)
     (studio_dir / "output").mkdir(exist_ok=True)
     (studio_dir / "knowledge").mkdir(exist_ok=True)
 
-    # Copy bridge template if no bridge doc exists
-    bridge_candidates = [
-        artifact_root / "docs" / "studio-bridge.md",
-        artifact_root / "studio-bridge.md",
-    ]
-    if not any(c.exists() for c in bridge_candidates):
-        template_path = studio_root / "docs" / "STUDIO_BRIDGE_TEMPLATE.md"
-        if template_path.exists():
-            dest = artifact_root / "docs" / "studio-bridge.md"
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            template = template_path.read_text(encoding="utf-8")
-            template = template.replace(
-                'export STUDIO_ROOT="/path/to/studio"',
-                f'export STUDIO_ROOT="{studio_root}"',
-            )
-            dest.write_text(template, encoding="utf-8")
-            print(f"  Created bridge doc: {dest}")
-            print(f"  Fill in the canon table and project summary.")
+    # Bridge doc is ensured even for init'd repos (where .studio/ already existed).
+    _ensure_bridge_doc(artifact_root, studio_root)
 
-    print(f"  Initialized .studio/ in {artifact_root}")
+    if fresh:
+        print(f"  Initialized .studio/ in {artifact_root}")
 
 
 def prepare_run(args: argparse.Namespace) -> str:
@@ -1236,7 +1304,7 @@ def prepare_run(args: argparse.Namespace) -> str:
         print(f"\n💡 Tip: Scopes are active. Work through {scopes_meta['scopes'][0]['name']} scope first.")
     else:
         print(f"\n💡 Tip: Want to optimize iteration budgets? Create .studio/scopes.toml")
-        print(f"   See: docs/SCOPES_GUIDE.md")
+        print(f"   See: .studio/source/docs/SCOPES_GUIDE.md")
 
     # Append to usage log (fail silently — don't break prepare over logging)
     try:
@@ -1255,8 +1323,8 @@ def prepare_run(args: argparse.Namespace) -> str:
     if storage_stats.get("cleanup_suggested", False):
         print(f"\n🧹 Storage Tip: You have {storage_stats['total_size_mb']}MB of Studio artifacts")
         print(f"   (oldest: {storage_stats['oldest_artifact_days']} days ago). Consider cleanup:")
-        print(f"   python run_phase.py cleanup --dry-run  # Preview what would be deleted")
-        print(f"   python run_phase.py cleanup           # Execute cleanup")
+        print(f"   {_entrypoint()} cleanup --dry-run  # Preview what would be deleted")
+        print(f"   {_entrypoint()} cleanup           # Execute cleanup")
 
     return run_id
 
@@ -1345,7 +1413,7 @@ def finalize_run(args: argparse.Namespace) -> None:
     # Contextual hints for next steps
     if meta['status'] == 'COMPLETED' and meta.get('verdict') == 'APPROVED':
         print(f"\n💡 Next steps:")
-        print(f"   1. Validate outputs: python run_phase.py validate --run-id {run_id}")
+        print(f"   1. Validate outputs: {_entrypoint()} validate --phase {phase} --run-id {run_id}")
         print(f"   2. Review summary: {run_dir}/summary.md")
         if phase != 'studio':
             print(f"   3. Implement recommendations from the run")
@@ -1864,10 +1932,10 @@ def validate_run(args: argparse.Namespace) -> None:
     if not run_dir.exists():
         raise FileNotFoundError(f"Run directory not found: {run_dir}")
     
-    # Load validation config
+    # Load validation config (project-local lives at the artifact root, not the snapshot)
     config_path = args.config
     if not config_path:
-        config_path = get_studio_root() / ".studio" / "validation.toml"
+        config_path = get_artifact_root() / ".studio" / "validation.toml"
     
     if not config_path.exists():
         print(f"Warning: Validation config not found at {config_path}")
@@ -2242,7 +2310,7 @@ def _prompt_for_rating(run_dir: Path) -> None:
     finalize via a non-interactive shell — never blocks on stdin.
     """
     nudge = (
-        f"   python run_phase.py rate --run-dir {run_dir} "
+        f"   {_entrypoint()} rate --run-dir {run_dir} "
         f"--score <1-5> --note \"...\""
     )
     if not sys.stdin.isatty():
@@ -2552,6 +2620,14 @@ def inject_context(args: argparse.Namespace) -> None:
                     (i for i, s in enumerate(scopes_config.scopes) if s.name == scope.name),
                     0,
                 )
+        else:
+            # The run recorded a scopes config that no longer resolves (e.g. moved, or a
+            # path from another machine). Don't silently drop scope guidance — say so.
+            print(
+                f"Warning: scopes config {scopes_path} (from run.json) not found; "
+                "emitting context without scope guidance.",
+                file=sys.stderr,
+            )
 
     # Resolve role details from manifest via existing utility
     manifest = load_manifest(studio_root)
@@ -2713,7 +2789,7 @@ def _do_check_install(args: argparse.Namespace) -> None:
     status = check_studio(target)
     if not status["installed"]:
         print(f"Studio is NOT installed at {target}")
-        print("Run: python run_phase.py init --target " + str(target))
+        print(f"Run: {_entrypoint()} init --target {target}")
         return
     if status.get("warning"):
         print(f"WARNING: {status['warning']}\n")
@@ -2725,7 +2801,7 @@ def _do_check_install(args: argparse.Namespace) -> None:
             print(f"  Changed: {', '.join(status['changed'])}")
         if status["missing"]:
             print(f"  Missing: {', '.join(status['missing'])}")
-        print(f"\nRun: python run_phase.py update --target {target}")
+        print(f"\nRun: {_entrypoint()} update --target {target}")
 
 
 def _do_update(args: argparse.Namespace) -> None:
@@ -2845,14 +2921,7 @@ def do_offload(args: argparse.Namespace) -> None:
         print(report)
 
 
-def main() -> None:
-    args = parse_cli_args()
-
-    # Apply --artifact-root override before any command runs
-    artifact_root = getattr(args, "artifact_root", None)
-    if artifact_root is not None:
-        set_artifact_root(artifact_root)
-
+def _dispatch(args: argparse.Namespace) -> None:
     if args.command == "prepare":
         prepare_run(args)
     elif args.command == "finalize":
@@ -2898,6 +2967,23 @@ def main() -> None:
         _do_setup(args)
     else:
         raise ValueError("Unknown command")
+
+
+def main() -> None:
+    args = parse_cli_args()
+
+    # Apply --artifact-root override before any command runs
+    artifact_root = getattr(args, "artifact_root", None)
+    if artifact_root is not None:
+        set_artifact_root(artifact_root)
+
+    try:
+        _dispatch(args)
+    except Exception as exc:  # operational failure — surface an actionable message, not a traceback
+        if os.environ.get("STUDIO_DEBUG"):
+            raise
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
