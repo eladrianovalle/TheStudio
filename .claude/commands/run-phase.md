@@ -18,12 +18,14 @@ Run the prepare command to create a run directory and instructions:
 **Studio path:** Use `.studio/source/run_phase.py` for all commands below. If that file does not exist but `studio/run_phase.py` does, use `studio/run_phase.py` instead (you are in the Studio source repo).
 
 ```bash
-python ".studio/source/run_phase.py" prepare $ARGUMENTS
+python ".studio/source/run_phase.py" prepare $ARGUMENTS --json
 ```
 
 If running from a repo that is NOT the Studio repo itself, artifacts will automatically land in the current repo under `.studio/output/`. A bridge doc will be created on first use.
 
-Note the run_id and run directory path from the output.
+`--json` prints a machine-readable object as the **final line of stdout** — parse it for
+`run_id`, `run_dir`, and `instructions` rather than scraping prose:
+`{"run_id": "...", "run_dir": "...", "instructions": "...", "phase": "...", ...}`.
 
 ### Step 2: Read Instructions
 
@@ -71,10 +73,12 @@ python ".studio/source/run_phase.py" record-metrics --run-dir {run_dir} --agent 
 
 Then extract decision points:
 ```bash
-python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir}
+python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir} --json
 ```
 
-**If the output is non-empty (any decision points found), you MUST pause and present them ALL to the user before proceeding.** Do not continue to the contrarian until the user has responded.
+`--json` emits `{"count": N, "decisions": [...]}`. **If `count > 0`, you MUST pause and present
+every decision to the user before proceeding.** Do not continue to the contrarian until the user
+has responded. (Gate on `count`, not on whether stdout is empty.)
 
 Present each decision to the user:
 
@@ -121,7 +125,7 @@ This displays per-topic confidence scores so the user can see which areas are se
 ```bash
 python ".studio/source/run_phase.py" record-metrics --run-dir {run_dir} --agent contrarian --total-tokens {N} --tool-uses {N} --duration-ms {N}
 ```
-Then run `python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir}` again. If new decision points appear (from the contrarian), present them to the user and record as in step (b).
+Then run `python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir} --json` again. If `count > 0` (new decision points from the contrarian), present them to the user and record as in step (b).
 
 **e. Check verdict** — Read the contrarian output. If `VERDICT: APPROVED`, proceed to Step 4. If `VERDICT: REJECTED` and iterations remain, loop back to (a) with the rejection feedback.
 
