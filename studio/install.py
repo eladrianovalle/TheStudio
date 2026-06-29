@@ -52,6 +52,7 @@ SOURCE_FILES = [
     "config/implementation_loop.toml",
     "docs/STUDIO_BRIDGE_TEMPLATE.md",
     "docs/CODING_PRINCIPLES.md",
+    "docs/SCOPES_GUIDE.md",
 ]
 
 # Glob patterns for additional files
@@ -241,6 +242,7 @@ def _inject_principles_into_claude_md(target: Path, studio_dir: Path) -> None:
 
     if not claude_md.exists():
         claude_md.write_text(block + "\n", encoding="utf-8")
+        print(f"  Created {claude_md} (Studio coding principles only — add your project notes).")
         return
 
     content = claude_md.read_text(encoding="utf-8")

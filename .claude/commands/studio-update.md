@@ -20,6 +20,12 @@ python ".studio/source/run_phase.py" check-install --target .
 
 If already up to date, tell the user and stop.
 
+**If the output contains a `WARNING:` line** (e.g. "running from the installed snapshot … cannot
+compare against live source"), the check/update is running against the snapshot and cannot see the
+real upstream — so it may report "up to date" when it isn't. In that case, tell the user to run the
+update from the upstream Studio source repo instead:
+`python studio/run_phase.py update --target <this-repo>`. Do not trust the result until then.
+
 ### Step 3: Update
 
 ```bash

@@ -91,6 +91,11 @@ class TestInstallStudio:
         assert (source / "config" / "scopes.toml").is_file()
         assert (source / "studio.manifest.json").is_file()
 
+    def test_ships_scopes_guide(self, target_dir, studio_dir):
+        """SCOPES_GUIDE.md is shipped so the CLI's 'see SCOPES_GUIDE' pointers resolve."""
+        install_studio(target_dir, studio_dir)
+        assert (target_dir / ".studio" / "source" / "docs" / "SCOPES_GUIDE.md").is_file()
+
     def test_ships_implementation_loop(self, target_dir, studio_dir):
         """Install ships the writer/editor loop: source, config, command, workflow."""
         install_studio(target_dir, studio_dir)
