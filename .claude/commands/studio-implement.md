@@ -78,12 +78,12 @@ If `--plan`, stop here.
 **Studio path:** use `.studio/source/impl_loop.py` for the command below. If that file does not
 exist but `studio/impl_loop.py` does, use that instead (you are in the Studio source repo).
 
-Read the loop config knobs. If the repo has a project override at `.studio/implementation_loop.toml`,
-pass it explicitly (it lives at the repo root, outside the snapshot's resolution chain); otherwise
-run with no arg (shipped default → built-in defaults):
+Read the loop config knobs. Resolution finds a project override at the repo root
+(`.studio/implementation_loop.toml`) automatically, falling back to the shipped default →
+built-in defaults — so no path argument is needed:
 
 ```bash
-python .studio/source/impl_loop.py [.studio/implementation_loop.toml]
+python .studio/source/impl_loop.py
 # prints knobs JSON, e.g. {"editor_enabled": true, "read_scope": "touched+importers", "output_budget": 400, ...}
 ```
 

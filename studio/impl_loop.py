@@ -21,6 +21,7 @@ except ModuleNotFoundError:
             "Install it with: python -m pip install tomli  (or upgrade to Python 3.11+)."
         )
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List
@@ -77,15 +78,33 @@ class LoopConfig:
         return self.mandate != "off"
 
 
+def _project_artifact_root(studio_root: Path) -> Path:
+    """The consuming repo root where project-local config lives.
+
+    Mirrors run_phase.get_artifact_root's installed-layout detection WITHOUT importing
+    run_phase (impl_loop ships standalone to .studio/source/): honor STUDIO_ARTIFACT_ROOT,
+    else map an installed snapshot ``<repo>/.studio/source`` to ``<repo>``, else fall back
+    to the source root itself (the Studio source repo, where they coincide).
+    """
+    env = os.environ.get("STUDIO_ARTIFACT_ROOT")
+    if env:
+        return Path(env).expanduser().resolve()
+    if studio_root.name == "source" and studio_root.parent.name == ".studio":
+        return studio_root.parent.parent
+    return studio_root
+
+
 def _resolve_config_path(path: Path | None, studio_root: Path) -> Path | None:
     """Resolve the config path via the resolution chain.
 
-    explicit path → .studio/implementation_loop.toml → config/implementation_loop.toml.
-    Returns None when nothing in the chain exists (caller falls back to defaults).
+    explicit ``path`` → ``<artifact-root>/.studio/implementation_loop.toml`` (the project
+    override, which lives at the consuming repo root — NOT under the source snapshot) →
+    ``<studio-root>/config/implementation_loop.toml`` (the shipped default). Returns None
+    when nothing in the chain exists (caller falls back to built-in defaults).
     """
     if path is not None:
         return Path(path)
-    local = studio_root / ".studio" / "implementation_loop.toml"
+    local = _project_artifact_root(studio_root) / ".studio" / "implementation_loop.toml"
     if local.exists():
         return local
     shipped = studio_root / "config" / "implementation_loop.toml"
@@ -98,12 +117,14 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
     """
     Load loop configuration from TOML, mirroring load_scopes_config().
 
-    Resolution chain: explicit ``path`` → ``.studio/implementation_loop.toml`` →
-    ``config/implementation_loop.toml`` → built-in defaults. An end-of-chain miss
-    (no ``path`` given and nothing found) yields the default LoopConfig — the loop
-    ships with a working default, so absence is not a failure. But an explicit
-    ``path`` that does not exist raises FileNotFoundError: a typo'd config path is an
-    error, not a silent request for defaults.
+    Resolution chain: explicit ``path`` → project override at
+    ``<artifact-root>/.studio/implementation_loop.toml`` (the consuming repo root, found
+    even when this module runs from an installed ``.studio/source`` snapshot) → shipped
+    ``<studio-root>/config/implementation_loop.toml`` → built-in defaults. An end-of-chain
+    miss (no ``path`` given and nothing found) yields the default LoopConfig — the loop
+    ships with a working default, so absence is not a failure. But an explicit ``path``
+    that does not exist raises FileNotFoundError: a typo'd config path is an error, not a
+    silent request for defaults.
 
     All tables/keys are optional; unspecified keys inherit the LoopConfig defaults.
     See config/implementation_loop.toml (the shipped default) and SPEC §4 for the
@@ -175,10 +196,10 @@ def runtime_knobs(config: LoopConfig) -> dict:
 def _cli(argv: List[str]) -> str:
     """Return the runtime-knobs JSON for the CLI.
 
-    Optional ``argv[1]`` is an explicit config path — used by /studio-implement to
-    pass an installed repo's ``.studio/implementation_loop.toml`` (the project override
-    lives at the target root, outside this snapshot's resolution chain). With no arg,
-    the normal resolution chain runs (shipped default → built-in defaults).
+    Optional ``argv[1]`` is an explicit config path for a non-standard location. With no
+    arg the normal resolution chain runs, which now finds the project override at the
+    consuming repo root (``<repo>/.studio/implementation_loop.toml``) on its own — so
+    callers no longer need to pass it explicitly just to honor an installed repo's override.
     """
     path = Path(argv[1]) if len(argv) > 1 else None
     return json.dumps(runtime_knobs(load_loop_config(path)))

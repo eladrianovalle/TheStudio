@@ -169,6 +169,37 @@ def test_load_loop_config_studio_override_beats_shipped_default():
         assert config.output_budget == 123
 
 
+def test_load_loop_config_installed_override_resolves_at_repo_root(tmp_path, monkeypatch):
+    """In an installed layout (studio_root = <repo>/.studio/source), the project override
+    is read from <repo>/.studio/, NOT from under the source snapshot."""
+    monkeypatch.delenv("STUDIO_ARTIFACT_ROOT", raising=False)
+    repo = tmp_path / "repo"
+    snapshot = repo / ".studio" / "source"
+    (snapshot / "config").mkdir(parents=True)
+    # shipped default under the snapshot
+    (snapshot / "config" / "implementation_loop.toml").write_text(
+        "[editor]\noutput_budget = 400\n"
+    )
+    # project override at the REPO ROOT .studio/ (where the wizard writes it)
+    (repo / ".studio" / "implementation_loop.toml").write_text(
+        "[editor]\noutput_budget = 42\n"
+    )
+    config = load_loop_config(studio_root=snapshot)
+    assert config.output_budget == 42  # override wins; before the fix this returned 400
+
+
+def test_load_loop_config_artifact_root_env_override(tmp_path, monkeypatch):
+    """STUDIO_ARTIFACT_ROOT points the project-override lookup at an explicit root."""
+    repo = tmp_path / "elsewhere"
+    (repo / ".studio").mkdir(parents=True)
+    (repo / ".studio" / "implementation_loop.toml").write_text("[editor]\nmandate = \"off\"\n")
+    snapshot = tmp_path / "src" / ".studio" / "source"
+    snapshot.mkdir(parents=True)
+    monkeypatch.setenv("STUDIO_ARTIFACT_ROOT", str(repo))
+    config = load_loop_config(studio_root=snapshot)
+    assert config.mandate == "off"
+
+
 def test_load_loop_config_falls_back_to_shipped_default():
     """With no .studio override, the shipped config/ default is used."""
     with tempfile.TemporaryDirectory() as tmp:
