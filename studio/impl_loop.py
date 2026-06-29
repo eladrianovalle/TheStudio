@@ -166,5 +166,18 @@ def runtime_knobs(config: LoopConfig) -> dict:
     }
 
 
+def _cli(argv: List[str]) -> str:
+    """Return the runtime-knobs JSON for the CLI.
+
+    Optional ``argv[1]`` is an explicit config path — used by /studio-implement to
+    pass an installed repo's ``.studio/implementation_loop.toml`` (the project override
+    lives at the target root, outside this snapshot's resolution chain). With no arg,
+    the normal resolution chain runs (shipped default → built-in defaults).
+    """
+    path = Path(argv[1]) if len(argv) > 1 else None
+    return json.dumps(runtime_knobs(load_loop_config(path)))
+
+
 if __name__ == "__main__":
-    print(json.dumps(runtime_knobs(load_loop_config())))
+    import sys
+    print(_cli(sys.argv))

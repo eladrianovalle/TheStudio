@@ -40,6 +40,7 @@ SOURCE_FILES = [
     "offload.py",
     "clarity.py",
     "setup.py",
+    "impl_loop.py",
     "studio.manifest.json",
     "validators/__init__.py",
     "validators/document_validator.py",
@@ -48,6 +49,7 @@ SOURCE_FILES = [
     "integrations/slack_digest.py",
     "config/scopes.toml",
     "config/studio_settings.toml",
+    "config/implementation_loop.toml",
     "docs/STUDIO_BRIDGE_TEMPLATE.md",
     "docs/CODING_PRINCIPLES.md",
 ]
@@ -65,6 +67,12 @@ SLASH_COMMANDS = [
     "detest.md",
     "offload.md",
     "studio-setup.md",
+    "studio-implement.md",
+]
+
+# Claude Code Workflows to copy to {target}/.claude/workflows/ (verbatim, like commands)
+WORKFLOW_FILES = [
+    "implementation-loop.js",
 ]
 
 # Sentinels for CLAUDE.md injection — update replaces content between these markers
@@ -264,6 +272,7 @@ def install_studio(target: Path, studio_dir: Optional[Path] = None) -> Path:
     Creates:
         {target}/.studio/source/     — Studio Python source + config
         {target}/.claude/commands/    — Slash commands (verbatim, use .studio/source/ paths)
+        {target}/.claude/workflows/   — Claude Code workflows (verbatim, resolve .studio/source/ at run time)
         {target}/.studio/VERSION      — Version info
         {target}/.studio/MANIFEST.json — Install manifest with checksums
 
@@ -298,6 +307,19 @@ def install_studio(target: Path, studio_dir: Optional[Path] = None) -> Path:
         if not src.exists():
             continue
         dst = commands_dest / cmd_name
+        if dst.exists() and src.samefile(dst):
+            continue
+        shutil.copy2(src, dst)
+
+    # Copy Claude Code workflows verbatim (they resolve .studio/source/ paths at run time)
+    workflows_dest = target / ".claude" / "workflows"
+    workflows_src = studio_dir.parent / ".claude" / "workflows"
+    for wf_name in WORKFLOW_FILES:
+        src = workflows_src / wf_name
+        if not src.exists():
+            continue
+        workflows_dest.mkdir(parents=True, exist_ok=True)
+        dst = workflows_dest / wf_name
         if dst.exists() and src.samefile(dst):
             continue
         shutil.copy2(src, dst)

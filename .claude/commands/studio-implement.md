@@ -75,22 +75,27 @@ If `--plan`, stop here.
 
 ### Step 4 — Load config knobs, then run the loop
 
-First read the loop config so the run honors `implementation_loop.toml` (run from the `studio/`
-package dir):
+**Studio path:** use `.studio/source/impl_loop.py` for the command below. If that file does not
+exist but `studio/impl_loop.py` does, use that instead (you are in the Studio source repo).
+
+Read the loop config knobs. If the repo has a project override at `.studio/implementation_loop.toml`,
+pass it explicitly (it lives at the repo root, outside the snapshot's resolution chain); otherwise
+run with no arg (shipped default → built-in defaults):
 
 ```bash
-python -m impl_loop   # prints knobs JSON, e.g. {"editor_enabled": true, "read_scope": "touched+importers", "output_budget": 400, ...}
+python .studio/source/impl_loop.py [.studio/implementation_loop.toml]
+# prints knobs JSON, e.g. {"editor_enabled": true, "read_scope": "touched+importers", "output_budget": 400, ...}
 ```
 
-Then call the **Workflow** tool **by `scriptPath`** (NOT `name` — see Gotchas), merging the
-config knobs into the unit args:
+Then call the **Workflow** tool **by `scriptPath`** (NOT `name` — see Gotchas), pointing at this
+repo's copy of the workflow and merging the config knobs into the unit args:
 
 ```
 Workflow({ scriptPath: "<repo>/.claude/workflows/implementation-loop.js", args: {
   unit_id, title, instructions, static_check,
   test_command,            // per-unit inferred; if none, use the knob test_command
-  editor_enabled, read_scope, output_budget,           // from `python -m impl_loop`
-  static_checks, require_mutation_check                // from `python -m impl_loop`
+  editor_enabled, read_scope, output_budget,           // from impl_loop.py
+  static_checks, require_mutation_check                // from impl_loop.py
 }})
 ```
 
