@@ -157,8 +157,8 @@ python studio/run_phase.py notify --run-dir <run_dir> --dry-run  # print payload
 
 # Cross-repo install (installs slash commands + source into any project)
 python studio/run_phase.py init --target /path/to/project
-python studio/run_phase.py check-install --target /path/to/project
-python studio/run_phase.py update --target /path/to/project
+python studio/run_phase.py check-install --target /path/to/project   # previews locally-edited snapshot files an update would clobber
+python studio/run_phase.py update --target /path/to/project          # add --force to overwrite locally-edited snapshot files
 
 # Setup wizard (configure roles, scopes, cleanup after install)
 python studio/run_phase.py setup --target . --status
@@ -199,7 +199,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 
 ### Configuration files
 
-- **`studio.manifest.json`** — Defines all disciplines (marketing, product, design, art, engineering, test_engineer, qa, web_engineering, web_test_engineer, web_qa, ml, ai_engineer, pmm) with advocate/contrarian focuses, deliverables, escalation cues, and role dependencies.
+- **`studio.manifest.json`** — Defines all disciplines (marketing, product, design, art, engineering, test_engineer, qa, web_engineering, web_product, web_test_engineer, web_qa, ml, ai_engineer, pmm) with advocate/contrarian focuses, deliverables, escalation cues, and role dependencies.
 - **`role_packs/*.json`** — Curated pod presets (e.g., `studio_core` = marketing + product + design + art + engineering + test_engineer + qa). Override with `--roles +role/-role`. Role dependencies in the manifest auto-inject co-required roles (e.g., engineering always brings test_engineer).
 - **`config/scopes.toml`** — Default three-tier scope configuration (alignment → depth → polish) with output budgets and debate modes.
 - **`config/studio_settings.toml`** — Cleanup TTL and storage limits.
