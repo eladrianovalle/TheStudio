@@ -2862,7 +2862,7 @@ def _do_check_install(args: argparse.Namespace) -> None:
             print(f"  Missing: {', '.join(status['missing'])}")
         print(f"\nRun: {_entrypoint()} update --target {target}")
 
-    locally_modified = status.get("locally_modified", [])
+    locally_modified = status["locally_modified"]
     if locally_modified:
         print(f"\n⚠️  {len(locally_modified)} installed file(s) have LOCAL EDITS that update would overwrite:")
         for rel in locally_modified:
