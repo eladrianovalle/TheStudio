@@ -182,6 +182,15 @@ class TestCheckStudio:
         assert status["up_to_date"] is False
         assert "run_phase.py" in status["changed"]
 
+    def test_check_reports_locally_modified(self, target_dir, studio_dir):
+        """check_studio flags installed source files edited after install (the clobber set)."""
+        install_studio(target_dir, studio_dir)
+        f = target_dir / ".studio" / "source" / "config" / "scopes.toml"
+        f.write_text(f.read_text() + "\n# local edit\n", encoding="utf-8")
+        status = check_studio(target_dir, studio_dir)
+        assert "config/scopes.toml" in status["locally_modified"]
+        assert "run_phase.py" not in status["locally_modified"]  # untouched → not flagged
+
 
 class TestUpdateStudio:
     """Tests for update_studio()."""
@@ -229,6 +238,29 @@ class TestUpdateStudio:
         # Should succeed (no SameFileError) and report no changes
         assert result["updated"] == 0
         assert result["added"] == 0
+
+    def test_update_blocked_on_local_modification(self, target_dir, studio_dir):
+        """A locally-edited snapshot file blocks update (no clobber); --force overrides."""
+        install_studio(target_dir, studio_dir)
+        # Local edit to an installed source file, WITHOUT syncing the manifest (drift).
+        cfg = target_dir / ".studio" / "source" / "config" / "scopes.toml"
+        cfg.write_text(cfg.read_text() + "\n# my local tweak\n", encoding="utf-8")
+        # Make an update appear pending by dropping a different file from the manifest.
+        manifest_path = target_dir / ".studio" / "MANIFEST.json"
+        manifest = json.loads(manifest_path.read_text())
+        del manifest["verdict.py"]
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        # update refuses to clobber the local edit
+        result = update_studio(target_dir, studio_dir)
+        assert result.get("blocked") is True
+        assert "config/scopes.toml" in result["locally_modified"]
+        assert "# my local tweak" in cfg.read_text()  # edit survived
+
+        # --force overrides — the edit is intentionally overwritten
+        forced = update_studio(target_dir, studio_dir, force=True)
+        assert not forced.get("blocked")
+        assert "# my local tweak" not in cfg.read_text()
 
 
 class TestSnapshotStaleDetection:
@@ -301,6 +333,22 @@ class TestSnapshotStaleDetection:
         status = check_studio(target_dir)
         assert status["warning"] is not None
         assert "snapshot" in status["warning"]
+
+    def test_self_install_preserves_upstream_source_path(
+        self, target_dir, studio_dir
+    ):
+        """Re-installing FROM the snapshot must not record a self-pointing
+        source_path — it would make future snapshot checks compare the snapshot
+        against itself (silent 'up to date'). A prior upstream pointer survives."""
+        install_studio(target_dir, studio_dir)  # source_path -> real upstream
+        snapshot = target_dir / ".studio" / "source"
+
+        # Simulate `init`/install run through the installed snapshot itself.
+        install_studio(target_dir, snapshot)
+
+        version = json.loads((target_dir / ".studio" / "VERSION").read_text())
+        assert Path(version["source_path"]).resolve() == studio_dir.resolve()
+        assert Path(version["source_path"]).resolve() != snapshot.resolve()
 
 
 class TestSlashCommandsUseDirectPaths:

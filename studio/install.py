@@ -176,6 +176,25 @@ def _resolve_source_dir(
     return live, None
 
 
+def _recorded_upstream_source(version_path: Path, snapshot: Path) -> Optional[Path]:
+    """Return the upstream source dir recorded in an existing VERSION — but only if
+    it is still a usable upstream: it exists, has ``run_phase.py``, and is NOT the
+    target's own snapshot. Used to avoid overwriting a good pointer with a
+    self-pointing one when (re)installing from the snapshot.
+    """
+    try:
+        version = json.loads(version_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError):
+        return None
+    sp = version.get("source_path")
+    if not sp:
+        return None
+    p = Path(sp)
+    if p.resolve() == snapshot or not (p / "run_phase.py").is_file():
+        return None
+    return p
+
+
 def _collect_source_files(studio_dir: Path) -> List[Path]:
     """Collect all source files to install (relative to studio/)."""
     files: List[Path] = []
@@ -340,14 +359,24 @@ def install_studio(target: Path, studio_dir: Optional[Path] = None) -> Path:
     # Write VERSION
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     git = _git_info(studio_dir.parent)
+    version_path = dot_studio / "VERSION"
+    # Never record a source_path that points at the target's own snapshot: it would
+    # make every future snapshot-based check compare the snapshot against itself
+    # (silent "up to date") and leave `update` with no breadcrumb back to upstream.
+    # When (re)installing FROM the snapshot (e.g. `init` run inside an installed
+    # repo), preserve a previously-recorded upstream pointer instead of clobbering it.
+    source_path = studio_dir
+    if studio_dir.resolve() == source_dest.resolve():
+        prior = _recorded_upstream_source(version_path, source_dest.resolve())
+        if prior is not None:
+            source_path = prior
     version_info = {
         "installed_at": now,
-        "source_path": str(studio_dir),
+        "source_path": str(source_path),
         "commit": git.get("commit", "unknown"),
         "commit_date": git.get("commit_date", ""),
         "file_count": len(manifest),
     }
-    version_path = dot_studio / "VERSION"
     version_path.write_text(
         json.dumps(version_info, indent=2), encoding="utf-8"
     )
@@ -364,9 +393,12 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
     Returns dict with:
         installed: bool — whether .studio/VERSION exists
         up_to_date: bool — whether all files match source checksums
-        changed: list[str] — files that differ
+        changed: list[str] — files where upstream differs from what was installed (update available)
         missing: list[str] — files in source but not installed
         extra: list[str] — files installed but not in source
+        locally_modified: list[str] — installed source files whose ON-DISK content has
+            drifted from the checksum recorded at install — i.e. local edits that an
+            `update` would OVERWRITE (the clobber set; commonly an edited snapshot config)
         warning: str | None — set when the live source could not be resolved
             (e.g. run from a stale snapshot), so the result may be unreliable
     """
@@ -376,7 +408,7 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
     manifest_path = dot_studio / "MANIFEST.json"
 
     if not version_path.exists():
-        return {"installed": False, "up_to_date": False, "changed": [], "missing": [], "extra": [], "warning": None}
+        return {"installed": False, "up_to_date": False, "changed": [], "missing": [], "extra": [], "locally_modified": [], "warning": None}
 
     studio_dir, warning = _resolve_source_dir(target, studio_dir)
 
@@ -408,6 +440,16 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
         if rel not in source_manifest:
             extra.append(rel)
 
+    # Local modifications: installed source file on disk differs from what was recorded
+    # at install. These are the files an `update` re-install would clobber.
+    source_dest = dot_studio / "source"
+    locally_modified: List[str] = []
+    for rel, recorded_sha in installed_manifest.items():
+        f = source_dest / rel
+        if f.is_file() and _sha256(f) != recorded_sha:
+            locally_modified.append(rel)
+    locally_modified.sort()
+
     up_to_date = not changed and not missing
 
     return {
@@ -416,15 +458,21 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
         "changed": changed,
         "missing": missing,
         "extra": extra,
+        "locally_modified": locally_modified,
         "warning": warning,
     }
 
 
-def update_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
+def update_studio(target: Path, studio_dir: Optional[Path] = None, force: bool = False) -> dict:
     """Update an installed Studio from the source.
 
     Preserves user customizations in .studio/ (roles/, scopes.toml, etc.)
     by only overwriting source/ and slash commands.
+
+    PRECONDITION: if any installed source file has local edits (drifted from its
+    recorded checksum), the update is BLOCKED — re-installing would overwrite them.
+    Returns ``{"blocked": True, "locally_modified": [...]}`` instead of updating.
+    Pass ``force=True`` to overwrite anyway.
 
     Returns dict with counts of updated/added/removed files, plus a ``warning``
     key (str | None) when the live source could not be resolved (e.g. run from a
@@ -446,7 +494,13 @@ def update_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
     status = check_studio(target, source_dir)
 
     if status["up_to_date"]:
-        return {"updated": 0, "added": 0, "removed": 0, "warning": warning}
+        return {"updated": 0, "added": 0, "removed": 0, "locally_modified": status["locally_modified"], "warning": warning}
+
+    # Preview precondition: refuse to clobber locally-edited snapshot files unless forced.
+    locally_modified = status.get("locally_modified", [])
+    if locally_modified and not force:
+        return {"blocked": True, "locally_modified": locally_modified,
+                "updated": 0, "added": 0, "removed": 0, "warning": warning}
 
     # Re-install (install_studio is idempotent and preserves user dirs)
     install_studio(target, source_dir)
@@ -455,5 +509,6 @@ def update_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
         "updated": len(status["changed"]),
         "added": len(status["missing"]),
         "removed": 0,  # We don't remove extra files
+        "locally_modified": locally_modified,
         "warning": warning,
     }
