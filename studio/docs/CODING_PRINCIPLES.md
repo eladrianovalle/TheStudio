@@ -66,6 +66,19 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 A new PR starts as a **draft**, not ready-for-review. Mark it ready only when the work is complete, tests pass, and you actually want a human to review and merge it. Opening as a draft prevents two failure modes: accidental early merges (a not-yet-finished PR getting merged by mistake) and reviewer churn (reviewers spending attention on a still-moving target). Flip to ready when it's genuinely ready for eyes.
 
+## 6. Write Docs & Comments for Humans
+
+**A person reads your docs and comments. Write for that person.**
+
+This covers everything you write for humans rather than the compiler: doc files, code comments, docstrings, commit messages, and PR descriptions.
+
+- Use plain language. If a term of art is unavoidable, define it the first time or pick a simpler word.
+- Say what a thing does and why it matters, not just its name. "Refuses to overwrite your local edits" beats "enforces the clobber-guard precondition."
+- Cut the tells of machine-written prose: inflated phrasing, filler, hedging, and padding add length without adding meaning.
+- Match the voice already in the file instead of importing your own.
+
+The test: could a teammate who is new to the code read it once and understand it, without asking you to translate?
+
 ---
 
 *These guidelines are working if:* fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.

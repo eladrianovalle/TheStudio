@@ -64,6 +64,25 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
+### 5. Git & PR Etiquette
+
+**Open pull requests as drafts first.**
+
+A new PR starts as a **draft**, not ready-for-review. Mark it ready only when the work is complete, tests pass, and you actually want a human to review and merge it. Opening as a draft prevents two failure modes: accidental early merges (a not-yet-finished PR getting merged by mistake) and reviewer churn (reviewers spending attention on a still-moving target). Flip to ready when it's genuinely ready for eyes.
+
+### 6. Write Docs & Comments for Humans
+
+**A person reads your docs and comments. Write for that person.**
+
+This covers everything you write for humans rather than the compiler: doc files, code comments, docstrings, commit messages, and PR descriptions.
+
+- Use plain language. If a term of art is unavoidable, define it the first time or pick a simpler word.
+- Say what a thing does and why it matters, not just its name. "Refuses to overwrite your local edits" beats "enforces the clobber-guard precondition."
+- Cut the tells of machine-written prose: inflated phrasing, filler, hedging, and padding add length without adding meaning.
+- Match the voice already in the file instead of importing your own.
+
+The test: could a teammate who is new to the code read it once and understand it, without asking you to translate?
+
 ---
 
 *Adapted from [Andrej Karpathy's coding principles](https://github.com/forrestchang/andrej-karpathy-skills).*
@@ -157,8 +176,8 @@ python studio/run_phase.py notify --run-dir <run_dir> --dry-run  # print payload
 
 # Cross-repo install (installs slash commands + source into any project)
 python studio/run_phase.py init --target /path/to/project
-python studio/run_phase.py check-install --target /path/to/project   # previews locally-edited snapshot files an update would clobber
-python studio/run_phase.py update --target /path/to/project          # add --force to overwrite locally-edited snapshot files
+python studio/run_phase.py check-install --target /path/to/project   # shows which of your local edits an update would overwrite
+python studio/run_phase.py update --target /path/to/project          # add --force to overwrite files you've edited locally
 
 # Setup wizard (configure roles, scopes, cleanup after install)
 python studio/run_phase.py setup --target . --status
@@ -190,7 +209,7 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 - **`decision_points.py`** — Parses and formats inline decision points (P0/P1/P2 blockquotes) from agent output. Extracts decisions from completed runs into a consolidated log.
 - **`clarity.py`** — Per-topic Clarity Score tracking. Computes confidence from answered decisions, controls agent question density, persists to `clarity.json`. CLI: `show-clarity`, `set-clarity`, `recompute-clarity`.
 - **`verdict.py`** — Extracts APPROVED/REJECTED/UNKNOWN verdict from text.
-- **`install.py`** — Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project. Also injects coding principles into the target's `CLAUDE.md` via sentinel markers for safe updates.
+- **`install.py`** — Cross-repo installer: `init`/`check-install`/`update` copies the Studio source, slash commands, and workflows into any project. Tracks every copied file's checksum so `update` warns you (and stops, unless `--force`) before overwriting a file you've edited locally. Also injects coding principles into the target's `CLAUDE.md` via sentinel markers for safe updates.
 - **`offload.py`** — CLAUDE.md analyzer: classifies sections, detects embedded constraints, scores pointer strength, generates offload reports and manages canary tokens.
 - **`setup.py`** — Setup wizard: project configuration after install. Tracks setup state in `.studio/SETUP.json`, generates role overrides, scopes, and cleanup config. Supports incremental re-configuration when new features are added.
 - **`impl_loop.py`** — Implementation-loop config: `LoopConfig` dataclass + `load_loop_config()` (tomllib/tomli fallback, resolution chain explicit → `.studio/` → shipped → defaults, patterned on `scopes.py`). `runtime_knobs()` + a `python -m impl_loop` JSON CLI project the resolved config into the knobs the `.claude/workflows/implementation-loop.js` Workflow consumes (editor on/off, read scope, output budget, mutation/static gates). The only Python piece of the writer/editor implementation loop; see `studio/docs/IMPLEMENTATION_LOOP_SPEC.md`.

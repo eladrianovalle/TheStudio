@@ -162,7 +162,7 @@ python studio/run_phase.py stats --json           # machine-readable aggregate
 # Cross-repo install
 python studio/run_phase.py init --target /path/to/project
 python studio/run_phase.py check-install --target /path/to/project
-python studio/run_phase.py update --target /path/to/project          # add --force to overwrite locally-edited snapshot files
+python studio/run_phase.py update --target /path/to/project          # add --force to overwrite files you've edited locally
 
 # Preview / execute storage cleanup
 python studio/run_phase.py cleanup --dry-run
@@ -331,7 +331,7 @@ studio/
   config/studio_settings.toml # Cleanup settings
   config/implementation_loop.toml # Implementation writer/editor loop defaults
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 621 tests (pytest)
+  tests/                    # 624 tests (pytest)
 ```
 
 ---
@@ -342,7 +342,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-621 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, agent metrics tracking, quality ratings and cross-run stats, CLAUDE.md offload analysis, unstale audit configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
+624 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, agent metrics tracking, quality ratings and cross-run stats, CLAUDE.md offload analysis, unstale audit configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 

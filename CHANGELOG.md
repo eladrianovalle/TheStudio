@@ -26,7 +26,7 @@ All notable changes to TheGameStudio are documented here.
 - `No Merge Conflicts` CI workflow (`.github/workflows/no-merge-conflicts.yml`) to satisfy branch ruleset
 
 ### Fixed
-- Clobber guard now covers the verbatim `.claude/` commands & workflows, not just `.studio/source/` files — the install manifest checksums `.claude/commands/*` and `.claude/workflows/*` too, so a locally-edited slash command or workflow is reported by `check-install` and blocks `update` (unless `--force`) instead of being silently overwritten
+- `update` no longer silently overwrites your local edits to slash commands or workflows. It already protected the Studio source files; now it also tracks the installed `.claude/commands/*` and `.claude/workflows/*`, so `check-install` flags an edit you've made to one of them and `update` stops before overwriting it (pass `--force` to overwrite anyway)
 - `check-install`/`update` stale-snapshot detection (#20) — run through the installed snapshot, both compared it against its own manifest and always reported "up to date", silently blocking updates. Now resolves the live upstream from `VERSION.source_path`, warning loudly when it can't
 - Installer omitted the `integrations` subpackage — `init`/`update` shipped without `integrations/__init__.py` + `slack_digest.py`, breaking every command in installed projects
 - Slack digest body now includes the run summary + final-doc pointer, prefers a plain-language `digest.md` over the dense `summary.md`, and renders markdown as Slack `mrkdwn`
