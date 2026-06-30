@@ -125,15 +125,15 @@ Each step is independently verifiable; land them in this order.
 
 ## Acceptance criteria
 
-- [ ] `studio/integrations/__init__.py` + `slack_digest.py` exist; stdlib-only imports.
-- [ ] `notify` subcommand prepares + posts digest for a finalized run; `--dry-run` prints payloads.
-- [ ] Slack payload renders as a Block Kit digest (verified in Block Kit Builder).
-- [ ] n8n payload is flat JSON addressable as `$json.body.<field>`; optional auth header sent when configured.
-- [ ] Webhook failure / timeout / 429 is handled soft (logged, returns False, no exception escapes).
-- [ ] No secret in repo: URL read from env var named in `.studio/integrations.toml`.
-- [ ] `studio/tests/test_slack_digest.py` covers: payload build, success, HTTP error, timeout, 429 retry, disabled/no-config no-op — all with `urllib` mocked.
-- [ ] Docs updated: `CLAUDE.md` CLI list + a short `studio/docs/INTEGRATIONS.md`.
-- [ ] All existing tests still pass (`cd studio && python -m pytest tests/ -v`).
+- [x] `studio/integrations/__init__.py` + `slack_digest.py` exist; stdlib-only imports.
+- [x] `notify` subcommand prepares + posts digest for a finalized run; `--dry-run` prints payloads.
+- [x] Slack payload renders as a Block Kit digest (verified in Block Kit Builder).
+- [x] n8n payload is flat JSON addressable as `$json.body.<field>`; optional auth header sent when configured.
+- [x] Webhook failure / timeout / 429 is handled soft (logged, returns False, no exception escapes).
+- [x] No secret in repo: URL read from env var named in `.studio/integrations.toml`.
+- [x] `studio/tests/test_slack_digest.py` covers: payload build, success, HTTP error, timeout, 429 retry, disabled/no-config no-op — all with `urllib` mocked.
+- [x] Docs updated: `CLAUDE.md` CLI list + a short `studio/docs/INTEGRATIONS.md`.
+- [x] All existing tests still pass (`cd studio && python -m pytest tests/ -v`).
 
 ## References
 

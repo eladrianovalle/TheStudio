@@ -34,7 +34,7 @@ The non-studio phases each follow a single Advocate ↔ Contrarian loop, then ha
 
 ### Studio Phase (Role Packs)
 
-Studio phase now hosts as many Advocate↔Contrarian duos as needed. The full role menu (all 13 manifest roles) is below; the default `studio_core` pack uses the first seven — marketing, product, design, art, engineering, test_engineer, qa — and you add others with `--roles +<role>`:
+Studio phase now hosts as many Advocate↔Contrarian duos as needed. The full role menu (all 14 manifest roles) is below; the default `studio_core` pack uses the first seven — marketing, product, design, art, engineering, test_engineer, qa — and you add others with `--roles +<role>`:
 
 | Role Key | Title | Advocate Focus | Contrarian Focus | Deliverables (examples) |
 | --- | --- | --- | --- | --- |
@@ -45,6 +45,7 @@ Studio phase now hosts as many Advocate↔Contrarian duos as needed. The full ro
 | engineering | Principal Gameplay Engineer | Architecture, integrations, performance | Ops toil, technical risk | System outline, stack choices, ops checklist |
 | test_engineer | Staff Test Engineer — AI-TDD Integrity | Scenario-first test design, stack boundaries, mutation verification | Self-mocking tests, hallucinated assertions, green checkmark trap | Test spec (GWT), context boundary, mutation plan, anti-pattern audit |
 | qa | Release QA & Launch Ops Lead | Validation strategy, telemetry | Coverage breadth, environment readiness, support gaps | Test matrix, rollback plan, instrumentation gaps |
+| web_product | Director of Product — Web Platforms & Creator Tools | Opportunity framing (ICP, JTBD, positioning), build-vs-fork-vs-buy, monetization/licensing fit, MVI roadmap | Undifferentiated positioning, vague ICP, licensing/IP traps, MVI violations | Opportunity framing, build-vs-fork-vs-buy recommendation, phased MVI roadmap, success/kill metrics |
 | web_engineering | Lead Web Engineer — Next.js & Static Export | Architecture for App Router, static export, route structure | Hydration mismatches, route conflicts, static export limitations | Architecture evaluation, route validation, export verification |
 | web_test_engineer | Staff Test Engineer — Web & Static Export | Scenario-first testing for static export, route generation | False-confidence tests, dev-only passes, missing content verification | Static export test spec, route accessibility plan, SEO checklist |
 | web_qa | Release QA Lead — Static Site Deployment | GitHub Pages validation, route resolution, asset loading | Missing routes, broken asset paths, cache invalidation gaps | Deployment smoke test matrix, export completeness checklist |

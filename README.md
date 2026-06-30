@@ -162,7 +162,7 @@ python studio/run_phase.py stats --json           # machine-readable aggregate
 # Cross-repo install
 python studio/run_phase.py init --target /path/to/project
 python studio/run_phase.py check-install --target /path/to/project
-python studio/run_phase.py update --target /path/to/project
+python studio/run_phase.py update --target /path/to/project          # add --force to overwrite locally-edited snapshot files
 
 # Preview / execute storage cleanup
 python studio/run_phase.py cleanup --dry-run
@@ -322,14 +322,16 @@ studio/
   cleanup.py                # TTL + budget-based artifact cleanup + loose file removal
   rerun.py                  # Rejection context injection for iterate-on-failure
   verdict.py                # APPROVED/REJECTED extraction
+  impl_loop.py              # Implementation writer/editor loop config (LoopConfig + python -m impl_loop)
   integrations/             # Outbound run-digest webhooks (slack_digest.py → Slack/n8n)
   validators/               # DocumentValidator + CodeValidator
-  studio.manifest.json      # Role definitions (13 disciplines)
+  studio.manifest.json      # Role definitions (14 disciplines)
   role_packs/*.json          # Curated role sets (studio_core, etc.)
   config/scopes.toml         # Default scope configuration
   config/studio_settings.toml # Cleanup settings
+  config/implementation_loop.toml # Implementation writer/editor loop defaults
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 585 tests (pytest)
+  tests/                    # 621 tests (pytest)
 ```
 
 ---
@@ -340,7 +342,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-585 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, agent metrics tracking, quality ratings and cross-run stats, CLAUDE.md offload analysis, unstale audit configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
+621 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, agent metrics tracking, quality ratings and cross-run stats, CLAUDE.md offload analysis, unstale audit configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 
