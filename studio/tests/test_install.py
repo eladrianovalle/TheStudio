@@ -78,6 +78,19 @@ class TestInstallStudio:
         assert "run_phase.py" in manifest
         assert len(manifest["run_phase.py"]) == 64  # SHA-256 hex
 
+    def test_manifest_covers_claude_commands_and_workflows(self, target_dir, studio_dir):
+        """Manifest checksums the verbatim .claude/ commands + workflows too, so the
+        clobber guard can see local edits to them — not just .studio/source/ files."""
+        install_studio(target_dir, studio_dir)
+        manifest = json.loads((target_dir / ".studio" / "MANIFEST.json").read_text())
+        assert ".claude/commands/run-phase.md" in manifest
+        assert ".claude/workflows/implementation-loop.js" in manifest
+        # Recorded checksum matches the installed file on disk.
+        wf = target_dir / ".claude" / "workflows" / "implementation-loop.js"
+        import hashlib
+        assert manifest[".claude/workflows/implementation-loop.js"] == \
+            hashlib.sha256(wf.read_bytes()).hexdigest()
+
     def test_creates_output_and_knowledge_dirs(self, target_dir, studio_dir):
         """Install creates .studio/output/ and .studio/knowledge/."""
         install_studio(target_dir, studio_dir)
@@ -191,6 +204,14 @@ class TestCheckStudio:
         assert "config/scopes.toml" in status["locally_modified"]
         assert "run_phase.py" not in status["locally_modified"]  # untouched → not flagged
 
+    def test_check_reports_locally_modified_command(self, target_dir, studio_dir):
+        """A locally-edited .claude/ command/workflow is in the clobber set too."""
+        install_studio(target_dir, studio_dir)
+        cmd = target_dir / ".claude" / "commands" / "run-phase.md"
+        cmd.write_text(cmd.read_text() + "\n<!-- local edit -->\n", encoding="utf-8")
+        status = check_studio(target_dir, studio_dir)
+        assert ".claude/commands/run-phase.md" in status["locally_modified"]
+
 
 class TestUpdateStudio:
     """Tests for update_studio()."""
@@ -261,6 +282,26 @@ class TestUpdateStudio:
         forced = update_studio(target_dir, studio_dir, force=True)
         assert not forced.get("blocked")
         assert "# my local tweak" not in cfg.read_text()
+
+    def test_update_blocked_on_locally_modified_command(self, target_dir, studio_dir):
+        """An edited .claude/ command blocks update (clobber guard); --force overwrites it."""
+        install_studio(target_dir, studio_dir)
+        cmd = target_dir / ".claude" / "commands" / "run-phase.md"
+        cmd.write_text(cmd.read_text() + "\n<!-- my command tweak -->\n", encoding="utf-8")
+        # Make an update appear pending by dropping an unrelated file from the manifest.
+        manifest_path = target_dir / ".studio" / "MANIFEST.json"
+        manifest = json.loads(manifest_path.read_text())
+        del manifest["verdict.py"]
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        result = update_studio(target_dir, studio_dir)
+        assert result.get("blocked") is True
+        assert ".claude/commands/run-phase.md" in result["locally_modified"]
+        assert "<!-- my command tweak -->" in cmd.read_text()  # edit survived
+
+        forced = update_studio(target_dir, studio_dir, force=True)
+        assert not forced.get("blocked")
+        assert "<!-- my command tweak -->" not in cmd.read_text()
 
 
 class TestSnapshotStaleDetection:
