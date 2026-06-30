@@ -214,16 +214,54 @@ def _collect_source_files(studio_dir: Path) -> List[Path]:
 
 
 
+def _claude_manifest_keys(studio_dir: Path) -> List[str]:
+    """Manifest keys for the verbatim ``.claude/`` commands + workflows.
+
+    These install OUTSIDE ``.studio/source/`` (into ``.claude/commands/`` and
+    ``.claude/workflows/``), so they're keyed by their repo-root-relative install
+    path (``.claude/commands/run-phase.md``) to distinguish them from source files
+    (keyed bare, relative to ``.studio/source/``). Including them in the manifest
+    is what lets the clobber guard notice local edits to a command or workflow.
+    """
+    repo_root = studio_dir.parent
+    keys: List[str] = []
+    for name in SLASH_COMMANDS:
+        if (repo_root / ".claude" / "commands" / name).is_file():
+            keys.append(f".claude/commands/{name}")
+    for name in WORKFLOW_FILES:
+        if (repo_root / ".claude" / "workflows" / name).is_file():
+            keys.append(f".claude/workflows/{name}")
+    return keys
+
+
+def _manifest_source_path(studio_dir: Path, key: str) -> Path:
+    """Map a manifest key to its file in the live source tree."""
+    if key.startswith(".claude/"):
+        return studio_dir.parent / key
+    return studio_dir / key
+
+
+def _manifest_installed_path(target: Path, key: str) -> Path:
+    """Map a manifest key to its installed file in the target."""
+    if key.startswith(".claude/"):
+        return target / key
+    return target / ".studio" / "source" / key
+
+
 def _build_manifest(
-    source_files: List[Path],
+    manifest_keys: List[str],
     studio_dir: Path,
 ) -> Dict[str, str]:
-    """Build install manifest: {relative_path: sha256}."""
+    """Build install manifest: {key: sha256}.
+
+    Keys are resolved to their live-source path via ``_manifest_source_path`` so
+    source files and the verbatim ``.claude/`` files share one flat manifest.
+    """
     manifest: Dict[str, str] = {}
-    for rel in source_files:
-        full = studio_dir / rel
+    for key in manifest_keys:
+        full = _manifest_source_path(studio_dir, str(key))
         if full.is_file():
-            manifest[str(rel)] = _sha256(full)
+            manifest[str(key)] = _sha256(full)
     return manifest
 
 
@@ -349,8 +387,9 @@ def install_studio(target: Path, studio_dir: Optional[Path] = None) -> Path:
     (dot_studio / "output").mkdir(parents=True, exist_ok=True)
     (dot_studio / "knowledge").mkdir(parents=True, exist_ok=True)
 
-    # Build and write manifest
-    manifest = _build_manifest(source_files, studio_dir)
+    # Build and write manifest (source files + verbatim .claude/ commands & workflows)
+    manifest_keys = [str(p) for p in source_files] + _claude_manifest_keys(studio_dir)
+    manifest = _build_manifest(manifest_keys, studio_dir)
     manifest_path = dot_studio / "MANIFEST.json"
     manifest_path.write_text(
         json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8"
@@ -396,9 +435,10 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
         changed: list[str] — files where upstream differs from what was installed (update available)
         missing: list[str] — files in source but not installed
         extra: list[str] — files installed but not in source
-        locally_modified: list[str] — installed source files whose ON-DISK content has
+        locally_modified: list[str] — installed files whose ON-DISK content has
             drifted from the checksum recorded at install — i.e. local edits that an
-            `update` would OVERWRITE (the clobber set; commonly an edited snapshot config)
+            `update` would OVERWRITE (the clobber set; spans both .studio/source/
+            files and the verbatim .claude/ commands/workflows)
         warning: str | None — set when the live source could not be resolved
             (e.g. run from a stale snapshot), so the result may be unreliable
     """
@@ -420,9 +460,10 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
         except (json.JSONDecodeError, ValueError):
             installed_manifest = {}
 
-    # Build current source manifest
+    # Build current source manifest (source files + verbatim .claude/ files)
     source_files = _collect_source_files(studio_dir)
-    source_manifest = _build_manifest(source_files, studio_dir)
+    manifest_keys = [str(p) for p in source_files] + _claude_manifest_keys(studio_dir)
+    source_manifest = _build_manifest(manifest_keys, studio_dir)
 
     changed: List[str] = []
     missing: List[str] = []
@@ -440,12 +481,12 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
         if rel not in source_manifest:
             extra.append(rel)
 
-    # Local modifications: installed source file on disk differs from what was recorded
-    # at install. These are the files an `update` re-install would clobber.
-    source_dest = dot_studio / "source"
+    # Local modifications: installed file on disk differs from what was recorded
+    # at install. These are the files an `update` re-install would clobber —
+    # source files under .studio/source/ AND the verbatim .claude/ commands/workflows.
     locally_modified: List[str] = []
     for rel, recorded_sha in installed_manifest.items():
-        f = source_dest / rel
+        f = _manifest_installed_path(target, rel)
         if f.is_file() and _sha256(f) != recorded_sha:
             locally_modified.append(rel)
     locally_modified.sort()
