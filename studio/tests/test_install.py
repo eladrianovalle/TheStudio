@@ -334,6 +334,22 @@ class TestSnapshotStaleDetection:
         assert status["warning"] is not None
         assert "snapshot" in status["warning"]
 
+    def test_self_install_preserves_upstream_source_path(
+        self, target_dir, studio_dir
+    ):
+        """Re-installing FROM the snapshot must not record a self-pointing
+        source_path — it would make future snapshot checks compare the snapshot
+        against itself (silent 'up to date'). A prior upstream pointer survives."""
+        install_studio(target_dir, studio_dir)  # source_path -> real upstream
+        snapshot = target_dir / ".studio" / "source"
+
+        # Simulate `init`/install run through the installed snapshot itself.
+        install_studio(target_dir, snapshot)
+
+        version = json.loads((target_dir / ".studio" / "VERSION").read_text())
+        assert Path(version["source_path"]).resolve() == studio_dir.resolve()
+        assert Path(version["source_path"]).resolve() != snapshot.resolve()
+
 
 class TestSlashCommandsUseDirectPaths:
     """Verify slash commands use .studio/source/ paths directly (no rewriting needed)."""

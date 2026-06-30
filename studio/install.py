@@ -176,6 +176,25 @@ def _resolve_source_dir(
     return live, None
 
 
+def _recorded_upstream_source(version_path: Path, snapshot: Path) -> Optional[Path]:
+    """Return the upstream source dir recorded in an existing VERSION — but only if
+    it is still a usable upstream: it exists, has ``run_phase.py``, and is NOT the
+    target's own snapshot. Used to avoid overwriting a good pointer with a
+    self-pointing one when (re)installing from the snapshot.
+    """
+    try:
+        version = json.loads(version_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError):
+        return None
+    sp = version.get("source_path")
+    if not sp:
+        return None
+    p = Path(sp)
+    if p.resolve() == snapshot or not (p / "run_phase.py").is_file():
+        return None
+    return p
+
+
 def _collect_source_files(studio_dir: Path) -> List[Path]:
     """Collect all source files to install (relative to studio/)."""
     files: List[Path] = []
@@ -340,14 +359,24 @@ def install_studio(target: Path, studio_dir: Optional[Path] = None) -> Path:
     # Write VERSION
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     git = _git_info(studio_dir.parent)
+    version_path = dot_studio / "VERSION"
+    # Never record a source_path that points at the target's own snapshot: it would
+    # make every future snapshot-based check compare the snapshot against itself
+    # (silent "up to date") and leave `update` with no breadcrumb back to upstream.
+    # When (re)installing FROM the snapshot (e.g. `init` run inside an installed
+    # repo), preserve a previously-recorded upstream pointer instead of clobbering it.
+    source_path = studio_dir
+    if studio_dir.resolve() == source_dest.resolve():
+        prior = _recorded_upstream_source(version_path, source_dest.resolve())
+        if prior is not None:
+            source_path = prior
     version_info = {
         "installed_at": now,
-        "source_path": str(studio_dir),
+        "source_path": str(source_path),
         "commit": git.get("commit", "unknown"),
         "commit_date": git.get("commit_date", ""),
         "file_count": len(manifest),
     }
-    version_path = dot_studio / "VERSION"
     version_path.write_text(
         json.dumps(version_info, indent=2), encoding="utf-8"
     )
