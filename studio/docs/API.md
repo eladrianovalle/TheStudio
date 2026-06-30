@@ -31,8 +31,8 @@ Supported commands:
 | `stats` | Cross-run diagnostics dashboard: verdict/approval rate, avg + lowest human ratings, token/cost efficiency, decision priority mix + answer rate, and prepare-usage counts. Supports `--phase`, `--json`, `--artifact-root`. |
 | `offload` | Analyzes CLAUDE.md for content safe to offload to companion docs. Classifies sections, scores pointer strength, generates reports. |
 | `init` | Installs Studio into a target project directory. |
-| `check-install` | Checks if installed Studio is up to date. Also previews any locally-edited snapshot files that an `update` would overwrite. |
-| `update` | Updates installed Studio from source. Refuses to overwrite locally-edited snapshot files unless `--force` is passed (clobber guard). |
+| `check-install` | Checks whether the installed Studio is up to date, and shows any files you've edited locally that an `update` would overwrite: both the Studio source and the installed slash commands and workflows. |
+| `update` | Updates the installed Studio from source. If you've edited any installed file locally, it stops instead of overwriting your work; pass `--force` to overwrite anyway. This covers the Studio source as well as the installed slash commands and workflows. |
 | `setup` | Configure Studio for a project — role pack selection, role + phase-persona customization (`.studio/personas.toml`), unstale audit config (`.studio/unstale.toml`), scope tuning, cleanup settings. Supports `--status`, `--defaults`, `--answers`, `--role-pack`. |
 | `notify` | Posts a run digest to enabled Slack/n8n webhooks (config in `.studio/integrations.toml`). Auto-fires on `finalize` when a target is enabled (soft-fail). Supports `--run-dir`, `--dry-run`, `--artifact-root`. |
 
