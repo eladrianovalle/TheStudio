@@ -34,6 +34,7 @@ CONTRARIAN_MANDATE = [
     "- **Simpler beats more complete.** A shorter, clearer proposal that still solves the real problem is a better outcome than a thorough one that does more than the problem requires.",
     "- **Collapse, don't accumulate.** Prefer merging two things into one over adding a third. Prefer removing an option over adding configuration to support it.",
     "- **Guard the essence.** Cutting serves clarity and the core problem — never amputate what the problem genuinely requires. If a cut would break the core, say so and stop.",
+    "- **Cut concepts, not clarity.** Remove features, layers, and options — but never compress readable code into dense or clever code to save lines. Explicit names and obvious steps are part of the essence you protect, not fat to trim.",
 ]
 
 
