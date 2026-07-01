@@ -7,6 +7,7 @@ All notable changes to TheGameStudio are documented here.
 ## [Unreleased]
 
 ### Added
+- Write for humans — in code as well as prose. `CODING_PRINCIPLES` gains §7 "Write Code for Humans" (explicit descriptive names, explicit over clever, one obvious thing per line) alongside the existing §6 for docs/comments/commits. §2 and the Contrarian Mandate are sharpened so "simplify" means fewer moving parts, never terser code — cut concepts, not characters. Reaches installing repos through the `CLAUDE.md` sentinel injection
 - Quality ratings & cross-run stats — the diagnostics + fine-tuning feedback loop. `rate` records a human 1-5 quality score + note per run (`rating.json`, the human counterpart to the agent verdict); `stats` is the first cross-run dashboard, aggregating every run's `run.json`/`rating.json`/`decisions.json` plus `.studio/usage.log` into verdict/approval rate, rating avg + lowest-rated targets, token/cost efficiency, decision priority mix, and usage (`--phase`, `--json`). `finalize` ends with an auto rate-prompt (TTY-interactive or copy-paste nudge; `--no-rate-prompt` to suppress)
 - Slack / n8n run-digest integration — first `studio/integrations/` subpackage (`slack_digest.py`). Posts a finalized run's status/verdict/summary to a Slack Incoming Webhook (Block Kit) and/or n8n Webhook node (flat JSON), stdlib `urllib` only. New `notify` subcommand; auto-fires on `finalize` when enabled (default-disabled, soft-fail). Config in `.studio/integrations.toml`; webhook secrets resolved strictly from env vars (`*_env` keys, no literal fallback)
 - CI: Phase-1 PR triage gate (`.github/workflows/pr-triage.yml`)
@@ -26,6 +27,7 @@ All notable changes to TheGameStudio are documented here.
 - `No Merge Conflicts` CI workflow (`.github/workflows/no-merge-conflicts.yml`) to satisfy branch ruleset
 
 ### Fixed
+- `record-metrics --agent` accepted `polish` (a scope name) as an agent type while omitting `implementer` (the real agent in market/design/tech phases) — corrected in the CLI and its `API.md` reference. Also retargeted the `CROSS_REPO_CHECK_MVI` doc, which described a never-shipped `studio check` command with output it doesn't print, to the actual `check-install` behavior
 - `update` no longer silently overwrites your local edits to slash commands or workflows. It already protected the Studio source files; now it also tracks the installed `.claude/commands/*` and `.claude/workflows/*`, so `check-install` flags an edit you've made to one of them and `update` stops before overwriting it (pass `--force` to overwrite anyway)
 - `check-install`/`update` stale-snapshot detection (#20) — run through the installed snapshot, both compared it against its own manifest and always reported "up to date", silently blocking updates. Now resolves the live upstream from `VERSION.source_path`, warning loudly when it can't
 - Installer omitted the `integrations` subpackage — `init`/`update` shipped without `integrations/__init__.py` + `slack_digest.py`, breaking every command in installed projects
