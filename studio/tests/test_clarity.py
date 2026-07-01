@@ -250,10 +250,11 @@ class TestComputeTopicClarity:
             ),
         ]
         tc = compute_topic_clarity("topic_a", decisions)
-        # 2/3 answered = 0.667, minus 0.1 * 1 challenge = 0.567
+        # 2/3 answered minus 0.1 per challenge = 0.567 exactly.
+        # Pin the exact value: a directional `< 0.667` check would survive
+        # dropping the penalty (2/3 rounds under 0.667) or scaling it.
         assert tc.challenged_count == 1
-        assert tc.score < 0.667
-        assert tc.score >= 0.0
+        assert tc.score == pytest.approx(2 / 3 - 0.1)
 
     def test_challenge_penalty_capped_at_zero(self):
         """Score never goes below zero even with many challenges."""

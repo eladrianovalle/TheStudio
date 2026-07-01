@@ -1881,7 +1881,7 @@ def build_parser() -> argparse.ArgumentParser:
         "record-metrics", help="Record token usage for a single agent invocation."
     )
     record_metrics_parser.add_argument("--run-dir", type=Path, required=True, help="Path to the run directory.")
-    record_metrics_parser.add_argument("--agent", required=True, choices=["advocate", "contrarian", "integrator", "polish"], help="Agent type.")
+    record_metrics_parser.add_argument("--agent", required=True, choices=["advocate", "contrarian", "integrator", "implementer"], help="Agent type.")
     record_metrics_parser.add_argument("--total-tokens", type=int, required=True, help="Total tokens consumed.")
     record_metrics_parser.add_argument("--tool-uses", type=int, default=0, help="Number of tool uses.")
     record_metrics_parser.add_argument("--duration-ms", type=int, default=0, help="Duration in milliseconds.")

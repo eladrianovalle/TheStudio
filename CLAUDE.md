@@ -26,9 +26,9 @@ Before implementing:
 - No abstractions for single-use code.
 - No "flexibility" or "configurability" that wasn't requested.
 - No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
+- If you wrote 200 lines of machinery for a 50-line problem, cut it down — but remove *concepts*, not characters. Aim for fewer moving parts, never the same logic squeezed into denser code (that's what "Write Code for Humans" guards).
 
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify. Overcomplicated means too many moving parts — not too many characters.
 
 ### 3. Surgical Changes
 
@@ -82,6 +82,19 @@ This covers everything you write for humans rather than the compiler: doc files,
 - Match the voice already in the file instead of importing your own.
 
 The test: could a teammate who is new to the code read it once and understand it, without asking you to translate?
+
+### 7. Write Code for Humans
+
+**The code's first reader is a person, not the compiler. Write for that person.**
+
+The previous principle covers what you write *around* the code — docs, comments, commits. This one is about the code itself. Simple code and readable code are not the same thing: simple code has few moving parts; readable code spells those parts out. Aim for both, and never trade readability away to save lines.
+
+- Name things in full, for what they are. `remaining_budget` over `rb`, `resolve_source_dir` over `rsd`. A good name is a comment you don't have to write.
+- Prefer explicit and a little verbose over compact and clever. One obvious thing per line beats a dense expression a reader has to decode.
+- Reach for the plain, conventional form a reader expects. Cleverness is a cost paid again by everyone who reads the code later.
+- Don't compress just to shorten. Saving three lines isn't worth making the next person stop and work out what they do.
+
+The test: could a teammate seeing this file for the first time read it top to bottom and follow it — without you narrating over their shoulder?
 
 ---
 

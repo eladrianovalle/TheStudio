@@ -93,7 +93,7 @@ Inside each run directory:
 | Flag | Required | Default | Description |
 | --- | --- | --- | --- |
 | `--run-dir PATH` | Yes | – | Path to the run directory. |
-| `--agent {advocate,contrarian,integrator,polish}` | Yes | – | Agent type being recorded. |
+| `--agent {advocate,contrarian,integrator,implementer}` | Yes | – | Agent type being recorded. |
 | `--total-tokens N` | Yes | – | Total tokens consumed by the agent. |
 | `--tool-uses N` | No | `0` | Number of tool uses. |
 | `--duration-ms N` | No | `0` | Wall-clock duration in milliseconds. |

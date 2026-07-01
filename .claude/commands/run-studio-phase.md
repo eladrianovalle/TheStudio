@@ -37,7 +37,7 @@ Read the generated `instructions.md` file. Pay attention to:
 
 1. **Record agent metrics** — The Agent tool result includes `total_tokens`, `tool_uses`, and `duration_ms` in a `<usage>` block. Record these immediately:
    ```bash
-   python ".studio/source/run_phase.py" record-metrics --run-dir {run_dir} --agent {advocate|contrarian|integrator|polish} --total-tokens {N} --tool-uses {N} --duration-ms {N} --role {role} --scope {scope}
+   python ".studio/source/run_phase.py" record-metrics --run-dir {run_dir} --agent {advocate|contrarian|integrator|implementer} --total-tokens {N} --tool-uses {N} --duration-ms {N} --role {role} --scope {scope}
    ```
    Omit `--role` and `--scope` for non-studio phases or integrator/polish agents.
 
