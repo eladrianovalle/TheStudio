@@ -23,7 +23,7 @@
 - **[INTEGRATION_GUIDE.md](./INTEGRATION_GUIDE.md)** - Using Studio from other repos
 - **[STUDIO_BRIDGE_TEMPLATE.md](./STUDIO_BRIDGE_TEMPLATE.md)** - Bridge doc template for downstream repos
 - **[BRIDGE_COMMANDS_TEMPLATE.md](./BRIDGE_COMMANDS_TEMPLATE.md)** - Slash command files to copy into a downstream repo's `.claude/commands/`
-- **[CROSS_REPO_CHECK_MVI.md](./CROSS_REPO_CHECK_MVI.md)** - `studio check` version comparison against the source repo
+- **[CROSS_REPO_CHECK_MVI.md](./CROSS_REPO_CHECK_MVI.md)** - `check-install` version comparison against the source repo
 
 ## Execution Guides
 - **[CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md)** - Claude Code slash commands and agent workflow
