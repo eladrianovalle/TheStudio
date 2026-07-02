@@ -9,6 +9,8 @@ Tests cover:
 import pytest
 
 from decision_points import (
+    DECISION_BLOCK_EXAMPLE,
+    DECISION_BLOCK_TEMPLATE,
     DecisionPoint,
     extract_decisions_from_run,
     filter_unsettled,
@@ -601,3 +603,64 @@ class TestFilterUnsettled:
 
         assert len(result) == 1
         assert result[0].question == "Q2?"
+
+
+# ---------------------------------------------------------------------------
+# Contract guard: the emit format (generators) and parse format (this module)
+# share one definition. If either drifts, these fail loudly instead of silently
+# extracting nothing.
+# ---------------------------------------------------------------------------
+
+def test_canonical_example_parses():
+    """The shared DECISION_BLOCK_EXAMPLE must parse into exactly one P0 decision."""
+    points = parse_decision_points(DECISION_BLOCK_EXAMPLE)
+    assert len(points) == 1
+    dp = points[0]
+    assert dp.priority == "P0"
+    assert "real-time or turn-based" in dp.question
+    assert dp.unblocks.startswith("Core loop design")
+    # The option parser captures the leading label (nested parens are trimmed).
+    assert dp.options == ["Real-time", "Turn-based"]
+
+
+def test_canonical_template_parses():
+    """The placeholder template is structurally valid too (parses as one block)."""
+    points = parse_decision_points(DECISION_BLOCK_TEMPLATE)
+    assert len(points) == 1
+    assert points[0].priority == "P0"
+
+
+def test_format_parse_round_trip():
+    """format_decision_point output feeds back through the parser unchanged."""
+    original = DecisionPoint(
+        priority="P1",
+        question="Store sessions in Redis or Postgres?",
+        unblocks="Auth architecture",
+        options=["Redis", "Postgres"],
+    )
+    rendered = format_decision_point(original)
+    reparsed = parse_decision_points(rendered)
+    assert len(reparsed) == 1
+    dp = reparsed[0]
+    assert dp.priority == original.priority
+    assert dp.question == original.question
+    assert dp.unblocks == original.unblocks
+    assert dp.options == original.options
+
+
+def test_generated_instructions_use_parseable_format(tmp_path):
+    """The example baked into generated instructions parses (generator<->parser)."""
+    import run_phase
+    meta = {
+        "run_id": "run_market_20260101_000000",
+        "phase": "market",
+        "input": "A cozy farming sim",
+        "max_iterations": 2,
+        "budget_cap": "",
+        "created_display": "2026-01-01 00:00",
+        "output_type": "deliverables",
+    }
+    doc = run_phase.build_instruction_doc(meta, tmp_path)
+    points = parse_decision_points(doc)
+    assert points, "generated instructions should contain a parseable DECISION example"
+    assert points[0].priority == "P0"

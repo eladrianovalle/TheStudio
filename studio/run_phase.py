@@ -47,6 +47,7 @@ from scopes import (
     load_scopes_config,
 )
 from decision_points import (
+    DECISION_BLOCK_EXAMPLE,
     DecisionPoint,
     extract_decisions_from_run,
     filter_unsettled,
@@ -938,9 +939,7 @@ def build_instruction_doc(
             "Use a markdown blockquote with a bold DECISION header:",
             "",
             "```",
-            "> **DECISION [P0]:** Should the social deduction mechanic be real-time or turn-based?",
-            "> **Unblocks:** Core loop design — fundamentally different gameplay",
-            "> **Options:** (a) Real-time (Among Us style) (b) Turn-based (Mafia style)",
+            *DECISION_BLOCK_EXAMPLE.splitlines(),
             "```",
             "",
             "### Priority Levels",

@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List
 
+from decision_points import DECISION_BLOCK_TEMPLATE
+
 
 VALID_DEBATE_MODES = {"all_roles", "per_role"}
 
@@ -357,9 +359,7 @@ def generate_scope_prompt(
         "**Decision Point Protocol:** When you encounter a gap, ambiguity, or fork that could meaningfully change your approach, flag it inline:",
         "",
         "```",
-        "> **DECISION [P0]:** [question]",
-        "> **Unblocks:** [what this decision affects]",
-        "> **Options:** (a) ... (b) ...",
+        *DECISION_BLOCK_TEMPLATE.splitlines(),
         "```",
         "",
         "- **P0 (Blocking):** Cannot proceed without an answer.",

@@ -28,6 +28,26 @@ from typing import List, Optional
 
 _PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2}
 
+# --- Canonical emit format (single source of truth) --------------------------
+# Agents are TOLD to emit this exact blockquote shape, and parse_decision_points
+# READS it back. The instruction generators (run_phase.build_instruction_doc and
+# scopes.py) import these constants instead of hand-writing the format, so "what
+# we ask agents to emit" and "what we parse" cannot silently drift apart — the
+# failure mode where a doc tweak quietly makes every extraction return nothing.
+# The round-trip test in tests/test_decision_points.py parses both of these
+# (and the output of format_decision_point) to prove they stay in sync.
+DECISION_BLOCK_TEMPLATE = (
+    "> **DECISION [P0]:** [question]\n"
+    "> **Unblocks:** [what this decision affects]\n"
+    "> **Options:** (a) ... (b) ..."
+)
+
+DECISION_BLOCK_EXAMPLE = (
+    "> **DECISION [P0]:** Should the social deduction mechanic be real-time or turn-based?\n"
+    "> **Unblocks:** Core loop design — fundamentally different gameplay\n"
+    "> **Options:** (a) Real-time (Among Us style) (b) Turn-based (Mafia style)"
+)
+
 # Regex to count DECISION lines (used by validator for quick counting).
 # Accepts both `**DECISION [P0]:**` and `**DECISION [P0]: ...**`
 DECISION_LINE_RE = re.compile(
