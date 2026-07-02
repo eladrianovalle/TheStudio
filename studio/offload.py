@@ -4,7 +4,7 @@ CLAUDE.md offload analyzer.
 Classifies sections, detects embedded constraints, scores pointer strength,
 generates reports, and evaluates validation protocol results.
 
-Pure function library — no side effects except explicit I/O functions
+Pure function library with no side effects except explicit I/O functions
 (create_backup, restore_backup, and the file-scan helpers scan_existing_docs,
 scan_slash_commands, detect_cross_repo_context).
 """
@@ -41,7 +41,7 @@ _IMPERATIVE_RE = re.compile(
     re.MULTILINE | re.IGNORECASE,
 )
 
-# "the required" / "a required" — adjective usage, not imperative
+# "the required" / "a required": adjective usage, not imperative
 _ADJECTIVE_REQUIRED_RE = re.compile(
     r"\b(?:the|a)\s+required\b", re.IGNORECASE
 )

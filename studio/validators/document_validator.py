@@ -214,7 +214,7 @@ class DocumentValidator:
                 issues=[f"[DocumentValidator] question-mode: file is empty. File: {doc_path}"]
             )
 
-        # Reject verdict tokens — question mode does not produce verdicts
+        # Reject verdict tokens: question mode does not produce verdicts
         if re.search(r'VERDICT:\s*(APPROVED|REJECTED)', content, re.IGNORECASE):
             return ValidationResult(
                 passed=False,

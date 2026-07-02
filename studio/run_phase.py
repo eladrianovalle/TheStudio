@@ -243,7 +243,7 @@ def get_studio_root() -> Path:
 
 
 def _entrypoint() -> str:
-    """How to invoke this CLI in next-step hints — echoes the path as actually called,
+    """How to invoke this CLI in next-step hints. Echoes the path as actually called,
     so hints copy-paste correctly in both the source repo (``studio/run_phase.py``) and
     installed repos (``.studio/source/run_phase.py``) instead of a bare ``run_phase.py``.
     """
@@ -255,7 +255,7 @@ def _phase_from_run_id(run_id: str) -> str:
     """Derive the phase from a run_id (format ``run_<phase>_<timestamp>``).
 
     Lets run-scoped commands (finalize/validate/recompute-clarity) make ``--phase``
-    optional — it's redundant with ``--run-id``, which already encodes it.
+    optional, since it's redundant with ``--run-id``, which already encodes it.
     """
     parts = run_id.split("_")
     if len(parts) >= 3 and parts[0] == "run" and parts[1] in PHASE_DETAILS:
@@ -317,7 +317,7 @@ def get_artifact_root() -> Path:
         return installed_root if installed_root is not None else studio_root
 
     # The next two branches are distinct on purpose: an init'd repo is marked by
-    # .studio/VERSION (walk UP for it — handles monorepo subdirs), whereas a merely
+    # .studio/VERSION (walk UP for it, which handles monorepo subdirs), whereas a merely
     # scaffolded repo has a bare .studio/ and no VERSION (check cwd ONLY). Don't merge.
     found = _find_installed_root_upwards(cwd)
     if found is not None:
@@ -354,7 +354,7 @@ def get_knowledge_log_path() -> Path:
 
 
 def _project_name() -> str:
-    """Short name for the repo a run belongs to — tags outcome records.
+    """Short name for the repo a run belongs to; tags outcome records.
 
     In a consuming repo the artifact root IS the repo root, so its directory name
     is the project name. In this tool repo the artifact root is the ``studio/``
@@ -371,8 +371,8 @@ def get_outcomes_ledger_path() -> Path:
     """Central append-only ledger of run outcomes (mirrors get_knowledge_log_path).
 
     This is where cross-repo outcome records land via ``import-outcomes`` so that
-    ``stats`` in the tool repo can see results from every project, not just runs
-    done here. Lives under ``knowledge/`` (gitignored) — it can name unshipped
+    ``stats`` in the tool repo can see results from every project, not only runs
+    done here. Lives under ``knowledge/`` (gitignored). It can name unshipped
     work, so it stays local unless you deliberately commit a redacted copy.
     """
     artifact_root = get_artifact_root().resolve()
@@ -386,7 +386,7 @@ def get_configured_ledger_path() -> Optional[Path]:
     """Local ledger path for auto-appending outcome records at finalize.
 
     Reads an optional ``[outcomes] ledger_path`` from
-    ``<artifact_root>/.studio/integrations.toml`` — the same file that holds the
+    ``<artifact_root>/.studio/integrations.toml``, the same file that holds the
     Slack/n8n webhook config. This is a single-user simplification: the "central
     ledger" is just a fixed local file (typically the tool repo's
     ``knowledge/outcomes.jsonl``), so finalize can append there directly instead
@@ -394,7 +394,7 @@ def get_configured_ledger_path() -> Optional[Path]:
 
     Returns the resolved path when configured, or None when the config file, the
     ``[outcomes]`` table, or the ``ledger_path`` key is absent or unreadable. The
-    ledger file itself need not exist yet — the first append creates it. Never
+    ledger file itself need not exist yet; the first append creates it. Never
     raises: a broken config must not break finalize.
     """
     config_path = get_artifact_root() / ".studio" / INTEGRATIONS_FILENAME
@@ -555,7 +555,7 @@ def _objective_changed(
     """Decide whether the current objective differs from the prior one.
 
     Prefers the objective stored in the project-level clarity.json
-    (``context.scope_description``), which is shared across phases — so a
+    (``context.scope_description``), which is shared across phases, so a
     prior run under a different phase still counts. Falls back to the
     same-phase previous run's input when no clarity snapshot exists.
     Returns False when there is no prior context to compare against.
@@ -907,7 +907,7 @@ def build_instruction_doc(
                 "- Integrator runs its own capped duel (Advocate vs. Contrarian) inside `integrator.md` once the pods approve."
             )
 
-    # Open-Questions Pre-Flight — every deliverable run opens by surfacing what is
+    # Open-Questions Pre-Flight: every deliverable run opens by surfacing what is
     # genuinely unsettled before anyone dives in. Reuses the decision/clarity machinery
     # so answers raise the clarity score and later passes only re-ask what is still open.
     preflight_section: List[str] = []
@@ -965,7 +965,7 @@ def build_instruction_doc(
     loop_section.append("")
     loop_section.append(f"**Notes:** {info['notes']}")
 
-    # Decision Point Protocol — always included except in question mode
+    # Decision Point Protocol: always included except in question mode
     decision_point_section: List[str] = []
     if not is_qmode:
         decision_point_section.extend([
@@ -1176,13 +1176,13 @@ def _resolve_studio_roles(args: argparse.Namespace) -> Tuple[Dict | None, List[R
 def _resolve_scopes(args: argparse.Namespace):
     """Resolve scope-based iteration config from CLI args.
 
-    Returns (scopes_config, scopes_allocations, scopes_meta) — all None if disabled.
+    Returns (scopes_config, scopes_allocations, scopes_meta); all None if disabled.
     """
     if args.no_scopes:
         return None, None, None
 
     # Determine scopes path. Project-local config lives at the artifact root
-    # (<repo>/.studio/), like roles/personas/clarity/integrations — NOT the source
+    # (<repo>/.studio/), like roles/personas/clarity/integrations, NOT the source
     # snapshot. The shipped default stays under the source dir.
     if args.scopes:
         scopes_path = Path(args.scopes)
@@ -1270,7 +1270,7 @@ def _ensure_bridge_doc(artifact_root: Path, studio_root: Path) -> None:
     """Create the project bridge doc if none exists yet.
 
     Kept separate from the .studio/ scaffold guard: an ``init``-installed repo already
-    has .studio/ (so the scaffold short-circuits), but still needs its bridge doc — so
+    has .studio/ (so the scaffold short-circuits), but still needs its bridge doc, so
     this runs regardless of whether .studio/ pre-existed.
     """
     bridge_candidates = [
@@ -1354,7 +1354,7 @@ def prepare_run(args: argparse.Namespace) -> str:
     # Reset clarity when the objective changes so stale topic scores don't
     # bleed in (rebuilt via recompute-clarity). The objective is compared
     # against the one stored in the project-level clarity.json, which is
-    # phase-independent — a prior run under a different phase still counts.
+    # phase-independent, so a prior run under a different phase still counts.
     project_clarity = clarity.load_project_clarity(artifact_root)
     prev_run = _find_previous_run_dir(run_dir)
     had_prior = project_clarity is not None or prev_run is not None
@@ -1399,7 +1399,7 @@ def prepare_run(args: argparse.Namespace) -> str:
             print("\n💡 Tip: Want to optimize iteration budgets? Create .studio/scopes.toml")
             print("   See: .studio/source/docs/SCOPES_GUIDE.md")
 
-    # Append to usage log (fail silently — don't break prepare over logging)
+    # Append to usage log (fail silently so logging can't break prepare)
     try:
         mode = getattr(args, "mode", "deliverables")
         roles_str = ",".join(r.name for r in (studio_role_details or []))
@@ -1571,13 +1571,13 @@ def finalize_run(args: argparse.Namespace) -> None:
         agent_count = meta["metrics"]["agents"]
         print(f"Agent metrics: {agent_count} agents, {total_tokens:,} total tokens")
 
-    # Clarity delta for the session record — the "before" is captured below only
+    # Clarity delta for the session record: the "before" is captured below only
     # when there are decisions to recompute clarity from; otherwise it stays null.
     clarity_mean_before: Optional[float] = None
     clarity_mean_after: Optional[float] = None
     clarity_topics_touched = 0
 
-    # Generate decisions.md — merge agent-surfaced decisions with any already-settled ones
+    # Generate decisions.md: merge agent-surfaced decisions with any already-settled ones
     existing = load_decisions_json(run_dir)
     extracted = extract_decisions_from_run(run_dir)
     if existing or extracted:
@@ -1647,7 +1647,7 @@ def _maybe_notify(run_dir: Path) -> None:
     """Auto-fire the run digest on finalize if a webhook target is enabled.
 
     Default-disabled: no-op unless ``.studio/integrations.toml`` enables a
-    target. Soft-fail — any error is reported but never breaks finalize.
+    target. Soft-fail: any error is reported but never breaks finalize.
     """
     try:
         config = load_integrations_config(get_artifact_root())
@@ -1670,7 +1670,7 @@ def _maybe_append_to_ledger(run_dir: Path, meta: Dict) -> None:
     finalize side effect: when ``[outcomes] ledger_path`` is set in
     ``.studio/integrations.toml``, the finalized run (rated or not) is appended to
     that ledger, deduped by (repo, run_id) so re-finalizing refreshes the record
-    instead of duplicating it. Default-off and soft-fail — on any error we warn,
+    instead of duplicating it. Default-off and soft-fail: on any error we warn,
     print the manual import fallback, and never break finalize. Mirrors
     _maybe_notify.
     """
@@ -2362,7 +2362,7 @@ def record_decisions(args: argparse.Namespace) -> None:
                 source_file=d.get("source_file"),
             ))
     else:
-        # Single decision mode — validate required args
+        # Single decision mode: validate required args
         if args.question is None or args.answer is None or args.priority is None:
             raise ValueError(
                 "Single-decision mode requires --question, --answer, and --priority. "
@@ -2388,7 +2388,7 @@ def record_decisions(args: argparse.Namespace) -> None:
 
 
 def _decision_to_dict(dp) -> dict:
-    """Serialize a DecisionPoint — single source of truth for the machine-readable
+    """Serialize a DecisionPoint. Single source of truth for the machine-readable
     shape shared by `check-decisions` and `extract-decisions --json`."""
     return {
         "priority": dp.priority,
@@ -2450,7 +2450,7 @@ def extract_decisions(args: argparse.Namespace) -> None:
         return
 
     if not all_decisions:
-        # Silent exit — no decisions found is normal
+        # Silent exit: no decisions found is normal
         return
 
     print(format_decisions_log(all_decisions))
@@ -2583,8 +2583,8 @@ def _write_rating(
 ) -> Dict:
     """Write rating.json (the human counterpart to the agent verdict).
 
-    The optional shipped/impact/changed fields are the *outcome* of the run —
-    what it led to downstream — stored under an ``outcome`` block. They answer
+    The optional shipped/impact/changed fields are the *outcome* of the run
+    (what it led to downstream), stored under an ``outcome`` block. They answer
     "did this actually change anything, and what," which is the signal a run's
     verdict and quality score can't capture on their own.
     """
@@ -2609,7 +2609,7 @@ def _write_rating(
 def record_rating(args: argparse.Namespace) -> None:
     """Record a human quality rating (1-5), plus optional outcome, for a run.
 
-    Stored as rating.json alongside metrics.json — the human counterpart to the
+    Stored as rating.json alongside metrics.json, the human counterpart to the
     agent-emitted verdict. The score says how good the run was; the optional
     ``--shipped/--impact/--changed`` outcome says what it actually led to. This
     is the signal `stats` uses to gauge how well the system is doing and which
@@ -2638,8 +2638,8 @@ def _prompt_for_rating(run_dir: Path) -> None:
     """Invite a human quality rating at the end of finalize.
 
     Interactive when attached to a TTY (a human running ``finalize`` directly);
-    otherwise prints a copy-paste nudge so automation — and the assistant driving
-    finalize via a non-interactive shell — never blocks on stdin.
+    otherwise prints a copy-paste nudge so automation (and the assistant driving
+    finalize via a non-interactive shell) never blocks on stdin.
     """
     nudge = (
         f"   {_entrypoint()} rate --run-dir {run_dir} "
@@ -2677,7 +2677,7 @@ def _prompt_for_rating(run_dir: Path) -> None:
 def _outcome_record_from_run(run: Dict, repo: str) -> Dict:
     """Build a portable outcome record from an enriched run dict.
 
-    Every run yields a record, including unrated ones — an unrated run is still a
+    Every run yields a record, including unrated ones; an unrated run is still a
     session the ledger and stats should see. A rating, when present, fills in
     score/shipped/impact/changed/rated_iso; without one those stay null while
     repo, run_id, phase, verdict, status, and token cost are still recorded.
@@ -2723,7 +2723,7 @@ def _write_ledger(path: Path, records: List[Dict]) -> None:
 def _collect_local_outcomes(runs: List[Dict], repo: str) -> List[Dict]:
     """Outcome records for this repo's runs (runs already carry _rating).
 
-    Includes unrated runs — every run yields a record, so stats and the ledger
+    Includes unrated runs; every run yields a record, so stats and the ledger
     see every session rather than only the ones a human bothered to rate.
     """
     return [_outcome_record_from_run(run, repo) for run in runs]
@@ -2744,9 +2744,9 @@ def _merge_outcomes(ledger: List[Dict], local: List[Dict]) -> List[Dict]:
 def export_outcomes(args: argparse.Namespace) -> None:
     """Collect this repo's runs into a portable JSONL of outcome records.
 
-    Includes unrated runs — every session is a record. Writes to --out (default:
+    Includes unrated runs; every session is a record. Writes to --out (default:
     stdout). Feed the file to ``import-outcomes`` in the tool repo so a consuming
-    repo's results become visible to ``stats`` there — the bridge that lets
+    repo's results become visible to ``stats`` there. This is the bridge that lets
     evidence reach the main repo when a repo lives on another machine.
     """
     repo = getattr(args, "repo", None) or _project_name()
@@ -2895,7 +2895,7 @@ def inject_context(args: argparse.Namespace) -> None:
                 )
         else:
             # The run recorded a scopes config that no longer resolves (e.g. moved, or a
-            # path from another machine). Don't silently drop scope guidance — say so.
+            # path from another machine). Don't silently drop scope guidance; say so.
             print(
                 f"Warning: scopes config {scopes_path} (from run.json) not found; "
                 "emitting context without scope guidance.",
@@ -2948,7 +2948,7 @@ def inject_context(args: argparse.Namespace) -> None:
             question_mode=qmode,
         ))
 
-    # 2. Settled decisions — only add if generate_scope_prompt didn't already cover it
+    # 2. Settled decisions: only add if generate_scope_prompt didn't already cover it
     if decisions_md_exists and not scope:
         output_parts.extend([
             "## Settled Decisions",
@@ -3273,7 +3273,7 @@ def main() -> None:
 
     try:
         _dispatch(args)
-    except Exception as exc:  # operational failure — surface an actionable message, not a traceback
+    except Exception as exc:  # operational failure: surface an actionable message, not a traceback
         if os.environ.get("STUDIO_DEBUG"):
             raise
         print(f"Error: {exc}", file=sys.stderr)

@@ -21,7 +21,7 @@ VALID_DEBATE_MODES = {"all_roles", "per_role"}
 
 # Shared contrarian identity, injected into every deliverable-producing contrarian
 # prompt (single-phase, flat studio, and scoped studio alike). The contrarian is not
-# only a flaw-hunter — it is an editor with a bias toward removal. The advocate adds;
+# only a flaw-hunter. It is an editor with a bias toward removal. The advocate adds;
 # the contrarian carves out the essence. This is always on by default.
 CONTRARIAN_MANDATE = [
     "**Contrarian Mandate — you are an editor, not only a critic.**",
@@ -248,7 +248,7 @@ def generate_scope_prompt(
         s1_files: For S2/S3: list of S1 file paths this agent should read.
         s2_brief_exists: Whether S2-brief.md exists in run_dir.
         rejection_context: Rejection reasons from prior iteration, if any.
-        question_mode: When True, this is a question-surfacing run — the
+        question_mode: When True, this is a question-surfacing run. The
             contrarian editor mandate (bias toward cutting) is suppressed so it
             does not drop genuinely-open questions.
 
@@ -269,7 +269,7 @@ def generate_scope_prompt(
         "",
     ]
 
-    # Contrarian editor mandate — always on for the contrarian stance, except in
+    # Contrarian editor mandate: always on for the contrarian stance, except in
     # question-surfacing mode where cutting questions is exactly wrong.
     if stance == "contrarian" and not question_mode:
         lines.extend(CONTRARIAN_MANDATE)

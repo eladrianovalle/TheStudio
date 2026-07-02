@@ -2,7 +2,7 @@
 """
 Question-surfacing mode for Studio runs.
 
-Pure function library — no side effects, no state, no I/O.
+Pure function library: no side effects, no state, no I/O.
 Generates instruction templates that switch advocate/contrarian output
 from deliverable production to structured question surfacing.
 """
@@ -158,7 +158,7 @@ def generate_question_integrator_instructions() -> str:
     """Generate integrator instructions for question mode.
 
     The integrator consolidates questions across roles into a single
-    prioritised set — it does NOT produce a roadmap or plan.
+    prioritised set. It does NOT produce a roadmap or plan.
     """
     return textwrap.dedent("""\
         # Question-Mode Integrator

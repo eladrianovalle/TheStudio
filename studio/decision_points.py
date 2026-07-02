@@ -32,7 +32,7 @@ _PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2}
 # Agents are TOLD to emit this exact blockquote shape, and parse_decision_points
 # READS it back. The instruction generators (run_phase.build_instruction_doc and
 # scopes.py) import these constants instead of hand-writing the format, so "what
-# we ask agents to emit" and "what we parse" cannot silently drift apart — the
+# we ask agents to emit" and "what we parse" cannot silently drift apart: the
 # failure mode where a doc tweak quietly makes every extraction return nothing.
 # The round-trip test in tests/test_decision_points.py parses both of these
 # (and the output of format_decision_point) to prove they stay in sync.
@@ -57,8 +57,8 @@ DECISION_LINE_RE = re.compile(
 # Regex to capture a decision point blockquote.
 # Matches lines starting with "> " where the first line has **DECISION [P0-2]:
 # Handles two variants agents produce:
-#   > **DECISION [P0]:** question text here     (canonical — colon outside bold)
-#   > **DECISION [P0]: question text here**     (natural — question inside bold)
+#   > **DECISION [P0]:** question text here     (canonical: colon outside bold)
+#   > **DECISION [P0]: question text here**     (natural: question inside bold)
 # and continues as long as lines start with "> ".
 _BLOCK_RE = re.compile(
     r"^> \*\*DECISION \[(P[012])\]:\*\*\s*(.+)\n"
@@ -230,7 +230,7 @@ def merge_decisions(
 ) -> list[DecisionPoint]:
     """Merge extracted decisions into existing list, deduplicating by question.
 
-    Existing decisions (typically from decisions.json) take precedence —
+    Existing decisions (typically from decisions.json) take precedence:
     extracted decisions are only added if their question text is new.
     Mutates and returns *existing*.
     """
@@ -247,7 +247,7 @@ def filter_unsettled(
 ) -> list[DecisionPoint]:
     """Return only decisions not already answered in the settled list.
 
-    Matches by exact question text — same key used by merge_decisions().
+    Matches by exact question text, the same key used by merge_decisions().
     """
     answered_qs = {dp.question for dp in settled if dp.answer is not None}
     return [dp for dp in extracted if dp.question not in answered_qs]

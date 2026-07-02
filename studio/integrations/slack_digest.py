@@ -8,7 +8,7 @@ n8n gets a flat run-digest JSON (:func:`build_n8n_payload`) it can fan out from.
 
 Configuration lives in ``.studio/integrations.toml`` (loaded with the same
 tomllib pattern as ``persona_overrides.py``). Webhook URLs are secrets and are
-resolved from environment variables named in the config — never stored in the
+resolved from environment variables named in the config, never stored in the
 repo. The integration is disabled unless a target is explicitly enabled.
 
 File schema (all tables/keys optional; absent → that target is off)::
@@ -85,7 +85,7 @@ def _resolve_secret(target_cfg: Dict, key: str) -> Optional[str]:
     """Resolve a secret strictly from the ``<key>_env`` env-var indirection.
 
     Secrets (webhook URLs, auth values) must never live in the committed config,
-    so there is deliberately no literal ``<key>`` fallback — only the named
+    so there is deliberately no literal ``<key>`` fallback; only the named
     environment variable is read. Returns None if unset/empty.
     """
     env_name = target_cfg.get(f"{key}_env")
@@ -282,7 +282,7 @@ def _read_summary_text(run_dir: Path, meta: Dict) -> str:
 
 
 # The Slack body prefers a short, plain-language digest when the run authored
-# one — the full summary.md is often dense/technical and gets truncated. The
+# one. The full summary.md is often dense and technical and gets truncated. The
 # "Final doc" pointer always targets the full summary regardless.
 _DIGEST_CANDIDATES = ("digest.md", "summary_human.md")
 
