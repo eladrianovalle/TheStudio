@@ -1,6 +1,6 @@
 # Studio
 
-Studio is an **instruction generator** for structured advocate/contrarian debates. It prepares run directories with instructions that an AI assistant (Claude Code, Windsurf/Cascade, or any capable agent) executes, then packages the results as versioned artifacts.
+Studio is an **instruction generator** for structured advocate/contrarian debates. It prepares run directories with instructions that an AI assistant (Claude Code is the supported path) executes, then packages the results as versioned artifacts.
 
 **No runtime. No API keys. No dependencies beyond Python stdlib.** All intelligence lives in the assistant's execution — Studio just keeps the prompts, roles, artifacts, and logs organized.
 
@@ -155,9 +155,14 @@ python studio/run_phase.py show-metrics --run-dir <path>
 
 # Quality ratings & cross-run stats (diagnostics + fine-tuning feedback loop)
 python studio/run_phase.py rate --run-dir <path> --score 4 --note "solid market read"  # human 1-5 quality score
-python studio/run_phase.py stats                  # cross-run dashboard: verdicts, ratings, tokens, decisions, usage
+python studio/run_phase.py rate --run-dir <path> --score 5 --shipped yes --impact major --changed "shipped the lobby MVP"  # record the run's outcome
+python studio/run_phase.py stats                  # cross-run dashboard: outcomes, verdicts, ratings, tokens, decisions, usage
 python studio/run_phase.py stats --phase studio   # filter to one phase
-python studio/run_phase.py stats --json           # machine-readable aggregate
+python studio/run_phase.py stats --json           # machine-readable aggregate (includes an outcomes key)
+
+# Cross-repo outcome sharing (feed other repos' results into this repo's stats)
+python studio/run_phase.py export-outcomes --out outcomes.jsonl  # export this repo's rated runs
+python studio/run_phase.py import-outcomes --from outcomes.jsonl # merge into the central ledger (dedup by repo+run_id)
 
 # Cross-repo install
 python studio/run_phase.py init --target /path/to/project
@@ -308,7 +313,9 @@ Configure in `config/studio_settings.toml`. Use `--skip-cleanup` to bypass.
 
 ```
 studio/
-  run_phase.py              # CLI entrypoint: prepare, finalize, validate, cleanup, decision, clarity, metrics, rate, stats, install, setup, offload, notify
+  run_phase.py              # CLI entrypoint: prepare, finalize, validate, cleanup, decision, clarity, metrics, rate, stats, export/import-outcomes, install, setup, offload, notify
+  stats.py                  # Pure cross-run aggregation + formatting + outcome roll-up (backs `stats`)
+  config_loading.py         # Shared TOML loader (tomllib/tomli fallback), used by every config reader
   run_phase_roles.py        # Role system: manifest, packs, dependencies, file naming
   role_overrides.py         # Project-local role customization (.studio/roles/*.json)
   persona_overrides.py      # Project-local phase persona overrides (.studio/personas.toml)
@@ -331,7 +338,7 @@ studio/
   config/studio_settings.toml # Cleanup settings
   config/implementation_loop.toml # Implementation writer/editor loop defaults
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 624 tests (pytest)
+  tests/                    # 638 tests (pytest)
 ```
 
 ---
@@ -342,7 +349,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-624 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, agent metrics tracking, quality ratings and cross-run stats, CLAUDE.md offload analysis, unstale audit configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
+638 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, agent metrics tracking, quality ratings and cross-run stats, run outcome capture and cross-repo outcome export/import, CLAUDE.md offload analysis, unstale audit configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 

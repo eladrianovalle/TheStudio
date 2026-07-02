@@ -1,6 +1,6 @@
 # API Reference (run_phase.py)
 
-Studio exposes exactly one supported interface: `run_phase.py`. This script prepares instructions, validates artifacts, and keeps indexes/logs up to date so runs stay reproducible across any AI assistant (Claude Code, Windsurf/Cascade, etc.). This document describes the command-line contract, JSON schema, and file formats you can rely on when integrating Studio into other repositories or tooling.
+Studio exposes exactly one supported interface: `run_phase.py`. This script prepares instructions, validates artifacts, and keeps indexes/logs up to date so runs stay reproducible (Claude Code is the supported assistant path). This document describes the command-line contract, JSON schema, and file formats you can rely on when integrating Studio into other repositories or tooling.
 
 ---
 
@@ -27,8 +27,10 @@ Supported commands:
 | `recompute-clarity` | Recomputes clarity from a run's decisions. |
 | `record-metrics` | Records token usage for a single agent invocation into `metrics.json`. |
 | `show-metrics` | Displays aggregated agent token usage for a run (by scope, role, per-agent). |
-| `rate` | Records a human quality rating (1-5, optional note) for a run into `rating.json`. |
-| `stats` | Cross-run diagnostics dashboard: verdict/approval rate, avg + lowest human ratings, token/cost efficiency, decision priority mix + answer rate, and prepare-usage counts. Supports `--phase`, `--json`, `--artifact-root`. |
+| `rate` | Records a human quality rating (1-5, optional note) plus an optional run outcome (did it ship, what changed) into `rating.json`. |
+| `stats` | Cross-run diagnostics dashboard: run outcomes (ship rate, impact, what changed), verdict/approval rate, avg + lowest human ratings, token/cost efficiency, decision priority mix + answer rate, and prepare-usage counts. Supports `--phase`, `--json`, `--artifact-root`. |
+| `export-outcomes` | Exports this repo's rated runs as portable JSONL outcome records for another repo to import. |
+| `import-outcomes` | Merges a JSONL outcomes export into the central ledger, deduping by (repo, run_id), so `stats` here can see other repos' results. |
 | `offload` | Analyzes CLAUDE.md for content safe to offload to companion docs. Classifies sections, scores pointer strength, generates reports. |
 | `init` | Installs Studio into a target project directory. |
 | `check-install` | Checks whether the installed Studio is up to date, and shows any files you've edited locally that an `update` would overwrite: both the Studio source and the installed slash commands and workflows. |
@@ -121,8 +123,13 @@ Displays a formatted summary of all recorded metrics: total tokens, tool uses, d
 | `--run-dir PATH` | Yes | – | Path to the run directory. |
 | `--score {1,2,3,4,5}` | Yes | – | Human quality score: 1 (poor) to 5 (excellent). |
 | `--note TEXT` | No | `None` | Optional note on what was good or bad. |
+| `--shipped {yes,no,partial}` | No | `None` | Outcome: did this run's result actually ship? |
+| `--impact {none,minor,major}` | No | `None` | Outcome: how much did it change downstream? |
+| `--changed TEXT` | No | `None` | Outcome: one line on what this run actually changed. |
 
 Writes `{run_dir}/rating.json` (`{score, note, rated_iso}`), overwriting any prior rating. This human score is the counterpart to the agent-emitted `verdict` and is the primary signal `stats` uses to gauge quality.
+
+The three `--shipped`/`--impact`/`--changed` flags are optional and record the run's *outcome* — what it led to downstream, which the quality score and verdict can't capture on their own. Any you pass are stored under an `outcome` block inside `rating.json` (`{"outcome": {"shipped": ..., "impact": ..., "changed": ...}}`); omitted fields are left out. `stats`, `export-outcomes`, and `import-outcomes` all read this block.
 
 ---
 
@@ -134,7 +141,32 @@ Writes `{run_dir}/rating.json` (`{score, note, rated_iso}`), overwriting any pri
 | `--json` | No | `false` | Emit the aggregated stats dict as JSON instead of the text dashboard. |
 | `--artifact-root PATH` | No | auto | Override artifact root (where `output/` and `.studio/usage.log` live). |
 
-Reads every run's `run.json`, `rating.json`, and `decisions.json` under the output root, plus `.studio/usage.log`, and aggregates: total/by-phase/by-status run counts, verdict distribution + approval rate, human-rating count/avg/by-phase + lowest-rated runs, token/cost/hours efficiency, decision priority mix + answer rate, and prepare-usage counts. Pure aggregation lives in `aggregate_stats()`; rendering in `format_stats()`.
+Reads every run's `run.json`, `rating.json`, and `decisions.json` under the output root, plus `.studio/usage.log`, and aggregates: total/by-phase/by-status run counts, verdict distribution + approval rate, human-rating count/avg/by-phase + lowest-rated runs, token/cost/hours efficiency, decision priority mix + answer rate, and prepare-usage counts. Pure aggregation and formatting live in `stats.py` (`aggregate_stats()`, `format_stats()`, `summarize_outcomes()`).
+
+The dashboard opens with an **"Outcomes (did it ship / what changed)"** section: ship rate, impact mix, and recent "what changed" notes. It folds two sources together — this repo's rated runs plus any cross-repo ledger records pulled in via `import-outcomes` (local records win on conflict). With `--json`, the emitted dict gains an `outcomes` key holding that same summary (record/repo counts, `shipped`/`impact` tallies, `ship_rate`, and recent `changed` notes).
+
+---
+
+### 1.7 `export-outcomes` arguments
+
+| Flag | Required | Default | Description |
+| --- | --- | --- | --- |
+| `--out PATH` | No | stdout | Write the JSONL export here. Parent directories are created. |
+| `--repo NAME` | No | repo dir name | Project name to tag each record with. |
+| `--artifact-root PATH` | No | auto | Override artifact root (where `output/` lives). |
+
+Collects this repo's rated runs into portable JSONL outcome records (one JSON object per line) — each carries `repo`, `run_id`, `phase`, `verdict`, `status`, `score`, the `shipped`/`impact`/`changed` outcome fields, `total_tokens`, and `rated_iso`. Only rated runs are exported; a rating is what makes a run an outcome worth learning from. Feed the file to `import-outcomes` in another repo so its `stats` can see these results.
+
+---
+
+### 1.8 `import-outcomes` arguments
+
+| Flag | Required | Default | Description |
+| --- | --- | --- | --- |
+| `--from PATH` | Yes | – | Path to a JSONL outcomes export (from `export-outcomes`). |
+| `--artifact-root PATH` | No | auto | Override artifact root (where the ledger lives). |
+
+Merges the incoming records into the central outcomes ledger, deduping by (repo, run_id) so re-importing an updated export refreshes existing records instead of duplicating them. The ledger lives at `knowledge/outcomes.jsonl` (Studio-local) or `<repo>/.studio/knowledge/outcomes.jsonl` (external repo) and is gitignored. Once imported, those outcomes show up in the local `stats` Outcomes section.
 
 ---
 
@@ -307,7 +339,6 @@ Stick to the CLI whenever possible so scripts remain simple and any assistant ca
 
 - [README.md](../../README.md) – big-picture overview and testing notes.
 - [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) – Claude Code slash commands and workflow.
-- [windsurf/USAGE.md](./windsurf/USAGE.md) – Windsurf/Cascade-specific workflow.
 - [STUDIO_BRIDGE_TEMPLATE.md](./STUDIO_BRIDGE_TEMPLATE.md) – copy into every dependent repo.
 - [INTEGRATION_GUIDE.md](./INTEGRATION_GUIDE.md) – repo-level onboarding checklist and helper scripts.
 

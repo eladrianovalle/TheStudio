@@ -177,7 +177,6 @@ Commit these helpers to dependent repos if you want reproducible ergonomics; oth
 
 - [README.md](../../README.md) – top-level overview and testing notes.
 - [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) – Claude Code slash commands and agent workflow.
-- [windsurf/USAGE.md](./windsurf/USAGE.md) – Windsurf/Cascade-specific workflow.
 - [API.md](./API.md) – command/JSON schema for `run_phase.py`, metadata, and logs.
 - [STUDIO_BRIDGE_TEMPLATE.md](./STUDIO_BRIDGE_TEMPLATE.md) – copy/paste contract for every repo.
 

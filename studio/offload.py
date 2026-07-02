@@ -306,7 +306,6 @@ def generate_pointer_stub(section: dict, companion_path: str) -> dict:
         Dict with keys: inline_stub, manifest_entry, strength.
     """
     name = section["name"]
-    slug = _SLUG_RE.sub("_", name.lower()).strip("_")
 
     # Build trigger condition based on tier
     if section["tier"] == TIER_REFERENCE_OFFLOADABLE:

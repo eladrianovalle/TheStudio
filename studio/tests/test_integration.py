@@ -108,7 +108,6 @@ def test_rerun_detection(temp_studio_root):
     time.sleep(1)  # avoid timestamp collision
 
     run_id_2 = run_phase.prepare_run(make_prepare_args(phase="tech", text="Build auth system (revised)"))
-    instructions = (temp_studio_root / "output" / "tech" / run_id_2 / "instructions.md").read_text()
 
     # Rerun context should be injected when previous run was rejected
     assert (temp_studio_root / "output" / "tech" / run_id_2 / "instructions.md").exists()

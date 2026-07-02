@@ -95,13 +95,14 @@ Workflow({ scriptPath: "<repo>/.claude/workflows/implementation-loop.js", args: 
   unit_id, title, instructions, static_check,
   test_command,            // per-unit inferred; if none, use the knob test_command
   editor_enabled, read_scope, output_budget,           // from impl_loop.py
-  static_checks, require_mutation_check                // from impl_loop.py
+  static_checks, require_mutation_check, mutation_command  // from impl_loop.py
 }})
 ```
 
 How the workflow consumes each knob: `editor_enabled=false` → skip the editor pass;
 `read_scope`/`output_budget` → shape the editor prompt; `require_mutation_check=false` → writer
-skips the mutation check; `static_checks=[]` → writer skips the static check and the entry gate
+skips the mutation check; `mutation_command` → the command the writer runs for the mutation check
+(default `mutmut run`); `static_checks=[]` → writer skips the static check and the entry gate
 doesn't require it. So passing all knobs makes `implementation_loop.toml` fully live.
 
 The workflow runs in the background and notifies on completion. Do not re-run it or poll;

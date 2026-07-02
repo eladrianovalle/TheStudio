@@ -102,7 +102,7 @@ The test: could a teammate seeing this file for the first time read it top to bo
 
 ## What This Is
 
-TheGameStudio is an **instruction generator** for structured advocate/contrarian debates in game development workflows. It produces run directories with instructions that an AI assistant (Claude Code, Windsurf/Cascade) executes, then packages results as versioned artifacts. There is no AI runtime — all intelligence lives in the assistant's execution.
+TheGameStudio is an **instruction generator** for structured advocate/contrarian debates in game development workflows. It produces run directories with instructions that an AI assistant (Claude Code is the supported path) executes, then packages results as versioned artifacts. There is no AI runtime — all intelligence lives in the assistant's execution.
 
 ## Running a Studio Phase (Claude Code)
 
@@ -134,115 +134,62 @@ A **writer** agent builds one complete MVI unit and commits its passing state; a
 
 ## CLI Commands
 
-```bash
-# Run tests (from studio/ directory)
-cd studio && python -m pytest tests/ -v
+`run_phase.py` is the single entrypoint. The commands below are the ones you
+reach for most; run `python studio/run_phase.py --help` for the full subcommand
+list and **`studio/docs/API.md`** for the argument-by-argument contract.
 
-# Run a single test
+```bash
+# Tests (from studio/)
+cd studio && python -m pytest tests/ -v
 cd studio && python -m pytest tests/test_run_phase.py::TestClassName::test_name -v
 
-# Prepare a phase run (manual)
+# Prepare / finalize / validate a run
 python studio/run_phase.py prepare --phase <market|design|tech|studio> --text "description"
-
-# Prepare in question-surfacing mode (surfaces open questions instead of deliverables)
 python studio/run_phase.py prepare --phase design --text "description" --mode questions
-
-# Prepare with role pack (studio phase only)
-python studio/run_phase.py prepare --phase studio --text "..." --role-pack studio_core --roles +product +engineering +qa
-
-# Finalize a completed run
 python studio/run_phase.py finalize --phase <phase> --run-id <run_id> --status completed --verdict APPROVED
-
-# Validate a run
 python studio/run_phase.py validate --phase <phase> --run-id <run_id>
 
-# Decision management
-python studio/run_phase.py check-decisions --file path/to/advocate_1.md
-python studio/run_phase.py record-decisions --run-dir <run_dir> --decisions-file answers.json
-python studio/run_phase.py extract-decisions --run-dir <run_dir>          # unsettled only (default)
-python studio/run_phase.py extract-decisions --run-dir <run_dir> --all   # include already-settled
-python studio/run_phase.py inject-context --run-dir <run_dir> --scope alignment --role marketing --stance advocate
+# Rate a run + record what it led to (outcome), then view the cross-run dashboard
+python studio/run_phase.py rate --run-dir <path> --score 4 --note "..." \
+    --shipped yes --impact major --changed "cut lobby scope in half"
+python studio/run_phase.py stats                       # verdicts, ratings, outcomes, tokens, decisions
 
-# Clarity scores
-python studio/run_phase.py show-clarity
-python studio/run_phase.py set-clarity --topic core_loop_design --score 0.9
-python studio/run_phase.py set-clarity --topic core_loop_design --reset
-python studio/run_phase.py recompute-clarity --phase studio --run-id <run_id>
+# Bridge outcomes from a consuming repo back to this one (see API.md)
+python studio/run_phase.py export-outcomes --repo <name> --out outcomes.jsonl
+python studio/run_phase.py import-outcomes --from outcomes.jsonl
 
-# Agent metrics (token tracking per agent)
-python studio/run_phase.py record-metrics --run-dir <path> --agent advocate --total-tokens 5000 --tool-uses 10 --duration-ms 30000 --role marketing --scope alignment
-python studio/run_phase.py show-metrics --run-dir <path>
-
-# Quality ratings & cross-run stats (diagnostics + fine-tuning feedback loop)
-python studio/run_phase.py rate --run-dir <path> --score 4 --note "solid market read"  # human 1-5 quality score
-python studio/run_phase.py stats                       # cross-run dashboard: verdicts, ratings, tokens, decisions, usage
-python studio/run_phase.py stats --phase studio        # filter to one phase
-python studio/run_phase.py stats --json                # machine-readable aggregate
-
-# Storage cleanup
-python studio/run_phase.py cleanup --dry-run
-python studio/run_phase.py cleanup
-
-# Outbound notifications (Slack / n8n run digest — see studio/docs/INTEGRATIONS.md)
-python studio/run_phase.py notify --run-dir <run_dir>            # post digest to enabled webhooks
-python studio/run_phase.py notify --run-dir <run_dir> --dry-run  # print payloads without posting
-
-# Cross-repo install (installs slash commands + source into any project)
+# Cross-repo install / update (also: check-install, setup, offload, notify, cleanup)
 python studio/run_phase.py init --target /path/to/project
-python studio/run_phase.py check-install --target /path/to/project   # shows which of your local edits an update would overwrite
-python studio/run_phase.py update --target /path/to/project          # add --force to overwrite files you've edited locally
-
-# Setup wizard (configure roles, scopes, cleanup after install)
-python studio/run_phase.py setup --target . --status
-python studio/run_phase.py setup --target . --defaults
-python studio/run_phase.py setup --target . --answers answers.json
-python studio/run_phase.py setup --target . --role-pack studio_core --roles +ml -art
-
-# Offload analysis (analyze CLAUDE.md for offload opportunities)
-python studio/run_phase.py offload --target .
-python studio/run_phase.py offload --target . --apply
-python studio/run_phase.py offload --target . --rollback
-python studio/run_phase.py offload --target . --verify
+python studio/run_phase.py update --target /path/to/project
 ```
+
+Other subcommands — decision management (`check-decisions`, `record-decisions`,
+`extract-decisions`, `inject-context`), clarity (`show-clarity`, `set-clarity`,
+`recompute-clarity`), metrics (`record-metrics`, `show-metrics`), `cleanup`,
+`notify`, `setup`, `offload` — are documented in `studio/docs/API.md`.
 
 ## Architecture
 
 All source lives under `studio/`. `run_phase.py` is the sole entrypoint using only stdlib (plus `tomli` on Python 3.10).
 
-### Core modules (all in `studio/`)
+### Modules (all in `studio/`)
 
-- **`run_phase.py`** — Primary entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, decision, clarity, metrics, rate, stats, install, setup, offload, and notify subcommands. The `rate`/`stats` pair is the diagnostics + fine-tuning feedback loop: `rate` records a human 1-5 quality score per run (`rating.json`, the human counterpart to the agent verdict); `stats` reads every run's `run.json`/`rating.json`/`decisions.json` plus the `.studio/usage.log` and prints a cross-run dashboard (verdict/approval rate, avg rating + lowest-rated improvement targets, token/cost efficiency, decision priority mix + answer rate, usage). All per-run data already existed; `stats` is the first thing that aggregates it across runs.
-- **`run_phase_roles.py`** — Role system: loads `studio.manifest.json`, resolves role packs, applies project-local overrides, builds per-role file naming (`advocate--<role>--NN.md`).
-- **`role_overrides.py`** — Project-local role customization: loads `.studio/roles/*.json` overlays, validates structure, shallow-merges with manifest roles.
-- **`persona_overrides.py`** — Project-local single-phase persona overrides: loads `.studio/personas.toml`, validates structure, per-phase shallow-merges over the shipped `PHASE_DETAILS` defaults (advocate/contrarian/notes/implementer/integrator).
-- **`cleanup.py`** — TTL-based (30 days) and budget-based (900MB) run artifact cleanup, plus loose file removal for legacy artifacts outside run directories.
-- **`scopes.py`** — Three-tier scope system (alignment / depth / polish) with output budgets and debate modes (`all_roles` vs `per_role`).
-- **`rerun.py`** — Detects rejection context from prior runs and generates rerun instructions.
-- **`question_mode.py`** — Question-surfacing mode: generates P0/P1/P2 question instructions for advocate/contrarian instead of deliverable prompts. Pure function library, no I/O.
-- **`decision_points.py`** — Parses and formats inline decision points (P0/P1/P2 blockquotes) from agent output. Extracts decisions from completed runs into a consolidated log.
-- **`clarity.py`** — Per-topic Clarity Score tracking. Computes confidence from answered decisions, controls agent question density, persists to `clarity.json`. CLI: `show-clarity`, `set-clarity`, `recompute-clarity`.
-- **`verdict.py`** — Extracts APPROVED/REJECTED/UNKNOWN verdict from text.
-- **`install.py`** — Cross-repo installer: `init`/`check-install`/`update` copies the Studio source, slash commands, and workflows into any project. Tracks every copied file's checksum so `update` warns you (and stops, unless `--force`) before overwriting a file you've edited locally. Also injects coding principles into the target's `CLAUDE.md` via sentinel markers for safe updates.
-- **`offload.py`** — CLAUDE.md analyzer: classifies sections, detects embedded constraints, scores pointer strength, generates offload reports and manages canary tokens.
-- **`setup.py`** — Setup wizard: project configuration after install. Tracks setup state in `.studio/SETUP.json`, generates role overrides, scopes, and cleanup config. Supports incremental re-configuration when new features are added.
-- **`impl_loop.py`** — Implementation-loop config: `LoopConfig` dataclass + `load_loop_config()` (tomllib/tomli fallback, resolution chain explicit → `.studio/` → shipped → defaults, patterned on `scopes.py`). `runtime_knobs()` + a `python -m impl_loop` JSON CLI project the resolved config into the knobs the `.claude/workflows/implementation-loop.js` Workflow consumes (editor on/off, read scope, output budget, mutation/static gates). The only Python piece of the writer/editor implementation loop; see `studio/docs/IMPLEMENTATION_LOOP_SPEC.md`.
-- **`validators/`** — `DocumentValidator` (including `validate_question_mode()`) and `CodeValidator` for post-run quality checks.
-- **`integrations/slack_digest.py`** — Outbound run-digest notifier. Posts a finalized run's status/verdict/summary to a Slack Incoming Webhook (Block Kit) and/or an n8n Webhook node (flat JSON), stdlib `urllib` only. Config from `.studio/integrations.toml`; webhook URLs resolved from env vars (secrets never committed). Fires via the `notify` subcommand and, when enabled, auto-fires on `finalize` (soft-fail). See `studio/docs/INTEGRATIONS.md`.
+`run_phase.py` is the CLI entrypoint; the rest are focused modules it imports.
+See **`studio/docs/ARCHITECTURE.md`** for the full per-module reference.
+
+- **Debate / flow:** `scopes.py`, `question_mode.py`, `decision_points.py` (owns the canonical decision-point emit/parse format), `clarity.py`, `verdict.py`, `rerun.py`
+- **Roles / personas:** `run_phase_roles.py`, `role_overrides.py`, `persona_overrides.py` (+ `studio.manifest.json`, `role_packs/`)
+- **Diagnostics:** `stats.py` (pure cross-run aggregation, ratings, and the outcome summary that `rate`/`export-outcomes`/`import-outcomes` feed)
+- **Implementation loop:** `impl_loop.py` — config for `.claude/workflows/implementation-loop.js`; see `studio/docs/IMPLEMENTATION_LOOP_SPEC.md`
+- **Cross-repo + hygiene:** `install.py`, `setup.py`, `offload.py`, `cleanup.py`
+- **Shared:** `config_loading.py` (the single TOML loader), `validators/`, `integrations/slack_digest.py`
 
 ### Configuration files
 
-- **`studio.manifest.json`** — Defines all disciplines (marketing, product, design, art, engineering, test_engineer, qa, web_engineering, web_product, web_test_engineer, web_qa, ml, ai_engineer, pmm) with advocate/contrarian focuses, deliverables, escalation cues, and role dependencies.
-- **`role_packs/*.json`** — Curated pod presets (e.g., `studio_core` = marketing + product + design + art + engineering + test_engineer + qa). Override with `--roles +role/-role`. Role dependencies in the manifest auto-inject co-required roles (e.g., engineering always brings test_engineer).
-- **`config/scopes.toml`** — Default three-tier scope configuration (alignment → depth → polish) with output budgets and debate modes.
-- **`config/studio_settings.toml`** — Cleanup TTL and storage limits.
-- **`config/implementation_loop.toml`** — Shipped defaults for the implementation writer/editor loop: `[loop]` (`deliver_on_gate_fail`), `[gate]` (`test_command`, `static_checks`, `require_mutation_check`), `[editor]` (`mandate`, `read_scope`, `output_budget`). Override with `.studio/implementation_loop.toml`. Loaded by `impl_loop.py`.
-- **`.studio/scopes.toml`** — Scope-based iteration budgets (auto-loaded if present).
-- **`.studio/validation.toml`** — Validation configuration.
-- **`.studio/roles/*.json`** — Project-local role overrides. Shallow-merge with manifest roles (override keys replace base, unspecified keys inherit).
-- **`.studio/personas.toml`** — Project-local single-phase persona overrides (market/design/tech/studio advocate, contrarian, notes, implementer, integrator). Per-phase shallow merge over the shipped `PHASE_DETAILS` defaults; loaded via `persona_overrides.py`, authored by the setup wizard.
-- **`.studio/integrations.toml`** — Optional outbound-webhook config for run digests. `[slack]` and `[n8n]` tables, each with `enabled` and `webhook_url_env` (env var holding the secret URL); `[n8n]` also takes optional `auth_header`/`auth_value_env` for Header Auth. Absent or no target `enabled` → notifications are off. Loaded by `integrations/slack_digest.py`.
-- **`.studio/unstale.toml`** — Optional per-repo override for the `/unstale` staleness audit: `[snapshot]` commands (`test_count`, `module_inventory`, `cli_help`) and `[audit]` globs (`doc_globs`, `source_globs`, `cross_refs`). When absent, `/unstale` self-detects the stack (Rust/Unity/Node/Python/Go) from marker files. Read directly by the `/unstale` command, not Python code.
-- **`.studio/implementation_loop.toml`** — Optional per-repo override for the implementation writer/editor loop config (shallow over `config/implementation_loop.toml`). Loaded by `impl_loop.py`; consumed by the `implementation-loop.js` Workflow via `python -m impl_loop`.
+Shipped defaults live in `config/` and `studio.manifest.json`; per-repo overrides
+live in `.studio/` and are shallow-merged over the defaults. `setup.cfg` holds the
+mutmut (mutation-testing) config. See `studio/docs/ARCHITECTURE.md` for the full
+catalog and each file's schema.
 
 ### Artifact structure
 

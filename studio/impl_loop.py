@@ -10,16 +10,7 @@ See studio/docs/IMPLEMENTATION_LOOP_SPEC.md §4 for the table shape.
 """
 from __future__ import annotations
 
-try:
-    import tomllib  # Python 3.11+
-except ModuleNotFoundError:
-    try:
-        import tomli as tomllib  # type: ignore[no-redefine]  # Python 3.10 fallback
-    except ModuleNotFoundError:
-        raise SystemExit(
-            "Studio needs the 'tomli' package on Python 3.10. "
-            "Install it with: python -m pip install tomli  (or upgrade to Python 3.11+)."
-        )
+from config_loading import tomllib
 import json
 import os
 from dataclasses import dataclass, field
@@ -47,6 +38,7 @@ class LoopConfig:
     test_command: str = "pytest -q"
     static_checks: List[str] = field(default_factory=lambda: ["ruff"])
     require_mutation_check: bool = True
+    mutation_command: str = "mutmut run"
     # [editor]
     mandate: str = "contrarian"
     read_scope: str = "touched+importers"
@@ -71,6 +63,8 @@ class LoopConfig:
             raise ValueError("loop.deliver_on_gate_fail must be a boolean")
         if not isinstance(self.require_mutation_check, bool):
             raise ValueError("gate.require_mutation_check must be a boolean")
+        if not isinstance(self.mutation_command, str):
+            raise ValueError("gate.mutation_command must be a string")
 
     @property
     def editor_enabled(self) -> bool:
@@ -170,6 +164,7 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
         test_command=gate.get("test_command", defaults.test_command),
         static_checks=gate.get("static_checks", list(defaults.static_checks)),
         require_mutation_check=gate.get("require_mutation_check", defaults.require_mutation_check),
+        mutation_command=gate.get("mutation_command", defaults.mutation_command),
         mandate=editor.get("mandate", defaults.mandate),
         read_scope=editor.get("read_scope", defaults.read_scope),
         output_budget=editor.get("output_budget", defaults.output_budget),
@@ -188,6 +183,7 @@ def runtime_knobs(config: LoopConfig) -> dict:
         "test_command": config.test_command,
         "static_checks": config.static_checks,
         "require_mutation_check": config.require_mutation_check,
+        "mutation_command": config.mutation_command,
         "read_scope": config.read_scope,
         "output_budget": config.output_budget,
     }

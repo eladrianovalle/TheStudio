@@ -601,6 +601,92 @@ def test_format_stats_smoke():
     assert "No runs rated yet" in out
 
 
+# --- Outcome capture (quantify + qualify run results) ---
+
+def test_summarize_outcomes_empty():
+    """No records yields a zeroed outcome summary with no ship rate."""
+    from stats import summarize_outcomes
+    s = summarize_outcomes([])
+    assert s["records"] == 0
+    assert s["ship_rate"] is None
+    assert s["recent_changed"] == []
+
+
+def test_summarize_outcomes_counts_and_rate():
+    """summarize_outcomes tallies shipped/impact, computes ship rate, keeps notes."""
+    from stats import summarize_outcomes
+    records = [
+        {"repo": "a", "run_id": "r1", "shipped": "yes", "impact": "major", "changed": "shipped X"},
+        {"repo": "a", "run_id": "r2", "shipped": "no", "impact": "none"},
+        {"repo": "b", "run_id": "r3", "shipped": "partial", "impact": "minor", "changed": "half of Y"},
+        {"repo": "b", "run_id": "r4"},  # rated but no outcome fields
+    ]
+    s = summarize_outcomes(records)
+    assert s["records"] == 4
+    assert s["with_outcome"] == 3
+    assert s["by_repo"] == {"a": 2, "b": 2}
+    assert s["shipped"] == {"yes": 1, "no": 1, "partial": 1}
+    assert s["ship_rate"] == 1 / 3
+    assert s["impact"] == {"none": 1, "minor": 1, "major": 1}
+    assert [c["changed"] for c in s["recent_changed"]] == ["shipped X", "half of Y"]
+
+
+def test_write_rating_records_outcome_block(tmp_path):
+    """_write_rating stores shipped/impact/changed under an outcome block."""
+    rating = run_phase._write_rating(
+        tmp_path, 4, "solid", shipped="yes", impact="major", changed="  cut scope  "
+    )
+    assert rating["outcome"] == {"shipped": "yes", "impact": "major", "changed": "cut scope"}
+    on_disk = json.loads((tmp_path / "rating.json").read_text())
+    assert on_disk["outcome"]["changed"] == "cut scope"
+
+
+def test_write_rating_omits_empty_outcome(tmp_path):
+    """A rating with no outcome fields carries no outcome block."""
+    rating = run_phase._write_rating(tmp_path, 3, "")
+    assert "outcome" not in rating
+
+
+def test_outcome_record_from_run_needs_rating():
+    """Unrated runs produce no outcome record; rated runs flatten the outcome."""
+    assert run_phase._outcome_record_from_run({"run_id": "r", "_rating": None}, "repo") is None
+    rec = run_phase._outcome_record_from_run(
+        {
+            "run_id": "run_studio_1", "phase": "studio", "verdict": "APPROVED",
+            "status": "completed", "metrics": {"total_tokens": 900},
+            "_rating": {"score": 5, "outcome": {"shipped": "yes", "impact": "minor"}},
+        },
+        "pictorly",
+    )
+    assert rec["repo"] == "pictorly"
+    assert rec["shipped"] == "yes"
+    assert rec["total_tokens"] == 900
+    assert rec["changed"] is None
+
+
+def test_merge_outcomes_local_wins_on_dedup():
+    """_merge_outcomes dedups by (repo, run_id); local record overrides the ledger."""
+    ledger = [{"repo": "a", "run_id": "r1", "shipped": "no"}]
+    local = [{"repo": "a", "run_id": "r1", "shipped": "yes"}, {"repo": "a", "run_id": "r2"}]
+    merged = run_phase._merge_outcomes(ledger, local)
+    by_id = {r["run_id"]: r for r in merged}
+    assert len(merged) == 2
+    assert by_id["r1"]["shipped"] == "yes"  # local won
+
+
+def test_format_stats_renders_outcomes_section():
+    """format_stats includes the outcomes block when given a summary."""
+    from stats import summarize_outcomes
+    agg = run_phase.aggregate_stats([])
+    outcomes = summarize_outcomes([
+        {"repo": "pictorly", "run_id": "r1", "shipped": "yes", "impact": "major", "changed": "did a thing"},
+    ])
+    out = run_phase.format_stats(agg, outcomes=outcomes)
+    assert "Outcomes (did it ship" in out
+    assert "ship rate 100%" in out
+    assert "did a thing" in out
+
+
 class _FakeStdin:
     def __init__(self, tty):
         self._tty = tty
@@ -743,7 +829,7 @@ class TestFreshRunClarityReset:
         import time
 
         # Run 1: create a run with objective A
-        run_id_1 = run_phase.prepare_run(make_prepare_args(text="Objective A"))
+        run_phase.prepare_run(make_prepare_args(text="Objective A"))
 
         # Simulate clarity data from run 1
         clarity_path = studio_root / ".studio" / "clarity.json"
@@ -754,7 +840,7 @@ class TestFreshRunClarityReset:
         time.sleep(1.1)  # avoid timestamp collision
 
         # Run 2: different objective — should reset clarity
-        run_id_2 = run_phase.prepare_run(make_prepare_args(text="Objective B"))
+        run_phase.prepare_run(make_prepare_args(text="Objective B"))
         assert not clarity_path.is_file(), "clarity.json should be cleared for a fresh run"
 
     def test_same_objective_preserves_clarity(self, studio_root):
@@ -765,7 +851,7 @@ class TestFreshRunClarityReset:
         clarity_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Run 1
-        run_id_1 = run_phase.prepare_run(make_prepare_args(text="Same objective"))
+        run_phase.prepare_run(make_prepare_args(text="Same objective"))
 
         # Write clarity after run 1 (using correct schema field names)
         clarity_path.write_text('{"run_id": "existing", "topics": [{"topic": "core_loop", "display_name": "Core Loop", "score": 0.8, "answered_count": 3, "total_count": 5, "challenged_count": 0}], "context": {"scope_label": "broad", "scope_description": "Same objective"}, "created_iso": "2026-01-01T00:00:00"}', encoding="utf-8")
@@ -773,7 +859,7 @@ class TestFreshRunClarityReset:
         time.sleep(1.1)  # avoid timestamp collision
 
         # Run 2: same objective — should preserve clarity
-        run_id_2 = run_phase.prepare_run(make_prepare_args(text="Same objective"))
+        run_phase.prepare_run(make_prepare_args(text="Same objective"))
         assert clarity_path.is_file(), "clarity.json should be preserved for same-objective rerun"
 
     def test_cross_phase_objective_change_clears_clarity(self, studio_root):
@@ -855,7 +941,8 @@ class TestFreshRunClarityReset:
             "VERDICT: REJECTED\n1. This is terrible\n", encoding="utf-8"
         )
 
-        import time; time.sleep(1.1)  # Ensure different timestamp
+        import time
+        time.sleep(1.1)  # Ensure different timestamp
 
         # Run 2: different objective
         run_id_2 = run_phase.prepare_run(make_prepare_args(text="New objective"))

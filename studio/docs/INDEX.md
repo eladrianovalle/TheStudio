@@ -8,6 +8,8 @@
 - **[AGENTS_REFERENCE.md](./AGENTS_REFERENCE.md)** - Agent roles and personas
 - **[API.md](./API.md)** - CLI reference for `run_phase.py`
 - **[CODING_PRINCIPLES.md](./CODING_PRINCIPLES.md)** - Karpathy-inspired coding principles (injected into target CLAUDE.md on install)
+- **[RUN_PHASE_SPLIT_PLAN.md](./RUN_PHASE_SPLIT_PLAN.md)** - Deferred plan for decomposing `run_phase.py` (config_loading + stats already extracted)
+- **[SESSION_ANALYTICS_PLAN.md](./SESSION_ANALYTICS_PLAN.md)** - Deferred plan for auto session-health metrics + export/import automation (measure sessions without rating unbuilt outputs)
 
 ## Workflow Features
 - **[SCOPES_GUIDE.md](./SCOPES_GUIDE.md)** - Scope-based iteration allocation
@@ -27,9 +29,6 @@
 
 ## Execution Guides
 - **[CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md)** - Claude Code slash commands and agent workflow
-- **[windsurf/USAGE.md](./windsurf/USAGE.md)** - Windsurf/Cascade-specific execution workflow
-- **[windsurf/QUICKREF.md](./windsurf/QUICKREF.md)** - Windsurf quick reference card
-- **[windsurf/cascade_workflow.md](./windsurf/cascade_workflow.md)** - Cascade roleplay workflow prompts
 
 ## Available Phases
 

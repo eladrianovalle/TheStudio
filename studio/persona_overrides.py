@@ -31,10 +31,7 @@ under the non-studio phases (market, design, tech).
 """
 from __future__ import annotations
 
-try:
-    import tomllib  # Python 3.11+
-except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[no-redefine]  # Python 3.10 fallback
+from config_loading import tomllib
 
 import copy
 from pathlib import Path

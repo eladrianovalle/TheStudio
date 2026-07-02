@@ -175,7 +175,7 @@ def test_corrupt_run_json_does_not_crash(tmp_path):
     output_root = tmp_path / "output"
     now = datetime(2025, 2, 1, tzinfo=timezone.utc)
 
-    corrupt_run = _write_run(
+    _write_run(
         output_root,
         "market",
         "run_market_corrupt",

@@ -2,7 +2,6 @@
 """Tests for rerun mode detection and failure context injection."""
 from pathlib import Path
 
-import pytest
 
 from rerun import (
     RejectionContext,

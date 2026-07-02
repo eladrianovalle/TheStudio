@@ -9,7 +9,7 @@ from deliverable production to structured question surfacing.
 from __future__ import annotations
 
 import textwrap
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 
 
 QUESTION_MODE_HEADER = "<!-- output_type: questions -->"

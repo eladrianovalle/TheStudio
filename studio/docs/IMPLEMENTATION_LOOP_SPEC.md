@@ -127,14 +127,15 @@ not the writer about its own work):**
 | Component | Criterion | Source |
 | --- | --- | --- |
 | MVI complete | Editor's exit-gate `mvi_verdict` — *"If we stopped here, could someone use what we've built?"* judged against the unit's `title`. Overturns the writer's `mvi_claimed`. | `MVI_METHODOLOGY.md` |
-| Mutation verified | Break 2–3 critical assertions; if tests still pass → reject and redo. | `AI_TDD_METHODOLOGY.md` |
+| Mutation verified | Run the configured `mutation_command` (mutmut; scope in `setup.cfg`) on the touched code; survivors → strengthen tests and redo. Falls back to hand-mutating 2–3 assertions if mutmut is absent. | `AI_TDD_METHODOLOGY.md` |
 | No anti-patterns | No self-mocking tests, hallucinated assertions, green-checkmark traps. | `AI_TDD_METHODOLOGY.md` |
 
 What's genuinely reused from `CodeValidator`: its subprocess runner and `ruff`/`pytest`
 invocation. The gate still needs **net-new glue** to aggregate `List[CheckResult]` → bool, run the
-unit-scoped `tests.command`, and capture the attested signals. The mutation check has no
-deterministic enforcer today, which is why it sits in the attested half — until one exists,
-calling it "non-negotiable" would overstate it.
+unit-scoped `tests.command`, and capture the attested signals. The mutation check now runs a
+real tool (`mutation_command`) and reports its result, but it still sits in the attested half:
+the writer runs it and reports, and no deterministic exit-gate blocks on survivors yet — so
+calling it "non-negotiable" would still overstate it.
 
 ### 3. The mandates (prompts as data)
 
@@ -173,9 +174,10 @@ disabled). A `LoopConfig` dataclass + `load_loop_config()` would live in a new
 deliver_on_gate_fail = true   # if the writer can't reach green, deliver flagged (uncommitted) rather than spin
 
 [gate]
-test_command = "pytest -q"    # per-repo; the only stack-specific knob. Runs the unit-scoped tests.
-static_checks = ["ruff"]      # CodeValidator static/lint half (mypy opt-in, off by default)
-require_mutation_check = true # records the attested mutation signal; not machine-enforced yet
+test_command = "pytest -q"       # per-repo; the only stack-specific knob. Runs the unit-scoped tests.
+static_checks = ["ruff"]         # CodeValidator static/lint half (mypy opt-in, off by default)
+require_mutation_check = true    # writer runs the mutation check on the touched code and reports it
+mutation_command = "mutmut run"  # the tool that check runs (scope/runner in setup.cfg)
 
 [editor]
 mandate = "contrarian"        # reuse CONTRARIAN_MANDATE; "off" disables the editor pass

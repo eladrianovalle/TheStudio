@@ -9,7 +9,6 @@ Covers:
 - Strengthened decision point protocol in instructions.md
 """
 import json
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -264,7 +263,7 @@ class TestExtractDecisionsCLI:
             "# Marketing Critique\n\nVERDICT: APPROVED\n"
         )
 
-        from run_phase import parse_cli_args, extract_decisions
+        from run_phase import extract_decisions
         import argparse
 
         args = argparse.Namespace(run_dir=run_dir, scope=None, show_all=False)
@@ -519,7 +518,7 @@ class TestStrengthenedDecisionProtocol:
     def test_scope_templates_included(self, tmp_path):
         """Instructions with scopes include inject-context/extract-decisions templates."""
         from run_phase import build_instruction_doc
-        from scopes import ScopesConfig, ScopeConfig, allocate_iterations
+        from scopes import ScopeConfig, allocate_iterations
 
         scopes_config = ScopesConfig(scopes=[
             ScopeConfig("alignment", "Directional", 2, output_budget=500, debate_mode="all_roles"),

@@ -72,3 +72,8 @@ env/
 # - Use .private/ for sensitive local data
 # - All studio/output/ contents are automatically excluded
 # - All studio/knowledge/ contents are automatically excluded
+
+# Mutation-testing cache
+.mutmut-cache
+studio/.mutmut-cache
+mutants/

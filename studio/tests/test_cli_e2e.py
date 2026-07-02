@@ -192,3 +192,58 @@ class TestCLIValidate:
         )
         # Validate should run without crashing (may have warnings)
         assert result.returncode == 0
+
+
+class TestCLIOutcomes:
+    """The rate -> export-outcomes -> import-outcomes -> stats bridge."""
+
+    def _seed_rated_run(self, root: Path) -> Path:
+        run_dir = root / "output" / "studio" / "run_studio_20260101_000000"
+        run_dir.mkdir(parents=True)
+        (run_dir / "run.json").write_text(json.dumps({
+            "run_id": "run_studio_20260101_000000", "phase": "studio",
+            "status": "completed", "verdict": "APPROVED",
+            "metrics": {"total_tokens": 4200},
+        }))
+        return run_dir
+
+    def test_rate_records_outcome(self, cli_studio_root):
+        run_dir = self._seed_rated_run(cli_studio_root)
+        result = _run_cli(
+            "rate", "--run-dir", str(run_dir), "--score", "4",
+            "--shipped", "yes", "--impact", "major", "--changed", "cut lobby scope",
+            studio_root=cli_studio_root,
+        )
+        assert result.returncode == 0, result.stderr
+        rating = json.loads((run_dir / "rating.json").read_text())
+        assert rating["outcome"] == {"shipped": "yes", "impact": "major", "changed": "cut lobby scope"}
+
+    def test_export_import_stats_roundtrip(self, cli_studio_root, tmp_path):
+        run_dir = self._seed_rated_run(cli_studio_root)
+        _run_cli(
+            "rate", "--run-dir", str(run_dir), "--score", "4",
+            "--shipped", "yes", "--impact", "major", "--changed", "cut lobby scope",
+            studio_root=cli_studio_root,
+        )
+        export_path = tmp_path / "export.jsonl"
+        exp = _run_cli(
+            "export-outcomes", "--repo", "pictorly", "--out", str(export_path),
+            studio_root=cli_studio_root,
+        )
+        assert exp.returncode == 0, exp.stderr
+        records = [json.loads(x) for x in export_path.read_text().splitlines() if x.strip()]
+        assert records and records[0]["repo"] == "pictorly"
+
+        imp = _run_cli("import-outcomes", "--from", str(export_path), studio_root=cli_studio_root)
+        assert imp.returncode == 0, imp.stderr
+        ledger = cli_studio_root / "knowledge" / "outcomes.jsonl"
+        assert ledger.is_file()
+
+        # Re-import must dedup, not duplicate.
+        _run_cli("import-outcomes", "--from", str(export_path), studio_root=cli_studio_root)
+        assert len([x for x in ledger.read_text().splitlines() if x.strip()]) == 1
+
+        stats = _run_cli("stats", studio_root=cli_studio_root)
+        assert stats.returncode == 0, stats.stderr
+        assert "Outcomes (did it ship" in stats.stdout
+        assert "cut lobby scope" in stats.stdout

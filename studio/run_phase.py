@@ -4,7 +4,7 @@ Studio run instruction helper.
 
 Prepares per-phase instructions, creates run directories, and keeps
 output/index.md in sync so every Studio request can be executed agentically
-by any AI assistant (Claude Code, Windsurf/Cascade, etc.).
+by an AI assistant (Claude Code is the supported path).
 """
 from __future__ import annotations
 
@@ -47,6 +47,7 @@ from scopes import (
     load_scopes_config,
 )
 from decision_points import (
+    DECISION_BLOCK_EXAMPLE,
     DecisionPoint,
     extract_decisions_from_run,
     filter_unsettled,
@@ -65,23 +66,22 @@ from question_mode import (
 from rerun import (
     detect_rerun_mode,
     generate_rerun_instructions,
-    load_rejection_context,
 )
 from validators.code_validator import CodeValidator
 
 import clarity
 from integrations.slack_digest import load_integrations_config, notify_run
 
-try:
-    import tomllib  # Python 3.11+
-except ModuleNotFoundError:
-    try:
-        import tomli as tomllib  # type: ignore[no-redefine]  # Python 3.10 fallback
-    except ModuleNotFoundError:
-        raise SystemExit(
-            "Studio needs the 'tomli' package on Python 3.10. "
-            "Install it with: python -m pip install tomli  (or upgrade to Python 3.11+)."
-        )
+from config_loading import tomllib
+from stats import (
+    VALID_IMPACT,
+    VALID_SHIPPED,
+    _parse_usage_log,
+    _summarize_metrics,
+    aggregate_stats,
+    format_stats,
+    summarize_outcomes,
+)
 
 
 def get_storage_stats() -> dict:
@@ -208,6 +208,7 @@ SUBCOMMANDS = {
     "show-clarity", "set-clarity", "recompute-clarity",
     "record-metrics", "show-metrics", "offload", "setup",
     "rate", "stats", "notify",
+    "export-outcomes", "import-outcomes",
 }
 
 
@@ -339,6 +340,35 @@ def get_knowledge_log_path() -> Path:
     if artifact_root == studio_root:
         return studio_root / "knowledge" / "run_log.md"
     return artifact_root / ".studio" / "knowledge" / "run_log.md"
+
+
+def _project_name() -> str:
+    """Short name for the repo a run belongs to — tags outcome records.
+
+    In a consuming repo the artifact root IS the repo root, so its directory name
+    is the project name. In this tool repo the artifact root is the ``studio/``
+    dir, so use its parent (the repo root) rather than the literal "studio".
+    """
+    artifact_root = get_artifact_root().resolve()
+    studio_root = get_studio_root().resolve()
+    if artifact_root == studio_root:
+        return studio_root.parent.name
+    return artifact_root.name
+
+
+def get_outcomes_ledger_path() -> Path:
+    """Central append-only ledger of run outcomes (mirrors get_knowledge_log_path).
+
+    This is where cross-repo outcome records land via ``import-outcomes`` so that
+    ``stats`` in the tool repo can see results from every project, not just runs
+    done here. Lives under ``knowledge/`` (gitignored) — it can name unshipped
+    work, so it stays local unless you deliberately commit a redacted copy.
+    """
+    artifact_root = get_artifact_root().resolve()
+    studio_root = get_studio_root().resolve()
+    if artifact_root == studio_root:
+        return studio_root / "knowledge" / "outcomes.jsonl"
+    return artifact_root / ".studio" / "knowledge" / "outcomes.jsonl"
 
 
 def utc_now() -> datetime:
@@ -909,9 +939,7 @@ def build_instruction_doc(
             "Use a markdown blockquote with a bold DECISION header:",
             "",
             "```",
-            "> **DECISION [P0]:** Should the social deduction mechanic be real-time or turn-based?",
-            "> **Unblocks:** Core loop design — fundamentally different gameplay",
-            "> **Options:** (a) Real-time (Among Us style) (b) Turn-based (Mafia style)",
+            *DECISION_BLOCK_EXAMPLE.splitlines(),
             "```",
             "",
             "### Priority Levels",
@@ -1223,7 +1251,7 @@ def _ensure_bridge_doc(artifact_root: Path, studio_root: Path) -> None:
     )
     dest.write_text(template, encoding="utf-8")
     print(f"  Created bridge doc: {dest}")
-    print(f"  Fill in the canon table and project summary.")
+    print("  Fill in the canon table and project summary.")
 
 
 def _scaffold_external_repo(artifact_root: Path, studio_root: Path) -> None:
@@ -1323,13 +1351,13 @@ def prepare_run(args: argparse.Namespace) -> str:
         print(f"- Run directory: {run_dir_abs}")
         print(f"- Instructions: {instructions_abs_path}")
         if objective_changed:
-            print(f"- Fresh run: cleared stale clarity from previous objective")
+            print("- Fresh run: cleared stale clarity from previous objective")
 
         if scopes_meta:
             print(f"\n💡 Tip: Scopes are active. Work through {scopes_meta['scopes'][0]['name']} scope first.")
         else:
-            print(f"\n💡 Tip: Want to optimize iteration budgets? Create .studio/scopes.toml")
-            print(f"   See: .studio/source/docs/SCOPES_GUIDE.md")
+            print("\n💡 Tip: Want to optimize iteration budgets? Create .studio/scopes.toml")
+            print("   See: .studio/source/docs/SCOPES_GUIDE.md")
 
     # Append to usage log (fail silently — don't break prepare over logging)
     try:
@@ -1437,16 +1465,16 @@ def finalize_run(args: argparse.Namespace) -> None:
 
     # Contextual hints for next steps
     if meta['status'] == 'COMPLETED' and meta.get('verdict') == 'APPROVED':
-        print(f"\n💡 Next steps:")
+        print("\n💡 Next steps:")
         print(f"   1. Validate outputs: {_entrypoint()} validate --phase {phase} --run-id {run_id}")
         print(f"   2. Review summary: {run_dir}/summary.md")
         if phase != 'studio':
-            print(f"   3. Implement recommendations from the run")
+            print("   3. Implement recommendations from the run")
     elif meta['status'] == 'COMPLETED' and meta.get('verdict') == 'REJECTED':
-        print(f"\n💡 Run was rejected. Consider:")
-        print(f"   1. Review rejection reasons in contrarian files")
-        print(f"   2. Prepare a rerun with revised approach")
-        print(f"   3. Rerun will automatically inject failure context")
+        print("\n💡 Run was rejected. Consider:")
+        print("   1. Review rejection reasons in contrarian files")
+        print("   2. Prepare a rerun with revised approach")
+        print("   3. Rerun will automatically inject failure context")
 
     # Invite a human quality rating to close the feedback loop (skippable).
     if meta['status'] == 'COMPLETED' and not getattr(args, 'no_rate_prompt', False):
@@ -1904,6 +1932,39 @@ def build_parser() -> argparse.ArgumentParser:
         help="Quality score: 1 (poor) to 5 (excellent).",
     )
     rate_parser.add_argument("--note", default=None, help="Optional note on what was good or bad.")
+    rate_parser.add_argument(
+        "--shipped", default=None, choices=list(VALID_SHIPPED),
+        help="Outcome: did this run's result actually ship? (yes/no/partial)",
+    )
+    rate_parser.add_argument(
+        "--impact", default=None, choices=list(VALID_IMPACT),
+        help="Outcome: how much did it change downstream? (none/minor/major)",
+    )
+    rate_parser.add_argument(
+        "--changed", default=None,
+        help="Outcome: one line on what this run actually changed.",
+    )
+
+    export_outcomes_parser = subparsers.add_parser(
+        "export-outcomes",
+        help="Export this repo's rated runs as portable JSONL outcome records.",
+    )
+    export_outcomes_parser.add_argument(
+        "--out", default=None, help="Write JSONL here (default: stdout)."
+    )
+    export_outcomes_parser.add_argument(
+        "--repo", default=None, help="Project name to tag records with (default: repo dir name)."
+    )
+    _add_artifact_root_arg(export_outcomes_parser)
+
+    import_outcomes_parser = subparsers.add_parser(
+        "import-outcomes",
+        help="Merge JSONL outcome records into the central ledger (dedup by repo+run_id).",
+    )
+    import_outcomes_parser.add_argument(
+        "--from", dest="from_file", required=True, help="Path to a JSONL outcomes export."
+    )
+    _add_artifact_root_arg(import_outcomes_parser)
 
     stats_parser = subparsers.add_parser(
         "stats", help="Cross-run diagnostics: outcomes, ratings, efficiency, decisions, usage."
@@ -2241,36 +2302,6 @@ def record_metrics(args: argparse.Namespace) -> None:
     _save_metrics(run_dir, entries)
 
 
-def _summarize_metrics(entries: List[Dict]) -> Dict:
-    """Aggregate metrics entries into a summary."""
-    total_tokens = sum(e.get("total_tokens", 0) for e in entries)
-    total_duration = sum(e.get("duration_ms", 0) for e in entries)
-    total_tool_uses = sum(e.get("tool_uses", 0) for e in entries)
-
-    by_scope: Dict[str, Dict] = {}
-    by_role: Dict[str, Dict] = {}
-
-    for e in entries:
-        scope = e.get("scope", "flat")
-        role = e.get("role", "unknown")
-
-        for group, key in [(by_scope, scope), (by_role, role)]:
-            if key not in group:
-                group[key] = {"agents": 0, "total_tokens": 0, "duration_ms": 0}
-            group[key]["agents"] += 1
-            group[key]["total_tokens"] += e.get("total_tokens", 0)
-            group[key]["duration_ms"] += e.get("duration_ms", 0)
-
-    return {
-        "agents": len(entries),
-        "total_tokens": total_tokens,
-        "total_duration_ms": total_duration,
-        "total_tool_uses": total_tool_uses,
-        "by_scope": by_scope,
-        "by_role": by_role,
-    }
-
-
 def show_metrics(args: argparse.Namespace) -> None:
     """Display metrics summary for a run."""
     run_dir = Path(args.run_dir)
@@ -2294,19 +2325,19 @@ def show_metrics(args: argparse.Namespace) -> None:
     print(f"  Total duration:  {total_sec:.0f}s ({total_sec/60:.1f}m)")
 
     if summary["by_scope"]:
-        print(f"\n  By scope:")
+        print("\n  By scope:")
         for scope, stats in sorted(summary["by_scope"].items()):
             pct = (stats["total_tokens"] / summary["total_tokens"] * 100) if summary["total_tokens"] else 0
             print(f"    {scope:12s}  {stats['agents']} agents  {stats['total_tokens']:>8,} tokens ({pct:.0f}%)")
 
     if summary["by_role"]:
-        print(f"\n  By role:")
+        print("\n  By role:")
         for role, stats in sorted(summary["by_role"].items()):
             pct = (stats["total_tokens"] / summary["total_tokens"] * 100) if summary["total_tokens"] else 0
             print(f"    {role:16s}  {stats['agents']} agents  {stats['total_tokens']:>8,} tokens ({pct:.0f}%)")
 
     # Per-agent detail
-    print(f"\n  Agent detail:")
+    print("\n  Agent detail:")
     for e in entries:
         role = e.get("role", "")
         scope = e.get("scope", "")
@@ -2334,31 +2365,65 @@ def _load_rating(run_dir: Path) -> Optional[Dict]:
         return None
 
 
-def _write_rating(run_dir: Path, score: int, note: str) -> Dict:
-    """Write rating.json (the human counterpart to the agent verdict)."""
+def _write_rating(
+    run_dir: Path,
+    score: int,
+    note: str,
+    shipped: Optional[str] = None,
+    impact: Optional[str] = None,
+    changed: Optional[str] = None,
+) -> Dict:
+    """Write rating.json (the human counterpart to the agent verdict).
+
+    The optional shipped/impact/changed fields are the *outcome* of the run —
+    what it led to downstream — stored under an ``outcome`` block. They answer
+    "did this actually change anything, and what," which is the signal a run's
+    verdict and quality score can't capture on their own.
+    """
     rating = {
         "score": score,
         "note": (note or "").strip(),
         "rated_iso": utc_now().isoformat(timespec="seconds"),
     }
+    outcome = {}
+    if shipped:
+        outcome["shipped"] = shipped
+    if impact:
+        outcome["impact"] = impact
+    if changed and changed.strip():
+        outcome["changed"] = changed.strip()
+    if outcome:
+        rating["outcome"] = outcome
     write_json(run_dir / "rating.json", rating)
     return rating
 
 
 def record_rating(args: argparse.Namespace) -> None:
-    """Record a human quality rating (1-5) for a completed run.
+    """Record a human quality rating (1-5), plus optional outcome, for a run.
 
     Stored as rating.json alongside metrics.json — the human counterpart to the
-    agent-emitted verdict. This is the signal `stats` uses to gauge how well the
-    system is doing and which runs to learn from.
+    agent-emitted verdict. The score says how good the run was; the optional
+    ``--shipped/--impact/--changed`` outcome says what it actually led to. This
+    is the signal `stats` uses to gauge how well the system is doing and which
+    runs to learn from.
     """
     run_dir = Path(args.run_dir)
     if not run_dir.is_dir():
         raise FileNotFoundError(f"Run directory not found: {run_dir}")
 
-    rating = _write_rating(run_dir, args.score, args.note)
+    rating = _write_rating(
+        run_dir,
+        args.score,
+        args.note,
+        shipped=getattr(args, "shipped", None),
+        impact=getattr(args, "impact", None),
+        changed=getattr(args, "changed", None),
+    )
     suffix = f' — "{rating["note"]}"' if rating["note"] else ""
     print(f"Recorded rating {rating['score']}/5 for {run_dir.name}{suffix}")
+    outcome = rating.get("outcome")
+    if outcome:
+        print("  Outcome: " + ", ".join(f"{k}={v}" for k, v in outcome.items()))
 
 
 def _prompt_for_rating(run_dir: Path) -> None:
@@ -2401,202 +2466,127 @@ def _prompt_for_rating(run_dir: Path) -> None:
     print(f"   Recorded {score}/5.")
 
 
-def _parse_usage_log(text: str) -> Dict:
-    """Summarize the prepare usage log (.studio/usage.log) into counts.
+def _outcome_record_from_run(run: Dict, repo: str) -> Optional[Dict]:
+    """Build a portable outcome record from an enriched run dict (needs _rating).
 
-    Lines look like: ``ts | prepare | phase | mode | roles=... | scoped=true``.
+    Returns None for unrated runs — a rating is what makes a run an outcome we
+    can learn from. shipped/impact/changed are pulled from the rating's optional
+    ``outcome`` block and may be null.
     """
-    by_phase: Dict[str, int] = {}
-    by_mode: Dict[str, int] = {}
-    scoped = {"true": 0, "false": 0}
-    total = 0
-    for line in text.splitlines():
-        parts = [p.strip() for p in line.split("|")]
-        if len(parts) < 6:
-            continue
-        _, _command, phase, mode, _roles, scoped_field = parts[:6]
-        total += 1
-        by_phase[phase] = by_phase.get(phase, 0) + 1
-        by_mode[mode] = by_mode.get(mode, 0) + 1
-        val = scoped_field.split("=", 1)[1] if "=" in scoped_field else scoped_field
-        if val in scoped:
-            scoped[val] += 1
-    return {"total": total, "by_phase": by_phase, "by_mode": by_mode, "scoped": scoped}
-
-
-def aggregate_stats(runs: List[Dict]) -> Dict:
-    """Aggregate cross-run signals into a stats summary.
-
-    Pure over a list of enriched run dicts. Each run is a run.json dict that may
-    additionally carry ``_rating`` (rating.json dict or None) and ``_decisions``
-    (list of DecisionPoint). Missing fields are tolerated.
-    """
-    by_phase: Dict[str, int] = {}
-    by_status: Dict[str, int] = {}
-    verdicts = {"APPROVED": 0, "REJECTED": 0, "UNKNOWN": 0}
-
-    scores: List[int] = []
-    scores_by_phase: Dict[str, List[int]] = {}
-    rated: List[Dict] = []
-
-    total_tokens = 0
-    token_runs = 0
-    total_cost = 0.0
-    cost_runs = 0
-    total_hours = 0.0
-    hours_runs = 0
-
-    dec_priority = {"P0": 0, "P1": 0, "P2": 0}
-    dec_total = 0
-    dec_answered = 0
-
-    for run in runs:
-        phase = run.get("phase", "unknown")
-        status = run.get("status", "UNKNOWN")
-        by_phase[phase] = by_phase.get(phase, 0) + 1
-        by_status[status] = by_status.get(status, 0) + 1
-
-        verdict = (run.get("verdict") or "").upper()
-        if verdict in ("APPROVED", "REJECTED"):
-            verdicts[verdict] += 1
-        elif verdict:
-            verdicts["UNKNOWN"] += 1
-
-        tok = (run.get("metrics") or {}).get("total_tokens", 0)
-        if tok:
-            total_tokens += tok
-            token_runs += 1
-
-        cost = run.get("cost")
-        if isinstance(cost, (int, float)):
-            total_cost += cost
-            cost_runs += 1
-        hours = run.get("hours")
-        if isinstance(hours, (int, float)):
-            total_hours += hours
-            hours_runs += 1
-
-        rating = run.get("_rating")
-        if rating and isinstance(rating.get("score"), (int, float)):
-            sc = rating["score"]
-            scores.append(sc)
-            scores_by_phase.setdefault(phase, []).append(sc)
-            rated.append({
-                "run_id": run.get("run_id", run.get("run_dir", "?")),
-                "phase": phase,
-                "score": sc,
-                "note": rating.get("note", ""),
-            })
-
-        for dp in run.get("_decisions", []):
-            dec_total += 1
-            pr = getattr(dp, "priority", "P2")
-            if pr in dec_priority:
-                dec_priority[pr] += 1
-            if getattr(dp, "answer", None) is not None:
-                dec_answered += 1
-
-    verdict_total = verdicts["APPROVED"] + verdicts["REJECTED"]
+    rating = run.get("_rating")
+    if not rating:
+        return None
+    outcome = rating.get("outcome") or {}
     return {
-        "total_runs": len(runs),
-        "by_phase": by_phase,
-        "by_status": by_status,
-        "verdicts": verdicts,
-        "approval_rate": (verdicts["APPROVED"] / verdict_total) if verdict_total else None,
-        "ratings": {
-            "count": len(scores),
-            "avg": (sum(scores) / len(scores)) if scores else None,
-            "by_phase_avg": {p: sum(v) / len(v) for p, v in scores_by_phase.items()},
-            "lowest": sorted(rated, key=lambda r: r["score"])[:5],
-        },
-        "tokens": {
-            "total": total_tokens,
-            "runs": token_runs,
-            "avg": (total_tokens / token_runs) if token_runs else None,
-        },
-        "cost": {"total": total_cost, "runs": cost_runs},
-        "hours": {"total": total_hours, "runs": hours_runs},
-        "decisions": {
-            "total": dec_total,
-            "by_priority": dec_priority,
-            "answered": dec_answered,
-            "answer_rate": (dec_answered / dec_total) if dec_total else None,
-        },
+        "repo": repo,
+        "run_id": run.get("run_id", Path(run.get("run_dir", "?")).name),
+        "phase": run.get("phase"),
+        "verdict": run.get("verdict"),
+        "status": run.get("status"),
+        "score": rating.get("score"),
+        "shipped": outcome.get("shipped"),
+        "impact": outcome.get("impact"),
+        "changed": outcome.get("changed"),
+        "total_tokens": (run.get("metrics") or {}).get("total_tokens"),
+        "rated_iso": rating.get("rated_iso"),
     }
 
 
-def format_stats(agg: Dict, usage: Optional[Dict] = None, clarity_note: Optional[str] = None) -> str:
-    """Render an aggregate_stats() result as a terminal dashboard."""
-    bar = "=" * 60
-    lines: List[str] = [bar, "Studio Cross-Run Stats", bar]
+def _read_ledger(path: Path) -> List[Dict]:
+    """Read a JSONL outcomes file, skipping blank or unparseable lines."""
+    if not path.exists():
+        return []
+    records: List[Dict] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return records
 
-    if agg["total_runs"] == 0:
-        lines.append("No runs found yet. Run a phase first.")
-        lines.append(bar)
-        return "\n".join(lines)
 
-    lines.append(f"Total runs: {agg['total_runs']}")
-    lines.append("  By phase:  " + ", ".join(f"{k}={v}" for k, v in sorted(agg["by_phase"].items())))
-    lines.append("  By status: " + ", ".join(f"{k}={v}" for k, v in sorted(agg["by_status"].items())))
+def _write_ledger(path: Path, records: List[Dict]) -> None:
+    """Write outcome records as JSONL (one compact object per line)."""
+    path.write_text("".join(json.dumps(r) + "\n" for r in records), encoding="utf-8")
 
-    v = agg["verdicts"]
-    lines.append("")
-    lines.append("Verdicts (agent):")
-    lines.append(f"  APPROVED={v['APPROVED']}  REJECTED={v['REJECTED']}  UNKNOWN={v['UNKNOWN']}")
-    if agg["approval_rate"] is not None:
-        lines.append(f"  Approval rate: {agg['approval_rate']*100:.0f}% (of decided runs)")
 
-    r = agg["ratings"]
-    lines.append("")
-    lines.append("Quality ratings (human):")
-    if r["count"] == 0:
-        lines.append("  No runs rated yet. Use: rate --run-dir <path> --score 1-5")
+def _collect_local_outcomes(runs: List[Dict], repo: str) -> List[Dict]:
+    """Outcome records for this repo's rated runs (runs already carry _rating)."""
+    records = []
+    for run in runs:
+        rec = _outcome_record_from_run(run, repo)
+        if rec is not None:
+            records.append(rec)
+    return records
+
+
+def _merge_outcomes(ledger: List[Dict], local: List[Dict]) -> List[Dict]:
+    """Combine cross-repo ledger records with this repo's fresh local records.
+
+    Dedup by (repo, run_id); local wins, since it's read straight from the run
+    directories and the ledger may hold an older export of the same run.
+    """
+    by_key = {(r.get("repo"), r.get("run_id")): r for r in ledger}
+    for rec in local:
+        by_key[(rec.get("repo"), rec.get("run_id"))] = rec
+    return list(by_key.values())
+
+
+def export_outcomes(args: argparse.Namespace) -> None:
+    """Collect this repo's rated runs into a portable JSONL of outcome records.
+
+    Writes to --out (default: stdout). Feed the file to ``import-outcomes`` in
+    the tool repo so a consuming repo's results become visible to ``stats`` there
+    — the bridge that lets evidence reach the main repo.
+    """
+    repo = getattr(args, "repo", None) or _project_name()
+    runs = collect_runs(get_output_root())
+    for run in runs:
+        run["_rating"] = _load_rating(Path(run["run_dir"]))
+    records = _collect_local_outcomes(runs, repo)
+
+    payload = "".join(json.dumps(r) + "\n" for r in records)
+    out = getattr(args, "out", None)
+    if out:
+        out_path = Path(out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(payload, encoding="utf-8")
+        print(f"Exported {len(records)} outcome record(s) from '{repo}' to {out_path}")
     else:
-        lines.append(f"  Rated {r['count']}/{agg['total_runs']} runs — avg {r['avg']:.1f}/5")
-        if r["by_phase_avg"]:
-            lines.append("  By phase: " + ", ".join(f"{p}={s:.1f}" for p, s in sorted(r["by_phase_avg"].items())))
-        if r["lowest"]:
-            lines.append("  Lowest-rated (improvement targets):")
-            for item in r["lowest"]:
-                note = f" — {item['note']}" if item["note"] else ""
-                lines.append(f"    {item['score']}/5  {item['run_id']}{note}")
+        if payload:
+            print(payload, end="")
+        print(f"# {len(records)} outcome record(s) from '{repo}'", file=sys.stderr)
 
-    t = agg["tokens"]
-    lines.append("")
-    lines.append("Efficiency:")
-    if t["runs"]:
-        lines.append(f"  Tokens: {t['total']:,} across {t['runs']} runs (avg {t['avg']:,.0f}/run)")
-    else:
-        lines.append("  No token metrics recorded.")
-    if agg["cost"]["runs"]:
-        lines.append(f"  Cost: ${agg['cost']['total']:.2f} across {agg['cost']['runs']} runs")
-    if agg["hours"]["runs"]:
-        lines.append(f"  Hours: {agg['hours']['total']:.1f} across {agg['hours']['runs']} runs")
 
-    d = agg["decisions"]
-    lines.append("")
-    lines.append("Decision points:")
-    if d["total"]:
-        bp = d["by_priority"]
-        lines.append(f"  {d['total']} total — P0={bp['P0']} P1={bp['P1']} P2={bp['P2']}")
-        if d["answer_rate"] is not None:
-            lines.append(f"  Answered: {d['answered']}/{d['total']} ({d['answer_rate']*100:.0f}%)")
-    else:
-        lines.append("  None recorded.")
+def import_outcomes(args: argparse.Namespace) -> None:
+    """Merge outcome records from a JSONL file into the central ledger.
 
-    if usage and usage["total"]:
-        lines.append("")
-        lines.append("Usage (prepare log):")
-        lines.append(f"  {usage['total']} prepares — " + ", ".join(f"{k}={v}" for k, v in sorted(usage["by_phase"].items())))
-        lines.append("  Modes: " + ", ".join(f"{k}={v}" for k, v in sorted(usage["by_mode"].items())))
-        lines.append(f"  Scoped: {usage['scoped'].get('true', 0)} / Flat: {usage['scoped'].get('false', 0)}")
+    Dedup by (repo, run_id): re-importing an updated export refreshes existing
+    records instead of duplicating them. This is how outcomes from other repos
+    reach ``stats`` in this repo.
+    """
+    src = Path(args.from_file)
+    if not src.is_file():
+        raise FileNotFoundError(f"Outcomes file not found: {src}")
+    incoming = _read_ledger(src)
 
-    if clarity_note:
-        lines.append("")
-        lines.append(f"Clarity: {clarity_note}")
+    ledger_path = get_outcomes_ledger_path()
+    existing = _read_ledger(ledger_path)
+    keys_before = {(r.get("repo"), r.get("run_id")) for r in existing}
+    merged = _merge_outcomes(existing, incoming)
 
-    lines.append(bar)
-    return "\n".join(lines)
+    added = sum(1 for r in incoming if (r.get("repo"), r.get("run_id")) not in keys_before)
+    updated = len(incoming) - added
+
+    ledger_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_ledger(ledger_path, merged)
+    print(
+        f"Imported {len(incoming)} record(s) into {ledger_path} "
+        f"(+{added} new, {updated} updated; {len(merged)} total)"
+    )
 
 
 def show_stats(args: argparse.Namespace) -> None:
@@ -2618,8 +2608,17 @@ def show_stats(args: argparse.Namespace) -> None:
 
     agg = aggregate_stats(runs)
 
+    # Outcomes: this repo's rated runs plus the cross-repo ledger (imported from
+    # other projects). Local records win on conflict since they're the fresher read.
+    local_outcomes = _collect_local_outcomes(runs, _project_name())
+    ledger_outcomes = _read_ledger(get_outcomes_ledger_path())
+    outcome_records = _merge_outcomes(ledger_outcomes, local_outcomes)
+    if phase_filter:
+        outcome_records = [r for r in outcome_records if r.get("phase") == phase_filter]
+    outcomes = summarize_outcomes(outcome_records)
+
     if getattr(args, "json", False):
-        print(json.dumps(agg, indent=2))
+        print(json.dumps({**agg, "outcomes": outcomes}, indent=2))
         return
 
     usage = None
@@ -2635,7 +2634,7 @@ def show_stats(args: argparse.Namespace) -> None:
     if snapshot is not None and snapshot.topics:
         clarity_note = f"{len(snapshot.topics)} topics tracked (run 'show-clarity' for the table)"
 
-    print(format_stats(agg, usage=usage, clarity_note=clarity_note))
+    print(format_stats(agg, usage=usage, clarity_note=clarity_note, outcomes=outcomes))
 
 
 def inject_context(args: argparse.Namespace) -> None:
@@ -2836,9 +2835,9 @@ def _do_init(args: argparse.Namespace) -> None:
     print(f"Studio installed to {dot_studio}")
     print(f"  Slash commands: {target / '.claude' / 'commands'}")
     print(f"  Source: {dot_studio / 'source'}")
-    print(f"\nRun /studio-setup to configure roles, personas, scopes, cleanup, and unstale audit.")
-    print(f"Then use /run-phase or /run-studio-phase — pause-and-ask included.")
-    print(f"NOTE: Start a NEW Claude Code session (not just /clear) to discover the commands.")
+    print("\nRun /studio-setup to configure roles, personas, scopes, cleanup, and unstale audit.")
+    print("Then use /run-phase or /run-studio-phase — pause-and-ask included.")
+    print("NOTE: Start a NEW Claude Code session (not just /clear) to discover the commands.")
 
 
 def _do_check_install(args: argparse.Namespace) -> None:
@@ -3035,6 +3034,10 @@ def _dispatch(args: argparse.Namespace) -> None:
         record_rating(args)
     elif args.command == "stats":
         show_stats(args)
+    elif args.command == "export-outcomes":
+        export_outcomes(args)
+    elif args.command == "import-outcomes":
+        import_outcomes(args)
     elif args.command == "notify":
         notify(args)
     elif args.command == "offload":

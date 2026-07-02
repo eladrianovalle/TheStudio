@@ -1,6 +1,6 @@
 # Studio Architecture
 
-Studio is no longer a long-running runtime or CrewAI service. The entire system revolves around producing structured instructions, having an AI assistant (Claude Code, Windsurf/Cascade, or any capable agent) execute them, and packaging artifacts so every project can reuse the results.
+Studio is no longer a long-running runtime or CrewAI service. The entire system revolves around producing structured instructions, having an AI assistant (Claude Code is the supported path) execute them, and packaging artifacts so every project can reuse the results.
 
 ---
 
@@ -28,7 +28,7 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 
 | Component | Purpose |
 | --- | --- |
-| `run_phase.py` | CLI entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, clarity, install, decision, metrics, setup, offload, and `notify` subcommands. |
+| `run_phase.py` | CLI entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, clarity, install, decision, metrics, `rate`, `stats`, `export-outcomes`, `import-outcomes`, setup, offload, and `notify` subcommands. |
 | `run_phase_roles.py` | Loads `studio.manifest.json`, applies role packs with dependency injection, applies project-local overrides, and normalizes per-role filenames. |
 | `role_overrides.py` | Project-local role customization: loads `.studio/roles/*.json` overlays, validates structure, shallow-merges with manifest roles. |
 | `persona_overrides.py` | Project-local single-phase persona overrides: loads `.studio/personas.toml`, per-phase shallow-merges over the shipped `PHASE_DETAILS` defaults. |
@@ -39,6 +39,9 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 | `cleanup.py` | TTL-based (30 days) and budget-based (900 MB) run artifact cleanup, plus loose file removal for legacy artifacts outside run directories. |
 | `rerun.py` | Detects rejection context from prior runs and generates rerun instructions. |
 | `verdict.py` | Extracts APPROVED/REJECTED/UNKNOWN verdict from agent output. |
+| `stats.py` | Pure cross-run aggregation, formatting, and outcome roll-up (`aggregate_stats`, `format_stats`, `summarize_outcomes`, `_summarize_metrics`, `_parse_usage_log`). Backs the `stats` command; moved out of `run_phase.py` so the number-crunching has no I/O. |
+| `config_loading.py` | The single shared TOML loader: picks `tomllib` (3.11+) or the `tomli` fallback (3.10) with one consistent error message. Imported by `run_phase.py`, `scopes.py`, `cleanup.py`, `persona_overrides.py`, `impl_loop.py`, and `integrations/slack_digest.py` so no module carries its own copy. |
+| `impl_loop.py` | Implementation writer/editor loop config: `LoopConfig` + `load_loop_config()`. Projects the resolved config into runtime knobs (editor on/off, read scope, output budget, mutation/static gates) for the `implementation-loop.js` Workflow via `python -m impl_loop`. |
 | `install.py` | Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project. Injects coding principles into target's `CLAUDE.md` via sentinel markers. |
 | `offload.py` | CLAUDE.md analyzer: classifies sections, detects embedded constraints, scores pointer strength, generates offload reports, manages canary tokens. |
 | `setup.py` | Setup wizard: project configuration after install. Tracks setup state in `.studio/SETUP.json`, generates role overrides, scopes, and cleanup config with incremental versioned steps. |
@@ -47,6 +50,8 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 | `studio.manifest.json` | Declarative description of phase-level personas, Studio role definitions, and role dependencies. |
 | `role_packs/*.json` | Curated sets of Studio roles (e.g., `studio_core`). Operators pick a pack, then add/remove roles with CLI flags. |
 | `config/scopes.toml` | Default scope configuration for studio phase runs. |
+| `config/implementation_loop.toml` | Shipped defaults for the implementation writer/editor loop (`[loop]`, `[gate]` incl. `mutation_command`, `[editor]`). Override with `.studio/implementation_loop.toml`. Loaded by `impl_loop.py`. |
+| `setup.cfg` | `[mutmut]` config for mutation testing — the tool the `require_mutation_check` gate and the weekly mutation CI run. Lists which pure-logic modules to mutate and the pytest runner. |
 | `.studio/roles/*.json` | Project-local role overrides. Shallow-merge with manifest roles (override keys replace base, unspecified keys inherit). |
 | `.studio/personas.toml` | Project-local single-phase persona overrides. Per-phase shallow-merge over the shipped `PHASE_DETAILS` defaults (loaded by `persona_overrides.py`, authored by the setup wizard). |
 | `.studio/unstale.toml` | Optional per-repo override for the `/unstale` audit (`[snapshot]` commands + `[audit]` globs). Read by the `/unstale` command; absent it self-detects the stack. Authored by the setup wizard. |
@@ -170,7 +175,7 @@ No direct imports or service layers are required—just CLI calls and Markdown a
 ## 9. Source of Truth
 
 1. Code: `run_phase.py`, `run_phase_roles.py`, manifest, role packs.
-2. Docs: README, CLAUDE_CODE_USAGE, WINDSURF_USAGE, WINDSURF_QUICKREF, STUDIO_BRIDGE_TEMPLATE, API, INTEGRATION_GUIDE, AGENTS_REFERENCE, ARCHITECTURE (this file), CODING_PRINCIPLES, MVI_METHODOLOGY, AI_TDD_METHODOLOGY, SCOPES_GUIDE, VALIDATION_GUIDE, TEST_DRIVEN_GUIDE, STORAGE_MANAGEMENT.
+2. Docs: README, CLAUDE_CODE_USAGE, STUDIO_BRIDGE_TEMPLATE, API, INTEGRATION_GUIDE, AGENTS_REFERENCE, ARCHITECTURE (this file), CODING_PRINCIPLES, MVI_METHODOLOGY, AI_TDD_METHODOLOGY, SCOPES_GUIDE, VALIDATION_GUIDE, TEST_DRIVEN_GUIDE, STORAGE_MANAGEMENT.
 3. Outputs: `<active_output_root>/index.md`, `<active_knowledge_root>/run_log.md`.
 
 Whenever the workflow changes, update all of the above in one commit. Studio deliberately has no hidden runtime — everything is visible, reproducible, and assistant-agnostic.

@@ -9,7 +9,6 @@ from scopes import (
     CONTRARIAN_MANDATE,
     ScopeConfig,
     ScopesConfig,
-    VALID_DEBATE_MODES,
     allocate_iterations,
     generate_scope_instructions,
     generate_scope_prompt,
@@ -431,7 +430,7 @@ def test_generate_scope_instructions_with_budget_and_mode():
     assert "Each role debates sequentially" in instructions
     # Depth scope should NOT have an output budget line
     lines = instructions.split("\n")
-    depth_idx = next(i for i, l in enumerate(lines) if "Depth" in l)
+    depth_idx = next(i for i, line in enumerate(lines) if "Depth" in line)
     # Check next few lines after Depth header don't mention output budget
     depth_section = "\n".join(lines[depth_idx:depth_idx + 5])
     assert "Output budget" not in depth_section
