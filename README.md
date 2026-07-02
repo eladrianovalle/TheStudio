@@ -1,8 +1,8 @@
 # Studio
 
-Studio is an **instruction generator** for structured advocate/contrarian debates. It prepares run directories with instructions that an AI assistant (Claude Code is the supported path) executes, then packages the results as versioned artifacts.
+Studio is a discipline layer for AI coding agents. It runs structured advocate/contrarian debates on your decisions, keeps agents focused and honest while they implement, and ships slash commands that automate the chores around all of it: auditing tests, un-staling docs, slimming context files, and keeping installs current.
 
-**No runtime. No API keys. No dependencies beyond Python stdlib.** All intelligence lives in the assistant's execution. Studio just keeps the prompts, roles, artifacts, and logs organized.
+Under the hood it's an **instruction generator**. It prepares run directories with instructions an AI assistant (Claude Code is the supported path) executes, then packages the results as versioned artifacts. **No runtime. No API keys. No dependencies beyond Python stdlib.** All the intelligence lives in the assistant's execution.
 
 ---
 
@@ -34,6 +34,48 @@ python studio/run_phase.py finalize --phase market --run-id <run_id> --status co
 python studio/run_phase.py init --target /path/to/your-project
 # Then from that project: /run-phase and /run-studio-phase just work
 ```
+
+---
+
+## Slash Commands
+
+Slash commands are the main way you use Studio day to day. `init` installs them into any project, so they work natively wherever your code lives.
+
+**Run debates**
+| Command | What it does |
+|---------|--------------|
+| `/run-phase` | Single-phase advocate/contrarian debate (market, design, or tech) |
+| `/run-studio-phase` | Multi-role debate across disciplines (alignment → depth → polish) |
+
+**Build**
+| Command | What it does |
+|---------|--------------|
+| `/studio-implement` | Build one MVI unit through the writer/editor loop, gated on tests-green |
+
+**Keep the project honest**
+| Command | What it does |
+|---------|--------------|
+| `/detest` | Audit your test suite against AI-TDD methodology and fix the violations |
+| `/unstale` | Find and fix stale docs, wrong counts, and dead links (stack-agnostic) |
+| `/offload` | Slim a bloated CLAUDE.md by moving reference content into companion docs |
+
+**Maintain the install**
+| Command | What it does |
+|---------|--------------|
+| `/studio-setup` | Configure roles, personas, scopes, and cleanup after install |
+| `/studio-update` | Pull the latest Studio source and commands into an installed project |
+
+Every command works from any project once you've run `init`. See [CLAUDE_CODE_USAGE.md](./studio/docs/CLAUDE_CODE_USAGE.md) for full arguments.
+
+---
+
+## The Discipline Layer
+
+Studio isn't only a debate runner. It's a way to hold AI agents to a standard. Install it and these travel with your project:
+
+- **Coding principles**: seven rules that counter common LLM failure modes, from "think before coding" and "make surgical changes" to writing both docs and code for a human reader. `init` injects them into your project's CLAUDE.md. See [CLAUDE.md](./CLAUDE.md#coding-principles).
+- **MVI (Minimum Viable Interaction)**: every increment ends in something usable. "Build a skateboard, not a wheel." The Product, Engineering, and Design contrarians enforce it. See [MVI_METHODOLOGY.md](./studio/docs/MVI_METHODOLOGY.md).
+- **AI-TDD**: scenario-first tests, humans own the assertions, and mutation verification proves the tests actually bite. The Test Engineer role enforces it. See [AI_TDD_METHODOLOGY.md](./studio/docs/AI_TDD_METHODOLOGY.md).
 
 ---
 
