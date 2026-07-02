@@ -8,15 +8,15 @@ an overridden key replaces the default, unspecified keys inherit.
 This is the single-phase analogue of ``role_overrides.py`` (which customizes
 studio multi-role personas). It lets a project tailor the advocate /
 contrarian / implementer / integrator personas for the market, design, tech,
-and studio phases without editing the shipped defaults — e.g. a Rust codebase
-swapping the tech advocate's default "Technical Architect" for a
+and studio phases without editing the shipped defaults. For example, a Rust
+codebase can swap the tech advocate's default "Technical Architect" for a
 "Rust Systems Architect".
 
 File schema (all tables and keys optional; absent keys inherit defaults)::
 
     [tech]
-    advocate = "Rust Systems Architect — define a performant ECS architecture."
-    contrarian = "Senior Systems SRE — flag perf and determinism risks."
+    advocate = "Rust Systems Architect: define a performant ECS architecture."
+    contrarian = "Senior Systems SRE: flag perf and determinism risks."
     notes = "Hold AI-TDD discipline; account for native build constraints."
 
     [tech.implementer]
@@ -24,7 +24,7 @@ File schema (all tables and keys optional; absent keys inherit defaults)::
     deliverables = ["Crate layout", "ECS schedule", "Test specs", "Impl code"]
 
     [studio]
-    integrator = "Systems Integrator & Ops Lead — merge vision + constraints."
+    integrator = "Systems Integrator & Ops Lead: merge vision + constraints."
 
 ``integrator`` is valid only under ``[studio]``; ``implementer`` is valid only
 under the non-studio phases (market, design, tech).

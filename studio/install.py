@@ -4,7 +4,7 @@ Cross-repo Studio installer.
 Copies Studio source, slash commands, workflows, config, and manifest into a
 target project so that all slash commands (`/run-phase`, `/run-studio-phase`,
 `/studio-implement`, `/unstale`, `/detest`, `/offload`, `/studio-update`,
-`/studio-setup`) work natively — including the pause-and-ask collaboration
+`/studio-setup`) work natively, including the pause-and-ask collaboration
 protocol and the implementation-loop workflow.
 
 Also injects coding principles (from docs/CODING_PRINCIPLES.md) into the
@@ -80,7 +80,7 @@ WORKFLOW_FILES = [
     "implementation-loop.js",
 ]
 
-# Sentinels for CLAUDE.md injection — update replaces content between these markers
+# Sentinels for CLAUDE.md injection: update replaces content between these markers
 _SENTINEL_BEGIN = "<!-- STUDIO:CODING_PRINCIPLES:BEGIN -->"
 _SENTINEL_END = "<!-- STUDIO:CODING_PRINCIPLES:END -->"
 
@@ -127,7 +127,7 @@ def _resolve_source_dir(
 
     When ``check``/``update`` is invoked through the *installed snapshot*
     (``<target>/.studio/source/run_phase.py``), the default source root IS that
-    snapshot — so comparing it against the installed ``MANIFEST.json`` compares
+    snapshot, so comparing it against the installed ``MANIFEST.json`` compares
     the snapshot against itself and always reports "up to date", silently
     masking real upstream changes (see issue #20).
 
@@ -141,7 +141,7 @@ def _resolve_source_dir(
     """
     if studio_dir is not None:
         # Explicit source (tests, or an upstream invocation that already knows
-        # where the live source is) — trust it.
+        # where the live source is), so trust it.
         return studio_dir, None
 
     root = _get_studio_root()
@@ -181,7 +181,7 @@ def _resolve_source_dir(
 
 
 def _recorded_upstream_source(version_path: Path, snapshot: Path) -> Optional[Path]:
-    """Return the upstream source dir recorded in an existing VERSION — but only if
+    """Return the upstream source dir recorded in an existing VERSION, but only if
     it is still a usable upstream: it exists, has ``run_phase.py``, and is NOT the
     target's own snapshot. Used to avoid overwriting a good pointer with a
     self-pointing one when (re)installing from the snapshot.
@@ -333,11 +333,11 @@ def install_studio(target: Path, studio_dir: Optional[Path] = None) -> Path:
     """Install Studio into a target project directory.
 
     Creates:
-        {target}/.studio/source/     — Studio Python source + config
-        {target}/.claude/commands/    — Slash commands (verbatim, use .studio/source/ paths)
-        {target}/.claude/workflows/   — Claude Code workflows (verbatim, resolve .studio/source/ at run time)
-        {target}/.studio/VERSION      — Version info
-        {target}/.studio/MANIFEST.json — Install manifest with checksums
+        {target}/.studio/source/     : Studio Python source + config
+        {target}/.claude/commands/    : Slash commands (verbatim, use .studio/source/ paths)
+        {target}/.claude/workflows/   : Claude Code workflows (verbatim, resolve .studio/source/ at run time)
+        {target}/.studio/VERSION      : Version info
+        {target}/.studio/MANIFEST.json : Install manifest with checksums
 
     Returns the .studio directory path.
     """
@@ -434,16 +434,16 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
     """Check if an installed Studio is up to date with the source.
 
     Returns dict with:
-        installed: bool — whether .studio/VERSION exists
-        up_to_date: bool — whether all files match source checksums
-        changed: list[str] — files where upstream differs from what was installed (update available)
-        missing: list[str] — files in source but not installed
-        extra: list[str] — files installed but not in source
-        locally_modified: list[str] — installed files whose ON-DISK content has
-            drifted from the checksum recorded at install — i.e. local edits that an
+        installed: bool: whether .studio/VERSION exists
+        up_to_date: bool: whether all files match source checksums
+        changed: list[str]: files where upstream differs from what was installed (update available)
+        missing: list[str]: files in source but not installed
+        extra: list[str]: files installed but not in source
+        locally_modified: list[str]: installed files whose ON-DISK content has
+            drifted from the checksum recorded at install, i.e. local edits that an
             `update` would OVERWRITE (the clobber set; spans both .studio/source/
             files and the verbatim .claude/ commands/workflows)
-        warning: str | None — set when the live source could not be resolved
+        warning: str | None: set when the live source could not be resolved
             (e.g. run from a stale snapshot), so the result may be unreliable
     """
     target = Path(target).resolve()
@@ -486,7 +486,7 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
             extra.append(rel)
 
     # Local modifications: installed file on disk differs from what was recorded
-    # at install. These are the files an `update` re-install would clobber —
+    # at install. These are the files an `update` re-install would clobber:
     # source files under .studio/source/ AND the verbatim .claude/ commands/workflows.
     locally_modified: List[str] = []
     for rel, recorded_sha in installed_manifest.items():
@@ -515,13 +515,13 @@ def update_studio(target: Path, studio_dir: Optional[Path] = None, force: bool =
     by only overwriting source/ and slash commands.
 
     PRECONDITION: if any installed source file has local edits (drifted from its
-    recorded checksum), the update is BLOCKED — re-installing would overwrite them.
+    recorded checksum), the update is BLOCKED, because re-installing would overwrite them.
     Returns ``{"blocked": True, "locally_modified": [...]}`` instead of updating.
     Pass ``force=True`` to overwrite anyway.
 
     Returns dict with counts of updated/added/removed files, plus a ``warning``
     key (str | None) when the live source could not be resolved (e.g. run from a
-    stale snapshot — see ``_resolve_source_dir``).
+    stale snapshot; see ``_resolve_source_dir``).
     """
     target = Path(target).resolve()
     dot_studio = target / ".studio"
@@ -532,7 +532,7 @@ def update_studio(target: Path, studio_dir: Optional[Path] = None, force: bool =
         )
 
     # Resolve the live source up front so both the check and the re-install copy
-    # from upstream — not from the (possibly stale) installed snapshot (#20).
+    # from upstream, not from the (possibly stale) installed snapshot (#20).
     source_dir, warning = _resolve_source_dir(target, studio_dir)
 
     # Check what needs updating

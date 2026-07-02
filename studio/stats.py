@@ -479,7 +479,7 @@ def format_stats(
     if agg["total_runs"] == 0:
         lines.append("No local runs found yet. Run a phase first.")
         # Cross-repo outcomes (imported into the ledger) can still be worth showing
-        # even when this repo has no runs of its own — that's the tool-repo case.
+        # even when this repo has no runs of its own; that's the tool-repo case.
         if outcomes is not None and outcomes["records"] > 0:
             lines.extend(_format_outcomes(outcomes))
         lines.append(bar)

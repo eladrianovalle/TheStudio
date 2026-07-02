@@ -1,5 +1,5 @@
 """
-Studio setup wizard — project configuration after install.
+Studio setup wizard: project configuration after install.
 
 Tracks setup state in ``.studio/SETUP.json`` and generates configuration
 files (``.studio/roles/*.json``, ``.studio/scopes.toml``, etc.) based on
@@ -108,7 +108,7 @@ def _mark_step(state: Dict[str, Any], step_name: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Manifest & pack helpers — delegates to run_phase_roles where possible
+# Manifest & pack helpers. Delegates to run_phase_roles where possible
 # ---------------------------------------------------------------------------
 
 
@@ -192,7 +192,7 @@ def _load_default_scopes() -> Dict[str, Dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
-# Apply functions — each generates config files and updates state
+# Apply functions. Each generates config files and updates state
 # ---------------------------------------------------------------------------
 
 
@@ -273,7 +273,7 @@ def _toml_quote(value: str) -> str:
     """Quote and escape *value* as a TOML basic string.
 
     Escapes backslash and quote first, then the control chars TOML forbids as
-    literals (newline/tab/CR/backspace/form-feed) — otherwise a multi-line
+    literals (newline/tab/CR/backspace/form-feed). Otherwise a multi-line
     value writes a file that tomllib refuses to parse on the next run.
     """
     out = value.replace("\\", "\\\\").replace('"', '\\"')
@@ -322,7 +322,7 @@ def apply_persona_customization(
 
     ``customizations`` maps phase name -> override fields dict (same shape as a
     ``[phase]`` table in ``.studio/personas.toml``). Empty dict means "no
-    customizations, keep neutral defaults" — no file is written.
+    customizations, keep neutral defaults"; no file is written.
     """
     from persona_overrides import validate_persona_overrides
 
@@ -351,7 +351,7 @@ def apply_persona_customization(
 def suggest_personas_from_stack(target: Path) -> Dict[str, Dict]:
     """Suggest phase persona overrides by sniffing the project's tech stack.
 
-    Pure suggestion helper — inspects well-known marker files and returns a
+    Pure suggestion helper. Inspects well-known marker files and returns a
     ``{phase: fields}`` dict the user can confirm and feed through
     ``apply_persona_customization``. Returns ``{}`` when no stack is detected.
     """
@@ -402,7 +402,7 @@ _UNSTALE_DEFAULT_DOCS = [
 def suggest_unstale_from_stack(target: Path) -> Dict[str, Any]:
     """Suggest an unstale audit config by sniffing the project's tech stack.
 
-    Pure suggestion helper — inspects the same marker files as
+    Pure suggestion helper. Inspects the same marker files as
     ``suggest_personas_from_stack`` and returns a config dict matching the
     ``.studio/unstale.toml`` schema (``snapshot`` commands + ``audit`` globs).
     Returns ``{}`` when no stack is detected, in which case ``/unstale``
@@ -432,8 +432,8 @@ def suggest_unstale_from_stack(target: Path) -> Dict[str, Any]:
             ["src/**/*.ts", "src/**/*.tsx", "src/**/*.js"],
         )
     if _exists("ProjectSettings") or any(target.glob("*.csproj")):
-        # Unity tests run through the editor test runner, not a shell command —
-        # leave test_count out so /unstale skips the count check.
+        # Unity tests run through the editor test runner, not a shell command.
+        # Leave test_count out so /unstale skips the count check.
         return _cfg(
             {"module_inventory": "find Assets/Scripts -name '*.cs' | wc -l"},
             ["Assets/Scripts/**/*.cs"],
@@ -490,7 +490,7 @@ def apply_unstale_config(
     """Write ``.studio/unstale.toml`` from a config dict.
 
     ``config`` mirrors the ``.studio/unstale.toml`` schema. Empty/None means
-    "no override — let ``/unstale`` self-detect the stack" and no file is
+    "no override, let ``/unstale`` self-detect the stack" and no file is
     written (matching the persona-customization step's opt-in behavior).
     """
     target = Path(target).resolve()
@@ -634,12 +634,12 @@ def apply_from_answers(target: Path, answers: Dict[str, Any]) -> Dict[str, Any]:
     """Apply setup from an answers dict.
 
     Expected keys (all optional):
-        role_pack: str — pack name
-        role_overrides: list[str] — e.g. ["+ml", "-art"]
-        role_customizations: dict[str, dict] — per-role override fields
-        persona_customizations: dict[phase, dict] — per-phase persona override fields
-        unstale_config: dict — .studio/unstale.toml override (snapshot + audit)
-        scopes: dict[str, dict] — scope configs (or "defaults")
+        role_pack: str: pack name
+        role_overrides: list[str]: e.g. ["+ml", "-art"]
+        role_customizations: dict[str, dict]: per-role override fields
+        persona_customizations: dict[phase, dict]: per-phase persona override fields
+        unstale_config: dict: .studio/unstale.toml override (snapshot + audit)
+        scopes: dict[str, dict]: scope configs (or "defaults")
         cleanup: dict with ttl_days and size_limit_mb
     """
     target = Path(target).resolve()

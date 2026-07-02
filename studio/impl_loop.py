@@ -92,7 +92,7 @@ def _resolve_config_path(path: Path | None, studio_root: Path) -> Path | None:
     """Resolve the config path via the resolution chain.
 
     explicit ``path`` → ``<artifact-root>/.studio/implementation_loop.toml`` (the project
-    override, which lives at the consuming repo root — NOT under the source snapshot) →
+    override, which lives at the consuming repo root, NOT under the source snapshot) →
     ``<studio-root>/config/implementation_loop.toml`` (the shipped default). Returns None
     when nothing in the chain exists (caller falls back to built-in defaults).
     """
@@ -115,10 +115,10 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
     ``<artifact-root>/.studio/implementation_loop.toml`` (the consuming repo root, found
     even when this module runs from an installed ``.studio/source`` snapshot) → shipped
     ``<studio-root>/config/implementation_loop.toml`` → built-in defaults. An end-of-chain
-    miss (no ``path`` given and nothing found) yields the default LoopConfig — the loop
+    miss (no ``path`` given and nothing found) yields the default LoopConfig; the loop
     ships with a working default, so absence is not a failure. But an explicit ``path``
-    that does not exist raises FileNotFoundError: a typo'd config path is an error, not a
-    silent request for defaults.
+    that does not exist raises FileNotFoundError: a typo'd config path is an error rather
+    than a silent request for defaults.
 
     All tables/keys are optional; unspecified keys inherit the LoopConfig defaults.
     See config/implementation_loop.toml (the shipped default) and SPEC §4 for the
@@ -176,7 +176,7 @@ def runtime_knobs(config: LoopConfig) -> dict:
 
     This is the consume side of load_loop_config(): the /studio-implement command
     shells out to ``python -m impl_loop``, reads this dict, and merges it into the
-    workflow args. Only already-resolved config is exposed — no new fields.
+    workflow args. Only already-resolved config is exposed; no new fields.
     """
     return {
         "editor_enabled": config.editor_enabled,
@@ -194,7 +194,7 @@ def _cli(argv: List[str]) -> str:
 
     Optional ``argv[1]`` is an explicit config path for a non-standard location. With no
     arg the normal resolution chain runs, which now finds the project override at the
-    consuming repo root (``<repo>/.studio/implementation_loop.toml``) on its own — so
+    consuming repo root (``<repo>/.studio/implementation_loop.toml``) on its own, so
     callers no longer need to pass it explicitly just to honor an installed repo's override.
     """
     path = Path(argv[1]) if len(argv) > 1 else None

@@ -2,10 +2,10 @@
 Per-topic Clarity Score tracking for Studio runs (mandatory, always active).
 
 Topics are derived from DecisionPoint.unblocks fields, normalized to slugs.
-Clarity scores control agent question density — low clarity means more
+Clarity scores control agent question density: low clarity means more
 decision points, high clarity means treat prior decisions as constraints.
 
-Pure function library — no side effects except explicit I/O functions
+Pure function library with no side effects except explicit I/O functions
 (save_clarity_json, load_clarity_json, etc.).
 """
 from __future__ import annotations
@@ -318,7 +318,7 @@ def question_density_for_scope(
     elif scope == "polish":
         return "high" if score < 0.3 else "low"
     else:
-        # Unknown scope — fall back to depth rules
+        # Unknown scope: fall back to depth rules
         if score < 0.4:
             return "high"
         elif score < 0.7:
@@ -541,7 +541,7 @@ def save_clarity_json(path: Path, snapshot: ClaritySnapshot) -> Path:
 def load_clarity_json(path: Path) -> ClaritySnapshot | None:
     """Load a clarity snapshot from a JSON file.
 
-    Returns ``None`` if the file does not exist OR cannot be parsed — a
+    Returns ``None`` if the file does not exist OR cannot be parsed. A
     corrupt or schema-drifted clarity.json is treated as absent so callers
     (e.g. ``prepare``) self-heal by rebuilding rather than crashing.
 
