@@ -179,7 +179,7 @@ See **`studio/docs/ARCHITECTURE.md`** for the full per-module reference.
 
 - **Debate / flow:** `scopes.py`, `question_mode.py`, `decision_points.py` (owns the canonical decision-point emit/parse format), `clarity.py`, `verdict.py`, `rerun.py`
 - **Roles / personas:** `run_phase_roles.py`, `role_overrides.py`, `persona_overrides.py` (+ `studio.manifest.json`, `role_packs/`)
-- **Diagnostics:** `stats.py` (pure cross-run aggregation, ratings, and the outcome summary that `rate`/`export-outcomes`/`import-outcomes` feed)
+- **Diagnostics:** `stats.py` (pure cross-run aggregation, ratings, and the outcome summary that `rate`/`export-outcomes`/`import-outcomes` feed), `session.py` (pure; builds the automatic `session.json` health record finalize writes for each run)
 - **Implementation loop:** `impl_loop.py` — config for `.claude/workflows/implementation-loop.js`; see `studio/docs/IMPLEMENTATION_LOOP_SPEC.md`
 - **Cross-repo + hygiene:** `install.py`, `setup.py`, `offload.py`, `cleanup.py`
 - **Shared:** `config_loading.py` (the single TOML loader), `validators/`, `integrations/slack_digest.py`

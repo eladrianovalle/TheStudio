@@ -1,10 +1,31 @@
-# Session Analytics — plan (not yet built)
+# Session Analytics — design + status
 
 A design for measuring Studio runs over time *without* rating outputs that
-haven't been implemented yet. Captured from a Fable 5 design pass; not
-implemented. Single-user context assumed throughout (one person, one machine,
-records moving between their own repos) — so the "central ledger" is just a local
-file path, and there are no multi-user or access concerns to design around.
+haven't been implemented yet. Captured from a Fable 5 design pass. Single-user
+context assumed throughout (one person, one machine, records moving between their
+own repos) — so the "central ledger" is just a local file path, and there are no
+multi-user or access concerns to design around.
+
+**Status: first slice shipped.** The recommended first slice (see the bottom
+section) is built, via the `/studio-implement` writer/editor loop:
+
+- `session.json`, auto-written at finalize — `session.py` holds the pure
+  record builder (`build_session_record` + the `_summarize_*` helpers); the
+  finalize wiring lives in `run_phase._write_session_record`, which reads the run
+  dir and passes the pieces in. Additive and soft-fail: it never gates finalize.
+- Ledger auto-append via `[outcomes] ledger_path` — `run_phase.get_configured_ledger_path`
+  reads the path from `.studio/integrations.toml`; `run_phase._maybe_append_to_ledger`
+  appends the run's outcome record at finalize, deduped by `(repo, run_id)`, soft-fail.
+  `_outcome_record_from_run` now yields a record for unrated runs too, so the
+  ledger and `stats` see every session.
+- `stats` session-health block — `stats.summarize_session_health` (pure) computes
+  the five signals; `run_phase.show_stats` loads each run's `session.json` and adds
+  a `session_health` key to `--json`.
+
+**Still deferred:** the `studio outcome` command and session→implementation
+linking (Part 4, `--from-run`), plus richer session records in the ledger and any
+correlation/LLM-judged analytics. `rate` stays exactly as-is. The honest caveats
+below still apply to what shipped.
 
 ## The problem this solves
 

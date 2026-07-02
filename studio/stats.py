@@ -8,6 +8,7 @@ keeps the aggregation logic out of the 3,000-line entrypoint.
 """
 from __future__ import annotations
 
+from statistics import median
 from typing import Dict, List, Optional
 
 # Outcome vocabularies — kept small on purpose. "Did it ship" and a coarse
@@ -66,6 +67,141 @@ def summarize_outcomes(records: List[Dict]) -> Dict:
         "impact": impact,
         "recent_changed": recent_changed[-8:],
     }
+
+
+def _is_number(value) -> bool:
+    """True for a real int/float. Excludes bool: it is an int subclass, but a
+    flag is not a count, and treating it as one hides bad data instead of
+    dropping it.
+    """
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _numeric(value) -> float:
+    """Return the value if it is a real number, else 0.
+
+    Session records come from disk and may carry nulls or missing fields, so
+    every count is read through this guard before it enters a sum.
+    """
+    return value if _is_number(value) else 0
+
+
+def _session_health_signals(records: List[Dict]) -> Dict:
+    """Compute the five session-health signals over a list of session records.
+
+    Split out from :func:`summarize_session_health` so the same math can run over
+    the full history and over each half when we show a recent-vs-earlier trend.
+    Each record is a ``session.json`` dict (see docs/SESSION_ANALYTICS_PLAN.md).
+    Missing or partial fields are tolerated; an empty list yields all Nones.
+    """
+    count = len(records)
+
+    # Assumed-P0 rate: blocking questions the session guessed on, over all the
+    # blocking questions it surfaced. None when no P0 was ever surfaced.
+    p0_surfaced = 0
+    p0_assumed = 0
+    for record in records:
+        decisions = record.get("decisions") or {}
+        surfaced = decisions.get("surfaced") or {}
+        p0_surfaced += _numeric(surfaced.get("P0"))
+        p0_assumed += _numeric(decisions.get("p0_assumed"))
+    assumed_p0_rate = (p0_assumed / p0_surfaced) if p0_surfaced else None
+
+    # Convergence: median iterations-to-verdict, and the fraction of sessions
+    # that saw at least one rejection along the way.
+    iteration_counts: List[float] = []
+    sessions_with_rejection = 0
+    for record in records:
+        convergence = record.get("convergence") or {}
+        iterations = convergence.get("iterations")
+        if _is_number(iterations):
+            iteration_counts.append(iterations)
+        if _numeric(convergence.get("rejections")) > 0:
+            sessions_with_rejection += 1
+    median_iterations = median(iteration_counts) if iteration_counts else None
+    rejection_rate = (sessions_with_rejection / count) if count else None
+
+    # Clarity gain: mean of (after - before), only over records that have both.
+    clarity_gains: List[float] = []
+    for record in records:
+        clarity = record.get("clarity") or {}
+        before = clarity.get("mean_before")
+        after = clarity.get("mean_after")
+        if _is_number(before) and _is_number(after):
+            clarity_gains.append(after - before)
+    clarity_gain = (sum(clarity_gains) / len(clarity_gains)) if clarity_gains else None
+
+    # Tokens per settled decision: total spend over decisions actually answered
+    # (by the user or by an assumption). None when nothing settled.
+    total_tokens = 0
+    settled_decisions = 0
+    for record in records:
+        cost = record.get("cost") or {}
+        total_tokens += _numeric(cost.get("total_tokens"))
+        decisions = record.get("decisions") or {}
+        settled_decisions += (
+            _numeric(decisions.get("answered_by_user"))
+            + _numeric(decisions.get("answered_by_assumption"))
+        )
+    tokens_per_settled_decision = (
+        (total_tokens / settled_decisions) if settled_decisions else None
+    )
+
+    # Editor liveness: fraction of sessions whose final doc shrank vs the first
+    # draft (shrink_ratio > 0). 0% is the failure mode: a dead cut mandate.
+    sessions_that_shrank = 0
+    for record in records:
+        editor = record.get("editor") or {}
+        shrink_ratio = editor.get("shrink_ratio")
+        if _is_number(shrink_ratio) and shrink_ratio > 0:
+            sessions_that_shrank += 1
+    editor_liveness = (sessions_that_shrank / count) if count else None
+
+    return {
+        "records": count,
+        "assumed_p0_rate": assumed_p0_rate,
+        "convergence": {
+            "median_iterations": median_iterations,
+            "rejection_rate": rejection_rate,
+        },
+        "clarity_gain": clarity_gain,
+        "tokens_per_settled_decision": tokens_per_settled_decision,
+        "editor_liveness": editor_liveness,
+    }
+
+
+def summarize_session_health(session_records: List[Dict]) -> Dict:
+    """Roll up ``session.json`` records into the five health signals over time.
+
+    Each input is a ``session.json`` dict written automatically at finalize (see
+    docs/SESSION_ANALYTICS_PLAN.md). These measure a run's *health* — did the
+    debate converge, settle its blocking questions, and reduce uncertainty, at
+    what cost — not the quality of a plan that hasn't been built yet.
+
+    Returns the all-time figures plus, once there are enough records (>= 6), a
+    ``trend`` block that splits the list in half (caller passes them oldest
+    first) so a reader can see whether the two most telling signals — assumed-P0
+    rate and median iterations — are moving in the right direction. With fewer
+    records ``trend`` is None. Never raises: missing fields and an empty list
+    yield Nones and zeros.
+
+    Pure: data in, summary dict out.
+    """
+    records = [r for r in session_records if isinstance(r, dict)]
+    summary = _session_health_signals(records)
+
+    # A recent-vs-earlier split only says something once each half has a few
+    # sessions in it; below that it is noise, so we withhold it.
+    if len(records) >= 6:
+        midpoint = len(records) // 2
+        summary["trend"] = {
+            "earlier": _session_health_signals(records[:midpoint]),
+            "recent": _session_health_signals(records[midpoint:]),
+        }
+    else:
+        summary["trend"] = None
+
+    return summary
 
 
 def _summarize_metrics(entries: List[Dict]) -> Dict:
@@ -255,11 +391,86 @@ def _format_outcomes(outcomes: Dict) -> List[str]:
     return lines
 
 
+def _fmt_signal(value: Optional[float], *, pct: bool) -> str:
+    """Format one session-health number, or "n/a" when it could not be computed."""
+    if value is None:
+        return "n/a"
+    if pct:
+        return f"{value*100:.0f}%"
+    return f"{value:g}"
+
+
+def _format_session_health(health: Dict) -> List[str]:
+    """Render the session-health block: five signals auto-measured at finalize.
+
+    Each line labels what the number means in a few words, because these are for
+    a human reading the dashboard, not targets for an agent to chase.
+    """
+    lines = ["", "Session health (auto-measured at finalize):"]
+    lines.append(f"  {health['records']} finalized session(s) on record")
+
+    assumed = health["assumed_p0_rate"]
+    if assumed is None:
+        lines.append("  Assumed-P0 rate: n/a (no blocking questions surfaced)")
+    else:
+        lines.append(
+            f"  Assumed-P0 rate: {assumed*100:.0f}% "
+            "(blocking questions guessed instead of asked; want ~0%)"
+        )
+
+    convergence = health["convergence"]
+    median_iterations = _fmt_signal(convergence["median_iterations"], pct=False)
+    rejection_rate = _fmt_signal(convergence["rejection_rate"], pct=True)
+    lines.append(
+        f"  Convergence: median {median_iterations} iterations, "
+        f"{rejection_rate} of sessions hit a rejection (both extremes are smells)"
+    )
+
+    gain = health["clarity_gain"]
+    if gain is None:
+        lines.append("  Clarity gain: n/a (no before/after snapshots)")
+    else:
+        lines.append(f"  Clarity gain: {gain:+.2f} mean per session (uncertainty reduced; higher is better)")
+
+    tokens = health["tokens_per_settled_decision"]
+    if tokens is None:
+        lines.append("  Tokens/settled decision: n/a (nothing settled)")
+    else:
+        lines.append(f"  Tokens/settled decision: {tokens:,.0f} (spend per question answered)")
+
+    liveness = health["editor_liveness"]
+    if liveness is None:
+        lines.append("  Editor liveness: n/a")
+    else:
+        lines.append(
+            f"  Editor liveness: {liveness*100:.0f}% "
+            "of sessions shrank the doc (0% means a dead cut mandate)"
+        )
+
+    trend = health.get("trend")
+    if trend:
+        earlier = trend["earlier"]
+        recent = trend["recent"]
+        lines.append(f"  Trend (recent {recent['records']} vs earlier {earlier['records']}):")
+        lines.append(
+            "    Assumed-P0 rate: "
+            f"{_fmt_signal(earlier['assumed_p0_rate'], pct=True)} -> "
+            f"{_fmt_signal(recent['assumed_p0_rate'], pct=True)}"
+        )
+        lines.append(
+            "    Median iterations: "
+            f"{_fmt_signal(earlier['convergence']['median_iterations'], pct=False)} -> "
+            f"{_fmt_signal(recent['convergence']['median_iterations'], pct=False)}"
+        )
+    return lines
+
+
 def format_stats(
     agg: Dict,
     usage: Optional[Dict] = None,
     clarity_note: Optional[str] = None,
     outcomes: Optional[Dict] = None,
+    session_health: Optional[Dict] = None,
 ) -> str:
     """Render an aggregate_stats() result as a terminal dashboard."""
     bar = "=" * 60
@@ -325,6 +536,9 @@ def format_stats(
             lines.append(f"  Answered: {d['answered']}/{d['total']} ({d['answer_rate']*100:.0f}%)")
     else:
         lines.append("  None recorded.")
+
+    if session_health and session_health.get("records"):
+        lines.extend(_format_session_health(session_health))
 
     if usage and usage["total"]:
         lines.append("")

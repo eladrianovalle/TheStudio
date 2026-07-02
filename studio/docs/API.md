@@ -88,6 +88,11 @@ Inside each run directory:
 
 `finalize` enforces the artifact checklist (see Section 3). Missing files raise a `FileNotFoundError` describing the gaps. On a `COMPLETED` run it closes with a rating prompt — interactive at a TTY, otherwise a copy-paste `rate` nudge — unless `--no-rate-prompt` is given.
 
+`finalize` also has two additive side effects, both soft-fail (a failure prints a warning but never breaks finalize):
+
+- Writes `session.json` into the run directory — the automatic, judgment-free session-health record (schema in Section 4.1).
+- **Ledger auto-append.** When `[outcomes] ledger_path = "<path>"` is set under an `[outcomes]` table in `.studio/integrations.toml` (the same file that holds the Slack/n8n webhook config), `finalize` appends this run's outcome record to that local JSONL file, deduped by `(repo, run_id)` so re-finalizing refreshes the record rather than duplicating it. The record is the same shape `export-outcomes` emits (see Section 1.7), and unrated runs are included. This is a single-machine simplification: the "central ledger" becomes a fixed local file, so `finalize` can append directly instead of making you run `export-outcomes` then `import-outcomes` by hand. When the key is absent or unreadable, nothing is appended.
+
 ---
 
 ### 1.3 `record-metrics` arguments
@@ -144,6 +149,8 @@ The three `--shipped`/`--impact`/`--changed` flags are optional and record the r
 Reads every run's `run.json`, `rating.json`, and `decisions.json` under the output root, plus `.studio/usage.log`, and aggregates: total/by-phase/by-status run counts, verdict distribution + approval rate, human-rating count/avg/by-phase + lowest-rated runs, token/cost/hours efficiency, decision priority mix + answer rate, and prepare-usage counts. Pure aggregation and formatting live in `stats.py` (`aggregate_stats()`, `format_stats()`, `summarize_outcomes()`).
 
 The dashboard opens with an **"Outcomes (did it ship / what changed)"** section: ship rate, impact mix, and recent "what changed" notes. It folds two sources together — this repo's rated runs plus any cross-repo ledger records pulled in via `import-outcomes` (local records win on conflict). With `--json`, the emitted dict gains an `outcomes` key holding that same summary (record/repo counts, `shipped`/`impact` tallies, `ship_rate`, and recent `changed` notes).
+
+The dashboard also renders a **"Session health"** block, computed from each run's `session.json` (see Section 4.1) by `stats.summarize_session_health`. It reports five auto-measured signals over the finalized sessions on record: assumed-P0 rate (P0s guessed instead of asked), convergence (median iterations + rejection rate), clarity gain per session, tokens per settled decision, and editor liveness (share of sessions whose final doc shrank). With enough sessions it splits earlier vs. recent to show the trend. With `--json`, the emitted dict gains a `session_health` key holding this summary.
 
 ---
 
@@ -238,6 +245,29 @@ Every run directory contains a `run.json` created by `prepare` and updated by `f
 | `metrics` | object or null | Agent token usage aggregated from `metrics.json` at finalize: `{ "agents": int, "total_tokens": int, "total_duration_ms": int, "total_tool_uses": int, "by_scope": { ... }, "by_role": { ... } }`. |
 
 You can safely parse this JSON for dashboards, scripts, or audits.
+
+---
+
+### 4.1 `session.json` Schema
+
+`finalize` also writes a `session.json` into each run directory — an automatic, judgment-free **session-health** record. A Studio run is a planning session whose specs get built later, so its quality can't be judged at finalize; what *can* be measured is whether the debate converged, surfaced and settled the right questions, reduced uncertainty, and at what cost. Every field is derived from files the run already produced (no human input). The record is built by `session.build_session_record` and written soft-fail, so a failure here never breaks finalize.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `run_id` | string | Run identifier. |
+| `repo` | string | Project name the run belongs to. |
+| `phase` | string | `market`, `design`, `tech`, or `studio`. |
+| `mode` | string | `deliverables` or `questions`. |
+| `finalized_iso` | string | UTC timestamp of finalize. |
+| `verdict` | string | Final verdict (`APPROVED`, `REJECTED`, …). |
+| `convergence` | object | `{ "iterations": int, "max_iterations": int, "rejections": int }` — iterations to verdict and how many REJECTED verdicts preceded it. |
+| `decisions` | object | `{ "surfaced": {"P0": int, "P1": int, "P2": int}, "answered_by_user": int, "answered_by_assumption": int, "unanswered": int, "p0_assumed": int }`. `p0_assumed` is the key signal: blocking questions the session guessed on rather than asking. |
+| `clarity` | object | `{ "mean_before": float or null, "mean_after": float or null, "topics_touched": int }` — the de-risking delta. |
+| `cost` | object | `{ "total_tokens": int, "duration_ms": int, "agents": int, "tokens_per_settled_decision": int or null, "scope_pct": { "<scope>": int } }`. `tokens_per_settled_decision` is null when nothing was settled; `scope_pct` is each scope's whole-number percent share of tokens. |
+| `editor` | object | `{ "first_draft_words": int, "final_words": int, "shrink_ratio": float }` — editor-liveness proxy from advocate-doc word counts. `shrink_ratio` of 0.33 means a third was cut; 0.0 when there is no first draft to measure against. |
+| `outcome` | null | Always null at finalize; the one field a human may edit later to record whether the plan got built. |
+
+See `docs/SESSION_ANALYTICS_PLAN.md` for the design and the five health signals `stats` derives from these records.
 
 ---
 

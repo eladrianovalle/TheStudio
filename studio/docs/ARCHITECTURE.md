@@ -39,7 +39,8 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 | `cleanup.py` | TTL-based (30 days) and budget-based (900 MB) run artifact cleanup, plus loose file removal for legacy artifacts outside run directories. |
 | `rerun.py` | Detects rejection context from prior runs and generates rerun instructions. |
 | `verdict.py` | Extracts APPROVED/REJECTED/UNKNOWN verdict from agent output. |
-| `stats.py` | Pure cross-run aggregation, formatting, and outcome roll-up (`aggregate_stats`, `format_stats`, `summarize_outcomes`, `_summarize_metrics`, `_parse_usage_log`). Backs the `stats` command; moved out of `run_phase.py` so the number-crunching has no I/O. |
+| `stats.py` | Pure cross-run aggregation, formatting, and outcome roll-up (`aggregate_stats`, `format_stats`, `summarize_outcomes`, `summarize_session_health`, `_summarize_metrics`, `_parse_usage_log`). Backs the `stats` command; moved out of `run_phase.py` so the number-crunching has no I/O. |
+| `session.py` | Pure builder for the automatic `session.json` health record (`build_session_record` + `_summarize_decisions`/`_summarize_cost`/`_summarize_editor`). Mirrors `stats.py` — data-in/data-out, no I/O; `run_phase` finalize reads the run dir and hands the pieces in. |
 | `config_loading.py` | The single shared TOML loader: picks `tomllib` (3.11+) or the `tomli` fallback (3.10) with one consistent error message. Imported by `run_phase.py`, `scopes.py`, `cleanup.py`, `persona_overrides.py`, `impl_loop.py`, and `integrations/slack_digest.py` so no module carries its own copy. |
 | `impl_loop.py` | Implementation writer/editor loop config: `LoopConfig` + `load_loop_config()`. Projects the resolved config into runtime knobs (editor on/off, read scope, output budget, mutation/static gates) for the `implementation-loop.js` Workflow via `python -m impl_loop`. |
 | `install.py` | Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project. Injects coding principles into target's `CLAUDE.md` via sentinel markers. |
@@ -55,7 +56,7 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 | `.studio/roles/*.json` | Project-local role overrides. Shallow-merge with manifest roles (override keys replace base, unspecified keys inherit). |
 | `.studio/personas.toml` | Project-local single-phase persona overrides. Per-phase shallow-merge over the shipped `PHASE_DETAILS` defaults (loaded by `persona_overrides.py`, authored by the setup wizard). |
 | `.studio/unstale.toml` | Optional per-repo override for the `/unstale` audit (`[snapshot]` commands + `[audit]` globs). Read by the `/unstale` command; absent it self-detects the stack. Authored by the setup wizard. |
-| `.studio/integrations.toml` | Optional outbound-webhook config for run digests. `[slack]` and `[n8n]` tables, each with `enabled` and `webhook_url_env` (env var holding the secret URL); `[n8n]` also takes optional `auth_header`/`auth_value_env` for Header Auth. Loaded by `integrations/slack_digest.py`. |
+| `.studio/integrations.toml` | Optional outbound-webhook config for run digests, plus the outcomes ledger path. `[slack]` and `[n8n]` tables, each with `enabled` and `webhook_url_env` (env var holding the secret URL); `[n8n]` also takes optional `auth_header`/`auth_value_env` for Header Auth. Loaded by `integrations/slack_digest.py`. An optional `[outcomes] ledger_path` key names a local JSONL file that `finalize` auto-appends each run's outcome record to (read by `run_phase.get_configured_ledger_path`). |
 | Role `prompt_doc` (optional) | Per-role pointer to a long-form prompt doc, surfaced as a link in the Role Menu. Studio ships none — projects supply their own and set the path via a `.studio/roles/*.json` override; unset renders as `-`. |
 | Active output root (`output/` or `.studio/output/`) | Run folders containing instructions, advocate/contrarian artifacts, integrator plans, summaries, and metadata. |
 | Active knowledge log (`knowledge/run_log.md` or `.studio/knowledge/run_log.md`) | Append-only log of finalized runs for easy reference across repos. |
@@ -121,6 +122,7 @@ No automation runs outside the assistant; the instructions are simply executed a
    - **Agent metrics aggregation**: if `metrics.json` exists (recorded by the orchestrator during the run), summarize into `run.json["metrics"]` with totals and breakdowns by scope and role.
 4. Finalize updates `run.json` with status, verdict, hours, cost, iterations, quality checks, scope stats, agent metrics, and for Studio: `completed` + `missing` role lists.
 5. The active index/log (`<active_output_root>/index.md` and `<active_knowledge_root>/run_log.md`) are refreshed, giving downstream repos searchable entries with summary links.
+6. Two additive, soft-fail side effects (never gate finalize): `run_phase._write_session_record` writes the automatic `session.json` health record into the run dir (built by `session.build_session_record`), and when `[outcomes] ledger_path` is configured, `run_phase._maybe_append_to_ledger` appends this run's outcome record to that local ledger, deduped by `(repo, run_id)`.
 
 ---
 

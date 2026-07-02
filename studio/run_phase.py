@@ -70,7 +70,13 @@ from rerun import (
 from validators.code_validator import CodeValidator
 
 import clarity
-from integrations.slack_digest import load_integrations_config, notify_run
+from verdict import extract_verdict
+from session import build_session_record
+from integrations.slack_digest import (
+    INTEGRATIONS_FILENAME,
+    load_integrations_config,
+    notify_run,
+)
 
 from config_loading import tomllib
 from stats import (
@@ -81,6 +87,7 @@ from stats import (
     aggregate_stats,
     format_stats,
     summarize_outcomes,
+    summarize_session_health,
 )
 
 
@@ -369,6 +376,35 @@ def get_outcomes_ledger_path() -> Path:
     if artifact_root == studio_root:
         return studio_root / "knowledge" / "outcomes.jsonl"
     return artifact_root / ".studio" / "knowledge" / "outcomes.jsonl"
+
+
+def get_configured_ledger_path() -> Optional[Path]:
+    """Local ledger path for auto-appending outcome records at finalize.
+
+    Reads an optional ``[outcomes] ledger_path`` from
+    ``<artifact_root>/.studio/integrations.toml`` — the same file that holds the
+    Slack/n8n webhook config. This is a single-user simplification: the "central
+    ledger" is just a fixed local file (typically the tool repo's
+    ``knowledge/outcomes.jsonl``), so finalize can append there directly instead
+    of making you run export-outcomes then import-outcomes by hand.
+
+    Returns the resolved path when configured, or None when the config file, the
+    ``[outcomes]`` table, or the ``ledger_path`` key is absent or unreadable. The
+    ledger file itself need not exist yet — the first append creates it. Never
+    raises: a broken config must not break finalize.
+    """
+    config_path = get_artifact_root() / ".studio" / INTEGRATIONS_FILENAME
+    try:
+        if not config_path.is_file():
+            return None
+        with config_path.open("rb") as fh:
+            data = tomllib.load(fh)
+        raw = (data.get("outcomes") or {}).get("ledger_path")
+        if not isinstance(raw, str) or not raw.strip():
+            return None
+        return Path(raw).expanduser().resolve()
+    except Exception:
+        return None
 
 
 def utc_now() -> datetime:
@@ -1382,6 +1418,105 @@ def prepare_run(args: argparse.Namespace) -> str:
     return run_id
 
 
+def _ordered_agent_files(run_dir: Path, phase: str, kind: str) -> List[Path]:
+    """Agent output files (``kind`` is 'advocate' or 'contrarian') in write order.
+
+    Chronological so "first draft vs final" and "rejections before the last one"
+    are meaningful: simple runs sort by iteration number; studio runs sort by
+    scope then iteration.
+    """
+    if phase == "studio":
+        paths = list(run_dir.glob(f"{kind}--*--*.md"))
+
+        def studio_key(path: Path) -> Tuple[str, int, str]:
+            _, role, scope, iteration = parse_role_filename(path.name)
+            return (scope or "", iteration, role)
+
+        paths.sort(key=studio_key)
+    else:
+        paths = list(run_dir.glob(f"{kind}_*.md"))
+
+        def simple_key(path: Path) -> int:
+            suffix = path.stem.split("_")[-1]
+            return int(suffix) if suffix.isdigit() else 0
+
+        paths.sort(key=simple_key)
+    return paths
+
+
+def _count_rejections(run_dir: Path, phase: str) -> int:
+    """Count contrarian REJECTED verdicts before the final one.
+
+    Each contrarian file carries a VERDICT line. A debate that took two
+    rejections to reach APPROVED did real work; one that approved on the first
+    pass may be a rubber stamp. We count REJECTED verdicts across every
+    contrarian file except the last, so the terminal verdict itself isn't
+    counted as a rejection-along-the-way.
+    """
+    paths = _ordered_agent_files(run_dir, phase, "contrarian")
+    rejections = 0
+    for path in paths[:-1]:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if extract_verdict(text) == "REJECTED":
+            rejections += 1
+    return rejections
+
+
+def _ordered_advocate_word_counts(run_dir: Path, phase: str) -> List[int]:
+    """Word count of each advocate document, first draft first, final last."""
+    counts: List[int] = []
+    for path in _ordered_agent_files(run_dir, phase, "advocate"):
+        try:
+            counts.append(len(path.read_text(encoding="utf-8").split()))
+        except OSError:
+            continue
+    return counts
+
+
+def _write_session_record(
+    run_dir: Path,
+    meta: Dict,
+    phase: str,
+    run_id: str,
+    metrics_entries: List[Dict],
+    clarity_mean_before: Optional[float],
+    clarity_mean_after: Optional[float],
+    clarity_topics_touched: int,
+) -> None:
+    """Write the automatic session.json health record for a finalized run.
+
+    Additive and soft-fail: session.json augments finalize, it never gates it.
+    Anything that goes wrong while deriving the record is logged and skipped so
+    a finalize that already did its real work still succeeds. See
+    docs/SESSION_ANALYTICS_PLAN.md and session.build_session_record.
+    """
+    try:
+        record = build_session_record(
+            run_id=run_id,
+            repo=_project_name(),
+            phase=phase,
+            mode=meta.get("output_type", "deliverables"),
+            finalized_iso=meta.get("updated_iso")
+            or utc_now().isoformat(timespec="seconds"),
+            verdict=meta.get("verdict", ""),
+            iterations=meta.get("iterations_run") or 0,
+            max_iterations=meta.get("max_iterations") or 0,
+            rejections=_count_rejections(run_dir, phase),
+            decisions=load_decisions_json(run_dir),
+            clarity_mean_before=clarity_mean_before,
+            clarity_mean_after=clarity_mean_after,
+            clarity_topics_touched=clarity_topics_touched,
+            metrics_entries=metrics_entries,
+            advocate_word_counts=_ordered_advocate_word_counts(run_dir, phase),
+        )
+        write_json(run_dir / "session.json", record)
+    except Exception as exc:  # never let the health record break finalize
+        print(f"Session record skipped: {exc}", file=sys.stderr)
+
+
 def finalize_run(args: argparse.Namespace) -> None:
     run_id = args.run_id
     phase = (args.phase or _phase_from_run_id(run_id)).lower()
@@ -1425,11 +1560,18 @@ def finalize_run(args: argparse.Namespace) -> None:
     rebuild_index()
     _append_run_log(meta)
     _maybe_notify(run_dir)
+    _maybe_append_to_ledger(run_dir, meta)
 
     if metrics_entries:
         total_tokens = meta["metrics"]["total_tokens"]
         agent_count = meta["metrics"]["agents"]
         print(f"Agent metrics: {agent_count} agents, {total_tokens:,} total tokens")
+
+    # Clarity delta for the session record — the "before" is captured below only
+    # when there are decisions to recompute clarity from; otherwise it stays null.
+    clarity_mean_before: Optional[float] = None
+    clarity_mean_after: Optional[float] = None
+    clarity_topics_touched = 0
 
     # Generate decisions.md — merge agent-surfaced decisions with any already-settled ones
     existing = load_decisions_json(run_dir)
@@ -1460,6 +1602,22 @@ def finalize_run(args: argparse.Namespace) -> None:
         clarity.save_clarity_json(run_dir / "clarity.json", snapshot)
         clarity.save_project_clarity(art_root, snapshot)
         print(f"Updated clarity scores ({len(snapshot.topics)} topic(s), mean: {snapshot.mean_score:.2f})")
+
+        clarity_mean_before = prior.mean_score if prior is not None else None
+        clarity_mean_after = snapshot.mean_score
+        clarity_topics_touched = len(snapshot.topics)
+
+    # Auto-write the judgment-free session health record (additive, soft-fail).
+    _write_session_record(
+        run_dir,
+        meta,
+        phase,
+        run_id,
+        metrics_entries,
+        clarity_mean_before,
+        clarity_mean_after,
+        clarity_topics_touched,
+    )
 
     print(f"Finalized {run_id} ({phase}) → {meta['status']}")
 
@@ -1499,6 +1657,38 @@ def _maybe_notify(run_dir: Path) -> None:
             print(f"Notify: {line}")
     except Exception as exc:
         print(f"Notify failed: {exc}", file=sys.stderr)
+
+
+def _maybe_append_to_ledger(run_dir: Path, meta: Dict) -> None:
+    """Append this run's outcome record to the configured local ledger.
+
+    Collapses the manual export-outcomes → import-outcomes two-step into one
+    finalize side effect: when ``[outcomes] ledger_path`` is set in
+    ``.studio/integrations.toml``, the finalized run (rated or not) is appended to
+    that ledger, deduped by (repo, run_id) so re-finalizing refreshes the record
+    instead of duplicating it. Default-off and soft-fail — on any error we warn,
+    print the manual import fallback, and never break finalize. Mirrors
+    _maybe_notify.
+    """
+    ledger_path = get_configured_ledger_path()
+    if ledger_path is None:
+        return
+    try:
+        run = dict(meta)
+        run["_rating"] = _load_rating(run_dir)
+        record = _outcome_record_from_run(run, _project_name())
+        existing = _read_ledger(ledger_path)
+        merged = _merge_outcomes(existing, [record])
+        ledger_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_ledger(ledger_path, merged)
+        print(f"Appended outcome record to ledger: {ledger_path}")
+    except Exception as exc:
+        print(f"Ledger append failed ({exc}); record NOT added to {ledger_path}", file=sys.stderr)
+        print(
+            f"   Fallback: {_entrypoint()} export-outcomes --out out.jsonl && "
+            f"{_entrypoint()} import-outcomes --from out.jsonl",
+            file=sys.stderr,
+        )
 
 
 def rebuild_index() -> None:
@@ -1947,7 +2137,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     export_outcomes_parser = subparsers.add_parser(
         "export-outcomes",
-        help="Export this repo's rated runs as portable JSONL outcome records.",
+        help="Export this repo's runs as portable JSONL outcome records (rated or not).",
     )
     export_outcomes_parser.add_argument(
         "--out", default=None, help="Write JSONL here (default: stdout)."
@@ -2365,6 +2555,20 @@ def _load_rating(run_dir: Path) -> Optional[Dict]:
         return None
 
 
+def _load_session(run_dir: Path) -> Optional[Dict]:
+    """Load session.json from a run directory, returning None if absent/unreadable.
+
+    session.json is the automatic health record finalize writes; a run finalized
+    before that feature (or a broken file) simply has none.
+    """
+    try:
+        return json.loads((run_dir / "session.json").read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
 def _write_rating(
     run_dir: Path,
     score: int,
@@ -2466,16 +2670,15 @@ def _prompt_for_rating(run_dir: Path) -> None:
     print(f"   Recorded {score}/5.")
 
 
-def _outcome_record_from_run(run: Dict, repo: str) -> Optional[Dict]:
-    """Build a portable outcome record from an enriched run dict (needs _rating).
+def _outcome_record_from_run(run: Dict, repo: str) -> Dict:
+    """Build a portable outcome record from an enriched run dict.
 
-    Returns None for unrated runs — a rating is what makes a run an outcome we
-    can learn from. shipped/impact/changed are pulled from the rating's optional
-    ``outcome`` block and may be null.
+    Every run yields a record, including unrated ones — an unrated run is still a
+    session the ledger and stats should see. A rating, when present, fills in
+    score/shipped/impact/changed/rated_iso; without one those stay null while
+    repo, run_id, phase, verdict, status, and token cost are still recorded.
     """
-    rating = run.get("_rating")
-    if not rating:
-        return None
+    rating = run.get("_rating") or {}
     outcome = rating.get("outcome") or {}
     return {
         "repo": repo,
@@ -2514,13 +2717,12 @@ def _write_ledger(path: Path, records: List[Dict]) -> None:
 
 
 def _collect_local_outcomes(runs: List[Dict], repo: str) -> List[Dict]:
-    """Outcome records for this repo's rated runs (runs already carry _rating)."""
-    records = []
-    for run in runs:
-        rec = _outcome_record_from_run(run, repo)
-        if rec is not None:
-            records.append(rec)
-    return records
+    """Outcome records for this repo's runs (runs already carry _rating).
+
+    Includes unrated runs — every run yields a record, so stats and the ledger
+    see every session rather than only the ones a human bothered to rate.
+    """
+    return [_outcome_record_from_run(run, repo) for run in runs]
 
 
 def _merge_outcomes(ledger: List[Dict], local: List[Dict]) -> List[Dict]:
@@ -2536,11 +2738,12 @@ def _merge_outcomes(ledger: List[Dict], local: List[Dict]) -> List[Dict]:
 
 
 def export_outcomes(args: argparse.Namespace) -> None:
-    """Collect this repo's rated runs into a portable JSONL of outcome records.
+    """Collect this repo's runs into a portable JSONL of outcome records.
 
-    Writes to --out (default: stdout). Feed the file to ``import-outcomes`` in
-    the tool repo so a consuming repo's results become visible to ``stats`` there
-    — the bridge that lets evidence reach the main repo.
+    Includes unrated runs — every session is a record. Writes to --out (default:
+    stdout). Feed the file to ``import-outcomes`` in the tool repo so a consuming
+    repo's results become visible to ``stats`` there — the bridge that lets
+    evidence reach the main repo when a repo lives on another machine.
     """
     repo = getattr(args, "repo", None) or _project_name()
     runs = collect_runs(get_output_root())
@@ -2601,12 +2804,20 @@ def show_stats(args: argparse.Namespace) -> None:
     for run in runs:
         run_dir = Path(run["run_dir"])
         run["_rating"] = _load_rating(run_dir)
+        run["_session"] = _load_session(run_dir)
         try:
             run["_decisions"] = load_decisions_json(run_dir)
         except Exception:
             run["_decisions"] = []
 
     agg = aggregate_stats(runs)
+
+    # Session health: the automatic finalize records, oldest first so the
+    # recent-vs-earlier trend split is chronological. The --phase filter above
+    # already narrowed `runs`, so this respects it.
+    session_records = [run["_session"] for run in runs if run.get("_session")]
+    session_records.sort(key=lambda record: record.get("finalized_iso") or "")
+    session_health = summarize_session_health(session_records)
 
     # Outcomes: this repo's rated runs plus the cross-repo ledger (imported from
     # other projects). Local records win on conflict since they're the fresher read.
@@ -2618,7 +2829,7 @@ def show_stats(args: argparse.Namespace) -> None:
     outcomes = summarize_outcomes(outcome_records)
 
     if getattr(args, "json", False):
-        print(json.dumps({**agg, "outcomes": outcomes}, indent=2))
+        print(json.dumps({**agg, "outcomes": outcomes, "session_health": session_health}, indent=2))
         return
 
     usage = None
@@ -2634,7 +2845,7 @@ def show_stats(args: argparse.Namespace) -> None:
     if snapshot is not None and snapshot.topics:
         clarity_note = f"{len(snapshot.topics)} topics tracked (run 'show-clarity' for the table)"
 
-    print(format_stats(agg, usage=usage, clarity_note=clarity_note, outcomes=outcomes))
+    print(format_stats(agg, usage=usage, clarity_note=clarity_note, outcomes=outcomes, session_health=session_health))
 
 
 def inject_context(args: argparse.Namespace) -> None:

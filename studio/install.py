@@ -43,6 +43,7 @@ SOURCE_FILES = [
     "impl_loop.py",
     "config_loading.py",
     "stats.py",
+    "session.py",
     "studio.manifest.json",
     "validators/__init__.py",
     "validators/document_validator.py",
