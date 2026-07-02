@@ -1,6 +1,6 @@
 # Studio
 
-Studio is an **instruction generator** for structured advocate/contrarian debates. It prepares run directories with instructions that an AI assistant (Claude Code, Windsurf/Cascade, or any capable agent) executes, then packages the results as versioned artifacts.
+Studio is an **instruction generator** for structured advocate/contrarian debates. It prepares run directories with instructions that an AI assistant (Claude Code is the supported path) executes, then packages the results as versioned artifacts.
 
 **No runtime. No API keys. No dependencies beyond Python stdlib.** All intelligence lives in the assistant's execution — Studio just keeps the prompts, roles, artifacts, and logs organized.
 

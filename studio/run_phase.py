@@ -4,7 +4,7 @@ Studio run instruction helper.
 
 Prepares per-phase instructions, creates run directories, and keeps
 output/index.md in sync so every Studio request can be executed agentically
-by any AI assistant (Claude Code, Windsurf/Cascade, etc.).
+by an AI assistant (Claude Code is the supported path).
 """
 from __future__ import annotations
 

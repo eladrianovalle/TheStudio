@@ -12,7 +12,7 @@ Analyze CLAUDE.md for content that can be safely offloaded to companion document
 
 ## Constraints
 
-- This command targets Claude Code agents. Windsurf/Cascade compatibility is not validated and pointer patterns may not trigger Read calls in those environments.
+- This command targets Claude Code agents. Pointer patterns rely on the agent following Read directives.
 - Canary tokens use exact string match only (`==`). Never use regex or substring matching for canary verification.
 - In multi-turn sessions, a canary echo from a prior turn does not prove the agent re-read the doc in the current turn.
 

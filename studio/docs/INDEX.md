@@ -27,9 +27,6 @@
 
 ## Execution Guides
 - **[CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md)** - Claude Code slash commands and agent workflow
-- **[windsurf/USAGE.md](./windsurf/USAGE.md)** - Windsurf/Cascade-specific execution workflow
-- **[windsurf/QUICKREF.md](./windsurf/QUICKREF.md)** - Windsurf quick reference card
-- **[windsurf/cascade_workflow.md](./windsurf/cascade_workflow.md)** - Cascade roleplay workflow prompts
 
 ## Available Phases
 

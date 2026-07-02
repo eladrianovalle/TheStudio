@@ -24,7 +24,7 @@ IDENTITY_SECTION_GAMESTUDIO = """\
 
 TheGameStudio is an **instruction generator** for structured advocate/contrarian \
 debates in game development workflows. It produces run directories with instructions \
-that an AI assistant (Claude Code, Windsurf/Cascade) executes, then packages results \
+that an AI assistant (Claude Code) executes, then packages results \
 as versioned artifacts. There is no AI runtime — all intelligence lives in the \
 assistant's execution.
 """

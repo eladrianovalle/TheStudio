@@ -1,6 +1,6 @@
 # Agents Reference
 
-Studio no longer spins up its own agents. Instead, we describe every persona in Markdown/JSON so an AI assistant (Claude Code, Windsurf/the assistant, etc.) can roleplay them deterministically during the prepare → execute → finalize loop. Use this file to understand what each phase expects and how to extend or override roles safely.
+Studio no longer spins up its own agents. Instead, we describe every persona in Markdown/JSON so an AI assistant (Claude Code is the supported path) can roleplay them deterministically during the prepare → execute → finalize loop. Use this file to understand what each phase expects and how to extend or override roles safely.
 
 ---
 
@@ -140,7 +140,6 @@ Roles enforce two methodologies via their contrarian focuses and escalation trig
 
 - [README.md](../../README.md) – overall workflow and testing notes.
 - [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) – Claude Code slash commands and workflow.
-- [windsurf/USAGE.md](./windsurf/USAGE.md) – Windsurf/Cascade-specific workflow.  
 - [API.md](./API.md) – CLI/reference schema.  
 - [ARCHITECTURE.md](./ARCHITECTURE.md) – system view of prepare → execute → finalize.  
 

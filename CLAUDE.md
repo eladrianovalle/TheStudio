@@ -102,7 +102,7 @@ The test: could a teammate seeing this file for the first time read it top to bo
 
 ## What This Is
 
-TheGameStudio is an **instruction generator** for structured advocate/contrarian debates in game development workflows. It produces run directories with instructions that an AI assistant (Claude Code, Windsurf/Cascade) executes, then packages results as versioned artifacts. There is no AI runtime — all intelligence lives in the assistant's execution.
+TheGameStudio is an **instruction generator** for structured advocate/contrarian debates in game development workflows. It produces run directories with instructions that an AI assistant (Claude Code is the supported path) executes, then packages results as versioned artifacts. There is no AI runtime — all intelligence lives in the assistant's execution.
 
 ## Running a Studio Phase (Claude Code)
 

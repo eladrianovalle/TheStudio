@@ -1,6 +1,6 @@
 # API Reference (run_phase.py)
 
-Studio exposes exactly one supported interface: `run_phase.py`. This script prepares instructions, validates artifacts, and keeps indexes/logs up to date so runs stay reproducible across any AI assistant (Claude Code, Windsurf/Cascade, etc.). This document describes the command-line contract, JSON schema, and file formats you can rely on when integrating Studio into other repositories or tooling.
+Studio exposes exactly one supported interface: `run_phase.py`. This script prepares instructions, validates artifacts, and keeps indexes/logs up to date so runs stay reproducible (Claude Code is the supported assistant path). This document describes the command-line contract, JSON schema, and file formats you can rely on when integrating Studio into other repositories or tooling.
 
 ---
 
@@ -307,7 +307,6 @@ Stick to the CLI whenever possible so scripts remain simple and any assistant ca
 
 - [README.md](../../README.md) – big-picture overview and testing notes.
 - [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) – Claude Code slash commands and workflow.
-- [windsurf/USAGE.md](./windsurf/USAGE.md) – Windsurf/Cascade-specific workflow.
 - [STUDIO_BRIDGE_TEMPLATE.md](./STUDIO_BRIDGE_TEMPLATE.md) – copy into every dependent repo.
 - [INTEGRATION_GUIDE.md](./INTEGRATION_GUIDE.md) – repo-level onboarding checklist and helper scripts.
 
