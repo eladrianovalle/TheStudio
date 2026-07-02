@@ -647,9 +647,20 @@ def test_write_rating_omits_empty_outcome(tmp_path):
     assert "outcome" not in rating
 
 
-def test_outcome_record_from_run_needs_rating():
-    """Unrated runs produce no outcome record; rated runs flatten the outcome."""
-    assert run_phase._outcome_record_from_run({"run_id": "r", "_rating": None}, "repo") is None
+def test_outcome_record_from_run_includes_unrated():
+    """Unrated runs still yield a record (null score/outcome); rated runs flatten it."""
+    unrated = run_phase._outcome_record_from_run(
+        {"run_id": "r", "phase": "market", "verdict": "APPROVED",
+         "status": "completed", "_rating": None},
+        "repo",
+    )
+    assert unrated["repo"] == "repo"
+    assert unrated["run_id"] == "r"
+    assert unrated["phase"] == "market"
+    assert unrated["verdict"] == "APPROVED"
+    assert unrated["score"] is None
+    assert unrated["shipped"] is None
+    assert unrated["rated_iso"] is None
     rec = run_phase._outcome_record_from_run(
         {
             "run_id": "run_studio_1", "phase": "studio", "verdict": "APPROVED",

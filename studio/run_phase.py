@@ -72,7 +72,11 @@ from validators.code_validator import CodeValidator
 import clarity
 from verdict import extract_verdict
 from session import build_session_record
-from integrations.slack_digest import load_integrations_config, notify_run
+from integrations.slack_digest import (
+    INTEGRATIONS_FILENAME,
+    load_integrations_config,
+    notify_run,
+)
 
 from config_loading import tomllib
 from stats import (
@@ -371,6 +375,35 @@ def get_outcomes_ledger_path() -> Path:
     if artifact_root == studio_root:
         return studio_root / "knowledge" / "outcomes.jsonl"
     return artifact_root / ".studio" / "knowledge" / "outcomes.jsonl"
+
+
+def get_configured_ledger_path() -> Optional[Path]:
+    """Local ledger path for auto-appending outcome records at finalize.
+
+    Reads an optional ``[outcomes] ledger_path`` from
+    ``<artifact_root>/.studio/integrations.toml`` — the same file that holds the
+    Slack/n8n webhook config. This is a single-user simplification: the "central
+    ledger" is just a fixed local file (typically the tool repo's
+    ``knowledge/outcomes.jsonl``), so finalize can append there directly instead
+    of making you run export-outcomes then import-outcomes by hand.
+
+    Returns the resolved path when configured, or None when the config file, the
+    ``[outcomes]`` table, or the ``ledger_path`` key is absent or unreadable. The
+    ledger file itself need not exist yet — the first append creates it. Never
+    raises: a broken config must not break finalize.
+    """
+    config_path = get_artifact_root() / ".studio" / INTEGRATIONS_FILENAME
+    try:
+        if not config_path.is_file():
+            return None
+        with config_path.open("rb") as fh:
+            data = tomllib.load(fh)
+        raw = (data.get("outcomes") or {}).get("ledger_path")
+        if not isinstance(raw, str) or not raw.strip():
+            return None
+        return Path(raw).expanduser().resolve()
+    except Exception:
+        return None
 
 
 def utc_now() -> datetime:
@@ -1526,6 +1559,7 @@ def finalize_run(args: argparse.Namespace) -> None:
     rebuild_index()
     _append_run_log(meta)
     _maybe_notify(run_dir)
+    _maybe_append_to_ledger(run_dir, meta)
 
     if metrics_entries:
         total_tokens = meta["metrics"]["total_tokens"]
@@ -1622,6 +1656,38 @@ def _maybe_notify(run_dir: Path) -> None:
             print(f"Notify: {line}")
     except Exception as exc:
         print(f"Notify failed: {exc}", file=sys.stderr)
+
+
+def _maybe_append_to_ledger(run_dir: Path, meta: Dict) -> None:
+    """Append this run's outcome record to the configured local ledger.
+
+    Collapses the manual export-outcomes → import-outcomes two-step into one
+    finalize side effect: when ``[outcomes] ledger_path`` is set in
+    ``.studio/integrations.toml``, the finalized run (rated or not) is appended to
+    that ledger, deduped by (repo, run_id) so re-finalizing refreshes the record
+    instead of duplicating it. Default-off and soft-fail — on any error we warn,
+    print the manual import fallback, and never break finalize. Mirrors
+    _maybe_notify.
+    """
+    ledger_path = get_configured_ledger_path()
+    if ledger_path is None:
+        return
+    try:
+        run = dict(meta)
+        run["_rating"] = _load_rating(run_dir)
+        record = _outcome_record_from_run(run, _project_name())
+        existing = _read_ledger(ledger_path)
+        merged = _merge_outcomes(existing, [record])
+        ledger_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_ledger(ledger_path, merged)
+        print(f"Appended outcome record to ledger: {ledger_path}")
+    except Exception as exc:
+        print(f"Ledger append failed ({exc}); record NOT added to {ledger_path}", file=sys.stderr)
+        print(
+            f"   Fallback: {_entrypoint()} export-outcomes --out out.jsonl && "
+            f"{_entrypoint()} import-outcomes --from out.jsonl",
+            file=sys.stderr,
+        )
 
 
 def rebuild_index() -> None:
@@ -2070,7 +2136,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     export_outcomes_parser = subparsers.add_parser(
         "export-outcomes",
-        help="Export this repo's rated runs as portable JSONL outcome records.",
+        help="Export this repo's runs as portable JSONL outcome records (rated or not).",
     )
     export_outcomes_parser.add_argument(
         "--out", default=None, help="Write JSONL here (default: stdout)."
@@ -2589,16 +2655,16 @@ def _prompt_for_rating(run_dir: Path) -> None:
     print(f"   Recorded {score}/5.")
 
 
-def _outcome_record_from_run(run: Dict, repo: str) -> Optional[Dict]:
-    """Build a portable outcome record from an enriched run dict (needs _rating).
+def _outcome_record_from_run(run: Dict, repo: str) -> Dict:
+    """Build a portable outcome record from an enriched run dict.
 
-    Returns None for unrated runs — a rating is what makes a run an outcome we
-    can learn from. shipped/impact/changed are pulled from the rating's optional
-    ``outcome`` block and may be null.
+    Every run yields a record, including unrated ones — an unrated run is still a
+    session the ledger and stats should see (that invisibility was the whole
+    complaint). A rating, when present, fills in score/shipped/impact/changed/
+    rated_iso; without one those stay null while repo, run_id, phase, verdict,
+    status, and token cost are still recorded.
     """
-    rating = run.get("_rating")
-    if not rating:
-        return None
+    rating = run.get("_rating") or {}
     outcome = rating.get("outcome") or {}
     return {
         "repo": repo,
@@ -2637,13 +2703,12 @@ def _write_ledger(path: Path, records: List[Dict]) -> None:
 
 
 def _collect_local_outcomes(runs: List[Dict], repo: str) -> List[Dict]:
-    """Outcome records for this repo's rated runs (runs already carry _rating)."""
-    records = []
-    for run in runs:
-        rec = _outcome_record_from_run(run, repo)
-        if rec is not None:
-            records.append(rec)
-    return records
+    """Outcome records for this repo's runs (runs already carry _rating).
+
+    Includes unrated runs — every run yields a record, so stats and the ledger
+    see every session rather than only the ones a human bothered to rate.
+    """
+    return [_outcome_record_from_run(run, repo) for run in runs]
 
 
 def _merge_outcomes(ledger: List[Dict], local: List[Dict]) -> List[Dict]:
@@ -2659,11 +2724,12 @@ def _merge_outcomes(ledger: List[Dict], local: List[Dict]) -> List[Dict]:
 
 
 def export_outcomes(args: argparse.Namespace) -> None:
-    """Collect this repo's rated runs into a portable JSONL of outcome records.
+    """Collect this repo's runs into a portable JSONL of outcome records.
 
-    Writes to --out (default: stdout). Feed the file to ``import-outcomes`` in
-    the tool repo so a consuming repo's results become visible to ``stats`` there
-    — the bridge that lets evidence reach the main repo.
+    Includes unrated runs — every session is a record. Writes to --out (default:
+    stdout). Feed the file to ``import-outcomes`` in the tool repo so a consuming
+    repo's results become visible to ``stats`` there — the bridge that lets
+    evidence reach the main repo when a repo lives on another machine.
     """
     repo = getattr(args, "repo", None) or _project_name()
     runs = collect_runs(get_output_root())
