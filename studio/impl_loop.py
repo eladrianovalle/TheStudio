@@ -10,16 +10,7 @@ See studio/docs/IMPLEMENTATION_LOOP_SPEC.md §4 for the table shape.
 """
 from __future__ import annotations
 
-try:
-    import tomllib  # Python 3.11+
-except ModuleNotFoundError:
-    try:
-        import tomli as tomllib  # type: ignore[no-redefine]  # Python 3.10 fallback
-    except ModuleNotFoundError:
-        raise SystemExit(
-            "Studio needs the 'tomli' package on Python 3.10. "
-            "Install it with: python -m pip install tomli  (or upgrade to Python 3.11+)."
-        )
+from config_loading import tomllib
 import json
 import os
 from dataclasses import dataclass, field

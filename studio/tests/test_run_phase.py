@@ -743,7 +743,7 @@ class TestFreshRunClarityReset:
         import time
 
         # Run 1: create a run with objective A
-        run_id_1 = run_phase.prepare_run(make_prepare_args(text="Objective A"))
+        run_phase.prepare_run(make_prepare_args(text="Objective A"))
 
         # Simulate clarity data from run 1
         clarity_path = studio_root / ".studio" / "clarity.json"
@@ -754,7 +754,7 @@ class TestFreshRunClarityReset:
         time.sleep(1.1)  # avoid timestamp collision
 
         # Run 2: different objective — should reset clarity
-        run_id_2 = run_phase.prepare_run(make_prepare_args(text="Objective B"))
+        run_phase.prepare_run(make_prepare_args(text="Objective B"))
         assert not clarity_path.is_file(), "clarity.json should be cleared for a fresh run"
 
     def test_same_objective_preserves_clarity(self, studio_root):
@@ -765,7 +765,7 @@ class TestFreshRunClarityReset:
         clarity_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Run 1
-        run_id_1 = run_phase.prepare_run(make_prepare_args(text="Same objective"))
+        run_phase.prepare_run(make_prepare_args(text="Same objective"))
 
         # Write clarity after run 1 (using correct schema field names)
         clarity_path.write_text('{"run_id": "existing", "topics": [{"topic": "core_loop", "display_name": "Core Loop", "score": 0.8, "answered_count": 3, "total_count": 5, "challenged_count": 0}], "context": {"scope_label": "broad", "scope_description": "Same objective"}, "created_iso": "2026-01-01T00:00:00"}', encoding="utf-8")
@@ -773,7 +773,7 @@ class TestFreshRunClarityReset:
         time.sleep(1.1)  # avoid timestamp collision
 
         # Run 2: same objective — should preserve clarity
-        run_id_2 = run_phase.prepare_run(make_prepare_args(text="Same objective"))
+        run_phase.prepare_run(make_prepare_args(text="Same objective"))
         assert clarity_path.is_file(), "clarity.json should be preserved for same-objective rerun"
 
     def test_cross_phase_objective_change_clears_clarity(self, studio_root):
@@ -855,7 +855,8 @@ class TestFreshRunClarityReset:
             "VERDICT: REJECTED\n1. This is terrible\n", encoding="utf-8"
         )
 
-        import time; time.sleep(1.1)  # Ensure different timestamp
+        import time
+        time.sleep(1.1)  # Ensure different timestamp
 
         # Run 2: different objective
         run_id_2 = run_phase.prepare_run(make_prepare_args(text="New objective"))

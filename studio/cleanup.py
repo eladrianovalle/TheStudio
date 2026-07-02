@@ -7,10 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
-try:
-    import tomllib  # Python 3.11+
-except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[no-redefine]
+from config_loading import tomllib
 
 CONFIG_RELATIVE_PATH = Path("config") / "studio_settings.toml"
 DEFAULT_TTL_DAYS = 30

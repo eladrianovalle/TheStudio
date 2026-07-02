@@ -8,10 +8,7 @@ on polish (expensive to change).
 """
 from __future__ import annotations
 
-try:
-    import tomllib  # Python 3.11+
-except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[no-redefine]  # Python 3.10 fallback
+from config_loading import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List

@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Set
+from typing import List
 
 from verdict import extract_verdict
 
@@ -62,7 +62,7 @@ class DocumentValidator:
                 passed=False,
                 issues=[
                     f"File too large for validation: {file_size:,} bytes (limit: {self.MAX_FILE_SIZE:,} bytes)",
-                    f"Large files may cause performance issues. Consider splitting into smaller documents."
+                    "Large files may cause performance issues. Consider splitting into smaller documents."
                 ]
             )
         

@@ -1,12 +1,10 @@
 """M1 test suite for the /offload feature — studio.offload pure functions."""
 import re
 
-import pytest
 
 from offload import (
     TIER_ALWAYS_INLINE,
     TIER_REFERENCE_OFFLOADABLE,
-    TIER_TRIGGER_OFFLOADABLE,
     classify_sections,
     detect_embedded_constraints,
     evaluate_protocol_run,
