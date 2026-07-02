@@ -69,15 +69,21 @@ def summarize_outcomes(records: List[Dict]) -> Dict:
     }
 
 
+def _is_number(value) -> bool:
+    """True for a real int/float. Excludes bool: it is an int subclass, but a
+    flag is not a count, and treating it as one hides bad data instead of
+    dropping it.
+    """
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
 def _numeric(value) -> float:
     """Return the value if it is a real number, else 0.
 
     Session records come from disk and may carry nulls or missing fields, so
     every count is read through this guard before it enters a sum.
     """
-    if isinstance(value, bool):  # bool is an int subclass; a flag is not a count
-        return 0
-    return value if isinstance(value, (int, float)) else 0
+    return value if _is_number(value) else 0
 
 
 def _session_health_signals(records: List[Dict]) -> Dict:
@@ -108,7 +114,7 @@ def _session_health_signals(records: List[Dict]) -> Dict:
     for record in records:
         convergence = record.get("convergence") or {}
         iterations = convergence.get("iterations")
-        if isinstance(iterations, (int, float)) and not isinstance(iterations, bool):
+        if _is_number(iterations):
             iteration_counts.append(iterations)
         if _numeric(convergence.get("rejections")) > 0:
             sessions_with_rejection += 1
@@ -121,11 +127,7 @@ def _session_health_signals(records: List[Dict]) -> Dict:
         clarity = record.get("clarity") or {}
         before = clarity.get("mean_before")
         after = clarity.get("mean_after")
-        both_present = (
-            isinstance(before, (int, float)) and not isinstance(before, bool)
-            and isinstance(after, (int, float)) and not isinstance(after, bool)
-        )
-        if both_present:
+        if _is_number(before) and _is_number(after):
             clarity_gains.append(after - before)
     clarity_gain = (sum(clarity_gains) / len(clarity_gains)) if clarity_gains else None
 
@@ -151,9 +153,8 @@ def _session_health_signals(records: List[Dict]) -> Dict:
     for record in records:
         editor = record.get("editor") or {}
         shrink_ratio = editor.get("shrink_ratio")
-        if isinstance(shrink_ratio, (int, float)) and not isinstance(shrink_ratio, bool):
-            if shrink_ratio > 0:
-                sessions_that_shrank += 1
+        if _is_number(shrink_ratio) and shrink_ratio > 0:
+            sessions_that_shrank += 1
     editor_liveness = (sessions_that_shrank / count) if count else None
 
     return {
