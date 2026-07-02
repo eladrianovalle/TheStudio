@@ -4,14 +4,14 @@ Everything here is a pure function: data in, data (or a rendered string) out. No
 filesystem, no argparse, no path resolution. The ``run_phase`` CLI handlers do
 the reading and writing, then hand the collected records to these functions.
 Keeping the number-crunching separate from the I/O makes it trivial to test and
-keeps the aggregation logic out of the 3,000-line entrypoint.
+keeps the aggregation logic out of the CLI entrypoint.
 """
 from __future__ import annotations
 
 from statistics import median
 from typing import Dict, List, Optional
 
-# Outcome vocabularies — kept small on purpose. "Did it ship" and a coarse
+# Outcome vocabularies, kept small on purpose. "Did it ship" and a coarse
 # impact bucket are the cheapest things to record that still let us count.
 VALID_SHIPPED = ("yes", "no", "partial")
 VALID_IMPACT = ("none", "minor", "major")
@@ -24,7 +24,7 @@ def summarize_outcomes(records: List[Dict]) -> Dict:
     ``shipped`` (one of VALID_SHIPPED), ``impact`` (one of VALID_IMPACT), and
     ``changed`` (freetext: what this run actually changed). Records come from two
     places: this repo's rated runs and the cross-repo ledger. Any field may be
-    missing — a record with none of shipped/impact/changed still counts toward
+    missing: a record with none of shipped/impact/changed still counts toward
     its repo's tally but not the rates.
 
     Pure: data in, summary dict out.
@@ -174,14 +174,14 @@ def summarize_session_health(session_records: List[Dict]) -> Dict:
     """Roll up ``session.json`` records into the five health signals over time.
 
     Each input is a ``session.json`` dict written automatically at finalize (see
-    docs/SESSION_ANALYTICS_PLAN.md). These measure a run's *health* — did the
+    docs/SESSION_ANALYTICS_PLAN.md). These measure a run's *health*: did the
     debate converge, settle its blocking questions, and reduce uncertainty, at
-    what cost — not the quality of a plan that hasn't been built yet.
+    what cost. They do not measure the quality of a plan not yet built.
 
     Returns the all-time figures plus, once there are enough records (>= 6), a
     ``trend`` block that splits the list in half (caller passes them oldest
-    first) so a reader can see whether the two most telling signals — assumed-P0
-    rate and median iterations — are moving in the right direction. With fewer
+    first) so a reader can see whether the two most telling signals (assumed-P0
+    rate and median iterations) are moving in the right direction. With fewer
     records ``trend`` is None. Never raises: missing fields and an empty list
     yield Nones and zeros.
 

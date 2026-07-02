@@ -1,10 +1,10 @@
 # Studio Setup Wizard
 
-Configure this project's Studio installation — role packs, role/phase-persona customization, scope tuning, cleanup settings.
+Configure this project's Studio installation: role packs, role/phase-persona customization, scope tuning, cleanup settings.
 
 ## Arguments
 
-- `$ARGUMENTS` — Optional. Pass `--status` to check current config, or `--defaults` to apply all defaults without prompts.
+- `$ARGUMENTS`: Optional. Pass `--status` to check current config, or `--defaults` to apply all defaults without prompts.
 
 ## Instructions
 
@@ -60,8 +60,6 @@ Read each pack file to get names, descriptions, and roles. Present them as a num
 Available role packs:
 1. studio_core (7 roles) — Default pod: marketing, product, design, art, engineering, test_engineer, qa
 2. studio_core_with_ml (9 roles) — Core + ML and PMM
-3. pictorly_execution (5 roles) — Focused: product, design, engineering, test_engineer, qa
-4. orcpunk_web (3 roles) — Web-focused: web_engineering, web_test_engineer, web_qa
 ```
 
 Ask the user: **"Which role pack fits your project? (pick a number, or type a pack name)"**
@@ -82,7 +80,7 @@ python ".studio/source/run_phase.py" setup --target . --role-pack <name> --roles
 
 ### Step 4: Role Customization (Optional)
 
-Ask: **"Do you want to customize any role's focus areas or deliverables? Most users skip this — the defaults are solid."**
+Ask: **"Do you want to customize any role's focus areas or deliverables? Most users skip this; the defaults are solid."**
 
 If the user says no/skip, apply empty customization to mark the step complete:
 
@@ -111,10 +109,10 @@ python ".studio/source/run_phase.py" setup --target . --answers '<json with role
 
 The single-phase advocate / contrarian / implementer / integrator personas ship as
 stack-neutral defaults (e.g. tech advocate = "Technical Architect"). A project can
-tailor them per phase — writing `.studio/personas.toml` — so a Rust repo gets a
+tailor them per phase, writing `.studio/personas.toml`, so a Rust repo gets a
 "Rust Systems Architect" instead.
 
-Ask: **"Do you want to tailor the phase personas to your tech stack? Most users skip this — the neutral defaults are fine."**
+Ask: **"Do you want to tailor the phase personas to your tech stack? Most users skip this; the neutral defaults are fine."**
 
 If the user says no/skip, apply empty customization to mark the step complete (no file written, neutral defaults stand):
 
@@ -124,7 +122,7 @@ python ".studio/source/run_phase.py" setup --target . --answers '{"persona_custo
 
 If yes, for each phase the user wants to customize (`market`, `design`, `tech`, `studio`):
 
-1. Valid string keys per phase: `advocate`, `contrarian`, `notes`. `integrator` is allowed **only** under `studio`. A nested `implementer` table (keys `title`, `deliverables`) is allowed for `market`/`design`/`tech` only — not `studio`.
+1. Valid string keys per phase: `advocate`, `contrarian`, `notes`. `integrator` is allowed **only** under `studio`. A nested `implementer` table (keys `title`, `deliverables`) is allowed for `market`/`design`/`tech` only, not `studio`.
 
 2. Build a JSON answers file with the customizations and apply:
 
@@ -134,9 +132,9 @@ python ".studio/source/run_phase.py" setup --target . --answers '<json with pers
 
 ### Step 6: Unstale Audit Configuration (Optional)
 
-The `/unstale` staleness audit self-detects your stack (Rust / Unity / Node / Python / Go) from marker files at run time, so this step is optional. Pin exact commands and file globs only when detection isn't precise enough — it writes `.studio/unstale.toml`.
+The `/unstale` staleness audit self-detects your stack (Rust / Unity / Node / Python / Go) from marker files at run time, so this step is optional. Pin exact commands and file globs only when detection isn't precise enough. It writes `.studio/unstale.toml`.
 
-Ask: **"Want to pin the `/unstale` audit's commands and file globs for this repo? Most users skip this — `/unstale` auto-detects the stack."**
+Ask: **"Want to pin the `/unstale` audit's commands and file globs for this repo? Most users skip this; `/unstale` auto-detects the stack."**
 
 If the user says no/skip, mark the step complete (no file written, self-detection stands):
 
@@ -176,9 +174,9 @@ python ".studio/source/run_phase.py" setup --target . --answers '{"scopes": "def
 ```
 
 If yes, walk through each scope asking about:
-- `max_iterations` — how many advocate/contrarian rounds
-- `output_budget` — word cap per agent output (optional)
-- `debate_mode` — "all_roles" (parallel) or "per_role" (sequential)
+- `max_iterations`: how many advocate/contrarian rounds
+- `output_budget`: word cap per agent output (optional)
+- `debate_mode`: "all_roles" (parallel) or "per_role" (sequential)
 
 Build the scopes config and apply via answers JSON.
 
@@ -217,8 +215,8 @@ Tell the user:
 ## Key Rules
 
 - **Always show defaults** and explain what each setting does before asking
-- **Accept "defaults" or "skip"** for any step — never force the user through every question
-- **One step at a time** — don't dump all questions at once
-- **Apply each step immediately** via CLI — don't batch them. This way partial completion is preserved if the user stops mid-wizard
-- **Never skip a pending step silently** — always at least mention it and offer the default
+- **Accept "defaults" or "skip"** for any step; never force the user through every question
+- **One step at a time:** don't dump all questions at once
+- **Apply each step immediately** via CLI; don't batch them. This way partial completion is preserved if the user stops mid-wizard
+- **Never skip a pending step silently:** always at least mention it and offer the default
 - When showing roles, include their title so the user knows what each one does

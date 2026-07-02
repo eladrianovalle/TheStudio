@@ -4,7 +4,7 @@ Execute a multi-role advocate/contrarian debate across disciplines using a three
 
 ## Arguments
 
-- `$ARGUMENTS` — Required. Format: `--text "your idea or objective"`
+- `$ARGUMENTS`: Required. Format: `--text "your idea or objective"`
 - Optional: `--role-pack <name>` (default: studio_core), `--roles +role -role`, `--max-iterations N` (default 6 across all scopes)
 - Optional: `--no-scopes` to use flat mode (all roles at full depth, no tiers)
 
@@ -26,24 +26,24 @@ Note the run_id and run directory path from the output.
 
 ### Step 2: Read Instructions and Role Menu
 
-Read the generated `instructions.md` file. **It is the authority on run procedure** — follow the steps it lists, in order, even if they aren't repeated here. Pay attention to:
+Read the generated `instructions.md` file. **It is the authority on run procedure**: follow the steps it lists, in order, even if they aren't repeated here. Pay attention to:
 - The **Role Menu** table listing each invited role
 - The **Scope-Based Iteration Plan** (if scopes are enabled)
 - File naming convention
 
-In particular, the run opens with **Step 0: Open-Questions Pre-Flight** — a fast pass that surfaces what is genuinely unsettled and pauses on P0 blockers. Do this pre-flight (record answers as instructions.md directs) before the scoped debate below. (Not applicable to `--mode questions` runs.)
+In particular, the run opens with **Step 0: Open-Questions Pre-Flight**, a fast pass that surfaces what is genuinely unsettled and pauses on P0 blockers. Do this pre-flight (record answers as instructions.md directs) before the scoped debate below. (Not applicable to `--mode questions` runs.)
 
 ### Decision Point Handling (applies to ALL scopes)
 
-**MANDATORY — DO NOT SKIP:** After EVERY agent (advocate or contrarian) saves its output:
+**MANDATORY, DO NOT SKIP:** After EVERY agent (advocate or contrarian) saves its output:
 
-1. **Record agent metrics** — The Agent tool result includes `total_tokens`, `tool_uses`, and `duration_ms` in a `<usage>` block. Record these immediately:
+1. **Record agent metrics:** The Agent tool result includes `total_tokens`, `tool_uses`, and `duration_ms` in a `<usage>` block. Record these immediately:
    ```bash
    python ".studio/source/run_phase.py" record-metrics --run-dir {run_dir} --agent {advocate|contrarian|integrator|implementer} --total-tokens {N} --tool-uses {N} --duration-ms {N} --role {role} --scope {scope}
    ```
    Omit `--role` and `--scope` for non-studio phases or integrator/polish agents.
 
-2. **Extract decision points** — Run this command (do NOT manually scan files):
+2. **Extract decision points:** Run this command (do NOT manually scan files):
    ```bash
    python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir} --json
    ```
@@ -61,16 +61,16 @@ In particular, the run opens with **Step 0: Open-Questions Pre-Flight** — a fa
    JSON format: `[{"priority": "P0", "question": "...", "answer": "...", "unblocks": "...", "source_file": "[filename]", "answered_by": "user"}, ...]`
 
    After recording, show updated clarity scores: `python ".studio/source/run_phase.py" show-clarity`
-   Display the scores to the user — they can override with `set-clarity --topic <slug> --score <0.0-1.0>`.
+   Display the scores to the user. They can override with `set-clarity --topic <slug> --score <0.0-1.0>`.
 
-5. **Context injection** — Before spawning each agent, generate its context block:
+5. **Context injection:** Before spawning each agent, generate its context block:
    ```bash
    python ".studio/source/run_phase.py" inject-context --run-dir {run_dir} --scope {scope} --role {role} --stance {stance}
    ```
    Append the output to the agent prompt. This automatically includes settled decisions, clarity summary, prior-scope file lists, and scope-specific instructions. No manual assembly needed.
 
-6. **Settled context** — If `{run_dir}/decisions.md` exists, the `inject-context` command includes this automatically. If NOT using `inject-context`, ALL subsequent agent prompts must include:
-   > Read `{run_dir}/decisions.md` for settled constraints. Treat these as hard constraints — do not re-litigate.
+6. **Settled context:** If `{run_dir}/decisions.md` exists, the `inject-context` command includes this automatically. If NOT using `inject-context`, ALL subsequent agent prompts must include:
+   > Read `{run_dir}/decisions.md` for settled constraints. Treat these as hard constraints; do not re-litigate.
 
 ### Step 3: Execute Scoped Debate
 
@@ -92,11 +92,11 @@ python ".studio/source/run_phase.py" inject-context --run-dir {run_dir} --scope 
 **Advocate prompt:**
 > You are the **{role_title} Advocate** for this Studio run.
 >
-> {Paste the inject-context output here — it contains scope guidance, word cap, decision point protocol, and settled decisions.}
+> {Paste the inject-context output here: it contains scope guidance, word cap, decision point protocol, and settled decisions.}
 >
 > Save to `{run_dir}/advocate--{role}--S1-01.md`.
 
-**Contrarian** — generate context with `--stance contrarian`, then spawn a SEPARATE agent:
+**Contrarian:** generate context with `--stance contrarian`, then spawn a SEPARATE agent:
 > You are the **{role_title} Contrarian** for this Studio run.
 >
 > {Paste the inject-context output here.}
@@ -106,8 +106,8 @@ python ".studio/source/run_phase.py" inject-context --run-dir {run_dir} --scope 
 > End with `VERDICT: APPROVED` or `VERDICT: REJECTED` with numbered reasons.
 > Save to `{run_dir}/contrarian--{role}--S1-01.md`.
 
-**Decision checking within S1 — after EACH agent saves output:**
-Even though S1 roles run in parallel, you MUST extract and check decision points after each individual agent (advocate or contrarian) completes — follow the Decision Point Handling protocol above. Do not batch decisions until the end of the scope. Surface them as they appear so the user can answer early and those answers flow into subsequent agents.
+**Decision checking within S1, after EACH agent saves output:**
+Even though S1 roles run in parallel, you MUST extract and check decision points after each individual agent (advocate or contrarian) completes. Follow the Decision Point Handling protocol above. Do not batch decisions until the end of the scope. Surface them as they appear so the user can answer early and those answers flow into subsequent agents.
 
 **After all S1 roles complete (before proceeding to S2):**
 1. Recompute clarity: `python ".studio/source/run_phase.py" recompute-clarity --phase studio --run-id {run_id}`
@@ -125,9 +125,9 @@ Even though S1 roles run in parallel, you MUST extract and check decision points
 
 Process each role **sequentially** (later roles benefit from earlier outputs).
 
-**Token optimization — summarize-then-delegate:** After every 2-3 completed roles, write a condensed 1-page brief (`{run_dir}/S2-brief.md`) summarizing key decisions, concerns, and conditions from completed S2 roles. Update this brief as more roles complete. Later roles read the brief instead of all individual files.
+**Token optimization (summarize-then-delegate):** After every 2-3 completed roles, write a condensed 1-page brief (`{run_dir}/S2-brief.md`) summarizing key decisions, concerns, and conditions from completed S2 roles. Update this brief as more roles complete. Later roles read the brief instead of all individual files.
 
-**Scoped reads — each role only reads what's relevant:**
+**Scoped reads (each role only reads what's relevant):**
 
 | Role | Must read (S2 files) | Brief sufficient |
 |------|---------------------|-----------------|
@@ -139,7 +139,7 @@ Process each role **sequentially** (later roles benefit from earlier outputs).
 | Test Engineer | Engineering S2, Design S2 | Brief for others |
 | QA | Engineering S2, Test Engineer S2 | Brief for others |
 
-Adjust based on the specific proposal — if a role clearly depends on another's output, add it.
+Adjust based on the specific proposal. If a role clearly depends on another's output, add it.
 
 **Before each S2 agent**, generate its context:
 ```bash
@@ -149,25 +149,25 @@ python ".studio/source/run_phase.py" inject-context --run-dir {run_dir} --scope 
 **Advocate prompt:**
 > You are the **{role_title} Advocate** for this Studio run.
 >
-> {Paste the inject-context output here — it contains scope guidance, deliverables, decision point protocol, settled decisions, clarity context, and prior-scope file lists.}
+> {Paste the inject-context output here: it contains scope guidance, deliverables, decision point protocol, settled decisions, clarity context, and prior-scope file lists.}
 >
-> **Context from prior Depth roles (SCOPED — read only these):**
+> **Context from prior Depth roles (SCOPED, read only these):**
 > - {List specific S2 files this role needs per the dependency map}
 > - Condensed brief of all other roles: `{run_dir}/S2-brief.md`
 >
-> {If this role has a prompt doc (the `prompt_doc` shown in the Role Menu), read it at that path — it is relative to the repo root (a doc that lives in THIS project), not the Studio snapshot.}
+> {If this role has a prompt doc (the `prompt_doc` shown in the Role Menu), read it at that path. It is relative to the repo root (a doc that lives in THIS project), not the Studio snapshot.}
 >
-> Write a thorough proposal covering all required deliverables. No word cap — this is the full analysis.
+> Write a thorough proposal covering all required deliverables. No word cap. This is the full analysis.
 > Save to `{run_dir}/advocate--{role}--S2-01.md`.
 
-**Contrarian** — generate context with `--stance contrarian`, then spawn a SEPARATE agent:
+**Contrarian:** generate context with `--stance contrarian`, then spawn a SEPARATE agent:
 > You are the **{role_title} Contrarian** for this Studio run.
 >
 > {Paste the inject-context output here.}
 >
 > Read the advocate's depth proposal at `{run_dir}/advocate--{role}--S2-{NN}.md`.
 >
-> **Scoped reads (only these — do NOT read all S2 files):**
+> **Scoped reads (only these, do NOT read all S2 files):**
 > - {1-2 S2 files most relevant per dependency map}
 > - Condensed brief: `{run_dir}/S2-brief.md`
 >
@@ -181,13 +181,13 @@ python ".studio/source/run_phase.py" inject-context --run-dir {run_dir} --scope 
 > End with `VERDICT: APPROVED` or `VERDICT: REJECTED` with numbered reasons.
 > Save to `{run_dir}/contrarian--{role}--S2-{NN}.md`.
 
-**Check decision points** — After each S2 advocate and contrarian saves output, run:
+**Check decision points:** After each S2 advocate and contrarian saves output, run:
 ```bash
 python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir} --scope S2 --json
 ```
 If `count > 0`, follow the Decision Point Handling protocol above. Since S2 is sequential, decisions from earlier roles inform later roles.
 
-**Brief update cadence — MANDATORY:** After every 2-3 roles complete:
+**Brief update cadence (MANDATORY):** After every 2-3 roles complete:
 1. Run `python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir}` to gather all decisions
 2. Write/update `{run_dir}/S2-brief.md` with key decisions and conditions from completed roles
 3. Include a "Settled Decisions" summary referencing `decisions.md`. Keep under 1 page.
@@ -201,7 +201,7 @@ If `count > 0`, follow the Decision Point Handling protocol above. Since S2 is s
 
 **Goal:** Cross-discipline gut-check. "Anything still broken across disciplines?"
 
-After all Scope 2 roles are approved, run **one consolidated agent** — not per-role pairs.
+After all Scope 2 roles are approved, run **one consolidated agent**, not per-role pairs.
 
 **Consolidated polish prompt (ONE agent):**
 > You are the **Cross-Discipline Polish Reviewer** for this Studio run.
@@ -211,10 +211,10 @@ After all Scope 2 roles are approved, run **one consolidated agent** — not per
 > - All S2 contrarian files: `{run_dir}/contrarian--*--S2-*.md` (for conditions attached to each approval)
 >
 > Produce a single document covering:
-> 1. **Unresolved cross-discipline conflicts** — where one role's decision contradicts another's
-> 2. **Conditions that overlap or conflict** — where two contrarians demanded incompatible things
-> 3. **Gaps between roles** — concerns that fell between disciplines and no one owns
-> 4. **Consolidated open items** — deduplicated list of all conditions, grouped by priority
+> 1. **Unresolved cross-discipline conflicts:** where one role's decision contradicts another's
+> 2. **Conditions that overlap or conflict:** where two contrarians demanded incompatible things
+> 3. **Gaps between roles:** concerns that fell between disciplines and no one owns
+> 4. **Consolidated open items:** deduplicated list of all conditions, grouped by priority
 >
 > {If `{run_dir}/decisions.md` exists: "**Settled decisions:** Read `{run_dir}/decisions.md`. These are user-confirmed constraints. Flag in your review if any cross-discipline conflict involves a settled decision."}
 >
@@ -222,7 +222,7 @@ After all Scope 2 roles are approved, run **one consolidated agent** — not per
 > **Keep under 800 words.** End with `VERDICT: APPROVED` or `VERDICT: REJECTED` with numbered reasons.
 > Save to `{run_dir}/polish--consolidated--S3-01.md`.
 
-**No iteration** — single pass. If REJECTED, note concerns for integrator but proceed.
+**No iteration:** single pass. If REJECTED, note concerns for integrator but proceed.
 
 ---
 
@@ -232,22 +232,22 @@ Same as standard integrator flow. Create `{run_dir}/integrator.md`:
 
 #### a. Integrator Advocate
 
-> You are the **Integrator Advocate** — a Systems Integrator & Ops Lead.
+> You are the **Integrator Advocate**, a Systems Integrator & Ops Lead.
 >
 > Read these artifacts (briefs over full files):
 > - S2 condensed brief: `{run_dir}/S2-brief.md` (primary context)
 > - S3 consolidated polish: `{run_dir}/polish--consolidated--S3-01.md` (cross-discipline conflicts and open items)
 > - S1 alignment verdicts: skim `{run_dir}/*--S1-*.md` for rejected roles and key flags
 >
-> You do NOT need to read every individual S2 advocate/contrarian file — the brief and polish doc contain the distilled decisions.
+> You do NOT need to read every individual S2 advocate/contrarian file. The brief and polish doc contain the distilled decisions.
 >
-> {If `{run_dir}/decisions.md` exists: "**Settled decisions:** Read `{run_dir}/decisions.md` — incorporate all settled constraints into your unified plan."}
+> {If `{run_dir}/decisions.md` exists: "**Settled decisions:** Read `{run_dir}/decisions.md`. Incorporate all settled constraints into your unified plan."}
 >
 > Synthesize a unified plan. Write as `### Integrator Advocate` in `{run_dir}/integrator.md`.
 
 #### b. Integrator Contrarian
 
-> You are the **Integrator Contrarian** — Director of Live Service Operations.
+> You are the **Integrator Contrarian**, Director of Live Service Operations.
 >
 > Read `{run_dir}/integrator.md`. Critique for feasibility, sequencing, and missing concerns.
 > End with `VERDICT: APPROVED` or `VERDICT: REJECTED`.
@@ -274,7 +274,7 @@ python ".studio/source/run_phase.py" finalize --phase studio --run-id {run_id} -
 
 ### Step 7: Rate this run (quality feedback loop)
 
-Ask the user, in one short message, to rate the run's quality 1–5 (1 = poor, 5 = excellent) with an optional one-line note. Make clear it's optional — they can skip.
+Ask the user, in one short message, to rate the run's quality 1-5 (1 = poor, 5 = excellent) with an optional one-line note. Make clear it's optional. They can skip.
 
 If they give a score, record it (the human signal `stats` uses to gauge and tune Studio over time):
 
@@ -282,7 +282,7 @@ If they give a score, record it (the human signal `stats` uses to gauge and tune
 python ".studio/source/run_phase.py" rate --run-dir {run_dir} --score {1-5} --note "{their note}"
 ```
 
-If they skip, do nothing — don't nag.
+If they skip, do nothing. Don't nag.
 
 ---
 
@@ -297,7 +297,7 @@ For each role sequentially:
 2. Spawn SEPARATE contrarian agent
    - Include the Decision Point Protocol inline (format + "flag unsettled assumptions")
    - Include settled decisions context if `{run_dir}/decisions.md` exists
-3. **Check decision points** — follow the Decision Point Handling protocol after each advocate and contrarian output
+3. **Check decision points:** follow the Decision Point Handling protocol after each advocate and contrarian output
 4. If REJECTED and iterations remain, loop
 5. If APPROVED, next role
 
@@ -305,12 +305,12 @@ Then run integrator duel and summary as above.
 
 ## Key Rules
 
-- **Advocate and Contrarian MUST be separate Agent invocations** — no shared context.
-- **Scope 1 runs all roles in parallel** — short enough to parallelize.
+- **Advocate and Contrarian MUST be separate Agent invocations**: no shared context.
+- **Scope 1 runs all roles in parallel**: short enough to parallelize.
 - **Scope 2 runs roles sequentially** with scoped reads and rolling briefs (`S2-brief.md`).
-- **Scope 3 is a single consolidated agent** — one cross-discipline check, not per-role pairs.
-- **Briefs over full reads** — later roles and integrator read `S2-brief.md` instead of all individual files.
-- **Word caps are instruction-enforced** — include them in the agent prompt, not as runtime truncation.
-- **Decision points are checked after every agent in every scope** — S1, S2, flat mode all extract and surface per-agent. S3 and integrator receive all accumulated decisions.
+- **Scope 3 is a single consolidated agent**: one cross-discipline check, not per-role pairs.
+- **Briefs over full reads**: later roles and integrator read `S2-brief.md` instead of all individual files.
+- **Word caps are instruction-enforced**: include them in the agent prompt, not as runtime truncation.
+- **Decision points are checked after every agent in every scope**: S1, S2, flat mode all extract and surface per-agent. S3 and integrator receive all accumulated decisions.
 - **`decisions.md` is the single source of truth** for settled constraints, accumulating throughout the run.
 - File naming: `advocate--marketing--S1-01.md`, `contrarian--engineering--S2-02.md`, `polish--consolidated--S3-01.md`

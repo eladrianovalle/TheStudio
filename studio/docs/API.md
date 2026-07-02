@@ -35,7 +35,7 @@ Supported commands:
 | `init` | Installs Studio into a target project directory. |
 | `check-install` | Checks whether the installed Studio is up to date, and shows any files you've edited locally that an `update` would overwrite: both the Studio source and the installed slash commands and workflows. |
 | `update` | Updates the installed Studio from source. If you've edited any installed file locally, it stops instead of overwriting your work; pass `--force` to overwrite anyway. This covers the Studio source as well as the installed slash commands and workflows. |
-| `setup` | Configure Studio for a project — role pack selection, role + phase-persona customization (`.studio/personas.toml`), unstale audit config (`.studio/unstale.toml`), scope tuning, cleanup settings. Supports `--status`, `--defaults`, `--answers`, `--role-pack`. |
+| `setup` | Configure Studio for a project: role pack selection, role + phase-persona customization (`.studio/personas.toml`), unstale audit config (`.studio/unstale.toml`), scope tuning, cleanup settings. Supports `--status`, `--defaults`, `--answers`, `--role-pack`. |
 | `notify` | Posts a run digest to enabled Slack/n8n webhooks (config in `.studio/integrations.toml`). Auto-fires on `finalize` when a target is enabled (soft-fail). Supports `--run-dir`, `--dry-run`, `--artifact-root`. |
 
 ---
@@ -44,8 +44,8 @@ Supported commands:
 
 | Flag | Required | Default | Description |
 | --- | --- | --- | --- |
-| `--phase {market,design,tech,studio}` | ✅ | – | Studio phase to run. Controls artifact checklist and instruction copy. |
-| `--text "..."` | ✅ | – | Idea, objective, or question you want Studio to tackle. |
+| `--phase {market,design,tech,studio}` | ✅ | - | Studio phase to run. Controls artifact checklist and instruction copy. |
+| `--text "..."` | ✅ | - | Idea, objective, or question you want Studio to tackle. |
 | `--max-iterations N` | ❌ | `3` | How many Advocate↔Contrarian loops the assistant should run before stopping. |
 | `--budget "$0-20/mo"` | ❌ | `$0-20/mo` | Advisory note printed in instructions (not enforced). Primarily used by `studio` phase. |
 | `--role-pack PACK` | ❌ | Manifest default | Studio-only: selects a curated pod from `role_packs/`. |
@@ -76,21 +76,21 @@ Inside each run directory:
 
 | Flag | Required | Default | Description |
 | --- | --- | --- | --- |
-| `--phase {market,design,tech,studio}` | ✅ | – | Phase associated with the run. |
-| `--run-id run_<phase>_<timestamp>` | ✅ | – | Identifier printed by `prepare`. |
+| `--phase {market,design,tech,studio}` | ✅ | - | Phase associated with the run. |
+| `--run-id run_<phase>_<timestamp>` | ✅ | - | Identifier printed by `prepare`. |
 | `--status STATUS` | ❌ | `COMPLETED` | Free-form label (“completed”, “abandoned”, etc.). |
-| `--verdict VERDICT` | ❌ | – | `APPROVED`, `REJECTED`, `N/A`, or any label you prefer. |
+| `--verdict VERDICT` | ❌ | - | `APPROVED`, `REJECTED`, `N/A`, or any label you prefer. |
 | `--iterations-run N` | ❌ | auto-count | Override if the assistant ran extra loops or skipped iterations. |
 | `--hours FLOAT` | ❌ | `None` | Time spent; stored in `run.json` + `run_log.md`. |
 | `--cost FLOAT` | ❌ | `None` | Monetary cost in USD (typically `0`). |
 | `--summary PATH` | ❌ | auto-detected | Provide a custom summary path if you store it elsewhere. |
 | `--no-rate-prompt` | ❌ | `false` | Suppress the end-of-run quality-rating prompt/nudge (the slash commands pass this and ask conversationally instead). |
 
-`finalize` enforces the artifact checklist (see Section 3). Missing files raise a `FileNotFoundError` describing the gaps. On a `COMPLETED` run it closes with a rating prompt — interactive at a TTY, otherwise a copy-paste `rate` nudge — unless `--no-rate-prompt` is given.
+`finalize` enforces the artifact checklist (see Section 3). Missing files raise a `FileNotFoundError` describing the gaps. On a `COMPLETED` run it closes with a rating prompt (interactive at a TTY, otherwise a copy-paste `rate` nudge) unless `--no-rate-prompt` is given.
 
 `finalize` also has two additive side effects, both soft-fail (a failure prints a warning but never breaks finalize):
 
-- Writes `session.json` into the run directory — the automatic, judgment-free session-health record (schema in Section 4.1).
+- Writes `session.json` into the run directory: the automatic, judgment-free session-health record (schema in Section 4.1).
 - **Ledger auto-append.** When `[outcomes] ledger_path = "<path>"` is set under an `[outcomes]` table in `.studio/integrations.toml` (the same file that holds the Slack/n8n webhook config), `finalize` appends this run's outcome record to that local JSONL file, deduped by `(repo, run_id)` so re-finalizing refreshes the record rather than duplicating it. The record is the same shape `export-outcomes` emits (see Section 1.7), and unrated runs are included. This is a single-machine simplification: the "central ledger" becomes a fixed local file, so `finalize` can append directly instead of making you run `export-outcomes` then `import-outcomes` by hand. When the key is absent or unreadable, nothing is appended.
 
 ---
@@ -99,9 +99,9 @@ Inside each run directory:
 
 | Flag | Required | Default | Description |
 | --- | --- | --- | --- |
-| `--run-dir PATH` | Yes | – | Path to the run directory. |
-| `--agent {advocate,contrarian,integrator,implementer}` | Yes | – | Agent type being recorded. |
-| `--total-tokens N` | Yes | – | Total tokens consumed by the agent. |
+| `--run-dir PATH` | Yes | - | Path to the run directory. |
+| `--agent {advocate,contrarian,integrator,implementer}` | Yes | - | Agent type being recorded. |
+| `--total-tokens N` | Yes | - | Total tokens consumed by the agent. |
 | `--tool-uses N` | No | `0` | Number of tool uses. |
 | `--duration-ms N` | No | `0` | Wall-clock duration in milliseconds. |
 | `--role NAME` | No | `None` | Role name (for studio phase). |
@@ -115,7 +115,7 @@ Appends an entry to `{run_dir}/metrics.json`. Called by the orchestrator after e
 
 | Flag | Required | Default | Description |
 | --- | --- | --- | --- |
-| `--run-dir PATH` | Yes | – | Path to the run directory. |
+| `--run-dir PATH` | Yes | - | Path to the run directory. |
 
 Displays a formatted summary of all recorded metrics: total tokens, tool uses, duration, breakdowns by scope and role, and per-agent detail.
 
@@ -125,8 +125,8 @@ Displays a formatted summary of all recorded metrics: total tokens, tool uses, d
 
 | Flag | Required | Default | Description |
 | --- | --- | --- | --- |
-| `--run-dir PATH` | Yes | – | Path to the run directory. |
-| `--score {1,2,3,4,5}` | Yes | – | Human quality score: 1 (poor) to 5 (excellent). |
+| `--run-dir PATH` | Yes | - | Path to the run directory. |
+| `--score {1,2,3,4,5}` | Yes | - | Human quality score: 1 (poor) to 5 (excellent). |
 | `--note TEXT` | No | `None` | Optional note on what was good or bad. |
 | `--shipped {yes,no,partial}` | No | `None` | Outcome: did this run's result actually ship? |
 | `--impact {none,minor,major}` | No | `None` | Outcome: how much did it change downstream? |
@@ -134,7 +134,7 @@ Displays a formatted summary of all recorded metrics: total tokens, tool uses, d
 
 Writes `{run_dir}/rating.json` (`{score, note, rated_iso}`), overwriting any prior rating. This human score is the counterpart to the agent-emitted `verdict` and is the primary signal `stats` uses to gauge quality.
 
-The three `--shipped`/`--impact`/`--changed` flags are optional and record the run's *outcome* — what it led to downstream, which the quality score and verdict can't capture on their own. Any you pass are stored under an `outcome` block inside `rating.json` (`{"outcome": {"shipped": ..., "impact": ..., "changed": ...}}`); omitted fields are left out. `stats`, `export-outcomes`, and `import-outcomes` all read this block.
+The three `--shipped`/`--impact`/`--changed` flags are optional and record the run's *outcome*: what it led to downstream, which the quality score and verdict can't capture on their own. Any you pass are stored under an `outcome` block inside `rating.json` (`{"outcome": {"shipped": ..., "impact": ..., "changed": ...}}`); omitted fields are left out. `stats`, `export-outcomes`, and `import-outcomes` all read this block.
 
 ---
 
@@ -148,7 +148,7 @@ The three `--shipped`/`--impact`/`--changed` flags are optional and record the r
 
 Reads every run's `run.json`, `rating.json`, and `decisions.json` under the output root, plus `.studio/usage.log`, and aggregates: total/by-phase/by-status run counts, verdict distribution + approval rate, human-rating count/avg/by-phase + lowest-rated runs, token/cost/hours efficiency, decision priority mix + answer rate, and prepare-usage counts. Pure aggregation and formatting live in `stats.py` (`aggregate_stats()`, `format_stats()`, `summarize_outcomes()`).
 
-The dashboard opens with an **"Outcomes (did it ship / what changed)"** section: ship rate, impact mix, and recent "what changed" notes. It folds two sources together — this repo's rated runs plus any cross-repo ledger records pulled in via `import-outcomes` (local records win on conflict). With `--json`, the emitted dict gains an `outcomes` key holding that same summary (record/repo counts, `shipped`/`impact` tallies, `ship_rate`, and recent `changed` notes).
+The dashboard opens with an **"Outcomes (did it ship / what changed)"** section: ship rate, impact mix, and recent "what changed" notes. It folds two sources together: this repo's rated runs plus any cross-repo ledger records pulled in via `import-outcomes` (local records win on conflict). With `--json`, the emitted dict gains an `outcomes` key holding that same summary (record/repo counts, `shipped`/`impact` tallies, `ship_rate`, and recent `changed` notes).
 
 The dashboard also renders a **"Session health"** block, computed from each run's `session.json` (see Section 4.1) by `stats.summarize_session_health`. It reports five auto-measured signals over the finalized sessions on record: assumed-P0 rate (P0s guessed instead of asked), convergence (median iterations + rejection rate), clarity gain per session, tokens per settled decision, and editor liveness (share of sessions whose final doc shrank). With enough sessions it splits earlier vs. recent to show the trend. With `--json`, the emitted dict gains a `session_health` key holding this summary.
 
@@ -162,7 +162,7 @@ The dashboard also renders a **"Session health"** block, computed from each run'
 | `--repo NAME` | No | repo dir name | Project name to tag each record with. |
 | `--artifact-root PATH` | No | auto | Override artifact root (where `output/` lives). |
 
-Collects this repo's rated runs into portable JSONL outcome records (one JSON object per line) — each carries `repo`, `run_id`, `phase`, `verdict`, `status`, `score`, the `shipped`/`impact`/`changed` outcome fields, `total_tokens`, and `rated_iso`. Only rated runs are exported; a rating is what makes a run an outcome worth learning from. Feed the file to `import-outcomes` in another repo so its `stats` can see these results.
+Collects this repo's rated runs into portable JSONL outcome records (one JSON object per line). Each carries `repo`, `run_id`, `phase`, `verdict`, `status`, `score`, the `shipped`/`impact`/`changed` outcome fields, `total_tokens`, and `rated_iso`. Only rated runs are exported; a rating is what makes a run an outcome worth learning from. Feed the file to `import-outcomes` in another repo so its `stats` can see these results.
 
 ---
 
@@ -170,7 +170,7 @@ Collects this repo's rated runs into portable JSONL outcome records (one JSON ob
 
 | Flag | Required | Default | Description |
 | --- | --- | --- | --- |
-| `--from PATH` | Yes | – | Path to a JSONL outcomes export (from `export-outcomes`). |
+| `--from PATH` | Yes | - | Path to a JSONL outcomes export (from `export-outcomes`). |
 | `--artifact-root PATH` | No | auto | Override artifact root (where the ledger lives). |
 
 Merges the incoming records into the central outcomes ledger, deduping by (repo, run_id) so re-importing an updated export refreshes existing records instead of duplicating them. The ledger lives at `knowledge/outcomes.jsonl` (Studio-local) or `<repo>/.studio/knowledge/outcomes.jsonl` (external repo) and is gitignored. Once imported, those outcomes show up in the local `stats` Outcomes section.
@@ -250,7 +250,7 @@ You can safely parse this JSON for dashboards, scripts, or audits.
 
 ### 4.1 `session.json` Schema
 
-`finalize` also writes a `session.json` into each run directory — an automatic, judgment-free **session-health** record. A Studio run is a planning session whose specs get built later, so its quality can't be judged at finalize; what *can* be measured is whether the debate converged, surfaced and settled the right questions, reduced uncertainty, and at what cost. Every field is derived from files the run already produced (no human input). The record is built by `session.build_session_record` and written soft-fail, so a failure here never breaks finalize.
+`finalize` also writes a `session.json` into each run directory: an automatic, judgment-free **session-health** record. A Studio run is a planning session whose specs get built later, so its quality can't be judged at finalize; what *can* be measured is whether the debate converged, surfaced and settled the right questions, reduced uncertainty, and at what cost. Every field is derived from files the run already produced (no human input). The record is built by `session.build_session_record` and written soft-fail, so a failure here never breaks finalize.
 
 | Field | Type | Description |
 | --- | --- | --- |
@@ -260,11 +260,11 @@ You can safely parse this JSON for dashboards, scripts, or audits.
 | `mode` | string | `deliverables` or `questions`. |
 | `finalized_iso` | string | UTC timestamp of finalize. |
 | `verdict` | string | Final verdict (`APPROVED`, `REJECTED`, …). |
-| `convergence` | object | `{ "iterations": int, "max_iterations": int, "rejections": int }` — iterations to verdict and how many REJECTED verdicts preceded it. |
+| `convergence` | object | `{ "iterations": int, "max_iterations": int, "rejections": int }`: iterations to verdict and how many REJECTED verdicts preceded it. |
 | `decisions` | object | `{ "surfaced": {"P0": int, "P1": int, "P2": int}, "answered_by_user": int, "answered_by_assumption": int, "unanswered": int, "p0_assumed": int }`. `p0_assumed` is the key signal: blocking questions the session guessed on rather than asking. |
-| `clarity` | object | `{ "mean_before": float or null, "mean_after": float or null, "topics_touched": int }` — the de-risking delta. |
+| `clarity` | object | `{ "mean_before": float or null, "mean_after": float or null, "topics_touched": int }`: the de-risking delta. |
 | `cost` | object | `{ "total_tokens": int, "duration_ms": int, "agents": int, "tokens_per_settled_decision": int or null, "scope_pct": { "<scope>": int } }`. `tokens_per_settled_decision` is null when nothing was settled; `scope_pct` is each scope's whole-number percent share of tokens. |
-| `editor` | object | `{ "first_draft_words": int, "final_words": int, "shrink_ratio": float }` — editor-liveness proxy from advocate-doc word counts. `shrink_ratio` of 0.33 means a third was cut; 0.0 when there is no first draft to measure against. |
+| `editor` | object | `{ "first_draft_words": int, "final_words": int, "shrink_ratio": float }`: editor-liveness proxy from advocate-doc word counts. `shrink_ratio` of 0.33 means a third was cut; 0.0 when there is no first draft to measure against. |
 | `outcome` | null | Always null at finalize; the one field a human may edit later to record whether the plan got built. |
 
 See `docs/SESSION_ANALYTICS_PLAN.md` for the design and the five health signals `stats` derives from these records.
@@ -275,13 +275,13 @@ See `docs/SESSION_ANALYTICS_PLAN.md` for the design and the five health signals 
 
 Generated instructions follow a consistent layout:
 
-1. **Header** — phase, run directory, input text, iteration cap, creation timestamp, budget, and (for Studio) role pack + overrides.
-2. **Artifacts list** — file destinations. Studio instructions highlight per-role filenames.
-3. **Agent Roles** — Advocate, Contrarian, Implementer (non-studio) or Integrator (studio).
-4. **Iteration Loop** — numbered steps for Advocate/Contrarian exchanges. Studio loop points to the Integrator duel hand-off after approval.
-5. **Role Menu** (Studio only) — table describing each invited role, deliverables, file naming, and a link to each role's `prompt_doc` when set (optional, project-supplied; `-` otherwise).
-6. **Integrator Duel** (Studio only) — explains `### Integrator Advocate`, `### Integrator Contrarian (VERDICT)`, and `### Integrated Plan` sections inside `integrator.md`.
-7. **Summary & Packaging** — reminders to fill out `summary.md` and run the finalize command.
+1. **Header**: phase, run directory, input text, iteration cap, creation timestamp, budget, and (for Studio) role pack + overrides.
+2. **Artifacts list**: file destinations. Studio instructions highlight per-role filenames.
+3. **Agent Roles**: Advocate, Contrarian, Implementer (non-studio) or Integrator (studio).
+4. **Iteration Loop**: numbered steps for Advocate/Contrarian exchanges. Studio loop points to the Integrator duel hand-off after approval.
+5. **Role Menu** (Studio only): table describing each invited role, deliverables, file naming, and a link to each role's `prompt_doc` when set (optional, project-supplied; `-` otherwise).
+6. **Integrator Duel** (Studio only): explains `### Integrator Advocate`, `### Integrator Contrarian (VERDICT)`, and `### Integrated Plan` sections inside `integrator.md`.
+7. **Summary & Packaging**: reminders to fill out `summary.md` and run the finalize command.
 
 The assistant should read this file to know where to save each artifact.
 
@@ -367,9 +367,9 @@ Stick to the CLI whenever possible so scripts remain simple and any assistant ca
 
 ## 9. Related Documents
 
-- [README.md](../../README.md) – big-picture overview and testing notes.
-- [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) – Claude Code slash commands and workflow.
-- [STUDIO_BRIDGE_TEMPLATE.md](./STUDIO_BRIDGE_TEMPLATE.md) – copy into every dependent repo.
-- [INTEGRATION_GUIDE.md](./INTEGRATION_GUIDE.md) – repo-level onboarding checklist and helper scripts.
+- [README.md](../../README.md): big-picture overview and testing notes.
+- [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md): Claude Code slash commands and workflow.
+- [STUDIO_BRIDGE_TEMPLATE.md](./STUDIO_BRIDGE_TEMPLATE.md): copy into every dependent repo.
+- [INTEGRATION_GUIDE.md](./INTEGRATION_GUIDE.md): repo-level onboarding checklist and helper scripts.
 
 These docs, together with `run_phase.py`, define the entire Studio API surface.

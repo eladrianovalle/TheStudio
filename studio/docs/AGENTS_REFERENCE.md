@@ -12,29 +12,29 @@ The non-studio phases each follow a single Advocate ↔ Contrarian loop, then ha
 
 | Persona | Description |
 | --- | --- |
-| Advocate – Market Growth Strategist | Steel-man the idea into a high-virality launch hook for its target platform. Focus on audience segments, unique hooks, and low-cost launch tactics. |
-| Contrarian – The Reality Check | Attack market size, competition, cost realism, and virality claims. Must end with `VERDICT: APPROVED/REJECTED`. |
-| Implementer – Market Research Analyst | After approval, produces audience profiles, competitor tables, UVP, GTM plan, and KPI list. |
+| Advocate: Market Growth Strategist | Steel-man the idea into a high-virality launch hook for its target platform. Focus on audience segments, unique hooks, and low-cost launch tactics. |
+| Contrarian: The Reality Check | Attack market size, competition, cost realism, and virality claims. Must end with `VERDICT: APPROVED/REJECTED`. |
+| Implementer: Market Research Analyst | After approval, produces audience profiles, competitor tables, UVP, GTM plan, and KPI list. |
 
 ### Design Phase
 
 | Persona | Description |
 | --- | --- |
-| Advocate – Lead Systems Designer | Build the Minimum Viable Fun core loop, mechanics, and constraints. |
-| Contrarian – Scope-Creep Police | Challenge complexity, missing UX safeguards, and timeline realism; returns VERDICT. |
-| Implementer – Game Design Documenter | Provides gameplay loop diagram, progression outline, key mechanics, UI/UX notes, and constraint checklist. |
+| Advocate: Lead Systems Designer | Build the Minimum Viable Fun core loop, mechanics, and constraints. |
+| Contrarian: Scope-Creep Police | Challenge complexity, missing UX safeguards, and timeline realism; returns VERDICT. |
+| Implementer: Game Design Documenter | Provides gameplay loop diagram, progression outline, key mechanics, UI/UX notes, and constraint checklist. |
 
 ### Tech Phase
 
 | Persona | Description |
 | --- | --- |
-| Advocate – Technical Architect | Define a performant, idiomatic architecture, stack, and modules for the project's stack. |
-| Contrarian – Senior SRE | Flag performance, compatibility, ops toil, and reliability concerns (with VERDICT). |
-| Implementer – Technical Architect & Code Generator | Produces architecture description, stack, module plan, data-structure notes, and a starter code fragment. |
+| Advocate: Technical Architect | Define a performant, idiomatic architecture, stack, and modules for the project's stack. |
+| Contrarian: Senior SRE | Flag performance, compatibility, ops toil, and reliability concerns (with VERDICT). |
+| Implementer: Technical Architect & Code Generator | Produces architecture description, stack, module plan, data-structure notes, and a starter code fragment. |
 
 ### Studio Phase (Role Packs)
 
-Studio phase now hosts as many Advocate↔Contrarian duos as needed. The full role menu (all 14 manifest roles) is below; the default `studio_core` pack uses the first seven — marketing, product, design, art, engineering, test_engineer, qa — and you add others with `--roles +<role>`:
+Studio phase now hosts as many Advocate↔Contrarian duos as needed. The full role menu (all 14 manifest roles) is below; the default `studio_core` pack uses the first seven (marketing, product, design, art, engineering, test_engineer, qa), and you add others with `--roles +<role>`:
 
 | Role Key | Title | Advocate Focus | Contrarian Focus | Deliverables (examples) |
 | --- | --- | --- | --- | --- |
@@ -53,16 +53,16 @@ Studio phase now hosts as many Advocate↔Contrarian duos as needed. The full ro
 | ml | ML Systems Lead | AI critique engine quality + cost control | Model reliability, cost predictability, quality validation | Critique pipeline outline, model choices + fallbacks, benchmark/calibration plan |
 | pmm | Product Marketing Lead | Product narrative from MVP to launch | Launch realism, messaging integrity | Positioning brief, launch plan, readiness checklist |
 
-**Role dependencies:** The manifest declares co-requirements — `engineering → test_engineer`. When engineering is present, test_engineer is automatically injected after it. This ensures test integrity is always debated when technical work is proposed. Override with `-test_engineer` only when explicitly unwanted.
+**Role dependencies:** The manifest declares co-requirements: `engineering → test_engineer`. When engineering is present, test_engineer is automatically injected after it. This ensures test integrity is always debated when technical work is proposed. Override with `-test_engineer` only when explicitly unwanted.
 
 ### Three-Tier Scoped Debate (Default)
 
 Studio runs use a scoped flow by default (override with `--no-scopes`):
 
-1. **Alignment** — All roles debate in parallel, ~500-word cap. Catches directional problems cheaply before deep dives. File naming: `advocate--<role>--S1-NN.md`
-2. **Depth** — Each role debates sequentially with full deliverables, no word cap. Starts focused because alignment context is available. File naming: `advocate--<role>--S2-NN.md`
-3. **Polish** — All roles in parallel, ~300-word cap, single pass. Cross-discipline gut-check. File naming: `advocate--<role>--S3-NN.md`
-4. **Integrator** — After all roles approve in polish, synthesizes into `integrator.md` with capped duel (two passes max).
+1. **Alignment**: All roles debate in parallel, ~500-word cap. Catches directional problems cheaply before deep dives. File naming: `advocate--<role>--S1-NN.md`
+2. **Depth**: Each role debates sequentially with full deliverables, no word cap. Starts focused because alignment context is available. File naming: `advocate--<role>--S2-NN.md`
+3. **Polish**: All roles in parallel, ~300-word cap, single pass. Cross-discipline gut-check. File naming: `advocate--<role>--S3-NN.md`
+4. **Integrator**: After all roles approve in polish, synthesizes into `integrator.md` with capped duel (two passes max).
 
 In flat mode (`--no-scopes`), each role writes `advocate--<role>--NN.md` and `contrarian--<role>--NN.md` until approved, then the Integrator runs.
 
@@ -71,7 +71,7 @@ In flat mode (`--no-scopes`), each role writes `advocate--<role>--NN.md` and `co
 ## 2. Role Menu & Prompt Docs
 
 - `run_phase.py prepare --phase studio` renders a **Role Menu** listing every invited role, deliverables, filenames, and a link to its `prompt_doc` when set (`-` otherwise).
-- Prompt docs are **optional and project-supplied** — Studio ships none, keeping the shared core stack-neutral. A project adds long-form role guidance and points `prompt_doc` at it via a `.studio/roles/<role>.json` override. The manifest's `advocate_focus`/`contrarian_focus`/`deliverables` drive every role regardless.
+- Prompt docs are **optional and project-supplied**: Studio ships none, keeping the shared core stack-neutral. A project adds long-form role guidance and points `prompt_doc` at it via a `.studio/roles/<role>.json` override. The manifest's `advocate_focus`/`contrarian_focus`/`deliverables` drive every role regardless.
 - Escalation cues in the manifest tell the assistant when to invite additional roles (e.g., Marketing escalates Legal when policies are at risk).
 
 ---
@@ -99,12 +99,12 @@ Contrarians must always end with `VERDICT: APPROVED` or `VERDICT: REJECTED`. Fin
    - Operators select them via `--role-pack` and override attendance with `--roles` tokens (typically additions like `+product +engineering +qa`; use `-role` only when you need to remove one).
 3. **Override single-phase personas (`.studio/personas.toml`)**  
    - The `market`/`design`/`tech`/`studio` advocate, contrarian, notes, implementer, and (studio-only) integrator personas ship as stack-neutral defaults in `PHASE_DETAILS`.
-   - A project tailors them per-phase via `.studio/personas.toml` — `persona_overrides.py` shallow-merges each table over the defaults (e.g. swap the tech advocate's default "Technical Architect" for a "Rust Systems Architect"). Author it interactively with `/studio-setup` (which can also sniff the stack and suggest one).
+   - A project tailors them per-phase via `.studio/personas.toml`: `persona_overrides.py` shallow-merges each table over the defaults (e.g. swap the tech advocate's default "Technical Architect" for a "Rust Systems Architect"). Author it interactively with `/studio-setup` (which can also sniff the stack and suggest one).
 4. **Document changes**  
    - Update README, Interaction Guide, API, and Bridge Template whenever roles or packs shift.  
    - Mention the new pack in downstream bridge docs so the assistant loads it explicitly.
 
-Because everything is declarative, there’s no hidden CrewAI config to edit—just JSON + Markdown.
+Because everything is declarative, there’s no hidden CrewAI config to edit, just JSON + Markdown.
 
 ### Methodology Enforcement
 
@@ -138,9 +138,9 @@ Roles enforce two methodologies via their contrarian focuses and escalation trig
 
 ## 7. Related Docs
 
-- [README.md](../../README.md) – overall workflow and testing notes.
-- [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) – Claude Code slash commands and workflow.
-- [API.md](./API.md) – CLI/reference schema.  
-- [ARCHITECTURE.md](./ARCHITECTURE.md) – system view of prepare → execute → finalize.  
+- [README.md](../../README.md): overall workflow and testing notes.
+- [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md): Claude Code slash commands and workflow.
+- [API.md](./API.md): CLI/reference schema.
+- [ARCHITECTURE.md](./ARCHITECTURE.md): system view of prepare → execute → finalize.
 
-Keep these aligned whenever you adjust roles, packs, or artifact expectations—Studio has no runtime beyond what’s described here.
+Keep these aligned whenever you adjust roles, packs, or artifact expectations. Studio has no runtime beyond what’s described here.

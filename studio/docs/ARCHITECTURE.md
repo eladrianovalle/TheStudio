@@ -40,7 +40,7 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 | `rerun.py` | Detects rejection context from prior runs and generates rerun instructions. |
 | `verdict.py` | Extracts APPROVED/REJECTED/UNKNOWN verdict from agent output. |
 | `stats.py` | Pure cross-run aggregation, formatting, and outcome roll-up (`aggregate_stats`, `format_stats`, `summarize_outcomes`, `summarize_session_health`, `_summarize_metrics`, `_parse_usage_log`). Backs the `stats` command; moved out of `run_phase.py` so the number-crunching has no I/O. |
-| `session.py` | Pure builder for the automatic `session.json` health record (`build_session_record` + `_summarize_decisions`/`_summarize_cost`/`_summarize_editor`). Mirrors `stats.py` — data-in/data-out, no I/O; `run_phase` finalize reads the run dir and hands the pieces in. |
+| `session.py` | Pure builder for the automatic `session.json` health record (`build_session_record` + `_summarize_decisions`/`_summarize_cost`/`_summarize_editor`). Mirrors `stats.py`: data-in/data-out, no I/O; `run_phase` finalize reads the run dir and hands the pieces in. |
 | `config_loading.py` | The single shared TOML loader: picks `tomllib` (3.11+) or the `tomli` fallback (3.10) with one consistent error message. Imported by `run_phase.py`, `scopes.py`, `cleanup.py`, `persona_overrides.py`, `impl_loop.py`, and `integrations/slack_digest.py` so no module carries its own copy. |
 | `impl_loop.py` | Implementation writer/editor loop config: `LoopConfig` + `load_loop_config()`. Projects the resolved config into runtime knobs (editor on/off, read scope, output budget, mutation/static gates) for the `implementation-loop.js` Workflow via `python -m impl_loop`. |
 | `install.py` | Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project. Injects coding principles into target's `CLAUDE.md` via sentinel markers. |
@@ -52,12 +52,12 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 | `role_packs/*.json` | Curated sets of Studio roles (e.g., `studio_core`). Operators pick a pack, then add/remove roles with CLI flags. |
 | `config/scopes.toml` | Default scope configuration for studio phase runs. |
 | `config/implementation_loop.toml` | Shipped defaults for the implementation writer/editor loop (`[loop]`, `[gate]` incl. `mutation_command`, `[editor]`). Override with `.studio/implementation_loop.toml`. Loaded by `impl_loop.py`. |
-| `setup.cfg` | `[mutmut]` config for mutation testing — the tool the `require_mutation_check` gate and the weekly mutation CI run. Lists which pure-logic modules to mutate and the pytest runner. |
+| `setup.cfg` | `[mutmut]` config for mutation testing: the tool the `require_mutation_check` gate and the weekly mutation CI run. Lists which pure-logic modules to mutate and the pytest runner. |
 | `.studio/roles/*.json` | Project-local role overrides. Shallow-merge with manifest roles (override keys replace base, unspecified keys inherit). |
 | `.studio/personas.toml` | Project-local single-phase persona overrides. Per-phase shallow-merge over the shipped `PHASE_DETAILS` defaults (loaded by `persona_overrides.py`, authored by the setup wizard). |
 | `.studio/unstale.toml` | Optional per-repo override for the `/unstale` audit (`[snapshot]` commands + `[audit]` globs). Read by the `/unstale` command; absent it self-detects the stack. Authored by the setup wizard. |
 | `.studio/integrations.toml` | Optional outbound-webhook config for run digests, plus the outcomes ledger path. `[slack]` and `[n8n]` tables, each with `enabled` and `webhook_url_env` (env var holding the secret URL); `[n8n]` also takes optional `auth_header`/`auth_value_env` for Header Auth. Loaded by `integrations/slack_digest.py`. An optional `[outcomes] ledger_path` key names a local JSONL file that `finalize` auto-appends each run's outcome record to (read by `run_phase.get_configured_ledger_path`). |
-| Role `prompt_doc` (optional) | Per-role pointer to a long-form prompt doc, surfaced as a link in the Role Menu. Studio ships none — projects supply their own and set the path via a `.studio/roles/*.json` override; unset renders as `-`. |
+| Role `prompt_doc` (optional) | Per-role pointer to a long-form prompt doc, surfaced as a link in the Role Menu. Studio ships none. Projects supply their own and set the path via a `.studio/roles/*.json` override; unset renders as `-`. |
 | Active output root (`output/` or `.studio/output/`) | Run folders containing instructions, advocate/contrarian artifacts, integrator plans, summaries, and metadata. |
 | Active knowledge log (`knowledge/run_log.md` or `.studio/knowledge/run_log.md`) | Append-only log of finalized runs for easy reference across repos. |
 
@@ -89,11 +89,11 @@ The assistant reads `instructions.md`, the bridge doc, and any prompt docs linke
 
 Advocate → Contrarian loop until `VERDICT: APPROVED` or max iterations exhausted. Then implementation (tech) or summary.
 
-### Studio Phase — Three-Tier Scoped Debate (Default)
+### Studio Phase: Three-Tier Scoped Debate (Default)
 
 Studio runs use a scoped flow configured in `config/scopes.toml`:
 
-1. **Alignment** (all roles, parallel, ~500 words each): Directional check — approach, fatal flaws, high-level tradeoffs. Catches bad directions cheaply before deep dives.
+1. **Alignment** (all roles, parallel, ~500 words each): Directional check on approach, fatal flaws, and high-level tradeoffs. Catches bad directions cheaply before deep dives.
 2. **Depth** (per-role, sequential, no word cap): Full deliverables per discipline. Starts focused because alignment context is available.
 3. **Polish** (all roles, parallel, ~300 words, 1 pass): Cross-discipline gut-check. Flag remaining conflicts, no new proposals.
 4. **Integrator duel**: Synthesize all scope artifacts into `integrator.md` with `### Integrator Advocate`, `### Integrator Contrarian`, `### Integrated Plan`.
@@ -135,9 +135,9 @@ No automation runs outside the assistant; the instructions are simply executed a
   - `escalate_on`
   - `prompt_doc` (optional pointer to a project-supplied Markdown file; Studio ships none)
 - **Role packs** enforce consistent combinations. Example `studio_core` includes marketing, product, design, art, engineering, test_engineer, and QA.
-- **Role dependencies** are declared in `defaults.role_dependencies` (e.g., `engineering → test_engineer`). After resolving overrides, `resolve_role_list` injects co-required roles immediately after their trigger role — unless the operator explicitly removed them with `-role`. This guarantees that test integrity is always debated when engineering is present.
+- **Role dependencies** are declared in `defaults.role_dependencies` (e.g., `engineering → test_engineer`). After resolving overrides, `resolve_role_list` injects co-required roles immediately after their trigger role, unless the operator explicitly removed them with `-role`. This guarantees that test integrity is always debated when engineering is present.
 - Operators select a pack via `--role-pack` and tweak attendance with `--roles` additions/removals. This keeps instructions concise while maintaining a single source of truth.
-- **Methodology enforcement**: Product, Engineering, and Design roles enforce MVI (Minimum Viable Interaction) — every milestone must end in something usable. Engineering and Test Engineer enforce AI-TDD. See `docs/MVI_METHODOLOGY.md` and `docs/AI_TDD_METHODOLOGY.md`.
+- **Methodology enforcement**: Product, Engineering, and Design roles enforce MVI (Minimum Viable Interaction): every milestone must end in something usable. Engineering and Test Engineer enforce AI-TDD. See `docs/MVI_METHODOLOGY.md` and `docs/AI_TDD_METHODOLOGY.md`.
 
 ---
 
@@ -156,8 +156,8 @@ No automation runs outside the assistant; the instructions are simply executed a
 ```
 
 Indexes:
-- `<active_output_root>/index.md` – table view
-- `<active_knowledge_root>/run_log.md` – chronological log with verdicts, hours, and summary links
+- `<active_output_root>/index.md`: table view
+- `<active_knowledge_root>/run_log.md`: chronological log with verdicts, hours, and summary links
 
 ---
 
@@ -170,7 +170,7 @@ Indexes:
 | New phase | Add entries to `PHASE_DETAILS` in `run_phase.py`, define deliverables, and update docs/tests accordingly. |
 | Automation | Wrap `run_phase.py prepare/finalize` in repo-specific scripts, shell aliases, or assistant-specific commands. |
 
-No direct imports or service layers are required—just CLI calls and Markdown artifacts.
+No direct imports or service layers are required: just CLI calls and Markdown artifacts.
 
 ---
 
@@ -180,4 +180,4 @@ No direct imports or service layers are required—just CLI calls and Markdown a
 2. Docs: README, CLAUDE_CODE_USAGE, STUDIO_BRIDGE_TEMPLATE, API, INTEGRATION_GUIDE, AGENTS_REFERENCE, ARCHITECTURE (this file), CODING_PRINCIPLES, MVI_METHODOLOGY, AI_TDD_METHODOLOGY, SCOPES_GUIDE, VALIDATION_GUIDE, TEST_DRIVEN_GUIDE, STORAGE_MANAGEMENT.
 3. Outputs: `<active_output_root>/index.md`, `<active_knowledge_root>/run_log.md`.
 
-Whenever the workflow changes, update all of the above in one commit. Studio deliberately has no hidden runtime — everything is visible, reproducible, and assistant-agnostic.
+Whenever the workflow changes, update all of the above in one commit. Studio deliberately has no hidden runtime: everything is visible, reproducible, and assistant-agnostic.

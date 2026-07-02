@@ -59,7 +59,7 @@ size_limit_mb = 900  # Maximum total storage in megabytes
 
 - Studio will automatically suggest cleanup when you have >50MB of artifacts or files older than 45 days
 - Use `--dry-run` first to preview what will be deleted
-- Cleanup is safe - it only removes old run directories, not your work files
+- Cleanup is safe: it only removes old run directories, not your work files
 - Storage information is included in every run for full transparency
 
 ## Manual Cleanup

@@ -1,6 +1,6 @@
 # Minimum Viable Interaction (MVI) Methodology
 
-Every unit of work Studio produces — from a single task to a full roadmap — must end in a **complete, usable interaction**, not a partial component that becomes useful later.
+Every unit of work Studio produces, from a single task to a full roadmap, must end in a **complete, usable interaction**, not a partial component that becomes useful later.
 
 ---
 
@@ -10,7 +10,7 @@ Every unit of work Studio produces — from a single task to a full roadmap — 
 
 **Like this:** skateboard → scooter → bicycle → motorcycle → car (each step is rideable)
 
-The key word is **Interaction**, not Product. You're not shipping incrementally toward a product — you're shipping incrementally toward richer interactions. A skateboard isn't a car, but you can ride it today.
+The key word is **Interaction**, not Product. You're not shipping incrementally toward a product; you're shipping incrementally toward richer interactions. A skateboard isn't a car, but you can ride it today.
 
 ---
 

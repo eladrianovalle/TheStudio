@@ -75,7 +75,7 @@ Scopes are **enabled by default** for studio phase runs. No flags needed:
 /run-studio-phase --text "..." --no-scopes
 ```
 
-Flat mode runs all roles at full depth with no tiers — the original behavior.
+Flat mode runs all roles at full depth with no tiers, the original behavior.
 
 ### Custom scopes config
 
@@ -100,10 +100,10 @@ You can adjust the default config or create project-specific ones. The key lever
 
 - **Decision points** are extracted and surfaced after every agent in every scope
 - **Agent metrics** (token usage) are recorded per-agent, so you can see which scope consumes the most tokens via `show-metrics`
-- **Clarity scores** inform agent question density across scopes — settled topics get fewer questions
+- **Clarity scores** inform agent question density across scopes: settled topics get fewer questions
 
 ## See Also
 
-- [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) — slash commands and agent workflow
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — system design
-- [README.md](../../README.md) — project overview
+- [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md): slash commands and agent workflow
+- [ARCHITECTURE.md](./ARCHITECTURE.md): system design
+- [README.md](../../README.md): project overview

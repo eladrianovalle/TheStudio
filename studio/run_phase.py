@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """
-Studio run instruction helper.
+Studio CLI entrypoint.
 
-Prepares per-phase instructions, creates run directories, and keeps
-output/index.md in sync so every Studio request can be executed agentically
-by an AI assistant (Claude Code is the supported path).
+The single command surface for Studio. Beyond preparing per-phase instructions
+and run directories, it finalizes and validates runs, manages decisions and
+clarity, records agent metrics and human ratings, prints the cross-run stats
+dashboard and maintains the outcomes ledger, writes session-health records,
+sends run digests, and installs/updates Studio into other repos. Runs are
+executed by an AI assistant (Claude Code is the supported path); this script
+does the mechanics around them.
 """
 from __future__ import annotations
 
@@ -1829,7 +1833,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_artifact_root_arg(prepare_parser)
 
-    finalize_parser = subparsers.add_parser("finalize", help="Mark an existing run as completed and refresh index.")
+    finalize_parser = subparsers.add_parser("finalize", help="Mark a run completed: refresh index, write session.json, append to the outcomes ledger.")
     finalize_parser.add_argument(
         "--phase",
         required=False,

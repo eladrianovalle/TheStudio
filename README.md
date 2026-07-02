@@ -2,7 +2,7 @@
 
 Studio is an **instruction generator** for structured advocate/contrarian debates. It prepares run directories with instructions that an AI assistant (Claude Code is the supported path) executes, then packages the results as versioned artifacts.
 
-**No runtime. No API keys. No dependencies beyond Python stdlib.** All intelligence lives in the assistant's execution — Studio just keeps the prompts, roles, artifacts, and logs organized.
+**No runtime. No API keys. No dependencies beyond Python stdlib.** All intelligence lives in the assistant's execution. Studio just keeps the prompts, roles, artifacts, and logs organized.
 
 ---
 
@@ -51,22 +51,22 @@ prepare ──→ instructions.md ──→ AI assistant executes ──→ fina
 
 ### Collaborative by Design
 
-Agents don't run autonomously to completion. When they hit gaps or forks, they **flag decision points** inline — and the orchestrator pauses to ask you:
+Agents don't run autonomously to completion. When they hit gaps or forks, they **flag decision points** inline, and the orchestrator pauses to ask you:
 
 - **P0 (Blocking):** Run pauses. You answer before agents continue.
 - **P1 (Important):** Agent states an assumption. You can override.
 - **P2 (Context):** Logged for reference, no interruption.
 
-Your decisions accumulate in `decisions.md` and become hard constraints for all subsequent agents. **Clarity Scores** track per-topic confidence and automatically reduce question density as topics settle — early runs produce many questions, later runs focus only on genuine new gaps.
+Your decisions accumulate in `decisions.md` and become hard constraints for all subsequent agents. **Clarity Scores** track per-topic confidence and automatically reduce question density as topics settle: early runs produce many questions, later runs focus only on genuine new gaps.
 
 ### Four Phases
 
 | Phase | What It Does | Output |
 |-------|-------------|--------|
-| `market` | Viability analysis — audience, competition, GTM | `advocate_N.md`, `contrarian_N.md`, `summary.md` |
-| `design` | Game design — core loop, mechanics, scope | Same |
-| `tech` | Technical architecture — stack, performance, ops | Same + `implementation.md` with tests |
-| `studio` | Multi-role debate — all disciplines in the room | Per-role files + `integrator.md` |
+| `market` | Viability analysis: audience, competition, GTM | `advocate_N.md`, `contrarian_N.md`, `summary.md` |
+| `design` | Game design: core loop, mechanics, scope | Same |
+| `tech` | Technical architecture: stack, performance, ops | Same + `implementation.md` with tests |
+| `studio` | Multi-role debate: all disciplines in the room | Per-role files + `integrator.md` |
 
 ---
 
@@ -258,14 +258,14 @@ Keep installed copies current: `python studio/run_phase.py check-install --targe
 
 ## MVI (Minimum Viable Interaction)
 
-Every task, sprint, and milestone must end in something **usable** — not a partial component that becomes useful later.
+Every task, sprint, and milestone must end in something **usable**, not a partial component that becomes useful later.
 
 > "Build a skateboard, not a wheel." Each increment is rideable.
 
 - **Tasks** produce an interactable result, not isolated backend/frontend pieces
 - **Sprints** end with a working flow, not a layer of the stack
 - **Milestones** are demonstrable without caveats like "once we also finish X"
-- **Roadmaps** are sequences of increasingly capable MVIs — if cancelled at any point, something usable exists
+- **Roadmaps** are sequences of increasingly capable MVIs. If cancelled at any point, something usable exists
 
 Product, Engineering, and Design contrarians enforce MVI. See [MVI_METHODOLOGY.md](./studio/docs/MVI_METHODOLOGY.md).
 
@@ -314,7 +314,8 @@ Configure in `config/studio_settings.toml`. Use `--skip-cleanup` to bypass.
 ```
 studio/
   run_phase.py              # CLI entrypoint: prepare, finalize, validate, cleanup, decision, clarity, metrics, rate, stats, export/import-outcomes, install, setup, offload, notify
-  stats.py                  # Pure cross-run aggregation + formatting + outcome roll-up (backs `stats`)
+  stats.py                  # Pure cross-run aggregation + formatting + outcome/session-health roll-up (backs `stats`)
+  session.py                # Pure builder for the session.json health record finalize writes per run
   config_loading.py         # Shared TOML loader (tomllib/tomli fallback), used by every config reader
   run_phase_roles.py        # Role system: manifest, packs, dependencies, file naming
   role_overrides.py         # Project-local role customization (.studio/roles/*.json)
@@ -357,18 +358,18 @@ Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.
 
 ## Documentation
 
-- [CLAUDE_CODE_USAGE.md](./studio/docs/CLAUDE_CODE_USAGE.md) — slash commands, decision points, clarity scores, question mode
-- [ARCHITECTURE.md](./studio/docs/ARCHITECTURE.md) — system design and extensibility
-- [AGENTS_REFERENCE.md](./studio/docs/AGENTS_REFERENCE.md) — role definitions and debate flow
-- [MVI_METHODOLOGY.md](./studio/docs/MVI_METHODOLOGY.md) — Minimum Viable Interaction methodology
-- [AI_TDD_METHODOLOGY.md](./studio/docs/AI_TDD_METHODOLOGY.md) — AI-assisted testing methodology
-- [TEST_DRIVEN_GUIDE.md](./studio/docs/TEST_DRIVEN_GUIDE.md) — tech phase TDD workflow
-- [INTEGRATION_GUIDE.md](./studio/docs/INTEGRATION_GUIDE.md) — cross-repo setup
-- [INTEGRATIONS.md](./studio/docs/INTEGRATIONS.md) — outbound Slack/n8n run-digest webhooks
-- [STUDIO_BRIDGE_TEMPLATE.md](./studio/docs/STUDIO_BRIDGE_TEMPLATE.md) — template for downstream repos
+- [CLAUDE_CODE_USAGE.md](./studio/docs/CLAUDE_CODE_USAGE.md): slash commands, decision points, clarity scores, question mode
+- [ARCHITECTURE.md](./studio/docs/ARCHITECTURE.md): system design and extensibility
+- [AGENTS_REFERENCE.md](./studio/docs/AGENTS_REFERENCE.md): role definitions and debate flow
+- [MVI_METHODOLOGY.md](./studio/docs/MVI_METHODOLOGY.md): Minimum Viable Interaction methodology
+- [AI_TDD_METHODOLOGY.md](./studio/docs/AI_TDD_METHODOLOGY.md): AI-assisted testing methodology
+- [TEST_DRIVEN_GUIDE.md](./studio/docs/TEST_DRIVEN_GUIDE.md): tech phase TDD workflow
+- [INTEGRATION_GUIDE.md](./studio/docs/INTEGRATION_GUIDE.md): cross-repo setup
+- [INTEGRATIONS.md](./studio/docs/INTEGRATIONS.md): outbound Slack/n8n run-digest webhooks
+- [STUDIO_BRIDGE_TEMPLATE.md](./studio/docs/STUDIO_BRIDGE_TEMPLATE.md): template for downstream repos
 
 ---
 
 ## License
 
-MIT — reuse freely across your projects.
+MIT. Reuse freely across your projects.
