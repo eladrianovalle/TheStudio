@@ -70,6 +70,8 @@ from rerun import (
 from validators.code_validator import CodeValidator
 
 import clarity
+from verdict import extract_verdict
+from session import build_session_record
 from integrations.slack_digest import load_integrations_config, notify_run
 
 from config_loading import tomllib
@@ -1382,6 +1384,105 @@ def prepare_run(args: argparse.Namespace) -> str:
     return run_id
 
 
+def _ordered_agent_files(run_dir: Path, phase: str, kind: str) -> List[Path]:
+    """Agent output files (``kind`` is 'advocate' or 'contrarian') in write order.
+
+    Chronological so "first draft vs final" and "rejections before the last one"
+    are meaningful: simple runs sort by iteration number; studio runs sort by
+    scope then iteration.
+    """
+    if phase == "studio":
+        paths = list(run_dir.glob(f"{kind}--*--*.md"))
+
+        def studio_key(path: Path) -> Tuple[str, int, str]:
+            _, role, scope, iteration = parse_role_filename(path.name)
+            return (scope or "", iteration, role)
+
+        paths.sort(key=studio_key)
+    else:
+        paths = list(run_dir.glob(f"{kind}_*.md"))
+
+        def simple_key(path: Path) -> int:
+            suffix = path.stem.split("_")[-1]
+            return int(suffix) if suffix.isdigit() else 0
+
+        paths.sort(key=simple_key)
+    return paths
+
+
+def _count_rejections(run_dir: Path, phase: str) -> int:
+    """Count contrarian REJECTED verdicts before the final one.
+
+    Each contrarian file carries a VERDICT line. A debate that took two
+    rejections to reach APPROVED did real work; one that approved on the first
+    pass may be a rubber stamp. We count REJECTED verdicts across every
+    contrarian file except the last, so the terminal verdict itself isn't
+    counted as a rejection-along-the-way.
+    """
+    paths = _ordered_agent_files(run_dir, phase, "contrarian")
+    rejections = 0
+    for path in paths[:-1]:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if extract_verdict(text) == "REJECTED":
+            rejections += 1
+    return rejections
+
+
+def _ordered_advocate_word_counts(run_dir: Path, phase: str) -> List[int]:
+    """Word count of each advocate document, first draft first, final last."""
+    counts: List[int] = []
+    for path in _ordered_agent_files(run_dir, phase, "advocate"):
+        try:
+            counts.append(len(path.read_text(encoding="utf-8").split()))
+        except OSError:
+            continue
+    return counts
+
+
+def _write_session_record(
+    run_dir: Path,
+    meta: Dict,
+    phase: str,
+    run_id: str,
+    metrics_entries: List[Dict],
+    clarity_mean_before: Optional[float],
+    clarity_mean_after: Optional[float],
+    clarity_topics_touched: int,
+) -> None:
+    """Write the automatic session.json health record for a finalized run.
+
+    Additive and soft-fail: session.json augments finalize, it never gates it.
+    Anything that goes wrong while deriving the record is logged and skipped so
+    a finalize that already did its real work still succeeds. See
+    docs/SESSION_ANALYTICS_PLAN.md and session.build_session_record.
+    """
+    try:
+        record = build_session_record(
+            run_id=run_id,
+            repo=_project_name(),
+            phase=phase,
+            mode=meta.get("output_type", "deliverables"),
+            finalized_iso=meta.get("updated_iso")
+            or utc_now().isoformat(timespec="seconds"),
+            verdict=meta.get("verdict", ""),
+            iterations=meta.get("iterations_run") or 0,
+            max_iterations=meta.get("max_iterations") or 0,
+            rejections=_count_rejections(run_dir, phase),
+            decisions=load_decisions_json(run_dir),
+            clarity_mean_before=clarity_mean_before,
+            clarity_mean_after=clarity_mean_after,
+            clarity_topics_touched=clarity_topics_touched,
+            metrics_entries=metrics_entries,
+            advocate_word_counts=_ordered_advocate_word_counts(run_dir, phase),
+        )
+        write_json(run_dir / "session.json", record)
+    except Exception as exc:  # never let the health record break finalize
+        print(f"Session record skipped: {exc}", file=sys.stderr)
+
+
 def finalize_run(args: argparse.Namespace) -> None:
     run_id = args.run_id
     phase = (args.phase or _phase_from_run_id(run_id)).lower()
@@ -1431,6 +1532,12 @@ def finalize_run(args: argparse.Namespace) -> None:
         agent_count = meta["metrics"]["agents"]
         print(f"Agent metrics: {agent_count} agents, {total_tokens:,} total tokens")
 
+    # Clarity delta for the session record — the "before" is captured below only
+    # when there are decisions to recompute clarity from; otherwise it stays null.
+    clarity_mean_before: Optional[float] = None
+    clarity_mean_after: Optional[float] = None
+    clarity_topics_touched = 0
+
     # Generate decisions.md — merge agent-surfaced decisions with any already-settled ones
     existing = load_decisions_json(run_dir)
     extracted = extract_decisions_from_run(run_dir)
@@ -1460,6 +1567,22 @@ def finalize_run(args: argparse.Namespace) -> None:
         clarity.save_clarity_json(run_dir / "clarity.json", snapshot)
         clarity.save_project_clarity(art_root, snapshot)
         print(f"Updated clarity scores ({len(snapshot.topics)} topic(s), mean: {snapshot.mean_score:.2f})")
+
+        clarity_mean_before = prior.mean_score if prior is not None else None
+        clarity_mean_after = snapshot.mean_score
+        clarity_topics_touched = len(snapshot.topics)
+
+    # Auto-write the judgment-free session health record (additive, soft-fail).
+    _write_session_record(
+        run_dir,
+        meta,
+        phase,
+        run_id,
+        metrics_entries,
+        clarity_mean_before,
+        clarity_mean_after,
+        clarity_topics_touched,
+    )
 
     print(f"Finalized {run_id} ({phase}) → {meta['status']}")
 
