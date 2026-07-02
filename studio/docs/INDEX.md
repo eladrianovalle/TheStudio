@@ -9,6 +9,7 @@
 - **[API.md](./API.md)** - CLI reference for `run_phase.py`
 - **[CODING_PRINCIPLES.md](./CODING_PRINCIPLES.md)** - Karpathy-inspired coding principles (injected into target CLAUDE.md on install)
 - **[RUN_PHASE_SPLIT_PLAN.md](./RUN_PHASE_SPLIT_PLAN.md)** - Deferred plan for decomposing `run_phase.py` (config_loading + stats already extracted)
+- **[SESSION_ANALYTICS_PLAN.md](./SESSION_ANALYTICS_PLAN.md)** - Deferred plan for auto session-health metrics + export/import automation (measure sessions without rating unbuilt outputs)
 
 ## Workflow Features
 - **[SCOPES_GUIDE.md](./SCOPES_GUIDE.md)** - Scope-based iteration allocation
