@@ -29,6 +29,7 @@ def test_loop_config_defaults_match_spec():
     assert config.test_command == "pytest -q"
     assert config.static_checks == ["ruff"]
     assert config.require_mutation_check is True
+    assert config.mutation_command == "mutmut run"
     assert config.mandate == "contrarian"
     assert config.read_scope == "touched+importers"
     assert config.output_budget == 400
@@ -61,6 +62,12 @@ def test_loop_config_invalid_static_checks_type():
     """static_checks must be a list."""
     with pytest.raises(ValueError, match="static_checks"):
         LoopConfig(static_checks="ruff")  # type: ignore[arg-type]
+
+
+def test_loop_config_invalid_mutation_command_type():
+    """mutation_command must be a string."""
+    with pytest.raises(ValueError, match="mutation_command"):
+        LoopConfig(mutation_command=["mutmut"])  # type: ignore[arg-type]
 
 
 def test_loop_config_invalid_read_scope():
@@ -236,6 +243,7 @@ def test_runtime_knobs_default_config():
         "test_command": "pytest -q",
         "static_checks": ["ruff"],
         "require_mutation_check": True,
+        "mutation_command": "mutmut run",
         "read_scope": "touched+importers",
         "output_budget": 400,
     }
@@ -263,6 +271,7 @@ def test_runtime_knobs_reflects_loaded_override():
             "test_command": "python -m pytest tests/ -q",
             "static_checks": ["ruff", "mypy"],
             "require_mutation_check": False,
+            "mutation_command": "mutmut run",
             "read_scope": "touched",
             "output_budget": 250,
         }
@@ -279,6 +288,7 @@ def test_load_default_loop_config():
     assert config.test_command == "pytest -q"
     assert config.static_checks == ["ruff"]
     assert config.require_mutation_check is True
+    assert config.mutation_command == "mutmut run"
     assert config.mandate == "contrarian"
     assert config.read_scope == "touched+importers"
     assert config.output_budget == 400

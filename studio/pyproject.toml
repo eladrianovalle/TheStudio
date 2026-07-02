@@ -8,6 +8,15 @@ dependencies = [
     "tomli>=2.0;python_version<'3.11'",
 ]
 
+[project.optional-dependencies]
+# Dev/CI tooling. ruff is the static gate; mutmut backs the AI-TDD mutation
+# check that impl_loop's require_mutation_check gate expects (see setup.cfg).
+dev = [
+    "ruff",
+    "pytest",
+    "mutmut>=2.5,<3",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
