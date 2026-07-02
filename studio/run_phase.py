@@ -2659,10 +2659,9 @@ def _outcome_record_from_run(run: Dict, repo: str) -> Dict:
     """Build a portable outcome record from an enriched run dict.
 
     Every run yields a record, including unrated ones — an unrated run is still a
-    session the ledger and stats should see (that invisibility was the whole
-    complaint). A rating, when present, fills in score/shipped/impact/changed/
-    rated_iso; without one those stay null while repo, run_id, phase, verdict,
-    status, and token cost are still recorded.
+    session the ledger and stats should see. A rating, when present, fills in
+    score/shipped/impact/changed/rated_iso; without one those stay null while
+    repo, run_id, phase, verdict, status, and token cost are still recorded.
     """
     rating = run.get("_rating") or {}
     outcome = rating.get("outcome") or {}
