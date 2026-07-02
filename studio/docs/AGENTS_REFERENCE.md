@@ -140,7 +140,7 @@ Roles enforce two methodologies via their contrarian focuses and escalation trig
 
 - [README.md](../../README.md): overall workflow and testing notes.
 - [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md): Claude Code slash commands and workflow.
-- [API.md](./API.md): CLI/reference schema.  
-- [ARCHITECTURE.md](./ARCHITECTURE.md): system view of prepare → execute → finalize.  
+- [API.md](./API.md): CLI/reference schema.
+- [ARCHITECTURE.md](./ARCHITECTURE.md): system view of prepare → execute → finalize.
 
 Keep these aligned whenever you adjust roles, packs, or artifact expectations. Studio has no runtime beyond what’s described here.
