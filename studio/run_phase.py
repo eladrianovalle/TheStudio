@@ -87,6 +87,7 @@ from stats import (
     aggregate_stats,
     format_stats,
     summarize_outcomes,
+    summarize_session_health,
 )
 
 
@@ -2554,6 +2555,20 @@ def _load_rating(run_dir: Path) -> Optional[Dict]:
         return None
 
 
+def _load_session(run_dir: Path) -> Optional[Dict]:
+    """Load session.json from a run directory, returning None if absent/unreadable.
+
+    session.json is the automatic health record finalize writes; a run finalized
+    before that feature (or a broken file) simply has none.
+    """
+    try:
+        return json.loads((run_dir / "session.json").read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
 def _write_rating(
     run_dir: Path,
     score: int,
@@ -2789,12 +2804,20 @@ def show_stats(args: argparse.Namespace) -> None:
     for run in runs:
         run_dir = Path(run["run_dir"])
         run["_rating"] = _load_rating(run_dir)
+        run["_session"] = _load_session(run_dir)
         try:
             run["_decisions"] = load_decisions_json(run_dir)
         except Exception:
             run["_decisions"] = []
 
     agg = aggregate_stats(runs)
+
+    # Session health: the automatic finalize records, oldest first so the
+    # recent-vs-earlier trend split is chronological. The --phase filter above
+    # already narrowed `runs`, so this respects it.
+    session_records = [run["_session"] for run in runs if run.get("_session")]
+    session_records.sort(key=lambda record: record.get("finalized_iso") or "")
+    session_health = summarize_session_health(session_records)
 
     # Outcomes: this repo's rated runs plus the cross-repo ledger (imported from
     # other projects). Local records win on conflict since they're the fresher read.
@@ -2806,7 +2829,7 @@ def show_stats(args: argparse.Namespace) -> None:
     outcomes = summarize_outcomes(outcome_records)
 
     if getattr(args, "json", False):
-        print(json.dumps({**agg, "outcomes": outcomes}, indent=2))
+        print(json.dumps({**agg, "outcomes": outcomes, "session_health": session_health}, indent=2))
         return
 
     usage = None
@@ -2822,7 +2845,7 @@ def show_stats(args: argparse.Namespace) -> None:
     if snapshot is not None and snapshot.topics:
         clarity_note = f"{len(snapshot.topics)} topics tracked (run 'show-clarity' for the table)"
 
-    print(format_stats(agg, usage=usage, clarity_note=clarity_note, outcomes=outcomes))
+    print(format_stats(agg, usage=usage, clarity_note=clarity_note, outcomes=outcomes, session_health=session_health))
 
 
 def inject_context(args: argparse.Namespace) -> None:

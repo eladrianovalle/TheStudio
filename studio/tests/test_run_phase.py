@@ -698,6 +698,177 @@ def test_format_stats_renders_outcomes_section():
     assert "did a thing" in out
 
 
+# --- Session health (auto-measured trends from session.json) ---
+
+def _session(
+    *,
+    p0_surfaced=0,
+    p0_assumed=0,
+    iterations=1,
+    rejections=0,
+    mean_before=None,
+    mean_after=None,
+    total_tokens=0,
+    answered_by_user=0,
+    answered_by_assumption=0,
+    shrink_ratio=0.0,
+    finalized_iso="2026-01-01",
+):
+    """Build a minimal session.json-shaped record for the health tests."""
+    return {
+        "finalized_iso": finalized_iso,
+        "convergence": {"iterations": iterations, "rejections": rejections},
+        "decisions": {
+            "surfaced": {"P0": p0_surfaced, "P1": 0, "P2": 0},
+            "answered_by_user": answered_by_user,
+            "answered_by_assumption": answered_by_assumption,
+            "p0_assumed": p0_assumed,
+        },
+        "clarity": {"mean_before": mean_before, "mean_after": mean_after},
+        "cost": {"total_tokens": total_tokens},
+        "editor": {"shrink_ratio": shrink_ratio},
+    }
+
+
+def test_summarize_session_health_empty():
+    """No records yields all-None signals, zero count, and no trend."""
+    from stats import summarize_session_health
+    h = summarize_session_health([])
+    assert h["records"] == 0
+    assert h["assumed_p0_rate"] is None
+    assert h["convergence"]["median_iterations"] is None
+    assert h["convergence"]["rejection_rate"] is None
+    assert h["clarity_gain"] is None
+    assert h["tokens_per_settled_decision"] is None
+    assert h["editor_liveness"] is None
+    assert h["trend"] is None
+
+
+def test_summarize_session_health_normal_set():
+    """A normal set of records rolls the five signals up correctly."""
+    from stats import summarize_session_health
+    records = [
+        _session(p0_surfaced=2, p0_assumed=1, iterations=3, rejections=2,
+                 mean_before=0.4, mean_after=0.7, total_tokens=6000,
+                 answered_by_user=2, answered_by_assumption=1, shrink_ratio=0.3),
+        _session(p0_surfaced=2, p0_assumed=0, iterations=1, rejections=0,
+                 mean_before=0.5, mean_after=0.5, total_tokens=4000,
+                 answered_by_user=1, answered_by_assumption=0, shrink_ratio=0.0),
+    ]
+    h = summarize_session_health(records)
+    assert h["records"] == 2
+    # 1 assumed of 4 surfaced P0
+    assert h["assumed_p0_rate"] == 0.25
+    # median of [3, 1]
+    assert h["convergence"]["median_iterations"] == 2
+    # 1 of 2 sessions had a rejection
+    assert h["convergence"]["rejection_rate"] == 0.5
+    # mean of (0.3, 0.0)
+    assert h["clarity_gain"] == pytest.approx(0.15)
+    # 10000 tokens / 4 settled decisions
+    assert h["tokens_per_settled_decision"] == 2500
+    # 1 of 2 sessions shrank
+    assert h["editor_liveness"] == 0.5
+    assert h["trend"] is None  # under 6 records
+
+
+def test_summarize_session_health_tolerates_missing_fields():
+    """Missing clarity/decisions/editor blocks never raise; they drop out cleanly."""
+    from stats import summarize_session_health
+    records = [
+        {"convergence": {"iterations": 2}},  # no decisions/clarity/cost/editor
+        {"decisions": {}, "clarity": {}, "cost": {}, "editor": {}},
+        _session(mean_before=0.2, mean_after=0.6),  # only this has both clarity ends
+    ]
+    h = summarize_session_health(records)
+    assert h["records"] == 3
+    assert h["assumed_p0_rate"] is None  # no P0 surfaced anywhere
+    # clarity_gain averages only the one record with both ends present
+    assert h["clarity_gain"] == pytest.approx(0.4)
+    # no settled decisions anywhere
+    assert h["tokens_per_settled_decision"] is None
+    # no shrink_ratio > 0 anywhere
+    assert h["editor_liveness"] == 0.0
+
+
+def test_summarize_session_health_assumed_p0_divide_by_zero():
+    """assumed_p0_rate is None when no P0 surfaced, even if p0_assumed is set."""
+    from stats import summarize_session_health
+    # p0_assumed nonzero but surfaced zero must not divide by zero.
+    h = summarize_session_health([_session(p0_surfaced=0, p0_assumed=0)])
+    assert h["assumed_p0_rate"] is None
+    # And a real ratio when P0s are surfaced.
+    h2 = summarize_session_health([_session(p0_surfaced=4, p0_assumed=3)])
+    assert h2["assumed_p0_rate"] == 0.75
+
+
+def test_summarize_session_health_editor_liveness_math():
+    """editor_liveness is the fraction of records whose doc shrank (ratio > 0)."""
+    from stats import summarize_session_health
+    records = [
+        _session(shrink_ratio=0.4),   # shrank
+        _session(shrink_ratio=0.0),   # flat
+        _session(shrink_ratio=-0.1),  # grew (negative) — not liveness
+        _session(shrink_ratio=0.2),   # shrank
+    ]
+    h = summarize_session_health(records)
+    assert h["editor_liveness"] == 0.5  # 2 of 4
+
+
+def test_summarize_session_health_tokens_per_settled_zero_guard():
+    """Tokens spent but nothing settled yields None, not a divide-by-zero."""
+    from stats import summarize_session_health
+    h = summarize_session_health([
+        _session(total_tokens=5000, answered_by_user=0, answered_by_assumption=0),
+    ])
+    assert h["tokens_per_settled_decision"] is None
+
+
+def test_summarize_session_health_trend_split():
+    """With >= 6 records a trend block splits the list into earlier and recent halves."""
+    from stats import summarize_session_health
+    earlier = [_session(p0_surfaced=1, p0_assumed=1, iterations=4) for _ in range(3)]
+    recent = [_session(p0_surfaced=1, p0_assumed=0, iterations=1) for _ in range(3)]
+    h = summarize_session_health(earlier + recent)
+    assert h["trend"] is not None
+    assert h["trend"]["earlier"]["records"] == 3
+    assert h["trend"]["recent"]["records"] == 3
+    # Assumed-P0 rate improved 100% -> 0% across the halves.
+    assert h["trend"]["earlier"]["assumed_p0_rate"] == 1.0
+    assert h["trend"]["recent"]["assumed_p0_rate"] == 0.0
+    assert h["trend"]["earlier"]["convergence"]["median_iterations"] == 4
+    assert h["trend"]["recent"]["convergence"]["median_iterations"] == 1
+
+
+def test_format_stats_renders_session_health():
+    """format_stats shows the Session health block when records are present."""
+    from stats import summarize_session_health
+    agg = run_phase.aggregate_stats([
+        {"run_id": "r1", "phase": "market", "status": "COMPLETED",
+         "verdict": "APPROVED", "metrics": {"total_tokens": 5000},
+         "_rating": None, "_decisions": []},
+    ])
+    health = summarize_session_health([
+        _session(p0_surfaced=2, p0_assumed=1, mean_before=0.3, mean_after=0.6,
+                 total_tokens=4000, answered_by_user=2, shrink_ratio=0.25),
+    ])
+    out = run_phase.format_stats(agg, session_health=health)
+    assert "Session health" in out
+    assert "Assumed-P0 rate: 50%" in out
+    assert "Editor liveness" in out
+
+
+def test_format_stats_omits_session_health_when_empty():
+    """No session records means no Session health block."""
+    from stats import summarize_session_health
+    agg = run_phase.aggregate_stats([
+        {"run_id": "r1", "phase": "market", "status": "COMPLETED",
+         "verdict": "APPROVED", "metrics": {}, "_rating": None, "_decisions": []},
+    ])
+    out = run_phase.format_stats(agg, session_health=summarize_session_health([]))
+    assert "Session health" not in out
+
+
 class _FakeStdin:
     def __init__(self, tty):
         self._tty = tty
