@@ -8,15 +8,15 @@ This guide defines the test-driven discipline for technical implementations prod
 
 ## Philosophy
 
-**Every technical implementation should be testable and tested.** Tests are not an afterthought—they're part of the deliverable that proves the system works.
+**Every technical implementation should be testable and tested.** Tests are not an afterthought; they're part of the deliverable that proves the system works.
 
 ### What This Means
 
 When you complete a tech phase run, you should have:
-1. **Test specifications** — What behaviors will be tested
-2. **Test code** — Executable tests that validate those behaviors
-3. **Implementation code** — Code written to pass those tests
-4. **Verification instructions** — How to run the tests and confirm everything works
+1. **Test specifications**: What behaviors will be tested
+2. **Test code**: Executable tests that validate those behaviors
+3. **Implementation code**: Code written to pass those tests
+4. **Verification instructions**: How to run the tests and confirm everything works
 
 ---
 
@@ -513,7 +513,7 @@ Don't test:
 - **Performance:** k6, Artillery
 
 ### Learning Resources
-- [Test-Driven Development by Example](https://www.amazon.com/Test-Driven-Development-Kent-Beck/dp/0321146530) — Kent Beck
+- [Test-Driven Development by Example](https://www.amazon.com/Test-Driven-Development-Kent-Beck/dp/0321146530) by Kent Beck
 - [Jest Documentation](https://jestjs.io/docs/getting-started)
 - [Playwright Best Practices](https://playwright.dev/docs/best-practices)
 - [pytest Documentation](https://docs.pytest.org/)

@@ -10,14 +10,14 @@ Run Studio phase debates natively in Claude Code using slash commands.
 
 This triggers the full advocate/contrarian loop:
 1. Prepares a run directory with instructions
-2. Runs the **Open-Questions Pre-Flight** (Step 0) — surfaces what is genuinely unsettled, pauses on P0 blockers, records the answers
+2. Runs the **Open-Questions Pre-Flight** (Step 0): surfaces what is genuinely unsettled, pauses on P0 blockers, records the answers
 3. Spawns an Advocate agent to build the case
 4. Spawns a separate Contrarian agent to stress-test it
 5. Iterates until APPROVED or max iterations exhausted
 6. Generates implementation deliverables (if approved)
 7. Writes summary and finalizes the run
 
-The **Contrarian is an editor by default**: alongside flaws and edge cases it carries an always-on mandate to cut, merge, and simplify — the advocate adds, the contrarian carves out the essence. (This mandate is off in `--mode questions`, where the contrarian instead judges whether each surfaced question is *relevant* and must not drop genuinely-open questions.)
+The **Contrarian is an editor by default**: alongside flaws and edge cases it carries an always-on mandate to cut, merge, and simplify. The advocate adds, the contrarian carves out the essence. (This mandate is off in `--mode questions`, where the contrarian instead judges whether each surfaced question is *relevant* and must not drop genuinely-open questions.)
 
 ## Available Phases
 
@@ -34,10 +34,10 @@ The **Contrarian is an editor by default**: alongside flaws and edge cases it ca
 /run-phase --phase design --text "A cozy farming sim" --mode questions
 ```
 
-- `--phase` — Required. One of: market, design, tech
-- `--text` — Required. The idea or objective to debate
-- `--max-iterations N` — Cap on advocate/contrarian rounds (default: 3)
-- `--mode` — Output mode: `deliverables` (default) or `questions`
+- `--phase`: Required. One of: market, design, tech
+- `--text`: Required. The idea or objective to debate
+- `--max-iterations N`: Cap on advocate/contrarian rounds (default: 3)
+- `--mode`: Output mode: `deliverables` (default) or `questions`
 
 ## How It Works
 
@@ -86,7 +86,7 @@ All runs (except question mode) now include inline decision point surfacing. As 
 |----------|---------|----------------|
 | **P0** | Blocking | Orchestrator pauses for human input before continuing |
 | **P1** | Important | Agent states an assumption and continues; human can override later |
-| **P2** | Context | Logged only — useful for future reference but not blocking |
+| **P2** | Context | Logged only; useful for future reference but not blocking |
 
 Decision points are automatically injected into `instructions.md` during `prepare`. After a run completes, you can extract all surfaced decisions from agent output files using `decision_points.extract_decisions_from_run()`, which produces a consolidated `decisions.md` grouped by priority.
 
@@ -94,7 +94,7 @@ Decision points are automatically injected into `instructions.md` during `prepar
 
 ## Pre-flight Decision Collection (`--mode questions`)
 
-Use `--mode questions` as a pre-flight reconnaissance step — a "what don't I know yet?" workflow before committing to a full deliverables run. This is especially useful when an idea is too early for specs and you need to identify the key decisions first.
+Use `--mode questions` as a pre-flight reconnaissance step, a "what don't I know yet?" workflow before committing to a full deliverables run. This is especially useful when an idea is too early for specs and you need to identify the key decisions first.
 
 ```
 /run-phase --phase design --text "A cozy farming sim with social deduction" --mode questions
@@ -108,15 +108,15 @@ Use `--mode questions` as a pre-flight reconnaissance step — a "what don't I k
 | Advocate output | Proposals, specs, plans | Prioritised question list (P0/P1/P2) |
 | Contrarian output | Critique + VERDICT | Challenge priorities, surface missing questions + VERDICT |
 | Integrator (studio) | Roadmap via duel | Consolidated, deduplicated question set grouped by theme |
-| Implementation step | Yes (after approval) | No — output is the question set itself |
+| Implementation step | Yes (after approval) | No (output is the question set itself) |
 | Rerun context | Injected from prior rejections | Skipped (questions aren't responses to rejections) |
 
 ### How questions are structured
 
 Advocates produce 5-15 numbered questions, each tagged:
-- **[P0]** — Blocking: cannot start work without an answer
-- **[P1]** — Important: answer shapes the approach significantly
-- **[P2]** — Nice-to-know: refines quality but work can begin without it
+- **[P0]** (Blocking): cannot start work without an answer
+- **[P1]** (Important): answer shapes the approach significantly
+- **[P2]** (Nice-to-know): refines quality but work can begin without it
 
 Each question must name the specific decision it unblocks. Anti-generic guardrails prevent questions that are answerable from the input text or that request missing data rather than exposing hidden assumptions.
 
@@ -139,11 +139,11 @@ Usage is logged to `.studio/usage.log` with the mode field for observability.
 
 ### Pause-and-Ask (Collaborative Decisions)
 
-During any run, agents may flag decision points — questions where your input changes the outcome. The orchestrator detects these and pauses to ask you:
+During any run, agents may flag decision points, questions where your input changes the outcome. The orchestrator detects these and pauses to ask you:
 
 - **P0 (Blocking):** The run pauses and presents the decision with options. You answer before agents continue. Your answers become hard constraints for all subsequent agents.
-- **P1 (Important):** Shown as "FYI — agent assumes X for: [question]." You can override or accept the assumption.
-- **P2 (Context):** Logged silently to `decisions.md` — no interruption.
+- **P1 (Important):** Shown as "FYI: agent assumes X for: [question]." You can override or accept the assumption.
+- **P2 (Context):** Logged silently to `decisions.md`, no interruption.
 
 All your decisions accumulate in `{run_dir}/decisions.md` throughout the run. Later agents read this file and treat settled decisions as constraints they cannot re-litigate.
 
@@ -161,13 +161,13 @@ This works in both single-phase (`/run-phase`) and multi-role (`/run-studio-phas
 
 ### Clarity Scores (Adaptive Question Density)
 
-As decisions accumulate, Studio tracks **per-topic clarity scores** — a confidence metric that controls how aggressively agents surface new decision points.
+As decisions accumulate, Studio tracks **per-topic clarity scores**, a confidence metric that controls how aggressively agents surface new decision points.
 
 | Score | Status | Agent behavior |
 |-------|--------|----------------|
-| 0.0–0.4 | Needs work | Actively surface decision points on this topic |
-| 0.4–0.7 | Settling | Only flag genuine new gaps |
-| 0.7–1.0 | Settled | Treat as constraint, do not re-litigate |
+| 0.0-0.4 | Needs work | Actively surface decision points on this topic |
+| 0.4-0.7 | Settling | Only flag genuine new gaps |
+| 0.7-1.0 | Settled | Treat as constraint, do not re-litigate |
 
 Scores are computed from: decisions answered / total decisions surfaced, with a mild penalty for contrarian challenges. They persist across runs in `.studio/clarity.json`.
 
@@ -220,7 +220,7 @@ Agent Metrics — run_studio_20260322_143000
     product           2 agents    18,700 tokens (23%)
 ```
 
-At finalize, metrics are aggregated into `run.json["metrics"]` for permanent record-keeping. This lets you compare token efficiency across runs — are alignment scopes catching issues cheaply? Are certain roles disproportionately expensive?
+At finalize, metrics are aggregated into `run.json["metrics"]` for permanent record-keeping. This lets you compare token efficiency across runs: are alignment scopes catching issues cheaply? Are certain roles disproportionately expensive?
 
 ---
 
@@ -316,7 +316,7 @@ Studio can be invoked from any external repository. Artifacts land in the callin
 
 2. Run any Studio command from your repo. On first use, Studio auto-creates:
    - `.studio/output/` and `.studio/knowledge/` directories
-   - `docs/studio-bridge.md` — pre-filled with your `STUDIO_ROOT` path
+   - `docs/studio-bridge.md`: pre-filled with your `STUDIO_ROOT` path
 
 3. Optionally copy slash commands for convenience:
    ```bash
@@ -375,11 +375,11 @@ For multi-role studio phase runs with role packs and integrator duels:
 ```
 
 Options:
-- `--text` — Required. The objective for the multi-role debate
-- `--role-pack <name>` — Pod preset (default: studio_core)
-- `--roles +role -role` — Include/exclude roles from the pack
-- `--max-iterations N` — Cap per-role advocate/contrarian rounds (default: 3)
-- `--mode` — Output mode: `deliverables` (default) or `questions` (see Question Mode above)
+- `--text`: Required. The objective for the multi-role debate
+- `--role-pack <name>`: Pod preset (default: studio_core)
+- `--roles +role -role`: Include/exclude roles from the pack
+- `--max-iterations N`: Cap per-role advocate/contrarian rounds (default: 3)
+- `--mode`: Output mode: `deliverables` (default) or `questions` (see Question Mode above)
 
 Each role is processed sequentially with separate Advocate and Contrarian agents. After all roles complete, an Integrator duel synthesizes the cross-functional plan. See the [command file](../../.claude/commands/run-studio-phase.md) for full details.
 
@@ -401,25 +401,25 @@ Override keys replace the base; unspecified keys inherit from the manifest. Vali
 
 ## Implementation Loop (`/studio-implement`)
 
-Brings the advocate/contrarian cadence into **implementation** — the writer/editor analogue of the planning-phase debate. One agent writes a complete unit; a fresh editor agent refines it; then it's delivered.
+Brings the advocate/contrarian cadence into **implementation**, the writer/editor analogue of the planning-phase debate. One agent writes a complete unit; a fresh editor agent refines it; then it's delivered.
 
 ```
 /studio-implement Users can create and view a profile (hardcoded storage)
 ```
 
 How it runs:
-1. **Parse** — your request becomes one MVI unit (title, build instructions, inferred `test_command`).
-2. **Branch** — runs on a feature branch (creates `impl/<unit>` if you're on `main`); refuses a dirty tree.
-3. **Plan echo** — prints the unit + branch + test command, then runs (no separate confirmation step).
-4. **Writer** — builds the unit, runs tests + a mutation check, commits its passing state (`writer_sha`).
-5. **Editor** — a fresh agent (the `CONTRARIAN_MANDATE` applied to code) diffs against `writer_sha`, cuts/refines, re-runs tests, and **reverts** if an edit breaks green. One-way pipeline — no ping-pong.
-6. **Report** — what was built, what the editor cut, the MVI verdict, whether anything reverted.
+1. **Parse**: your request becomes one MVI unit (title, build instructions, inferred `test_command`).
+2. **Branch**: runs on a feature branch (creates `impl/<unit>` if you're on `main`); refuses a dirty tree.
+3. **Plan echo**: prints the unit + branch + test command, then runs (no separate confirmation step).
+4. **Writer**: builds the unit, runs tests + a mutation check, commits its passing state (`writer_sha`).
+5. **Editor**: a fresh agent (the `CONTRARIAN_MANDATE` applied to code) diffs against `writer_sha`, cuts/refines, re-runs tests, and **reverts** if an edit breaks green. One-way pipeline, no ping-pong.
+6. **Report**: what was built, what the editor cut, the MVI verdict, whether anything reverted.
 
 The gate is **"MVI unit complete AND tests green"**, split into an *entry* gate (writer declares done + tests/static pass → triggers the editor) and an *exit* gate (the editor's authoritative MVI verdict, which can overturn the writer's claim).
 
-**Config** — `implementation_loop.toml` (override at `.studio/implementation_loop.toml`): `mandate = "off"` disables the editor pass; `read_scope`, `output_budget`, `require_mutation_check`, `static_checks`, and `test_command` tune the loop. Knobs reach the workflow via `python -m impl_loop`.
+**Config**: `implementation_loop.toml` (override at `.studio/implementation_loop.toml`): `mandate = "off"` disables the editor pass; `read_scope`, `output_budget`, `require_mutation_check`, `static_checks`, and `test_command` tune the loop. Knobs reach the workflow via `python -m impl_loop`.
 
-Full design, gate semantics, and portability rationale: [`IMPLEMENTATION_LOOP_SPEC.md`](IMPLEMENTATION_LOOP_SPEC.md). (Implementation note: the command invokes the `.claude/workflows/implementation-loop.js` Workflow by `scriptPath`, not by `name` — the latter resolves a frozen registry snapshot.)
+Full design, gate semantics, and portability rationale: [`IMPLEMENTATION_LOOP_SPEC.md`](IMPLEMENTATION_LOOP_SPEC.md). (Implementation note: the command invokes the `.claude/workflows/implementation-loop.js` Workflow by `scriptPath`, not by `name`; the latter resolves a frozen registry snapshot.)
 
 ## Utility Slash Commands
 
@@ -427,8 +427,8 @@ In addition to phase runners, these slash commands are available:
 
 | Command | Purpose |
 |---------|---------|
-| `/unstale` | Comprehensive staleness audit — aligns all docs, code comments, memory, and project tracking to current reality. Stack-agnostic: self-detects Rust/Unity/Node/Python/Go from marker files, or reads `.studio/unstale.toml` to pin exact snapshot commands and audit globs. |
-| `/detest` | Audits the repo's test suite against AI-TDD methodology — finds anti-patterns, fixes them. |
+| `/unstale` | Comprehensive staleness audit: aligns all docs, code comments, memory, and project tracking to current reality. Stack-agnostic: self-detects Rust/Unity/Node/Python/Go from marker files, or reads `.studio/unstale.toml` to pin exact snapshot commands and audit globs. |
+| `/detest` | Audits the repo's test suite against AI-TDD methodology; finds anti-patterns, fixes them. |
 | `/offload` | Analyzes CLAUDE.md for content safe to move to companion docs, with canary token verification. |
 | `/studio-update` | One-step update of installed Studio source and slash commands. |
-| `/studio-setup` | Configure project's Studio installation — role packs, role/phase-persona customization (`.studio/personas.toml`), unstale audit config (`.studio/unstale.toml`), scope tuning, cleanup settings. |
+| `/studio-setup` | Configure project's Studio installation: role packs, role/phase-persona customization (`.studio/personas.toml`), unstale audit config (`.studio/unstale.toml`), scope tuning, cleanup settings. |

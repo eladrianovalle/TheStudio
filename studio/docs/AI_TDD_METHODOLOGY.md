@@ -1,6 +1,6 @@
 # AI-Assisted Test-Driven Development (AI-TDD) Methodology
 
-This document codifies how we use AI assistants for test generation and validation. It exists because **AI is excellent at brainstorming and boilerplate but dangerous at assertions** — and our workflow must enforce that boundary.
+This document codifies how we use AI assistants for test generation and validation. It exists because **AI is excellent at brainstorming and boilerplate but dangerous at assertions**, and our workflow must enforce that boundary.
 
 ---
 
@@ -46,7 +46,7 @@ Good:
 Once you review the scenario list, selectively approve which ones to implement:
 > "Write test code for scenarios 3, 5, and 8."
 
-This prevents the AI from deciding what matters — that's your job.
+This prevents the AI from deciding what matters. That's your job.
 
 ### Rule 2: Context Boundary (Define the Stack)
 
@@ -93,7 +93,7 @@ Every AI-generated test suite MUST pass this check before acceptance:
 3. Run the tests
 4. If tests still pass → the AI wrote bad tests → reject and redo
 
-This is non-negotiable. A test that doesn't catch a known bug is worse than no test — it creates false confidence.
+This is non-negotiable. A test that doesn't catch a known bug is worse than no test: it creates false confidence.
 
 ---
 

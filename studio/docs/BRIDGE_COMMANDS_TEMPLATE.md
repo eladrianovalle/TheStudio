@@ -47,7 +47,7 @@ Key: always use `python "$STUDIO_ROOT/run_phase.py"` instead of `cd studio && py
 
 ## `.claude/commands/run-studio-phase.md`
 
-Same pattern — copy from the Studio repo's `.claude/commands/run-studio-phase.md` and replace all `cd studio && python run_phase.py` with `python "$STUDIO_ROOT/run_phase.py"`.
+Same pattern: copy from the Studio repo's `.claude/commands/run-studio-phase.md` and replace all `cd studio && python run_phase.py` with `python "$STUDIO_ROOT/run_phase.py"`.
 
 ## Environment
 

@@ -9,14 +9,14 @@
 - **[API.md](./API.md)** - CLI reference for `run_phase.py`
 - **[CODING_PRINCIPLES.md](./CODING_PRINCIPLES.md)** - Karpathy-inspired coding principles (injected into target CLAUDE.md on install)
 - **[RUN_PHASE_SPLIT_PLAN.md](./RUN_PHASE_SPLIT_PLAN.md)** - Deferred plan for decomposing `run_phase.py` (config_loading + stats already extracted)
-- **[SESSION_ANALYTICS_PLAN.md](./SESSION_ANALYTICS_PLAN.md)** - Auto session-health metrics — design + status (first slice shipped: `session.json` at finalize, ledger auto-append, `stats` session-health block; `studio outcome` + session linking still deferred)
+- **[SESSION_ANALYTICS_PLAN.md](./SESSION_ANALYTICS_PLAN.md)** - Auto session-health metrics: design + status (first slice shipped: `session.json` at finalize, ledger auto-append, `stats` session-health block; `studio outcome` + session linking still deferred)
 
 ## Workflow Features
 - **[SCOPES_GUIDE.md](./SCOPES_GUIDE.md)** - Scope-based iteration allocation
 - **[VALIDATION_GUIDE.md](./VALIDATION_GUIDE.md)** - Document and code validation
 - **[TEST_DRIVEN_GUIDE.md](./TEST_DRIVEN_GUIDE.md)** - Test-driven discipline for tech phase
 - **[AI_TDD_METHODOLOGY.md](./AI_TDD_METHODOLOGY.md)** - Full AI-TDD methodology (scenario-first, stack boundary, mutation verification)
-- **[MVI_METHODOLOGY.md](./MVI_METHODOLOGY.md)** - Minimum Viable Interaction — every milestone ends in something usable
+- **[MVI_METHODOLOGY.md](./MVI_METHODOLOGY.md)** - Minimum Viable Interaction: every milestone ends in something usable
 - **[IMPLEMENTATION_LOOP_SPEC.md](./IMPLEMENTATION_LOOP_SPEC.md)** - Writer/editor implementation loop (`/studio-implement`): design, gate semantics, config knobs
 - **[STORAGE_MANAGEMENT.md](./STORAGE_MANAGEMENT.md)** - Cleanup, TTL, and storage budgets
 

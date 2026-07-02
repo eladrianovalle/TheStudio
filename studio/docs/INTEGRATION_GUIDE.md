@@ -41,13 +41,13 @@ If you prefer manual control over the integration:
    - If you run inside Studio, artifacts stay in `<studio>/output/<phase>/run_*`.  
    - You can force a target repo with `STUDIO_ARTIFACT_ROOT=/absolute/path/to/repo`.
 
-No other setup is required — zero API keys, zero services.
+No other setup is required: zero API keys, zero services.
 
 ---
 
 ## 2. Integrating the Workflow
 
-### Step A – Prepare from your repo
+### Step A: Prepare from your repo
 
 ```bash
 python $STUDIO_ROOT/run_phase.py \
@@ -86,9 +86,9 @@ Use `-role` tokens only when you explicitly need to remove a role from the selec
   advocate--<role>--<n>.md / contrarian--<role>--<n>.md / integrator.md (studio)
 ```
 
-Capture the printed `run_id` and `instructions.md` path—your prompts should reference them directly.
+Capture the printed `run_id` and `instructions.md` path; your prompts should reference them directly.
 
-### Step B – Execute via your assistant
+### Step B: Execute via your assistant
 
 Use the prompt stub in your bridge doc. Remind the assistant to:
 1. Read the bridge doc to understand canon + expectations.
@@ -99,7 +99,7 @@ Use the prompt stub in your bridge doc. Remind the assistant to:
 4. Summarize the run in `summary.md` and flag any missing roles in `roles_needed.md` (optional) before you finalize.
 5. Tell you when it’s finished so you can run finalize.
 
-### Step C – Finalize + log
+### Step C: Finalize + log
 
 ```bash
 python $STUDIO_ROOT/run_phase.py \
@@ -109,7 +109,7 @@ python $STUDIO_ROOT/run_phase.py \
   --hours 0.5 --cost 0
 ```
 
-Finalize will fail with a checklist if required files are missing (see README). For Studio phase it also reports which roles never produced both advocate and contrarian files—close those loops or note a follow-up before calling the run complete. Once finalize passes, the active artifact root gets refreshed indexes/logs (`<active_output_root>/index.md`, `<active_knowledge_root>/run_log.md`).
+Finalize will fail with a checklist if required files are missing (see README). For Studio phase it also reports which roles never produced both advocate and contrarian files; close those loops or note a follow-up before calling the run complete. Once finalize passes, the active artifact root gets refreshed indexes/logs (`<active_output_root>/index.md`, `<active_knowledge_root>/run_log.md`).
 
 ---
 
@@ -175,9 +175,9 @@ Commit these helpers to dependent repos if you want reproducible ergonomics; oth
 
 ## 6. Reference Docs
 
-- [README.md](../../README.md) – top-level overview and testing notes.
-- [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md) – Claude Code slash commands and agent workflow.
-- [API.md](./API.md) – command/JSON schema for `run_phase.py`, metadata, and logs.
-- [STUDIO_BRIDGE_TEMPLATE.md](./STUDIO_BRIDGE_TEMPLATE.md) – copy/paste contract for every repo.
+- [README.md](../../README.md): top-level overview and testing notes.
+- [CLAUDE_CODE_USAGE.md](./CLAUDE_CODE_USAGE.md): Claude Code slash commands and agent workflow.
+- [API.md](./API.md): command/JSON schema for `run_phase.py`, metadata, and logs.
+- [STUDIO_BRIDGE_TEMPLATE.md](./STUDIO_BRIDGE_TEMPLATE.md): copy/paste contract for every repo.
 
 Keep these documents synchronized whenever the workflow changes.

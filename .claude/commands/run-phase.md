@@ -4,7 +4,7 @@ Execute a structured advocate/contrarian debate for game development decisions.
 
 ## Arguments
 
-- `$ARGUMENTS` — Required. Format: `--phase <market|design|tech> --text "your idea or objective"`
+- `$ARGUMENTS`: Required. Format: `--phase <market|design|tech> --text "your idea or objective"`
 - Optional: `--max-iterations N` (default 3)
 
 ## Instructions
@@ -23,21 +23,21 @@ python ".studio/source/run_phase.py" prepare $ARGUMENTS --json
 
 If running from a repo that is NOT the Studio repo itself, artifacts will automatically land in the current repo under `.studio/output/`. A bridge doc will be created on first use.
 
-`--json` prints a machine-readable object as the **final line of stdout** — parse it for
+`--json` prints a machine-readable object as the **final line of stdout**. Parse it for
 `run_id`, `run_dir`, and `instructions` rather than scraping prose:
 `{"run_id": "...", "run_dir": "...", "instructions": "...", "phase": "...", ...}`.
 
 ### Step 2: Read Instructions
 
-Read the generated `instructions.md` file in the run directory. It contains the phase-specific advocate/contrarian personas, iteration rules, and deliverable requirements. **`instructions.md` is the authority on run procedure** — follow the steps it lists, in order, even if they aren't repeated here.
+Read the generated `instructions.md` file in the run directory. It contains the phase-specific advocate/contrarian personas, iteration rules, and deliverable requirements. **`instructions.md` is the authority on run procedure**: follow the steps it lists, in order, even if they aren't repeated here.
 
-In particular, every deliverable run opens with **Step 0: Open-Questions Pre-Flight** — a fast pass that surfaces what is genuinely unsettled and pauses on P0 blockers before the loop begins. Do this pre-flight (record answers as instructions.md directs) before starting the advocate/contrarian loop below. (Not applicable to `--mode questions` runs, which are themselves a questions-only pass.)
+In particular, every deliverable run opens with **Step 0: Open-Questions Pre-Flight**, a fast pass that surfaces what is genuinely unsettled and pauses on P0 blockers before the loop begins. Do this pre-flight (record answers as instructions.md directs) before starting the advocate/contrarian loop below. (Not applicable to `--mode questions` runs, which are themselves a questions-only pass.)
 
 ### Step 3: Execute Advocate/Contrarian Loop
 
 For each iteration (up to max_iterations):
 
-**a. Advocate** — Use the Agent tool to spawn a subagent with this prompt:
+**a. Advocate:** Use the Agent tool to spawn a subagent with this prompt:
 
 > You are the **Advocate** for this Studio run. Your role: {advocate role from instructions.md}.
 >
@@ -45,9 +45,9 @@ For each iteration (up to max_iterations):
 >
 > {If iteration > 1, include: "Previous contrarian feedback to address:" followed by the rejection reasons from the prior contrarian output.}
 >
-> {If `{run_dir}/decisions.md` exists: "Read `{run_dir}/decisions.md` for settled constraints from prior iterations. Treat these as hard constraints — do not re-litigate."}
+> {If `{run_dir}/decisions.md` exists: "Read `{run_dir}/decisions.md` for settled constraints from prior iterations. Treat these as hard constraints; do not re-litigate."}
 >
-> {If `{run_dir}/clarity.json` exists, run `python ".studio/source/run_phase.py" show-clarity` and include the output here. Tell the agent: "**Clarity context:** Topics marked Settled are constraints — do not re-litigate. For topics marked Needs work, actively surface decision points. For Settling topics, only flag genuine new gaps."}
+> {If `{run_dir}/clarity.json` exists, run `python ".studio/source/run_phase.py" show-clarity` and include the output here. Tell the agent: "**Clarity context:** Topics marked Settled are constraints; do not re-litigate. For topics marked Needs work, actively surface decision points. For Settling topics, only flag genuine new gaps."}
 >
 > **Decision Point Protocol:** When you encounter a gap, ambiguity, or fork that could meaningfully change your approach, flag it inline using this exact blockquote format:
 >
@@ -66,7 +66,7 @@ For each iteration (up to max_iterations):
 >
 > Write a thorough advocate proposal. Structure it with clear sections, concrete recommendations, and actionable details. Save your output to `{run_dir}/advocate_{N}.md`.
 
-**b. Record metrics and extract decision points — MANDATORY, DO NOT SKIP**
+**b. Record metrics and extract decision points: MANDATORY, DO NOT SKIP**
 
 First, record the agent's token usage from the `<usage>` block in the Agent tool result:
 ```bash
@@ -88,7 +88,7 @@ Present each decision to the user:
   Unblocks: [context]
   Options: [options if present]
 
-Wait for the user to answer ALL decisions. Then record them in one batch — write a JSON file and run:
+Wait for the user to answer ALL decisions. Then record them in one batch. Write a JSON file and run:
 ```bash
 python ".studio/source/run_phase.py" record-decisions --run-dir {run_dir} --decisions-file {tmp_json_path}
 ```
@@ -100,13 +100,13 @@ python ".studio/source/run_phase.py" show-clarity
 ```
 This displays per-topic confidence scores so the user can see which areas are settling and which still need work. If a topic score seems wrong, the user can override: `python ".studio/source/run_phase.py" set-clarity --topic <slug> --score <0.0-1.0>`.
 
-**c. Contrarian** — Use the Agent tool to spawn a SEPARATE subagent with this prompt:
+**c. Contrarian:** Use the Agent tool to spawn a SEPARATE subagent with this prompt:
 
 > You are the **Contrarian** for this Studio run. Your role: {contrarian role from instructions.md}.
 >
-> {If `{run_dir}/decisions.md` exists: "Read `{run_dir}/decisions.md` first. Treat settled decisions as hard constraints — do not re-litigate them. Focus your critique on everything else."}
+> {If `{run_dir}/decisions.md` exists: "Read `{run_dir}/decisions.md` first. Treat settled decisions as hard constraints; do not re-litigate them. Focus your critique on everything else."}
 >
-> {If clarity data exists, include the same clarity context from the advocate prompt above — settled topics are constraints, unsettled topics should be explored.}
+> {If clarity data exists, include the same clarity context from the advocate prompt above: settled topics are constraints, unsettled topics should be explored.}
 >
 > Read the advocate's proposal at `{run_dir}/advocate_{N}.md`.
 >
@@ -114,7 +114,7 @@ This displays per-topic confidence scores so the user can see which areas are se
 > `> **DECISION [P0]:** [question]`
 > `> **Unblocks:** [what this decision affects]`
 > `> **Options:** (a) ... (b) ...`
-> Your primary job is critique — decision points are secondary, only when assumptions are genuinely unsettled.
+> Your primary job is critique; decision points are secondary, only when assumptions are genuinely unsettled.
 >
 > Critically evaluate the proposal. Look for fatal flaws, unrealistic assumptions, missing considerations, and risks. Be rigorous but fair.
 >
@@ -123,13 +123,13 @@ This displays per-topic confidence scores so the user can see which areas are se
 >
 > Save your output to `{run_dir}/contrarian_{N}.md`.
 
-**d. Record contrarian metrics and extract decision points** — Record the contrarian's token usage:
+**d. Record contrarian metrics and extract decision points:** Record the contrarian's token usage:
 ```bash
 python ".studio/source/run_phase.py" record-metrics --run-dir {run_dir} --agent contrarian --total-tokens {N} --tool-uses {N} --duration-ms {N}
 ```
 Then run `python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir} --json` again. If `count > 0` (new decision points from the contrarian), present them to the user and record as in step (b).
 
-**e. Check verdict** — Read the contrarian output. If `VERDICT: APPROVED`, proceed to Step 4. If `VERDICT: REJECTED` and iterations remain, loop back to (a) with the rejection feedback.
+**e. Check verdict:** Read the contrarian output. If `VERDICT: APPROVED`, proceed to Step 4. If `VERDICT: REJECTED` and iterations remain, loop back to (a) with the rejection feedback.
 
 ### Step 4: Implementation (if approved)
 
@@ -147,7 +147,7 @@ python ".studio/source/run_phase.py" finalize --phase {phase} --run-id {run_id} 
 
 ### Step 7: Rate this run (quality feedback loop)
 
-Ask the user, in one short message, to rate the run's quality 1–5 (1 = poor, 5 = excellent) with an optional one-line note on what was good or weak. Make clear it's optional — they can skip.
+Ask the user, in one short message, to rate the run's quality 1-5 (1 = poor, 5 = excellent) with an optional one-line note on what was good or weak. Make clear it's optional. They can skip.
 
 If they give a score, record it (this is the human signal `stats` uses to gauge and tune Studio over time):
 
@@ -155,13 +155,13 @@ If they give a score, record it (this is the human signal `stats` uses to gauge 
 python ".studio/source/run_phase.py" rate --run-dir {run_dir} --score {1-5} --note "{their note}"
 ```
 
-If they skip, do nothing — don't nag. The agent verdict already captured the debate's conclusion; this captures *their* judgment, which is what calibration learns from.
+If they skip, do nothing. Don't nag. The agent verdict already captured the debate's conclusion; this captures *their* judgment, which is what calibration learns from.
 
 ## Key Rules
 
-- **Advocate and Contrarian MUST be separate Agent invocations** — this prevents the contrarian from being influenced by having generated the advocate's arguments.
+- **Advocate and Contrarian MUST be separate Agent invocations**: this prevents the contrarian from being influenced by having generated the advocate's arguments.
 - The contrarian must ONLY read the advocate's written file, not share context.
 - Each iteration produces exactly one `advocate_N.md` and one `contrarian_N.md`.
 - Stop iterating when APPROVED or when max iterations are exhausted.
-- **All P0 decisions from a single agent are presented to the user at once** — do not ask one at a time.
-- **`decisions.md` accumulates across the full run** — decisions settled in iteration 1 carry forward as constraints for all subsequent iterations.
+- **All P0 decisions from a single agent are presented to the user at once**: do not ask one at a time.
+- **`decisions.md` accumulates across the full run**: decisions settled in iteration 1 carry forward as constraints for all subsequent iterations.

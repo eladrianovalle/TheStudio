@@ -3,7 +3,7 @@
 Studio can post a short **run digest** (phase, run id, status, verdict, summary)
 to an HTTP webhook when a run finishes. The same code targets either a **Slack
 Incoming Webhook** directly or an **n8n Webhook node** (which can then fan out to
-Slack, email, a database, etc.) — both are just "HTTP POST a JSON body to a URL".
+Slack, email, a database, etc.). Both are just "HTTP POST a JSON body to a URL".
 
 Implementation: `studio/integrations/slack_digest.py` (stdlib `urllib` only).
 Disabled by default; nothing is sent until you enable a target.
@@ -17,7 +17,7 @@ Disabled by default; nothing is sent until you enable a target.
    - *n8n:* add a **Webhook** trigger node, copy its **Production URL**
      (`https://<host>/webhook/<path>`), and activate the workflow.
 
-2. **Put the URL in an environment variable** (it is a secret — never commit it):
+2. **Put the URL in an environment variable** (it is a secret, never commit it):
    ```bash
    export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/T000/B000/XXXX"
    ```
@@ -53,21 +53,21 @@ run's record to that local outcomes ledger. See `studio/docs/API.md` for details
 
 ## Payloads
 
-- **Slack** — Block Kit message: a header, a two-column field section
+- **Slack**: a Block Kit message with a header, a two-column field section
   (status / verdict / phase / run id), the run summary body (markdown converted
   to Slack `mrkdwn` and truncated to ~2700 chars), a pointer to the full final
   doc, and a context footer. A top-level `text` fallback is always included
   (required by Slack). The body prefers a short plain-language `digest.md` (or
   `summary_human.md`) when the run authored one, falling back to `summary.md`;
   the "Final doc" pointer always targets the full `summary.md`.
-- **n8n** — flat JSON addressable downstream as `$json.body.<field>`:
+- **n8n**: flat JSON addressable downstream as `$json.body.<field>`:
   `source`, `event` (`"run.completed"`), `phase`, `run_id`, `status`,
   `verdict`, `iterations_run`, `summary_path`, `summary_text` (truncated),
   `timestamp`.
 
 ## Security
 
-The webhook URL **is** the credential (especially for Slack — it has no separate
+The webhook URL **is** the credential (especially for Slack, which has no separate
 auth). Keep it in an environment variable or an untracked file; never commit it
 or log it in full. If a Slack URL leaks, delete the webhook in the Slack app to
 invalidate it. For n8n, prefer **Header Auth** and store the header value via

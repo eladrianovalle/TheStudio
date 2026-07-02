@@ -1,6 +1,6 @@
 # Coding Principles
 
-Behavioral guidelines to reduce common LLM coding mistakes. These apply to ALL work in this repository — not just Studio runs.
+Behavioral guidelines to reduce common LLM coding mistakes. These apply to ALL work in this repository, not just Studio runs.
 
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
@@ -10,7 +10,7 @@ Behavioral guidelines to reduce common LLM coding mistakes. These apply to ALL w
 
 Before implementing:
 - State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them — don't pick silently.
+- If multiple interpretations exist, present them. Don't pick silently.
 - If a simpler approach exists, say so. Push back when warranted.
 - If something is unclear, stop. Name what's confusing. Ask.
 
@@ -22,9 +22,9 @@ Before implementing:
 - No abstractions for single-use code.
 - No "flexibility" or "configurability" that wasn't requested.
 - No error handling for impossible scenarios.
-- If you wrote 200 lines of machinery for a 50-line problem, cut it down — but remove *concepts*, not characters. Aim for fewer moving parts, never the same logic squeezed into denser code (that's what "Write Code for Humans" guards).
+- If you wrote 200 lines of machinery for a 50-line problem, cut it down, but remove *concepts*, not characters. Aim for fewer moving parts, never the same logic squeezed into denser code (that's what "Write Code for Humans" guards).
 
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify. Overcomplicated means too many moving parts — not too many characters.
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify. Overcomplicated means too many moving parts, not too many characters.
 
 ## 3. Surgical Changes
 
@@ -34,7 +34,7 @@ When editing existing code:
 - Don't "improve" adjacent code, comments, or formatting.
 - Don't refactor things that aren't broken.
 - Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it — don't delete it.
+- If you notice unrelated dead code, mention it, don't delete it.
 
 When your changes create orphans:
 - Remove imports/variables/functions that YOUR changes made unused.
@@ -83,14 +83,14 @@ The test: could a teammate who is new to the code read it once and understand it
 
 **The code's first reader is a person, not the compiler. Write for that person.**
 
-The previous principle covers what you write *around* the code — docs, comments, commits. This one is about the code itself. Simple code and readable code are not the same thing: simple code has few moving parts; readable code spells those parts out. Aim for both, and never trade readability away to save lines.
+The previous principle covers what you write *around* the code: docs, comments, commits. This one is about the code itself. Simple code and readable code are not the same thing: simple code has few moving parts; readable code spells those parts out. Aim for both, and never trade readability away to save lines.
 
 - Name things in full, for what they are. `remaining_budget` over `rb`, `resolve_source_dir` over `rsd`. A good name is a comment you don't have to write.
 - Prefer explicit and a little verbose over compact and clever. One obvious thing per line beats a dense expression a reader has to decode.
 - Reach for the plain, conventional form a reader expects. Cleverness is a cost paid again by everyone who reads the code later.
 - Don't compress just to shorten. Saving three lines isn't worth making the next person stop and work out what they do.
 
-The test: could a teammate seeing this file for the first time read it top to bottom and follow it — without you narrating over their shoulder?
+The test: could a teammate seeing this file for the first time read it top to bottom and follow it, without you narrating over their shoulder?
 
 ---
 
