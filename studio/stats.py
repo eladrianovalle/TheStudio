@@ -10,6 +10,63 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
+# Outcome vocabularies — kept small on purpose. "Did it ship" and a coarse
+# impact bucket are the cheapest things to record that still let us count.
+VALID_SHIPPED = ("yes", "no", "partial")
+VALID_IMPACT = ("none", "minor", "major")
+
+
+def summarize_outcomes(records: List[Dict]) -> Dict:
+    """Roll up outcome records into counts and a few recent qualitative notes.
+
+    An outcome record is a flat dict that may carry ``repo``, ``run_id``,
+    ``shipped`` (one of VALID_SHIPPED), ``impact`` (one of VALID_IMPACT), and
+    ``changed`` (freetext: what this run actually changed). Records come from two
+    places: this repo's rated runs and the cross-repo ledger. Any field may be
+    missing — a record with none of shipped/impact/changed still counts toward
+    its repo's tally but not the rates.
+
+    Pure: data in, summary dict out.
+    """
+    shipped = {k: 0 for k in VALID_SHIPPED}
+    impact = {k: 0 for k in VALID_IMPACT}
+    by_repo: Dict[str, int] = {}
+    recent_changed: List[Dict] = []
+    with_outcome = 0
+
+    for rec in records:
+        repo = rec.get("repo") or "?"
+        by_repo[repo] = by_repo.get(repo, 0) + 1
+
+        s = rec.get("shipped")
+        i = rec.get("impact")
+        c = (rec.get("changed") or "").strip()
+
+        if s in shipped:
+            shipped[s] += 1
+        if i in impact:
+            impact[i] += 1
+        if (s in shipped) or (i in impact) or c:
+            with_outcome += 1
+        if c:
+            recent_changed.append({
+                "repo": repo,
+                "run_id": rec.get("run_id", "?"),
+                "changed": c,
+            })
+
+    ship_total = sum(shipped.values())
+    return {
+        "records": len(records),
+        "with_outcome": with_outcome,
+        "repos": len(by_repo),
+        "by_repo": by_repo,
+        "shipped": shipped,
+        "ship_rate": (shipped["yes"] / ship_total) if ship_total else None,
+        "impact": impact,
+        "recent_changed": recent_changed[-8:],
+    }
+
 
 def _summarize_metrics(entries: List[Dict]) -> Dict:
     """Aggregate metrics entries into a summary."""
@@ -165,13 +222,55 @@ def aggregate_stats(runs: List[Dict]) -> Dict:
     }
 
 
-def format_stats(agg: Dict, usage: Optional[Dict] = None, clarity_note: Optional[str] = None) -> str:
+def _format_outcomes(outcomes: Dict) -> List[str]:
+    """Render the outcomes block (did it ship / what changed) for the dashboard."""
+    lines = ["", "Outcomes (did it ship / what changed):"]
+    if outcomes["records"] == 0:
+        lines.append(
+            "  No outcomes recorded yet. Add to a rating: "
+            "rate --run-dir <path> --score N --shipped yes --impact major --changed \"...\""
+        )
+        return lines
+
+    repos = ", ".join(f"{k}={v}" for k, v in sorted(outcomes["by_repo"].items()))
+    lines.append(f"  {outcomes['records']} rated runs across {outcomes['repos']} repo(s): {repos}")
+
+    sh = outcomes["shipped"]
+    ship_line = f"  Shipped: yes={sh['yes']} no={sh['no']} partial={sh['partial']}"
+    if outcomes["ship_rate"] is not None:
+        ship_line += f" (ship rate {outcomes['ship_rate']*100:.0f}%)"
+    lines.append(ship_line)
+
+    im = outcomes["impact"]
+    if any(im.values()):
+        lines.append(f"  Impact:  none={im['none']} minor={im['minor']} major={im['major']}")
+
+    if outcomes["recent_changed"]:
+        lines.append("  Recent changes:")
+        for item in reversed(outcomes["recent_changed"]):
+            changed = item["changed"]
+            if len(changed) > 80:
+                changed = changed[:77] + "..."
+            lines.append(f"    [{item['repo']}] {item['run_id']} — {changed}")
+    return lines
+
+
+def format_stats(
+    agg: Dict,
+    usage: Optional[Dict] = None,
+    clarity_note: Optional[str] = None,
+    outcomes: Optional[Dict] = None,
+) -> str:
     """Render an aggregate_stats() result as a terminal dashboard."""
     bar = "=" * 60
     lines: List[str] = [bar, "Studio Cross-Run Stats", bar]
 
     if agg["total_runs"] == 0:
-        lines.append("No runs found yet. Run a phase first.")
+        lines.append("No local runs found yet. Run a phase first.")
+        # Cross-repo outcomes (imported into the ledger) can still be worth showing
+        # even when this repo has no runs of its own — that's the tool-repo case.
+        if outcomes is not None and outcomes["records"] > 0:
+            lines.extend(_format_outcomes(outcomes))
         lines.append(bar)
         return "\n".join(lines)
 
@@ -200,6 +299,9 @@ def format_stats(agg: Dict, usage: Optional[Dict] = None, clarity_note: Optional
             for item in r["lowest"]:
                 note = f" — {item['note']}" if item["note"] else ""
                 lines.append(f"    {item['score']}/5  {item['run_id']}{note}")
+
+    if outcomes is not None:
+        lines.extend(_format_outcomes(outcomes))
 
     t = agg["tokens"]
     lines.append("")

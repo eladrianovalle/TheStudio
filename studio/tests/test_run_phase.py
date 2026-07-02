@@ -601,6 +601,92 @@ def test_format_stats_smoke():
     assert "No runs rated yet" in out
 
 
+# --- Outcome capture (quantify + qualify run results) ---
+
+def test_summarize_outcomes_empty():
+    """No records yields a zeroed outcome summary with no ship rate."""
+    from stats import summarize_outcomes
+    s = summarize_outcomes([])
+    assert s["records"] == 0
+    assert s["ship_rate"] is None
+    assert s["recent_changed"] == []
+
+
+def test_summarize_outcomes_counts_and_rate():
+    """summarize_outcomes tallies shipped/impact, computes ship rate, keeps notes."""
+    from stats import summarize_outcomes
+    records = [
+        {"repo": "a", "run_id": "r1", "shipped": "yes", "impact": "major", "changed": "shipped X"},
+        {"repo": "a", "run_id": "r2", "shipped": "no", "impact": "none"},
+        {"repo": "b", "run_id": "r3", "shipped": "partial", "impact": "minor", "changed": "half of Y"},
+        {"repo": "b", "run_id": "r4"},  # rated but no outcome fields
+    ]
+    s = summarize_outcomes(records)
+    assert s["records"] == 4
+    assert s["with_outcome"] == 3
+    assert s["by_repo"] == {"a": 2, "b": 2}
+    assert s["shipped"] == {"yes": 1, "no": 1, "partial": 1}
+    assert s["ship_rate"] == 1 / 3
+    assert s["impact"] == {"none": 1, "minor": 1, "major": 1}
+    assert [c["changed"] for c in s["recent_changed"]] == ["shipped X", "half of Y"]
+
+
+def test_write_rating_records_outcome_block(tmp_path):
+    """_write_rating stores shipped/impact/changed under an outcome block."""
+    rating = run_phase._write_rating(
+        tmp_path, 4, "solid", shipped="yes", impact="major", changed="  cut scope  "
+    )
+    assert rating["outcome"] == {"shipped": "yes", "impact": "major", "changed": "cut scope"}
+    on_disk = json.loads((tmp_path / "rating.json").read_text())
+    assert on_disk["outcome"]["changed"] == "cut scope"
+
+
+def test_write_rating_omits_empty_outcome(tmp_path):
+    """A rating with no outcome fields carries no outcome block."""
+    rating = run_phase._write_rating(tmp_path, 3, "")
+    assert "outcome" not in rating
+
+
+def test_outcome_record_from_run_needs_rating():
+    """Unrated runs produce no outcome record; rated runs flatten the outcome."""
+    assert run_phase._outcome_record_from_run({"run_id": "r", "_rating": None}, "repo") is None
+    rec = run_phase._outcome_record_from_run(
+        {
+            "run_id": "run_studio_1", "phase": "studio", "verdict": "APPROVED",
+            "status": "completed", "metrics": {"total_tokens": 900},
+            "_rating": {"score": 5, "outcome": {"shipped": "yes", "impact": "minor"}},
+        },
+        "pictorly",
+    )
+    assert rec["repo"] == "pictorly"
+    assert rec["shipped"] == "yes"
+    assert rec["total_tokens"] == 900
+    assert rec["changed"] is None
+
+
+def test_merge_outcomes_local_wins_on_dedup():
+    """_merge_outcomes dedups by (repo, run_id); local record overrides the ledger."""
+    ledger = [{"repo": "a", "run_id": "r1", "shipped": "no"}]
+    local = [{"repo": "a", "run_id": "r1", "shipped": "yes"}, {"repo": "a", "run_id": "r2"}]
+    merged = run_phase._merge_outcomes(ledger, local)
+    by_id = {r["run_id"]: r for r in merged}
+    assert len(merged) == 2
+    assert by_id["r1"]["shipped"] == "yes"  # local won
+
+
+def test_format_stats_renders_outcomes_section():
+    """format_stats includes the outcomes block when given a summary."""
+    from stats import summarize_outcomes
+    agg = run_phase.aggregate_stats([])
+    outcomes = summarize_outcomes([
+        {"repo": "pictorly", "run_id": "r1", "shipped": "yes", "impact": "major", "changed": "did a thing"},
+    ])
+    out = run_phase.format_stats(agg, outcomes=outcomes)
+    assert "Outcomes (did it ship" in out
+    assert "ship rate 100%" in out
+    assert "did a thing" in out
+
+
 class _FakeStdin:
     def __init__(self, tty):
         self._tty = tty

@@ -73,10 +73,13 @@ from integrations.slack_digest import load_integrations_config, notify_run
 
 from config_loading import tomllib
 from stats import (
+    VALID_IMPACT,
+    VALID_SHIPPED,
     _parse_usage_log,
     _summarize_metrics,
     aggregate_stats,
     format_stats,
+    summarize_outcomes,
 )
 
 
@@ -204,6 +207,7 @@ SUBCOMMANDS = {
     "show-clarity", "set-clarity", "recompute-clarity",
     "record-metrics", "show-metrics", "offload", "setup",
     "rate", "stats", "notify",
+    "export-outcomes", "import-outcomes",
 }
 
 
@@ -335,6 +339,35 @@ def get_knowledge_log_path() -> Path:
     if artifact_root == studio_root:
         return studio_root / "knowledge" / "run_log.md"
     return artifact_root / ".studio" / "knowledge" / "run_log.md"
+
+
+def _project_name() -> str:
+    """Short name for the repo a run belongs to — tags outcome records.
+
+    In a consuming repo the artifact root IS the repo root, so its directory name
+    is the project name. In this tool repo the artifact root is the ``studio/``
+    dir, so use its parent (the repo root) rather than the literal "studio".
+    """
+    artifact_root = get_artifact_root().resolve()
+    studio_root = get_studio_root().resolve()
+    if artifact_root == studio_root:
+        return studio_root.parent.name
+    return artifact_root.name
+
+
+def get_outcomes_ledger_path() -> Path:
+    """Central append-only ledger of run outcomes (mirrors get_knowledge_log_path).
+
+    This is where cross-repo outcome records land via ``import-outcomes`` so that
+    ``stats`` in the tool repo can see results from every project, not just runs
+    done here. Lives under ``knowledge/`` (gitignored) — it can name unshipped
+    work, so it stays local unless you deliberately commit a redacted copy.
+    """
+    artifact_root = get_artifact_root().resolve()
+    studio_root = get_studio_root().resolve()
+    if artifact_root == studio_root:
+        return studio_root / "knowledge" / "outcomes.jsonl"
+    return artifact_root / ".studio" / "knowledge" / "outcomes.jsonl"
 
 
 def utc_now() -> datetime:
@@ -1900,6 +1933,39 @@ def build_parser() -> argparse.ArgumentParser:
         help="Quality score: 1 (poor) to 5 (excellent).",
     )
     rate_parser.add_argument("--note", default=None, help="Optional note on what was good or bad.")
+    rate_parser.add_argument(
+        "--shipped", default=None, choices=list(VALID_SHIPPED),
+        help="Outcome: did this run's result actually ship? (yes/no/partial)",
+    )
+    rate_parser.add_argument(
+        "--impact", default=None, choices=list(VALID_IMPACT),
+        help="Outcome: how much did it change downstream? (none/minor/major)",
+    )
+    rate_parser.add_argument(
+        "--changed", default=None,
+        help="Outcome: one line on what this run actually changed.",
+    )
+
+    export_outcomes_parser = subparsers.add_parser(
+        "export-outcomes",
+        help="Export this repo's rated runs as portable JSONL outcome records.",
+    )
+    export_outcomes_parser.add_argument(
+        "--out", default=None, help="Write JSONL here (default: stdout)."
+    )
+    export_outcomes_parser.add_argument(
+        "--repo", default=None, help="Project name to tag records with (default: repo dir name)."
+    )
+    _add_artifact_root_arg(export_outcomes_parser)
+
+    import_outcomes_parser = subparsers.add_parser(
+        "import-outcomes",
+        help="Merge JSONL outcome records into the central ledger (dedup by repo+run_id).",
+    )
+    import_outcomes_parser.add_argument(
+        "--from", dest="from_file", required=True, help="Path to a JSONL outcomes export."
+    )
+    _add_artifact_root_arg(import_outcomes_parser)
 
     stats_parser = subparsers.add_parser(
         "stats", help="Cross-run diagnostics: outcomes, ratings, efficiency, decisions, usage."
@@ -2300,31 +2366,65 @@ def _load_rating(run_dir: Path) -> Optional[Dict]:
         return None
 
 
-def _write_rating(run_dir: Path, score: int, note: str) -> Dict:
-    """Write rating.json (the human counterpart to the agent verdict)."""
+def _write_rating(
+    run_dir: Path,
+    score: int,
+    note: str,
+    shipped: Optional[str] = None,
+    impact: Optional[str] = None,
+    changed: Optional[str] = None,
+) -> Dict:
+    """Write rating.json (the human counterpart to the agent verdict).
+
+    The optional shipped/impact/changed fields are the *outcome* of the run —
+    what it led to downstream — stored under an ``outcome`` block. They answer
+    "did this actually change anything, and what," which is the signal a run's
+    verdict and quality score can't capture on their own.
+    """
     rating = {
         "score": score,
         "note": (note or "").strip(),
         "rated_iso": utc_now().isoformat(timespec="seconds"),
     }
+    outcome = {}
+    if shipped:
+        outcome["shipped"] = shipped
+    if impact:
+        outcome["impact"] = impact
+    if changed and changed.strip():
+        outcome["changed"] = changed.strip()
+    if outcome:
+        rating["outcome"] = outcome
     write_json(run_dir / "rating.json", rating)
     return rating
 
 
 def record_rating(args: argparse.Namespace) -> None:
-    """Record a human quality rating (1-5) for a completed run.
+    """Record a human quality rating (1-5), plus optional outcome, for a run.
 
     Stored as rating.json alongside metrics.json — the human counterpart to the
-    agent-emitted verdict. This is the signal `stats` uses to gauge how well the
-    system is doing and which runs to learn from.
+    agent-emitted verdict. The score says how good the run was; the optional
+    ``--shipped/--impact/--changed`` outcome says what it actually led to. This
+    is the signal `stats` uses to gauge how well the system is doing and which
+    runs to learn from.
     """
     run_dir = Path(args.run_dir)
     if not run_dir.is_dir():
         raise FileNotFoundError(f"Run directory not found: {run_dir}")
 
-    rating = _write_rating(run_dir, args.score, args.note)
+    rating = _write_rating(
+        run_dir,
+        args.score,
+        args.note,
+        shipped=getattr(args, "shipped", None),
+        impact=getattr(args, "impact", None),
+        changed=getattr(args, "changed", None),
+    )
     suffix = f' — "{rating["note"]}"' if rating["note"] else ""
     print(f"Recorded rating {rating['score']}/5 for {run_dir.name}{suffix}")
+    outcome = rating.get("outcome")
+    if outcome:
+        print("  Outcome: " + ", ".join(f"{k}={v}" for k, v in outcome.items()))
 
 
 def _prompt_for_rating(run_dir: Path) -> None:
@@ -2367,6 +2467,129 @@ def _prompt_for_rating(run_dir: Path) -> None:
     print(f"   Recorded {score}/5.")
 
 
+def _outcome_record_from_run(run: Dict, repo: str) -> Optional[Dict]:
+    """Build a portable outcome record from an enriched run dict (needs _rating).
+
+    Returns None for unrated runs — a rating is what makes a run an outcome we
+    can learn from. shipped/impact/changed are pulled from the rating's optional
+    ``outcome`` block and may be null.
+    """
+    rating = run.get("_rating")
+    if not rating:
+        return None
+    outcome = rating.get("outcome") or {}
+    return {
+        "repo": repo,
+        "run_id": run.get("run_id", Path(run.get("run_dir", "?")).name),
+        "phase": run.get("phase"),
+        "verdict": run.get("verdict"),
+        "status": run.get("status"),
+        "score": rating.get("score"),
+        "shipped": outcome.get("shipped"),
+        "impact": outcome.get("impact"),
+        "changed": outcome.get("changed"),
+        "total_tokens": (run.get("metrics") or {}).get("total_tokens"),
+        "rated_iso": rating.get("rated_iso"),
+    }
+
+
+def _read_ledger(path: Path) -> List[Dict]:
+    """Read a JSONL outcomes file, skipping blank or unparseable lines."""
+    if not path.exists():
+        return []
+    records: List[Dict] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return records
+
+
+def _write_ledger(path: Path, records: List[Dict]) -> None:
+    """Write outcome records as JSONL (one compact object per line)."""
+    path.write_text("".join(json.dumps(r) + "\n" for r in records), encoding="utf-8")
+
+
+def _collect_local_outcomes(runs: List[Dict], repo: str) -> List[Dict]:
+    """Outcome records for this repo's rated runs (runs already carry _rating)."""
+    records = []
+    for run in runs:
+        rec = _outcome_record_from_run(run, repo)
+        if rec is not None:
+            records.append(rec)
+    return records
+
+
+def _merge_outcomes(ledger: List[Dict], local: List[Dict]) -> List[Dict]:
+    """Combine cross-repo ledger records with this repo's fresh local records.
+
+    Dedup by (repo, run_id); local wins, since it's read straight from the run
+    directories and the ledger may hold an older export of the same run.
+    """
+    by_key = {(r.get("repo"), r.get("run_id")): r for r in ledger}
+    for rec in local:
+        by_key[(rec.get("repo"), rec.get("run_id"))] = rec
+    return list(by_key.values())
+
+
+def export_outcomes(args: argparse.Namespace) -> None:
+    """Collect this repo's rated runs into a portable JSONL of outcome records.
+
+    Writes to --out (default: stdout). Feed the file to ``import-outcomes`` in
+    the tool repo so a consuming repo's results become visible to ``stats`` there
+    — the bridge that lets evidence reach the main repo.
+    """
+    repo = getattr(args, "repo", None) or _project_name()
+    runs = collect_runs(get_output_root())
+    for run in runs:
+        run["_rating"] = _load_rating(Path(run["run_dir"]))
+    records = _collect_local_outcomes(runs, repo)
+
+    payload = "".join(json.dumps(r) + "\n" for r in records)
+    out = getattr(args, "out", None)
+    if out:
+        out_path = Path(out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(payload, encoding="utf-8")
+        print(f"Exported {len(records)} outcome record(s) from '{repo}' to {out_path}")
+    else:
+        if payload:
+            print(payload, end="")
+        print(f"# {len(records)} outcome record(s) from '{repo}'", file=sys.stderr)
+
+
+def import_outcomes(args: argparse.Namespace) -> None:
+    """Merge outcome records from a JSONL file into the central ledger.
+
+    Dedup by (repo, run_id): re-importing an updated export refreshes existing
+    records instead of duplicating them. This is how outcomes from other repos
+    reach ``stats`` in this repo.
+    """
+    src = Path(args.from_file)
+    if not src.is_file():
+        raise FileNotFoundError(f"Outcomes file not found: {src}")
+    incoming = _read_ledger(src)
+
+    ledger_path = get_outcomes_ledger_path()
+    existing = _read_ledger(ledger_path)
+    keys_before = {(r.get("repo"), r.get("run_id")) for r in existing}
+    merged = _merge_outcomes(existing, incoming)
+
+    added = sum(1 for r in incoming if (r.get("repo"), r.get("run_id")) not in keys_before)
+    updated = len(incoming) - added
+
+    ledger_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_ledger(ledger_path, merged)
+    print(
+        f"Imported {len(incoming)} record(s) into {ledger_path} "
+        f"(+{added} new, {updated} updated; {len(merged)} total)"
+    )
+
+
 def show_stats(args: argparse.Namespace) -> None:
     """Display cross-run diagnostics: outcomes, ratings, efficiency, decisions, usage."""
     root = Path(args.artifact_root).resolve() if getattr(args, "artifact_root", None) else get_artifact_root()
@@ -2386,8 +2609,17 @@ def show_stats(args: argparse.Namespace) -> None:
 
     agg = aggregate_stats(runs)
 
+    # Outcomes: this repo's rated runs plus the cross-repo ledger (imported from
+    # other projects). Local records win on conflict since they're the fresher read.
+    local_outcomes = _collect_local_outcomes(runs, _project_name())
+    ledger_outcomes = _read_ledger(get_outcomes_ledger_path())
+    outcome_records = _merge_outcomes(ledger_outcomes, local_outcomes)
+    if phase_filter:
+        outcome_records = [r for r in outcome_records if r.get("phase") == phase_filter]
+    outcomes = summarize_outcomes(outcome_records)
+
     if getattr(args, "json", False):
-        print(json.dumps(agg, indent=2))
+        print(json.dumps({**agg, "outcomes": outcomes}, indent=2))
         return
 
     usage = None
@@ -2403,7 +2635,7 @@ def show_stats(args: argparse.Namespace) -> None:
     if snapshot is not None and snapshot.topics:
         clarity_note = f"{len(snapshot.topics)} topics tracked (run 'show-clarity' for the table)"
 
-    print(format_stats(agg, usage=usage, clarity_note=clarity_note))
+    print(format_stats(agg, usage=usage, clarity_note=clarity_note, outcomes=outcomes))
 
 
 def inject_context(args: argparse.Namespace) -> None:
@@ -2803,6 +3035,10 @@ def _dispatch(args: argparse.Namespace) -> None:
         record_rating(args)
     elif args.command == "stats":
         show_stats(args)
+    elif args.command == "export-outcomes":
+        export_outcomes(args)
+    elif args.command == "import-outcomes":
+        import_outcomes(args)
     elif args.command == "notify":
         notify(args)
     elif args.command == "offload":
