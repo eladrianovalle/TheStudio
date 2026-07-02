@@ -29,7 +29,9 @@ If running from a repo that is NOT the Studio repo itself, artifacts will automa
 
 ### Step 2: Read Instructions
 
-Read the generated `instructions.md` file in the run directory. It contains the phase-specific advocate/contrarian personas, iteration rules, and deliverable requirements.
+Read the generated `instructions.md` file in the run directory. It contains the phase-specific advocate/contrarian personas, iteration rules, and deliverable requirements. **`instructions.md` is the authority on run procedure** — follow the steps it lists, in order, even if they aren't repeated here.
+
+In particular, every deliverable run opens with **Step 0: Open-Questions Pre-Flight** — a fast pass that surfaces what is genuinely unsettled and pauses on P0 blockers before the loop begins. Do this pre-flight (record answers as instructions.md directs) before starting the advocate/contrarian loop below. (Not applicable to `--mode questions` runs, which are themselves a questions-only pass.)
 
 ### Step 3: Execute Advocate/Contrarian Loop
 

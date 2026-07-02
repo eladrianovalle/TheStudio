@@ -45,6 +45,25 @@ class TestInstallStudio:
         assert (source / "decision_points.py").is_file()
         assert (source / "install.py").is_file()
 
+    def test_installed_snapshot_imports(self, target_dir, studio_dir):
+        """The installed snapshot must import cleanly in a fresh interpreter.
+
+        This is the guard against SOURCE_FILES drifting behind run_phase's import
+        graph: if a module that run_phase imports (directly or transitively) isn't
+        shipped, the installed CLI dies with ModuleNotFoundError. Importing the
+        snapshot exercises the whole closure, so a missing file fails here.
+        """
+        import subprocess
+        import sys
+
+        install_studio(target_dir, studio_dir)
+        source = target_dir / ".studio" / "source"
+        result = subprocess.run(
+            [sys.executable, "-c", "import run_phase"],
+            cwd=str(source), capture_output=True, text=True,
+        )
+        assert result.returncode == 0, result.stderr
+
     def test_creates_slash_commands(self, target_dir, studio_dir):
         """Install creates .claude/commands/ with rewritten slash commands."""
         install_studio(target_dir, studio_dir)

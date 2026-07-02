@@ -18,6 +18,7 @@ const DEFAULT_UNIT = {
   // Run from repo root; tests live under studio/.
   test_command: 'cd studio && python -m pytest tests/test_impl_loop.py -q',
   static_check: 'cd studio && ruff check impl_loop.py',
+  mutation_command: 'cd studio && mutmut run',
   instructions: [
     'Build studio/impl_loop.py mirroring the ScopeConfig / load_scopes_config() pattern in studio/scopes.py:',
     '  - a `LoopConfig` dataclass for the [loop]/[gate]/[editor] tables documented in',
@@ -111,7 +112,7 @@ function writerPrompt(u) {
     ``,
     `Discipline:`,
     `- Build a usable interaction, not a partial component (MVI). No speculative scope beyond the unit.`,
-    `- Hold AI-TDD: write the tests and run them.${u.require_mutation_check === false ? ' (Mutation check disabled by config: require_mutation_check=false.)' : ' Then a mutation check — break 2-3 critical assertions, confirm the tests FAIL, then restore; report it in mutation_check.'}`,
+    `- Hold AI-TDD: write the tests and run them.${u.require_mutation_check === false ? ' (Mutation check disabled by config: require_mutation_check=false.)' : ` Then run the configured mutation check on the code you touched: \`${u.mutation_command}\` (scope + runner live in studio/setup.cfg), and report the outcome in mutation_check. If mutmut isn't installed, fall back to hand-mutating — break 2-3 critical assertions, confirm the tests FAIL, then restore.`}`,
     `- Run the unit tests: \`${u.test_command}\`${(Array.isArray(u.static_checks) && u.static_checks.length === 0) ? ' (static check skipped — config static_checks=[]).' : `  and the static check: \`${u.static_check}\`.`}`,
     `- When (and only when) tests pass, COMMIT the passing state on the current branch`,
     `  (\`git add -A && git commit -m "writer: ${u.unit_id}"\`) and capture the short SHA — that is writer_sha.`,

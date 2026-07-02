@@ -41,6 +41,8 @@ SOURCE_FILES = [
     "clarity.py",
     "setup.py",
     "impl_loop.py",
+    "config_loading.py",
+    "stats.py",
     "studio.manifest.json",
     "validators/__init__.py",
     "validators/document_validator.py",

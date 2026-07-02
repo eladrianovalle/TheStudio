@@ -64,6 +64,25 @@ def test_question_instructions_contain_priority_tags(sample_role_data):
     assert "P2" in advocate_str
 
 
+def test_question_instructions_emit_parseable_decision_blocks(sample_role_data):
+    """The DECISION examples in question-mode instructions must parse.
+
+    question_mode is a separate generator from run_phase, so guard its format
+    against decision_points.parse_decision_points too — if the blockquote shape
+    drifts from what the parser reads, extraction would silently return nothing.
+    """
+    from decision_points import parse_decision_points
+
+    # The examples are indented for display in the instruction doc; agents emit at
+    # column 0 in their own files. Strip per-line indentation to check the format.
+    def deindent(text: str) -> str:
+        return "\n".join(line.lstrip() for line in text.splitlines())
+
+    advocate_str, contrarian_str = generate_question_instructions(sample_role_data)
+    assert parse_decision_points(deindent(advocate_str)), "advocate example should parse"
+    assert parse_decision_points(deindent(contrarian_str)), "contrarian example should parse"
+
+
 def test_question_instructions_use_decision_blockquote_format(sample_role_data):
     """Advocate instructions use the unified DECISION blockquote format."""
     advocate_str, _ = generate_question_instructions(sample_role_data)

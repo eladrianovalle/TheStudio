@@ -2,7 +2,7 @@
 name = "studio"
 version = "0.1.0"
 description = "Studio workflow instruction generator"
-authors = [{ name = "Your Name", email = "you@example.com" }]
+authors = [{ name = "Adriano Valle", email = "adriano@orcpunk.com" }]
 requires-python = ">=3.10,<3.14"
 dependencies = [
     "tomli>=2.0;python_version<'3.11'",

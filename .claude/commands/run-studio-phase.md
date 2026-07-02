@@ -26,10 +26,12 @@ Note the run_id and run directory path from the output.
 
 ### Step 2: Read Instructions and Role Menu
 
-Read the generated `instructions.md` file. Pay attention to:
+Read the generated `instructions.md` file. **It is the authority on run procedure** — follow the steps it lists, in order, even if they aren't repeated here. Pay attention to:
 - The **Role Menu** table listing each invited role
 - The **Scope-Based Iteration Plan** (if scopes are enabled)
 - File naming convention
+
+In particular, the run opens with **Step 0: Open-Questions Pre-Flight** — a fast pass that surfaces what is genuinely unsettled and pauses on P0 blockers. Do this pre-flight (record answers as instructions.md directs) before the scoped debate below. (Not applicable to `--mode questions` runs.)
 
 ### Decision Point Handling (applies to ALL scopes)
 
