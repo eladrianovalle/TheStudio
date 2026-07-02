@@ -60,8 +60,6 @@ Read each pack file to get names, descriptions, and roles. Present them as a num
 Available role packs:
 1. studio_core (7 roles) — Default pod: marketing, product, design, art, engineering, test_engineer, qa
 2. studio_core_with_ml (9 roles) — Core + ML and PMM
-3. pictorly_execution (5 roles) — Focused: product, design, engineering, test_engineer, qa
-4. orcpunk_web (3 roles) — Web-focused: web_engineering, web_test_engineer, web_qa
 ```
 
 Ask the user: **"Which role pack fits your project? (pick a number, or type a pack name)"**

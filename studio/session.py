@@ -1,6 +1,6 @@
 """Build the automatic ``session.json`` health record for a finalized run.
 
-A Studio run is a planning session, so rating its output at finalize is noise —
+A Studio run is a planning session, so rating its output at finalize is noise:
 the specs get built later, elsewhere. What you *can* measure the moment a run
 ends is session *health*: did the debate converge, did it surface and settle the
 right questions, did it reduce uncertainty, and at what cost. All of that is
@@ -14,7 +14,7 @@ to :func:`build_session_record`, which shapes them into the schema documented in
 ``docs/SESSION_ANALYTICS_PLAN.md``.
 
 Every input is optional. A run with no decisions, no clarity snapshot, and no
-metrics still produces a valid record full of sensible zeros and nulls — this
+metrics still produces a valid record full of sensible zeros and nulls. This
 must never crash finalize.
 """
 from __future__ import annotations
@@ -73,7 +73,7 @@ def _summarize_cost(metrics_entries: List[Dict], settled_decisions: int) -> Dict
     """Roll up the cost block, reusing ``stats._summarize_metrics``.
 
     ``tokens_per_settled_decision`` turns a raw token count into "what the spend
-    bought" — total tokens divided by the number of decisions that ended up
+    bought": total tokens divided by the number of decisions that ended up
     answered. It is None when nothing was settled (dividing by zero buys
     nothing). ``scope_pct`` reports each scope's share of the total tokens as a
     whole-number percentage; a run that burned most of its budget in polish is a
@@ -107,8 +107,8 @@ def _summarize_editor(advocate_word_counts: Sequence[int]) -> Dict:
     ``advocate_word_counts`` is the word count of each advocate document in the
     order it was written (first draft first, final last). ``shrink_ratio`` is
     how much the doc shrank from first to final: 0.33 means a third was cut.
-    It is a crude proxy — a liveness check that catches the real failure mode,
-    a dead editor mandate where docs only ever grow — never a quality score.
+    It is a crude liveness check, not a quality score. It catches the real
+    failure mode: a dead editor mandate where docs only ever grow.
 
     Shrink is 0.0 when there is no first draft to measure against, which also
     guards the divide-by-zero when the first draft is empty.
@@ -153,7 +153,7 @@ def build_session_record(
 
     Pure: no I/O. The caller reads the run directory and passes the pieces in;
     this returns the record dict per ``docs/SESSION_ANALYTICS_PLAN.md``. Every
-    input is optional and tolerated — missing decisions, clarity, or metrics
+    input is optional and tolerated: missing decisions, clarity, or metrics
     yield sensible zeros and nulls rather than an error.
 
     ``outcome`` starts null and is the only field a human ever edits later (to

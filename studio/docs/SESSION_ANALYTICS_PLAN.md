@@ -1,24 +1,24 @@
-# Session Analytics — design + status
+# Session Analytics: design + status
 
 A design for measuring Studio runs over time *without* rating outputs that
 haven't been implemented yet. Captured from a Fable 5 design pass. Single-user
 context assumed throughout (one person, one machine, records moving between their
-own repos) — so the "central ledger" is just a local file path, and there are no
+own repos). The "central ledger" is just a local file path, and there are no
 multi-user or access concerns to design around.
 
 **Status: first slice shipped.** The recommended first slice (see the bottom
 section) is built, via the `/studio-implement` writer/editor loop:
 
-- `session.json`, auto-written at finalize — `session.py` holds the pure
+- `session.json`, auto-written at finalize. `session.py` holds the pure
   record builder (`build_session_record` + the `_summarize_*` helpers); the
   finalize wiring lives in `run_phase._write_session_record`, which reads the run
   dir and passes the pieces in. Additive and soft-fail: it never gates finalize.
-- Ledger auto-append via `[outcomes] ledger_path` — `run_phase.get_configured_ledger_path`
+- Ledger auto-append via `[outcomes] ledger_path`. `run_phase.get_configured_ledger_path`
   reads the path from `.studio/integrations.toml`; `run_phase._maybe_append_to_ledger`
   appends the run's outcome record at finalize, deduped by `(repo, run_id)`, soft-fail.
   `_outcome_record_from_run` now yields a record for unrated runs too, so the
   ledger and `stats` see every session.
-- `stats` session-health block — `stats.summarize_session_health` (pure) computes
+- `stats` session-health block. `stats.summarize_session_health` (pure) computes
   the five signals; `run_phase.show_stats` loads each run's `session.json` and adds
   a `session_health` key to `--json`.
 
@@ -36,12 +36,12 @@ consuming repo). You can't judge whether the plan was good before it's built. So
 the runs you bothered to rate.
 
 The reframe: you can't measure plan *quality* at finalize, but you can measure
-session *health* — did the debate converge, surface and settle the right
+session *health*: did the debate converge, surface and settle the right
 questions, reduce uncertainty, and at what cost. All of that is derivable
-automatically from data a run already produces. No rating, no waiting for
-implementation.
+automatically from data a run already produces. None of it needs a rating or a
+wait for implementation.
 
-## Part 1 — `session.json`, auto-written at finalize
+## Part 1: `session.json`, auto-written at finalize
 
 Written into the run dir at the end of `finalize_run`, entirely from files
 finalize already touches. No human input. Proposed schema:
@@ -71,7 +71,7 @@ finalize already touches. No human input. Proposed schema:
 
 ### Signals, ranked by signal-to-effort
 
-Tier 1 — data already in hand at finalize, zero new plumbing:
+Tier 1, data already in hand at finalize, zero new plumbing:
 
 1. **Convergence: iterations-to-verdict + rejection count.** `finalize_run`
    already computes `iterations_run`; the contrarian files are on disk, so run
@@ -80,7 +80,7 @@ Tier 1 — data already in hand at finalize, zero new plumbing:
    a rubber-stamp smell; `rejections=2 → APPROVED` is the debate doing work.
 2. **Decision profile: surfaced / answered-by-user / answered-by-assumption, by
    priority.** `decisions.json` already carries `priority` and `answered_by`
-   ("user" vs "assumption"). The killer stat is **P0s answered by assumption** —
+   ("user" vs "assumption"). The killer stat is **P0s answered by assumption**:
    every one is a blocking thing the session guessed on.
 3. **Clarity delta.** `finalize_run` already loads the prior snapshot right
    before computing the new one. Record `mean_before`, `mean_after`, topics
@@ -90,12 +90,12 @@ Tier 1 — data already in hand at finalize, zero new plumbing:
 5. **Scope spend distribution.** `_summarize_metrics` already produces per-scope
    token percentages. 60% of tokens in polish = misallocation.
 
-Tier 2 — one small addition:
+Tier 2, one small addition:
 
 6. **Contrarian cut signal (editor liveness).** The mandate says delete, but
    nothing measures it. Cheapest honest proxy: word counts of the advocate doc
    first draft vs final (`len(text.split())` on files already on disk). Report
-   `shrink_ratio`. Crude, but it detects the real failure mode — a *dead*
+   `shrink_ratio`. Crude, but it detects the real failure mode: a *dead*
    mandate where docs only ever grow. Don't over-engineer into diffing.
 
 Skip: semantic measures of cut quality, per-role "intensity," any LLM-judge at
@@ -105,25 +105,25 @@ finalize. Effort-heavy and gameable.
 optional, later, human. The `outcome` field starts null and is the only part a
 human ever touches (Part 4).
 
-## Part 2 — trends in `stats`
+## Part 2: trends in `stats`
 
 A "Session health (last N vs. prior N)" block reading `session.json` files. Keep
 it to five that mean something:
 
-- **Assumed-P0 rate** — P0s answered by assumption / P0s surfaced. Should trend
+- **Assumed-P0 rate**: P0s answered by assumption / P0s surfaced. Should trend
   to zero; the best "are we pausing when we should" number.
-- **Convergence profile** — median iterations and rejection rate. Watch for drift
+- **Convergence profile**: median iterations and rejection rate. Watch for drift
   toward 1-iteration-0-rejection (rubber-stamping) as much as toward churn.
-- **Clarity gain per session** — mean delta. Zero on a new project means sessions
+- **Clarity gain per session**: mean delta. Zero on a new project means sessions
   aren't de-risking.
-- **Tokens per settled decision** — the honest efficiency number.
-- **Editor liveness** — % of sessions where the final doc is smaller than the
+- **Tokens per settled decision**: the honest efficiency number.
+- **Editor liveness**: % of sessions where the final doc is smaller than the
   first draft.
 
 Vanity metrics to refuse: total runs, total tokens, and approval-rate-as-a-target
 (100% approval means the contrarian died).
 
-## Part 3 — automating export → import (single-user simplification)
+## Part 3: automating export → import (single-user simplification)
 
 Because it's one person on one machine, the "central ledger" is just a fixed
 local path (the tool repo's `knowledge/outcomes.jsonl`). Collapse the manual
@@ -135,7 +135,7 @@ finalize**:
   soft-fail pattern).
 - At finalize, append the session record to that path. Same dedup key
   `(repo, run_id)`; a later outcome update re-appends and the merge refreshes.
-- **Every session becomes visible to tool-repo `stats` automatically — including
+- **Every session becomes visible to tool-repo `stats` automatically, including
   unrated runs**, which fixes the actual complaint.
 
 Keep `export-outcomes`/`import-outcomes` as the fallback for the rare case a repo
@@ -144,9 +144,9 @@ break finalize); keep the raw run `input` text OUT of the record (only
 run_id/repo/phase) so the gitignored ledger stays cheap to redact; append lines
 from consuming repos, compact/dedup only in the tool repo.
 
-## Part 4 — linking a session to what it produced (deferred)
+## Part 4: linking a session to what it produced (deferred)
 
-The plan's real value shows up only when implemented — the honest hard part.
+The plan's real value shows up only when implemented, the honest hard part.
 Lowest-ceremony approach, added once a month of session records exists:
 
 - **Automatable:** `/studio-implement` (and rerun) carries `--from-run <run_id>`,
@@ -154,7 +154,7 @@ Lowest-ceremony approach, added once a month of session records exists:
   the parent session's `outcome.implementations`. Free when implementation
   happens in the same repo.
 - **The irreducible human moment** (implemented-by-hand, weeks later): one
-  command, three enums, no score —
+  command, three enums, no score:
   `studio outcome --run-id <id> --result implemented|partial|dropped|superseded [--note]`.
   "Dropped" is a legit win (the session correctly killed a bad idea). `stats` can
   nag: "4 approved sessions >30 days old have no outcome." That's the only human
@@ -166,13 +166,13 @@ Lowest-ceremony approach, added once a month of session records exists:
   rejections and clarity-before; flag 1-iteration runs on low-clarity topics.
 - **High P0 count** = thorough agents OR an under-specified prompt. Read per-topic
   over time; P0s should fall as clarity rises.
-- **Shrink ratio** isn't quality; a lazy editor could cut essence. Liveness check
-  only, never a target.
+- **Shrink ratio** isn't quality; a lazy editor could cut essence. Treat it as a
+  liveness check only; it must never become a target.
 - **Goodhart:** none of these may ever appear in agent prompts as targets
   ("surface ≥N decisions" would poison the P0 signal instantly). They're for the
   human reading `stats`, full stop.
 - Deepest check: periodically ask whether healthy-looking sessions actually get
-  implemented. If not, the health metrics are theater — process is only the
+  implemented. If not, the health metrics are theater: process is only the
   product if the product eventually exists.
 
 ## Recommended first slice (when built)

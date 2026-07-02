@@ -314,7 +314,8 @@ Configure in `config/studio_settings.toml`. Use `--skip-cleanup` to bypass.
 ```
 studio/
   run_phase.py              # CLI entrypoint: prepare, finalize, validate, cleanup, decision, clarity, metrics, rate, stats, export/import-outcomes, install, setup, offload, notify
-  stats.py                  # Pure cross-run aggregation + formatting + outcome roll-up (backs `stats`)
+  stats.py                  # Pure cross-run aggregation + formatting + outcome/session-health roll-up (backs `stats`)
+  session.py                # Pure builder for the session.json health record finalize writes per run
   config_loading.py         # Shared TOML loader (tomllib/tomli fallback), used by every config reader
   run_phase_roles.py        # Role system: manifest, packs, dependencies, file naming
   role_overrides.py         # Project-local role customization (.studio/roles/*.json)

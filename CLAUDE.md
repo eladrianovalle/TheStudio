@@ -206,7 +206,7 @@ Four phases: `market`, `design`, `tech`, `studio`. Each has distinct advocate/co
 ## Important Conventions
 
 - **Python 3.10+** required. Uses `tomllib` (3.11+) with `tomli` fallback.
-- **No heavy dependencies** — keep `run_phase.py` small and bash-friendly.
+- **No heavy dependencies** — stdlib only (plus `tomli` on Python 3.10). `run_phase.py` has grown large; a decomposition is planned in `studio/docs/RUN_PHASE_SPLIT_PLAN.md`.
 - **MVI (Minimum Viable Interaction)** — every task, sprint, and milestone must end in something usable. "Build a skateboard, not a wheel." Product, Engineering, and Design contrarians enforce this. See `studio/docs/MVI_METHODOLOGY.md`.
 - **AI-TDD discipline** is mandatory for tech phase implementations. AI writes scenarios and boilerplate; humans own assertions. See `studio/docs/AI_TDD_METHODOLOGY.md` for the full methodology (scenario-first, stack boundary, mutation verification, anti-pattern detection).
 - **Documentation contract**: changes to workflow must update README, CLAUDE_CODE_USAGE.md, and affected bridge docs simultaneously.

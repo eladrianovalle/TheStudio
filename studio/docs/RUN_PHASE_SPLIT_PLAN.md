@@ -1,4 +1,4 @@
-# Splitting `run_phase.py` — deferred decomposition plan
+# Splitting `run_phase.py`: deferred decomposition plan
 
 `run_phase.py` is the largest file in the repo. Two low-risk extractions have
 already landed: `config_loading.py` (the shared TOML loader) and `stats.py` (the
@@ -35,20 +35,20 @@ from the production side.
 
 ## Target modules (beyond config_loading + stats)
 
-- **`paths.py`** — root resolution. Public: `get_studio_root`, `get_artifact_root`,
+- **`paths.py`**: root resolution. Public: `get_studio_root`, `get_artifact_root`,
   `get_output_root`, `get_knowledge_log_path`, `get_outcomes_ledger_path`,
   `set_artifact_root`, `_project_name`, `ARTIFACT_ROOT_ENV`. Also lets `impl_loop.py`
   stop mirroring the artifact-root logic (follow-up, not part of the split).
-- **`phases.py`** — `PHASE_DETAILS` + `_phase_from_run_id`. Tiny data module both
+- **`phases.py`**: `PHASE_DETAILS` + `_phase_from_run_id`. Tiny data module both
   the CLI and `build_instruction_doc` read, so keeping it separate breaks any
   instructions↔CLI cycle.
-- **`instructions.py`** — `build_instruction_doc` + `inject_context` (same concern:
+- **`instructions.py`**: `build_instruction_doc` + `inject_context` (same concern:
   assembling agent-facing markdown). Depends on `phases`, `paths`, `scopes`,
   `question_mode`, `rerun`, `decision_points`, `clarity`.
-- **`run_index.py`** — `INDEX_HEADER`, `sanitize_cell`, `collect_runs`,
+- **`run_index.py`**: `INDEX_HEADER`, `sanitize_cell`, `collect_runs`,
   `write_index`, `rebuild_index` (+ the small io helpers `utc_now`/`write_json`/
   `load_json`, or put those in `config_loading`).
-- **`lifecycle.py`** — `prepare_run` + helpers, `finalize_run` + helpers,
+- **`lifecycle.py`**: `prepare_run` + helpers, `finalize_run` + helpers,
   `validate_run`. ~900 lines; split into `prepare.py`/`finalize.py` if that feels
   heavy.
 - **Stays in `run_phase.py`** (~700 lines): CLI wiring, cleanup glue, the thin
@@ -56,20 +56,20 @@ from the production side.
 
 ## Extraction order (each step independently green)
 
-1. **`paths.py`** — leaf, no internal deps.
-2. **`phases.py`** — pure data.
-3. **`run_index.py`** — depends on paths only.
-4. **`instructions.py`** — depends on paths + phases (do those first).
-5. **`lifecycle.py`** — depends on everything above; last.
+1. **`paths.py`**: leaf, no internal deps.
+2. **`phases.py`**: pure data.
+3. **`run_index.py`**: depends on paths only.
+4. **`instructions.py`**: depends on paths + phases (do those first).
+5. **`lifecycle.py`**: depends on everything above; last.
 
 Run the full suite after each step (`cd studio && python -m pytest tests/ -q`);
-624+ passing is the bar.
+667+ passing is the bar.
 
 ## Traps
 
 - **Monkeypatch surface.** Tests patch `run_phase._artifact_root_override`
   directly and `run_phase.sys.stdin`. Once the override state lives in `paths.py`,
-  patching the attribute on `run_phase` does nothing — update those sites to patch
+  patching the attribute on `run_phase` does nothing. Update those sites to patch
   `paths._artifact_root_override` (or call `run_phase.set_artifact_root(None)`,
   which delegates). This is the single most likely silent-failure point.
 - **Re-exports are load-bearing.** Several test files do `from run_phase import
