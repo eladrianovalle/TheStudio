@@ -8,6 +8,7 @@
 - **[AGENTS_REFERENCE.md](./AGENTS_REFERENCE.md)** - Agent roles and personas
 - **[API.md](./API.md)** - CLI reference for `run_phase.py`
 - **[CODING_PRINCIPLES.md](./CODING_PRINCIPLES.md)** - Karpathy-inspired coding principles (injected into target CLAUDE.md on install)
+- **[RUN_PHASE_SPLIT_PLAN.md](./RUN_PHASE_SPLIT_PLAN.md)** - Deferred plan for decomposing `run_phase.py` (config_loading + stats already extracted)
 
 ## Workflow Features
 - **[SCOPES_GUIDE.md](./SCOPES_GUIDE.md)** - Scope-based iteration allocation
