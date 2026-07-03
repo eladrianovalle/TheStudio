@@ -154,6 +154,30 @@ Present the suggested `snapshot` commands and `audit` globs. Let the user edit a
 python ".studio/source/run_phase.py" setup --target . --answers '<json with unstale_config>'
 ```
 
+### Step 6.5: Smoke Test Configuration (Optional)
+
+`/smoke` stands up a live, running version of what this repo builds so the user can hand-test it (a web app on a URL, a game in Play mode, a service on a port, a CLI). It self-detects the stack from marker files, so this step is optional. Pin exactly what "live" means for the repo only when detection isn't precise enough. It writes `.studio/smoke.toml`.
+
+Ask: **"Want to pin how `/smoke` stands up a live version of this project? Most users skip this; `/smoke` auto-detects how to run it."**
+
+If the user says no/skip, mark the step complete (no file written, self-detection stands):
+
+```bash
+python ".studio/source/run_phase.py" setup --target . --answers '{"smoke_config": {}}'
+```
+
+If yes, sniff the stack to get a starting point and show it:
+
+```bash
+python -c "import sys; sys.path.insert(0, '.studio/source'); import json, setup; print(json.dumps(setup.suggest_smoke_from_stack('.'), indent=2))"
+```
+
+Present the suggested profile. Let the user edit any of: `kind` (`web`/`game`/`service`/`cli`/`desktop`/`library`/`custom`), `setup`, `build`, `launch`, `url`, `ready_probe`, `ready_log`, `golden_path`, `teardown`. If the sniff returns `{}` (unknown stack), ask the user how they normally run the project, or let them skip. Then apply:
+
+```bash
+python ".studio/source/run_phase.py" setup --target . --answers '<json with smoke_config>'
+```
+
 ### Step 7: Scope Tuning
 
 Show the default scope configuration:
