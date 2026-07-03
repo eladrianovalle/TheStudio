@@ -130,8 +130,8 @@ class TestPendingSteps:
         pend = setup.pending_steps(state)
         assert pend == []
 
-    def test_v1_completed_returns_v2_and_v3_steps(self) -> None:
-        """A SETUP.json configured at v1 should surface the v2/v3 steps."""
+    def test_v1_completed_returns_later_steps(self) -> None:
+        """A SETUP.json configured at v1 should surface every later step."""
         state = setup._empty_state()
         state["setup_version"] = 1
         for step in setup.SETUP_STEPS:
@@ -139,7 +139,7 @@ class TestPendingSteps:
                 state["completed_steps"][step["name"]] = step["introduced_at"]
         pend = setup.pending_steps(state)
         names = [s["name"] for s in pend]
-        assert names == ["persona_customization", "unstale_config"]
+        assert names == ["persona_customization", "unstale_config", "smoke_config"]
 
     def test_detects_new_step(self, monkeypatch: pytest.MonkeyPatch) -> None:
         state = setup._empty_state()
@@ -401,6 +401,13 @@ class TestApplyDefaults:
         # Empty defaults => no unstale.toml written; /unstale self-detects.
         assert not (project / ".studio" / "unstale.toml").exists()
 
+    def test_marks_smoke_step_at_v4(self, project: Path) -> None:
+        state = setup.apply_defaults(project)
+        assert state["completed_steps"]["smoke_config"] == 4
+        assert setup.pending_steps(state) == []
+        # Empty defaults => no smoke.toml written; /smoke self-detects.
+        assert not (project / ".studio" / "smoke.toml").exists()
+
 
 # ---------------------------------------------------------------------------
 # Batch: from answers
@@ -455,6 +462,21 @@ class TestApplyFromAnswers:
         content = (project / ".studio" / "unstale.toml").read_text(encoding="utf-8")
         assert "[snapshot]" in content
         assert "cargo test" in content
+
+    def test_smoke_config_in_answers(self, project: Path) -> None:
+        answers = {
+            "smoke_config": {
+                "kind": "web",
+                "launch": "npm run dev",
+                "golden_path": ["Open the URL", "Create a farm"],
+            },
+        }
+        state = setup.apply_from_answers(project, answers)
+        assert state["choices"]["smoke_config"]["kind"] == "web"
+        content = (project / ".studio" / "smoke.toml").read_text(encoding="utf-8")
+        assert "[smoke]" in content
+        assert 'launch = "npm run dev"' in content
+        assert "golden_path" in content
 
     def test_custom_scopes_in_answers(self, project: Path) -> None:
         answers = {
@@ -520,6 +542,17 @@ class TestShowStatus:
         )
         output = setup.show_status(project)
         assert "Unstale audit: custom override" in output
+
+    def test_shows_smoke_self_detect_by_default(self, project: Path) -> None:
+        setup.apply_defaults(project)
+        output = setup.show_status(project)
+        assert "Smoke test: self-detect (no override)" in output
+
+    def test_shows_custom_smoke(self, project: Path) -> None:
+        setup.apply_role_pack(project, "studio_core")
+        setup.apply_smoke_config(project, {"kind": "game"})
+        output = setup.show_status(project)
+        assert "Smoke test: custom profile (game)" in output
 
 
 # ---------------------------------------------------------------------------
@@ -780,3 +813,101 @@ class TestApplyUnstaleConfig:
         state = setup.load_setup_state(project)
         assert state["completed_steps"]["unstale_config"] == 3
         assert state["choices"]["unstale_config"] == {"snapshot": [], "audit": []}
+
+
+# ---------------------------------------------------------------------------
+# Smoke test config
+# ---------------------------------------------------------------------------
+
+
+class TestSuggestSmokeFromStack:
+    def test_node_is_web(self, tmp_path: Path) -> None:
+        (tmp_path / "package.json").write_text("{}", encoding="utf-8")
+        cfg = setup.suggest_smoke_from_stack(tmp_path)
+        assert cfg["kind"] == "web"
+        assert cfg["launch"] == "npm run dev"
+
+    def test_rust_is_cli(self, tmp_path: Path) -> None:
+        (tmp_path / "Cargo.toml").write_text("[package]", encoding="utf-8")
+        cfg = setup.suggest_smoke_from_stack(tmp_path)
+        assert cfg["kind"] == "cli"
+        assert "cargo run" in cfg["launch"]
+
+    def test_unity_is_game_with_no_launch(self, tmp_path: Path) -> None:
+        (tmp_path / "Game.csproj").write_text("<Project/>", encoding="utf-8")
+        cfg = setup.suggest_smoke_from_stack(tmp_path)
+        # Unity stands up via Play mode (MCP), not a shell launch command.
+        assert cfg["kind"] == "game"
+        assert "launch" not in cfg
+
+    def test_go_is_service(self, tmp_path: Path) -> None:
+        (tmp_path / "go.mod").write_text("module x", encoding="utf-8")
+        cfg = setup.suggest_smoke_from_stack(tmp_path)
+        assert cfg["kind"] == "service"
+        assert cfg["launch"] == "go run ."
+
+    def test_python_is_cli_without_launch(self, tmp_path: Path) -> None:
+        (tmp_path / "pyproject.toml").write_text("[project]", encoding="utf-8")
+        cfg = setup.suggest_smoke_from_stack(tmp_path)
+        assert cfg["kind"] == "cli"
+        # Entrypoint module isn't inferable from markers, so launch is left blank.
+        assert "launch" not in cfg
+
+    def test_no_stack(self, tmp_path: Path) -> None:
+        assert setup.suggest_smoke_from_stack(tmp_path) == {}
+
+
+class TestFormatSmokeToml:
+    def test_basic_format(self) -> None:
+        cfg = {
+            "kind": "web",
+            "launch": "npm run dev",
+            "golden_path": ["Open the URL", "Create a farm"],
+        }
+        result = setup._format_smoke_toml(cfg)
+        assert "[smoke]" in result
+        assert 'kind = "web"' in result
+        assert 'launch = "npm run dev"' in result
+        assert 'golden_path = ["Open the URL", "Create a farm"]' in result
+
+    def test_ignores_unknown_keys(self) -> None:
+        result = setup._format_smoke_toml({"kind": "cli", "bogus": "x"})
+        assert 'kind = "cli"' in result
+        assert "bogus" not in result
+
+    def test_roundtrips_via_tomllib(self) -> None:
+        try:
+            import tomllib
+        except ModuleNotFoundError:
+            import tomli as tomllib  # type: ignore
+        cfg = {
+            "kind": "service",
+            "launch": 'run --flag "quoted" \\ path',
+            "build": ["go build ./..."],
+            "golden_path": ["Hit /health", "Exercise the main path"],
+        }
+        parsed = tomllib.loads(setup._format_smoke_toml(cfg))
+        assert parsed == {"smoke": cfg}
+
+
+class TestApplySmokeConfig:
+    def test_writes_and_roundtrips(self, project: Path) -> None:
+        try:
+            import tomllib
+        except ModuleNotFoundError:
+            import tomli as tomllib  # type: ignore
+        cfg = setup.suggest_smoke_from_stack(project) or {"kind": "cli"}
+        setup.apply_smoke_config(project, cfg)
+        path = project / ".studio" / "smoke.toml"
+        assert path.exists()
+        parsed = tomllib.loads(path.read_text(encoding="utf-8"))
+        assert parsed["smoke"]["kind"] == cfg["kind"]
+        state = setup.load_setup_state(project)
+        assert state["completed_steps"]["smoke_config"] == 4
+
+    def test_empty_writes_no_file_but_marks_step(self, project: Path) -> None:
+        setup.apply_smoke_config(project, {})
+        assert not (project / ".studio" / "smoke.toml").exists()
+        state = setup.load_setup_state(project)
+        assert state["completed_steps"]["smoke_config"] == 4
+        assert state["choices"]["smoke_config"] == {"kind": "", "keys": []}

@@ -51,6 +51,7 @@ Slash commands are the main way you use Studio day to day. `init` installs them 
 | Command | What it does |
 |---------|--------------|
 | `/studio-implement` | Build one MVI unit through the writer/editor loop, gated on tests-green |
+| `/smoke` | Stand up a live, running version so you can hand-test it (stack-agnostic) |
 
 **Keep the project honest**
 | Command | What it does |
