@@ -96,6 +96,19 @@ The previous principle covers what you write *around* the code: docs, comments, 
 
 The test: could a teammate seeing this file for the first time read it top to bottom and follow it, without you narrating over their shoulder?
 
+### 8. Talk to Humans
+
+**When you report back or ask for a decision, the reader hasn't seen what you just did. Write for that reader.**
+
+Principles 6 and 7 cover what you write into the codebase. This one is about the live conversation: progress updates, flagging a question, surfacing a decision. The person reading has not opened the files you changed, the docs you wrote, or the notes you kept, so nothing you name explains itself.
+
+- Lead with what changed for them and why it matters, not the mechanism you used to get there.
+- Don't drop internal handles — file names, section numbers, config keys, ticket or PR IDs, function names — as if they carry meaning on their own. Leave them out, or say in plain words what the thing is and why the reader should care. Keep the identifier only when it's something they'll act on: a link to click, a command to run, a PR to review.
+- When you flag a decision or a question, give enough context and a recommendation that they can answer without digging. Say what's at stake and which way you'd lean.
+- Plain and a little warm beats a dense status log. A person is reading this, not a build server.
+
+The test: could the reader act on your update — approve the call, answer the question, trust the "it's done" — without opening a single file or asking you to translate?
+
 ---
 
 *Adapted from [Andrej Karpathy's coding principles](https://github.com/forrestchang/andrej-karpathy-skills).*
