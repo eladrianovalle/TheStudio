@@ -500,3 +500,82 @@ class TestClaudeMdInjection:
         """CODING_PRINCIPLES.md is also copied into .studio/source/docs/."""
         install_studio(target_dir, studio_dir)
         assert (target_dir / ".studio" / "source" / "docs" / "CODING_PRINCIPLES.md").is_file()
+
+
+class TestClaudeMdSync:
+    """The coding-principles block in a target's CLAUDE.md is injected at install
+    time and is NOT a manifest file, so check/update must detect and refresh it
+    directly rather than by checksum (see _principles_block_stale)."""
+
+    @staticmethod
+    def _drift_block(claude_md: Path) -> None:
+        """Make the installed principles block differ from the current template."""
+        content = claude_md.read_text(encoding="utf-8")
+        start = content.index(_SENTINEL_BEGIN)
+        end = content.index(_SENTINEL_END) + len(_SENTINEL_END)
+        drifted = content[start:end].replace("Talk to Humans", "OLD PRINCIPLE")
+        claude_md.write_text(content[:start] + drifted + content[end:], encoding="utf-8")
+
+    def test_fresh_install_block_not_stale(self, target_dir, studio_dir):
+        """Right after install the block matches the template — not flagged."""
+        install_studio(target_dir, studio_dir)
+        status = check_studio(target_dir, studio_dir)
+        assert status["claude_md_stale"] is False
+        assert status["up_to_date"] is True
+
+    def test_check_detects_stale_block(self, target_dir, studio_dir):
+        """A principles block that drifted from the template is flagged."""
+        install_studio(target_dir, studio_dir)
+        self._drift_block(target_dir / "CLAUDE.md")
+        status = check_studio(target_dir, studio_dir)
+        assert status["claude_md_stale"] is True
+        assert status["up_to_date"] is False
+
+    def test_check_detects_missing_block(self, target_dir, studio_dir):
+        """A CLAUDE.md that lost its sentinels is flagged so update re-injects."""
+        install_studio(target_dir, studio_dir)
+        (target_dir / "CLAUDE.md").write_text(
+            "# My Game\n\nNo principles block here.\n", encoding="utf-8"
+        )
+        status = check_studio(target_dir, studio_dir)
+        assert status["claude_md_stale"] is True
+
+    def test_missing_claude_md_not_flagged(self, target_dir, studio_dir):
+        """A deliberately-removed CLAUDE.md isn't resurrected by a routine check."""
+        install_studio(target_dir, studio_dir)
+        (target_dir / "CLAUDE.md").unlink()
+        status = check_studio(target_dir, studio_dir)
+        assert status["claude_md_stale"] is False
+
+    def test_update_refreshes_block_preserving_notes(self, target_dir, studio_dir):
+        """Update refreshes a drifted block in place and leaves the user's notes."""
+        claude_md = target_dir / "CLAUDE.md"
+        claude_md.write_text("# My Game\n\nMy project notes.\n", encoding="utf-8")
+        install_studio(target_dir, studio_dir)
+
+        self._drift_block(claude_md)
+        # Add user content AFTER the block too, to prove it survives.
+        claude_md.write_text(
+            claude_md.read_text(encoding="utf-8") + "\n## My Section\n\nKeep me.\n",
+            encoding="utf-8",
+        )
+
+        result = update_studio(target_dir, studio_dir)
+        assert result.get("claude_md_refreshed") is True
+
+        refreshed = claude_md.read_text(encoding="utf-8")
+        assert "Talk to Humans" in refreshed        # template restored
+        assert "OLD PRINCIPLE" not in refreshed      # drift gone
+        assert "My project notes." in refreshed      # notes above kept
+        assert "Keep me." in refreshed               # notes below kept
+
+    def test_update_runs_when_only_block_stale(self, target_dir, studio_dir):
+        """Source files all match; only the block drifted — update still runs."""
+        install_studio(target_dir, studio_dir)
+        self._drift_block(target_dir / "CLAUDE.md")
+
+        result = update_studio(target_dir, studio_dir)
+        assert result.get("claude_md_refreshed") is True
+        # No source-file churn, so counts are zero, but it was not a no-op.
+        assert result["updated"] == 0
+        assert result["added"] == 0
