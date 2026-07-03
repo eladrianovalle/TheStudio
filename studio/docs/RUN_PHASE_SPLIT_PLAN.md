@@ -63,7 +63,7 @@ from the production side.
 5. **`lifecycle.py`**: depends on everything above; last.
 
 Run the full suite after each step (`cd studio && python -m pytest tests/ -q`);
-667+ passing is the bar.
+682+ passing is the bar.
 
 ## Traps
 

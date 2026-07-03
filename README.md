@@ -382,7 +382,7 @@ studio/
   config/studio_settings.toml # Cleanup settings
   config/implementation_loop.toml # Implementation writer/editor loop defaults
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 667 tests (pytest)
+  tests/                    # 682 tests (pytest)
 ```
 
 ---
@@ -393,7 +393,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-667 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, agent metrics tracking, quality ratings and cross-run stats, run outcome capture and cross-repo outcome export/import, session-health records and ledger auto-append, CLAUDE.md offload analysis, unstale audit configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
+682 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, agent metrics tracking, quality ratings and cross-run stats, run outcome capture and cross-repo outcome export/import, session-health records and ledger auto-append, CLAUDE.md offload analysis, unstale audit configuration, smoke test configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 
