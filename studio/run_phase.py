@@ -3066,6 +3066,8 @@ def _do_check_install(args: argparse.Namespace) -> None:
         return
     if status.get("warning"):
         print(f"WARNING: {status['warning']}\n")
+    if status.get("source_note"):
+        print(f"Note: {status['source_note']}.")
     if status["up_to_date"]:
         print(f"Studio at {target} is up to date.")
     else:
@@ -3094,6 +3096,8 @@ def _do_update(args: argparse.Namespace) -> None:
     result = update_studio(target, force=getattr(args, "force", False))
     if result.get("warning"):
         print(f"WARNING: {result['warning']}\n")
+    if result.get("source_note"):
+        print(f"Note: {result['source_note']}.")
     if result.get("blocked"):
         mods = result["locally_modified"]
         print(f"Update BLOCKED: {len(mods)} installed file(s) have local edits that would be overwritten:")
