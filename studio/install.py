@@ -291,6 +291,35 @@ def _build_principles_block(studio_dir: Path) -> str:
     return f"{_SENTINEL_BEGIN}\n{body}\n{_SENTINEL_END}"
 
 
+def _principles_block_stale(target: Path, studio_dir: Path) -> bool:
+    """Return True when the target's CLAUDE.md coding-principles block is missing
+    or behind the current Studio template.
+
+    The block is injected between sentinel markers at install time and is NOT part
+    of the file manifest, so a plain checksum diff never notices when Studio's
+    principles move ahead (e.g. a new principle is added upstream). This lets
+    check/update spot a stale block and refresh it, while leaving the rest of
+    CLAUDE.md — the user's own project notes — untouched.
+
+    Only flags a CLAUDE.md that already exists: a routine update check won't
+    resurrect a file the user deliberately removed.
+    """
+    claude_md = target / "CLAUDE.md"
+    if not claude_md.is_file():
+        return False
+    try:
+        content = claude_md.read_text(encoding="utf-8")
+        expected = _build_principles_block(studio_dir)
+    except OSError:
+        return False
+    if _SENTINEL_BEGIN not in content or _SENTINEL_END not in content:
+        # Installed repo whose CLAUDE.md lost (or never had) the block: refresh it.
+        return True
+    start = content.index(_SENTINEL_BEGIN)
+    end = content.index(_SENTINEL_END) + len(_SENTINEL_END)
+    return content[start:end] != expected
+
+
 def _inject_principles_into_claude_md(target: Path, studio_dir: Path) -> None:
     """Inject or update the coding principles block in the target's CLAUDE.md.
 
@@ -453,7 +482,7 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
     manifest_path = dot_studio / "MANIFEST.json"
 
     if not version_path.exists():
-        return {"installed": False, "up_to_date": False, "changed": [], "missing": [], "extra": [], "locally_modified": [], "warning": None}
+        return {"installed": False, "up_to_date": False, "changed": [], "missing": [], "extra": [], "locally_modified": [], "claude_md_stale": False, "warning": None}
 
     studio_dir, warning = _resolve_source_dir(target, studio_dir)
 
@@ -496,7 +525,12 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
             locally_modified.append(rel)
     locally_modified.sort()
 
-    up_to_date = not changed and not missing
+    # The coding-principles block injected into the target's CLAUDE.md isn't a
+    # manifest file, so checksum diffing never sees it drift. Check it directly
+    # so a new/changed principle upstream registers as an available update.
+    claude_md_stale = _principles_block_stale(target, studio_dir)
+
+    up_to_date = not changed and not missing and not claude_md_stale
 
     return {
         "installed": True,
@@ -505,6 +539,7 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
         "missing": missing,
         "extra": extra,
         "locally_modified": locally_modified,
+        "claude_md_stale": claude_md_stale,
         "warning": warning,
     }
 
@@ -540,15 +575,17 @@ def update_studio(target: Path, studio_dir: Optional[Path] = None, force: bool =
     status = check_studio(target, source_dir)
 
     if status["up_to_date"]:
-        return {"updated": 0, "added": 0, "removed": 0, "locally_modified": status["locally_modified"], "warning": warning}
+        return {"updated": 0, "added": 0, "removed": 0, "locally_modified": status["locally_modified"], "claude_md_refreshed": False, "warning": warning}
 
     # Preview precondition: refuse to clobber locally-edited snapshot files unless forced.
     locally_modified = status.get("locally_modified", [])
     if locally_modified and not force:
         return {"blocked": True, "locally_modified": locally_modified,
-                "updated": 0, "added": 0, "removed": 0, "warning": warning}
+                "updated": 0, "added": 0, "removed": 0, "claude_md_refreshed": False, "warning": warning}
 
-    # Re-install (install_studio is idempotent and preserves user dirs)
+    # Re-install (install_studio is idempotent and preserves user dirs). This
+    # also re-injects the coding-principles block into CLAUDE.md, refreshing it
+    # in place between the sentinel markers and leaving the rest of the file be.
     install_studio(target, source_dir)
 
     return {
@@ -556,5 +593,6 @@ def update_studio(target: Path, studio_dir: Optional[Path] = None, force: bool =
         "added": len(status["missing"]),
         "removed": 0,  # We don't remove extra files
         "locally_modified": locally_modified,
+        "claude_md_refreshed": status.get("claude_md_stale", False),
         "warning": warning,
     }

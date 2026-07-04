@@ -3074,6 +3074,8 @@ def _do_check_install(args: argparse.Namespace) -> None:
             print(f"  Changed: {', '.join(status['changed'])}")
         if status["missing"]:
             print(f"  Missing: {', '.join(status['missing'])}")
+        if status.get("claude_md_stale"):
+            print("  CLAUDE.md: coding-principles block is behind the current template")
         print(f"\nRun: {_entrypoint()} update --target {target}")
 
     locally_modified = status["locally_modified"]
@@ -3101,7 +3103,7 @@ def _do_update(args: argparse.Namespace) -> None:
         print("project config, move it to <repo>/.studio/<name>.toml — the project-override location")
         print(f"update never touches. To overwrite anyway: {_entrypoint()} update --target {target} --force")
         return
-    if result["updated"] == 0 and result["added"] == 0:
+    if result["updated"] == 0 and result["added"] == 0 and not result.get("claude_md_refreshed"):
         print(f"Studio at {target} is already up to date.")
     else:
         print(f"Studio updated at {target}:")
@@ -3109,6 +3111,8 @@ def _do_update(args: argparse.Namespace) -> None:
             print(f"  Updated: {result['updated']} file(s)")
         if result["added"]:
             print(f"  Added: {result['added']} file(s)")
+        if result.get("claude_md_refreshed"):
+            print("  CLAUDE.md: refreshed the coding-principles block (your own notes left untouched)")
         # Check for new setup steps
         try:
             import setup as _setup
