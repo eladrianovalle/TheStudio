@@ -427,6 +427,7 @@ In addition to phase runners, these slash commands are available:
 
 | Command | Purpose |
 |---------|---------|
+| `/spec` | Maps a feature's architecture into an approved, source-of-truth spec before you build it. Runs a discovery-forward, single advocate/contrarian `tech`-phase pass — scope-paced as an alignment scope (Open-Questions Pre-Flight surfaces and answers the architectural unknowns) then a depth scope (pressure-tests and finalizes the design) — then synthesizes one document that explains the feature in plain language *and* build-ready technical detail with a Mermaid diagram. On approval it's saved (tracked) under `specs/` (or `.studio/specs/` in a consuming repo) and linked to its ticket. Args: feature text, `--ticket`, `--id`, `--max-iterations` (default 2), `--plan`. |
 | `/smoke` | Stands up a live, running version of whatever the repo builds so you can hand-test it (web app on a URL, game in Play mode, service on a port, CLI). Stack-agnostic: self-detects how to run the project, or reads `.studio/smoke.toml` to pin the exact setup/build/launch, readiness check, and golden path. |
 | `/unstale` | Comprehensive staleness audit: aligns all docs, code comments, memory, and project tracking to current reality. Stack-agnostic: self-detects Rust/Unity/Node/Python/Go from marker files, or reads `.studio/unstale.toml` to pin exact snapshot commands and audit globs. |
 | `/detest` | Audits the repo's test suite against AI-TDD methodology; finds anti-patterns, fixes them. |

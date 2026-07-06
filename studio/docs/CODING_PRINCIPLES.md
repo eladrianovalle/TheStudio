@@ -105,6 +105,19 @@ Principles 6 and 7 cover what you write into the codebase. This one is about the
 
 The test: could the reader act on your update — approve the call, answer the question, trust the "it's done" — without opening a single file or asking you to translate?
 
+## 9. Spec Before Build
+
+**A non-trivial feature gets an approved architecture spec before you build it.**
+
+Building without a spec means the architecture gets decided implicitly, one commit at a time, with no place to see it whole and no record of why. A spec pulls the design forward: it surfaces the unknowns while they're still cheap to change, pressure-tests the structure, and gives everyone one source of truth to build against.
+
+- Before implementing a real feature, write (or ask for) a spec — the `/spec` command runs the discovery + advocate/contrarian pass and produces one. It explains the feature in plain language *and* build-ready technical detail, with a diagram.
+- The spec is the source of truth only once a human approves it. Then the build follows it; changes to the architecture go back through the spec, not around it.
+- Track the spec with its feature: commit it under `specs/` and link it to the ticket/issue it belongs to, so the design and the work stay tied together.
+- This is for features and meaningful changes, not every task. A one-line fix or an obvious tweak doesn't need a spec — use judgment, the same as everywhere else.
+
+The test: if someone asked "what are we building and why is it shaped this way?", is there an approved document that answers it — or does the answer only exist in your head and the diff?
+
 ---
 
 *These guidelines are working if:* fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.

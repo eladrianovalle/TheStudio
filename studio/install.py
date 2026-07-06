@@ -74,6 +74,7 @@ SLASH_COMMANDS = [
     "studio-setup.md",
     "studio-implement.md",
     "smoke.md",
+    "spec.md",
 ]
 
 # Claude Code Workflows to copy to {target}/.claude/workflows/ (verbatim, like commands)
