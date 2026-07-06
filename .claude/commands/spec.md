@@ -100,9 +100,10 @@ into the spec as a known risk. A rejected architecture should not silently becom
 From the approved advocate proposal, the contrarian's critique, and the recorded decisions
 (`{run_dir}/decisions.md` if present), write the spec to the path from Step 1. Write it for two
 readers at once — a newcomer who needs to understand the feature, and an engineer who has to build
-it. Use this structure:
+it. Use this structure (the outer fence is four backticks so the inner ` ```mermaid ` block
+below doesn't close it early — the spec file you write uses a normal three-backtick fence):
 
-```markdown
+````markdown
 ---
 feature: <human title>
 slug: <slug>
@@ -156,7 +157,7 @@ spec that hides its soft spots is worse than one that names them.
 How this maps to buildable units — ideally a short list of MVI units (each a complete, usable
 interaction; "build a skateboard, not a wheel"), in dependency order. This is the bridge to
 `/studio-implement`.
-```
+````
 
 Keep the writing human (Coding Principles §6): plain language, say what a thing does and why it
 matters, match a calm engineering voice. The diagram is required, not optional — if the feature
