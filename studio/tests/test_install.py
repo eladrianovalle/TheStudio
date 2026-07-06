@@ -7,6 +7,7 @@ Tests cover:
   - slash commands copied verbatim (no rewriting needed)
 """
 import json
+import shutil
 import subprocess
 import pytest
 from pathlib import Path
@@ -650,3 +651,120 @@ class TestSourceAtDefaultBranch:
         with install._source_at_default_branch(studio, enabled=True) as (src, note):
             assert (src / "marker.txt").read_text(encoding="utf-8") == "main version\n"
             assert note is None  # on main (just dirty), so no branch was bypassed
+
+
+class TestCheckStudioStaleness:
+    """check-install refuses a false 'up to date' when the resolved Studio source
+    is itself behind its own git remote (the #20 follow-up). Hermetic: a temp git
+    source repo wired to a LOCAL BARE remote, no network."""
+
+    @staticmethod
+    def _git(repo: Path, *args: str) -> None:
+        subprocess.run(["git", "-C", str(repo), *args],
+                       check=True, capture_output=True, text=True)
+
+    def _source_repo_with_remote(self, tmp_path, studio_dir):
+        """Build a hermetic Studio source repo (a copy of the real studio/ tree)
+        on `main`, wired to a bare origin remote sharing one commit. Returns the
+        studio/ dir inside it."""
+        root = tmp_path / "src"
+        studio = root / "studio"
+        shutil.copytree(
+            studio_dir, studio,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache"),
+        )
+        remote = tmp_path / "origin.git"
+        subprocess.run(
+            ["git", "-c", "init.defaultBranch=main", "init", "--bare", "-q", str(remote)],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-c", "init.defaultBranch=main", "init", "-q", str(root)],
+            check=True, capture_output=True,
+        )
+        self._git(root, "config", "user.email", "t@t")
+        self._git(root, "config", "user.name", "t")
+        self._git(root, "remote", "add", "origin", str(remote))
+        self._git(root, "add", "-A")
+        self._git(root, "commit", "-qm", "init")
+        self._git(root, "push", "-q", "-u", "origin", "main")
+        return studio
+
+    def _advance_origin(self, tmp_path, remote_name="origin.git"):
+        """Push one new commit onto the bare remote's main through a throwaway
+        clone, so the source repo's local main falls behind origin/main. The new
+        commit adds a non-source file, so it moves the ref WITHOUT changing any
+        installed file — isolating staleness from the file diff."""
+        remote = tmp_path / remote_name
+        clone = tmp_path / "advancer"
+        subprocess.run(["git", "clone", "-q", str(remote), str(clone)],
+                       check=True, capture_output=True)
+        self._git(clone, "config", "user.email", "t@t")
+        self._git(clone, "config", "user.name", "t")
+        (clone / "NOTES.txt").write_text("moved origin ahead\n", encoding="utf-8")
+        self._git(clone, "add", "-A")
+        self._git(clone, "commit", "-qm", "advance origin")
+        self._git(clone, "push", "-q", "origin", "main")
+
+    def test_stale_source_refuses_up_to_date(self, target_dir, tmp_path, monkeypatch):
+        """A source whose local main is behind origin returns up_to_date=False and
+        a stale `staleness`, even though every installed file still matches."""
+        source = self._source_repo_with_remote(tmp_path, install._get_studio_root())
+        install_studio(target_dir, source)
+        self._advance_origin(tmp_path)
+        # check_studio(studio_dir=None) auto-resolves the source through _get_studio_root.
+        monkeypatch.setattr(install, "_get_studio_root", lambda: source)
+
+        status = check_studio(target_dir)  # fetch=True catches the unfetched origin
+
+        assert status["up_to_date"] is False
+        assert status["staleness"] is not None
+        assert status["staleness"].is_stale is True
+        assert status["staleness"].behind == 1
+        assert status["staleness"].remote_ref == "origin/main"
+        # Isolated staleness signal: the honest diff, not phantom file changes.
+        assert status["changed"] == []
+        assert status["missing"] == []
+
+    def test_even_source_still_reports_up_to_date(self, target_dir, tmp_path, monkeypatch):
+        """Regression guard: an even/clean source (not behind origin) must still
+        report up_to_date=True and must not be falsely flagged stale."""
+        source = self._source_repo_with_remote(tmp_path, install._get_studio_root())
+        install_studio(target_dir, source)
+        monkeypatch.setattr(install, "_get_studio_root", lambda: source)
+
+        status = check_studio(target_dir)  # fetch against origin, which is even
+
+        assert status["up_to_date"] is True
+        assert status["staleness"] is not None
+        assert status["staleness"].is_stale is False
+
+    def test_no_fetch_uses_cached_refs(self, target_dir, tmp_path, monkeypatch):
+        """--no-fetch (fetch=False) compares against cached refs only. Origin moved
+        ahead but was never fetched, so the cached refs still look even → not stale."""
+        source = self._source_repo_with_remote(tmp_path, install._get_studio_root())
+        install_studio(target_dir, source)
+        self._advance_origin(tmp_path)  # origin ahead, but source never fetches it
+        monkeypatch.setattr(install, "_get_studio_root", lambda: source)
+
+        status = check_studio(target_dir, fetch=False)
+
+        assert status["staleness"] is not None
+        assert status["staleness"].is_stale is False
+        assert status["up_to_date"] is True
+
+    def test_handler_exits_nonzero_on_stale_source(self, target_dir, tmp_path, monkeypatch):
+        """The check-install handler prints a block and exits non-zero over a stale
+        source, so a false 'up to date' can never reach stdout."""
+        import argparse
+        import run_phase
+
+        source = self._source_repo_with_remote(tmp_path, install._get_studio_root())
+        install_studio(target_dir, source)
+        self._advance_origin(tmp_path)
+        monkeypatch.setattr(install, "_get_studio_root", lambda: source)
+
+        args = argparse.Namespace(target=target_dir, no_fetch=False)
+        with pytest.raises(SystemExit) as exc:
+            run_phase._do_check_install(args)
+        assert exc.value.code == 1

@@ -2048,6 +2048,12 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Path to the target project directory.",
     )
+    check_install_parser.add_argument(
+        "--no-fetch",
+        action="store_true",
+        help="Skip the network fetch of the Studio source's remote; compare "
+             "against cached refs only (for offline use).",
+    )
 
     update_parser = subparsers.add_parser(
         "update", help="Update installed Studio from source."
@@ -3057,9 +3063,9 @@ def _do_init(args: argparse.Namespace) -> None:
 
 def _do_check_install(args: argparse.Namespace) -> None:
     """Check if installed Studio is up to date."""
-    from install import check_studio
+    from install import check_studio, _resolve_source_dir
     target = Path(args.target).resolve()
-    status = check_studio(target)
+    status = check_studio(target, fetch=not args.no_fetch)
     if not status["installed"]:
         print(f"Studio is NOT installed at {target}")
         print(f"Run: {_entrypoint()} init --target {target}")
@@ -3068,6 +3074,29 @@ def _do_check_install(args: argparse.Namespace) -> None:
         print(f"WARNING: {status['warning']}\n")
     if status.get("source_note"):
         print(f"Note: {status['source_note']}.")
+
+    # A stale source (its own local main behind origin) makes any "up to date"
+    # false: the installed files match a source that is itself out of date. Refuse
+    # the green verdict — show the honest diff against origin, name the one command
+    # that catches the source up, and exit non-zero so nothing prints "up to date".
+    staleness = status.get("staleness")
+    if staleness and staleness.is_stale:
+        source_dir, _ = _resolve_source_dir(target, None)
+        print(
+            f"Studio source is {staleness.behind} commit(s) behind "
+            f"{staleness.remote_ref}; comparing against {staleness.remote_ref} "
+            f"instead of the stale local copy."
+        )
+        if status["changed"]:
+            print(f"  Changed: {', '.join(status['changed'])}")
+        if status["missing"]:
+            print(f"  Missing: {', '.join(status['missing'])}")
+        if status.get("claude_md_stale"):
+            print("  CLAUDE.md: coding-principles block is behind the current template")
+        print(f"\nCatch your source up first:  git -C {source_dir} pull")
+        print(f"Then:  {_entrypoint()} update --target {target}")
+        sys.exit(1)
+
     if status["up_to_date"]:
         print(f"Studio at {target} is up to date.")
     else:

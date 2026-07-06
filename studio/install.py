@@ -355,7 +355,7 @@ def _source_staleness(
 
 @contextmanager
 def _source_at_default_branch(
-    studio_dir: Path, enabled: bool
+    studio_dir: Path, enabled: bool, override_ref: Optional[str] = None
 ) -> Iterator[Tuple[Path, Optional[str]]]:
     """Yield ``(source_dir, note)`` to read Studio source from.
 
@@ -367,11 +367,17 @@ def _source_at_default_branch(
     uncommitted edits). This is the backstop that keeps a work-in-progress
     branch from leaking into other projects' update checks.
 
+    ``override_ref`` lets a caller that already knows the source is stale read a
+    specific ref instead (e.g. ``origin/main``). When given, the clean-tree fast
+    path is skipped — the whole point is to read something *other* than the
+    checked-out local tree — and ``note`` explains that the source was read from
+    origin instead of the behind-by-N local branch.
+
     Falls back to ``studio_dir`` unchanged (``note`` = None) when disabled, not a
-    git repo, the branch can't be resolved, or the checkout is already sitting on
-    that branch's commit with a clean tree. ``note`` is a short human line naming
-    the branch that was bypassed, for the CLI to surface; None when nothing was
-    bypassed.
+    git repo, the branch can't be resolved, or (with no override) the checkout is
+    already sitting on that branch's commit with a clean tree. ``note`` is a short
+    human line naming the ref that was read in place of the checkout; None when
+    nothing was bypassed.
     """
     if not enabled:
         yield studio_dir, None
@@ -379,17 +385,25 @@ def _source_at_default_branch(
 
     top = _git_out(studio_dir, "rev-parse", "--show-toplevel")
     repo = Path(top) if top else None
-    ref = _default_branch_ref(repo) if repo else None
-    if repo is None or ref is None:
+    if repo is None:
+        yield studio_dir, None
+        return
+
+    # With an override the caller has already decided which ref to read (the
+    # stale-source case reads origin/main); otherwise resolve the local default branch.
+    ref = override_ref if override_ref is not None else _default_branch_ref(repo)
+    if ref is None:
         yield studio_dir, None
         return
 
     # Fast path: already on the default branch's commit with a clean tree, so the
-    # working tree already IS the finished source. Skip the worktree churn.
-    head = _git_out(repo, "rev-parse", "HEAD")
-    if head is not None and head == _git_out(repo, "rev-parse", ref) and not _git_out(repo, "status", "--porcelain"):
-        yield studio_dir, None
-        return
+    # working tree already IS the finished source. Skip the worktree churn. An
+    # override ref is by definition not the checked-out tree, so never fast-path it.
+    if override_ref is None:
+        head = _git_out(repo, "rev-parse", "HEAD")
+        if head is not None and head == _git_out(repo, "rev-parse", ref) and not _git_out(repo, "status", "--porcelain"):
+            yield studio_dir, None
+            return
 
     try:
         rel = studio_dir.resolve().relative_to(repo.resolve())
@@ -409,7 +423,9 @@ def _source_at_default_branch(
             return
         added = True
         note = None
-        if current and current != ref:
+        if override_ref is not None:
+            note = f"read Studio source from '{ref}' — your local checkout is behind it"
+        elif current and current != ref:
             note = f"read Studio source from '{ref}' (the source checkout is on '{current}')"
         yield worktree / rel, note
     finally:
@@ -690,12 +706,17 @@ def install_studio(
     return dot_studio
 
 
-def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
+def check_studio(target: Path, studio_dir: Optional[Path] = None, fetch: bool = True) -> dict:
     """Check if an installed Studio is up to date with the source.
+
+    ``fetch`` controls whether the staleness check does a short network fetch of
+    the source's remote before comparing (default True; ``--no-fetch`` on the CLI
+    passes False to compare against cached refs only).
 
     Returns dict with:
         installed: bool: whether .studio/VERSION exists
-        up_to_date: bool: whether all files match source checksums
+        up_to_date: bool: whether all files match source checksums AND the source
+            itself is not behind its own remote
         changed: list[str]: files where upstream differs from what was installed (update available)
         missing: list[str]: files in source but not installed
         extra: list[str]: files installed but not in source
@@ -709,6 +730,9 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
             branch instead of the checkout's parked branch, naming what was bypassed
         warning: str | None: set when the live source could not be resolved
             (e.g. run from a stale snapshot), so the result may be unreliable
+        staleness: SourceStaleness | None: whether the resolved source is itself
+            behind its git remote (None when not computed, e.g. an explicit
+            studio_dir was passed so staleness detection is disabled)
     """
     target = Path(target).resolve()
     dot_studio = target / ".studio"
@@ -716,7 +740,7 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
     manifest_path = dot_studio / "MANIFEST.json"
 
     if not version_path.exists():
-        return {"installed": False, "up_to_date": False, "changed": [], "missing": [], "extra": [], "locally_modified": [], "claude_md_stale": False, "source_note": None, "warning": None}
+        return {"installed": False, "up_to_date": False, "changed": [], "missing": [], "extra": [], "locally_modified": [], "claude_md_stale": False, "source_note": None, "warning": None, "staleness": None}
 
     # When the source was auto-resolved (not handed in explicitly by a test or a
     # caller that already knows) and resolved cleanly, read it from the default
@@ -724,6 +748,14 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
     auto_resolved = studio_dir is None
     studio_dir, warning = _resolve_source_dir(target, studio_dir)
     enabled = auto_resolved and warning is None
+
+    # Second question, separate from the file diff: is the resolved source itself
+    # behind its own remote? If so, the files could match a source that is itself
+    # out of date — a false "up to date". Compute this BEFORE materializing the
+    # tree, and when stale, materialize/diff against origin so the change list the
+    # user sees is the honest "what origin/main has that you don't".
+    staleness = _source_staleness(studio_dir, fetch=fetch) if enabled else None
+    override_ref = staleness.remote_ref if (staleness and staleness.is_stale) else None
 
     # Load installed manifest
     installed_manifest: Dict[str, str] = {}
@@ -733,7 +765,7 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
         except (json.JSONDecodeError, ValueError):
             installed_manifest = {}
 
-    with _source_at_default_branch(studio_dir, enabled) as (source_dir, source_note):
+    with _source_at_default_branch(studio_dir, enabled, override_ref) as (source_dir, source_note):
         # Build current source manifest (source files + verbatim .claude/ files)
         source_files = _collect_source_files(source_dir)
         manifest_keys = [str(p) for p in source_files] + _claude_manifest_keys(source_dir)
@@ -770,7 +802,12 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
         # so a new/changed principle upstream registers as an available update.
         claude_md_stale = _principles_block_stale(target, source_dir)
 
-    up_to_date = not changed and not missing and not claude_md_stale
+    up_to_date = (
+        not changed
+        and not missing
+        and not claude_md_stale
+        and not (staleness and staleness.is_stale)
+    )
 
     return {
         "installed": True,
@@ -782,6 +819,7 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
         "claude_md_stale": claude_md_stale,
         "source_note": source_note,
         "warning": warning,
+        "staleness": staleness,
     }
 
 
