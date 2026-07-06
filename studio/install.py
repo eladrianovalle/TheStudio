@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import tempfile
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple
@@ -233,6 +234,123 @@ def _default_branch_ref(repo: Path) -> Optional[str]:
         if _git_out(repo, "rev-parse", "--verify", "--quiet", f"refs/remotes/{ref}") is not None:
             return ref
     return None
+
+
+@dataclass(frozen=True)
+class SourceStaleness:
+    """Whether a Studio source checkout is behind its own git remote.
+
+    Produced by ``_source_staleness``. Best-effort by design: when staleness
+    can't be determined (offline, no remote, detached HEAD, not a git repo),
+    ``is_stale`` is False and ``reason`` says why, so callers fall back to
+    today's behavior instead of blocking on a guess.
+    """
+    is_stale: bool
+    behind: int
+    remote_ref: Optional[str]
+    fetched: bool
+    reason: Optional[str]
+
+
+def _default_branch_ref_local(repo: Path) -> Optional[str]:
+    """Return the LOCAL default branch name ('main' or 'master') in ``repo``.
+
+    This is the local-only half of ``_default_branch_ref``. It deliberately does
+    NOT fall back to ``origin/main``: staleness detection has to compare the local
+    branch against origin, and if the local ref resolved to origin the two sides
+    would be identical and always look "even". Returns None when neither local
+    branch exists (detached HEAD with no default branch, or not a git repo).
+    """
+    for ref in ("main", "master"):
+        if _git_out(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{ref}") is not None:
+            return ref
+    return None
+
+
+def _git_fetch(repo: Path, branch: str, *, timeout: float) -> bool:
+    """Fetch ``origin``'s ``branch`` into ``repo``, bounded by ``timeout`` seconds.
+
+    A small, network-bounded sibling to ``_git_out``. Returns True when the fetch
+    succeeds and False on ANY failure — a non-zero git exit, git missing, or the
+    fetch running past ``timeout``. It never raises, so an offline or slow remote
+    degrades to "couldn't fetch" rather than crashing the update check.
+
+    Kept separate from ``_git_out`` on purpose: that helper is called all over
+    with ``check=True`` and no timeout, and giving it a network timeout would
+    ripple to every caller.
+    """
+    try:
+        subprocess.run(
+            ["git", "-C", str(repo), "fetch", "origin", branch],
+            capture_output=True, text=True, check=True, timeout=timeout,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        return False
+    return True
+
+
+def _source_staleness(
+    repo: Path, *, fetch: bool = True, timeout: float = 5.0
+) -> SourceStaleness:
+    """Report whether ``repo``'s local default branch is behind its origin.
+
+    Best-effort and NEVER raises. The steps: resolve the local default branch,
+    confirm ``origin/<branch>`` exists, optionally fetch origin (bounded by
+    ``timeout``), then count how far local is behind origin.
+
+    ``is_stale`` is True ONLY when local is strictly *behind* origin. A checkout
+    that is merely *ahead* (unpushed local work) is not stale and must not be
+    flagged. Every "can't tell" case — no local default branch, no origin
+    tracking ref, or a comparison that fails — returns ``is_stale=False`` with a
+    ``reason`` set, so the caller proceeds exactly as it would without staleness
+    detection.
+    """
+    branch = _default_branch_ref_local(repo)
+    if branch is None:
+        return SourceStaleness(
+            is_stale=False, behind=0, remote_ref=None, fetched=False,
+            reason="no local main/master branch (detached HEAD or not a git repo)",
+        )
+
+    remote_ref = f"origin/{branch}"
+    origin_ref_exists = _git_out(
+        repo, "rev-parse", "--verify", "--quiet", f"refs/remotes/{remote_ref}"
+    ) is not None
+    if not origin_ref_exists:
+        return SourceStaleness(
+            is_stale=False, behind=0, remote_ref=None, fetched=False,
+            reason=f"no {remote_ref} tracking ref (origin not configured)",
+        )
+
+    fetched = False
+    if fetch:
+        fetched = _git_fetch(repo, branch, timeout=timeout)
+
+    # `--left-right --count A...B` prints "<left>\t<right>": left = commits only
+    # on A (local, i.e. ahead), right = commits only on B (origin, i.e. behind).
+    counts = _git_out(
+        repo, "rev-list", "--left-right", "--count", f"{branch}...{remote_ref}"
+    )
+    if counts is None:
+        return SourceStaleness(
+            is_stale=False, behind=0, remote_ref=remote_ref, fetched=fetched,
+            reason=f"could not compare {branch} against {remote_ref}",
+        )
+
+    fields = counts.split()
+    behind = int(fields[1]) if len(fields) == 2 else 0
+
+    reason = None
+    if fetch and not fetched:
+        reason = f"could not fetch {remote_ref}; compared against cached refs"
+
+    return SourceStaleness(
+        is_stale=behind > 0,
+        behind=behind,
+        remote_ref=remote_ref,
+        fetched=fetched,
+        reason=reason,
+    )
 
 
 @contextmanager
