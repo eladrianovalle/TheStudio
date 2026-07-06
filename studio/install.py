@@ -21,9 +21,11 @@ import hashlib
 import json
 import shutil
 import subprocess
+import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
 # Files to copy from studio/ into .studio/source/
 SOURCE_FILES = [
@@ -201,6 +203,103 @@ def _recorded_upstream_source(version_path: Path, snapshot: Path) -> Optional[Pa
     return p
 
 
+def _git_out(repo: Path, *args: str) -> Optional[str]:
+    """Run a git command in ``repo`` and return its stripped stdout.
+
+    Returns ``None`` if git isn't available or the command fails, so callers can
+    treat "can't tell" the same as "not a git repo" and fall back safely.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo), *args],
+            capture_output=True, text=True, check=True,
+        )
+    except (subprocess.CalledProcessError, OSError):
+        return None
+    return result.stdout.strip()
+
+
+def _default_branch_ref(repo: Path) -> Optional[str]:
+    """Resolve the branch that holds the *finished* Studio source in ``repo``.
+
+    Prefers a local ``main``/``master``, then the same on ``origin``. Returns
+    ``None`` when none resolve, so the caller falls back to reading the working
+    tree as-is.
+    """
+    for ref in ("main", "master"):
+        if _git_out(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{ref}") is not None:
+            return ref
+    for ref in ("origin/main", "origin/master"):
+        if _git_out(repo, "rev-parse", "--verify", "--quiet", f"refs/remotes/{ref}") is not None:
+            return ref
+    return None
+
+
+@contextmanager
+def _source_at_default_branch(
+    studio_dir: Path, enabled: bool
+) -> Iterator[Tuple[Path, Optional[str]]]:
+    """Yield ``(source_dir, note)`` to read Studio source from.
+
+    When ``enabled`` and ``studio_dir`` is inside a git working copy with a
+    resolvable default branch, materialize that branch's *committed* tree in a
+    throwaway detached worktree and yield the matching source dir inside it — so
+    ``check``/``update`` always read the finished ``main`` version, never
+    whatever branch the source checkout happens to be parked on (or its
+    uncommitted edits). This is the backstop that keeps a work-in-progress
+    branch from leaking into other projects' update checks.
+
+    Falls back to ``studio_dir`` unchanged (``note`` = None) when disabled, not a
+    git repo, the branch can't be resolved, or the checkout is already sitting on
+    that branch's commit with a clean tree. ``note`` is a short human line naming
+    the branch that was bypassed, for the CLI to surface; None when nothing was
+    bypassed.
+    """
+    if not enabled:
+        yield studio_dir, None
+        return
+
+    top = _git_out(studio_dir, "rev-parse", "--show-toplevel")
+    repo = Path(top) if top else None
+    ref = _default_branch_ref(repo) if repo else None
+    if repo is None or ref is None:
+        yield studio_dir, None
+        return
+
+    # Fast path: already on the default branch's commit with a clean tree, so the
+    # working tree already IS the finished source. Skip the worktree churn.
+    head = _git_out(repo, "rev-parse", "HEAD")
+    if head is not None and head == _git_out(repo, "rev-parse", ref) and not _git_out(repo, "status", "--porcelain"):
+        yield studio_dir, None
+        return
+
+    try:
+        rel = studio_dir.resolve().relative_to(repo.resolve())
+    except ValueError:
+        yield studio_dir, None
+        return
+
+    current = _git_out(repo, "rev-parse", "--abbrev-ref", "HEAD")
+    tmp = Path(tempfile.mkdtemp(prefix="studio-src-"))
+    worktree = tmp / "wt"
+    added = False
+    try:
+        # --detach checks out the commit, not the branch, so it works even when
+        # `main` is already checked out in another worktree.
+        if _git_out(repo, "worktree", "add", "--detach", str(worktree), ref) is None:
+            yield studio_dir, None
+            return
+        added = True
+        note = None
+        if current and current != ref:
+            note = f"read Studio source from '{ref}' (the source checkout is on '{current}')"
+        yield worktree / rel, note
+    finally:
+        if added:
+            _git_out(repo, "worktree", "remove", "--force", str(worktree))
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def _collect_source_files(studio_dir: Path) -> List[Path]:
     """Collect all source files to install (relative to studio/)."""
     files: List[Path] = []
@@ -360,7 +459,11 @@ def _inject_principles_into_claude_md(target: Path, studio_dir: Path) -> None:
         claude_md.write_text("\n".join(lines), encoding="utf-8")
 
 
-def install_studio(target: Path, studio_dir: Optional[Path] = None) -> Path:
+def install_studio(
+    target: Path,
+    studio_dir: Optional[Path] = None,
+    source_path_override: Optional[Path] = None,
+) -> Path:
     """Install Studio into a target project directory.
 
     Creates:
@@ -369,6 +472,12 @@ def install_studio(target: Path, studio_dir: Optional[Path] = None) -> Path:
         {target}/.claude/workflows/   : Claude Code workflows (verbatim, resolve .studio/source/ at run time)
         {target}/.studio/VERSION      : Version info
         {target}/.studio/MANIFEST.json : Install manifest with checksums
+
+    ``source_path_override`` records a different upstream in VERSION than the dir
+    files were copied from. Used when ``update`` copies from a throwaway worktree
+    of ``main`` (see ``_source_at_default_branch``): the files come from the temp
+    worktree, but VERSION must still point at the real, durable upstream so the
+    next update knows where to look — never at the temp path, which is gone by then.
 
     Returns the .studio directory path.
     """
@@ -440,7 +549,9 @@ def install_studio(target: Path, studio_dir: Optional[Path] = None) -> Path:
     # When (re)installing FROM the snapshot (e.g. `init` run inside an installed
     # repo), preserve a previously-recorded upstream pointer instead of clobbering it.
     source_path = studio_dir
-    if studio_dir.resolve() == source_dest.resolve():
+    if source_path_override is not None:
+        source_path = source_path_override
+    elif studio_dir.resolve() == source_dest.resolve():
         prior = _recorded_upstream_source(version_path, source_dest.resolve())
         if prior is not None:
             source_path = prior
@@ -474,6 +585,10 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
             drifted from the checksum recorded at install, i.e. local edits that an
             `update` would OVERWRITE (the clobber set; spans both .studio/source/
             files and the verbatim .claude/ commands/workflows)
+        claude_md_stale: bool: whether the CLAUDE.md coding-principles block is
+            behind the current template (not a manifest file, so checked directly)
+        source_note: str | None: set when the source was read from the default
+            branch instead of the checkout's parked branch, naming what was bypassed
         warning: str | None: set when the live source could not be resolved
             (e.g. run from a stale snapshot), so the result may be unreliable
     """
@@ -483,9 +598,14 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
     manifest_path = dot_studio / "MANIFEST.json"
 
     if not version_path.exists():
-        return {"installed": False, "up_to_date": False, "changed": [], "missing": [], "extra": [], "locally_modified": [], "claude_md_stale": False, "warning": None}
+        return {"installed": False, "up_to_date": False, "changed": [], "missing": [], "extra": [], "locally_modified": [], "claude_md_stale": False, "source_note": None, "warning": None}
 
+    # When the source was auto-resolved (not handed in explicitly by a test or a
+    # caller that already knows) and resolved cleanly, read it from the default
+    # branch's committed tree, not whatever branch the checkout is parked on.
+    auto_resolved = studio_dir is None
     studio_dir, warning = _resolve_source_dir(target, studio_dir)
+    enabled = auto_resolved and warning is None
 
     # Load installed manifest
     installed_manifest: Dict[str, str] = {}
@@ -495,41 +615,42 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
         except (json.JSONDecodeError, ValueError):
             installed_manifest = {}
 
-    # Build current source manifest (source files + verbatim .claude/ files)
-    source_files = _collect_source_files(studio_dir)
-    manifest_keys = [str(p) for p in source_files] + _claude_manifest_keys(studio_dir)
-    source_manifest = _build_manifest(manifest_keys, studio_dir)
+    with _source_at_default_branch(studio_dir, enabled) as (source_dir, source_note):
+        # Build current source manifest (source files + verbatim .claude/ files)
+        source_files = _collect_source_files(source_dir)
+        manifest_keys = [str(p) for p in source_files] + _claude_manifest_keys(source_dir)
+        source_manifest = _build_manifest(manifest_keys, source_dir)
 
-    changed: List[str] = []
-    missing: List[str] = []
-    extra: List[str] = []
+        changed: List[str] = []
+        missing: List[str] = []
+        extra: List[str] = []
 
-    # Check source files against installed
-    for rel, sha in source_manifest.items():
-        if rel not in installed_manifest:
-            missing.append(rel)
-        elif installed_manifest[rel] != sha:
-            changed.append(rel)
+        # Check source files against installed
+        for rel, sha in source_manifest.items():
+            if rel not in installed_manifest:
+                missing.append(rel)
+            elif installed_manifest[rel] != sha:
+                changed.append(rel)
 
-    # Check for extra installed files
-    for rel in installed_manifest:
-        if rel not in source_manifest:
-            extra.append(rel)
+        # Check for extra installed files
+        for rel in installed_manifest:
+            if rel not in source_manifest:
+                extra.append(rel)
 
-    # Local modifications: installed file on disk differs from what was recorded
-    # at install. These are the files an `update` re-install would clobber:
-    # source files under .studio/source/ AND the verbatim .claude/ commands/workflows.
-    locally_modified: List[str] = []
-    for rel, recorded_sha in installed_manifest.items():
-        f = _manifest_installed_path(target, rel)
-        if f.is_file() and _sha256(f) != recorded_sha:
-            locally_modified.append(rel)
-    locally_modified.sort()
+        # Local modifications: installed file on disk differs from what was recorded
+        # at install. These are the files an `update` re-install would clobber:
+        # source files under .studio/source/ AND the verbatim .claude/ commands/workflows.
+        locally_modified: List[str] = []
+        for rel, recorded_sha in installed_manifest.items():
+            f = _manifest_installed_path(target, rel)
+            if f.is_file() and _sha256(f) != recorded_sha:
+                locally_modified.append(rel)
+        locally_modified.sort()
 
-    # The coding-principles block injected into the target's CLAUDE.md isn't a
-    # manifest file, so checksum diffing never sees it drift. Check it directly
-    # so a new/changed principle upstream registers as an available update.
-    claude_md_stale = _principles_block_stale(target, studio_dir)
+        # The coding-principles block injected into the target's CLAUDE.md isn't a
+        # manifest file, so checksum diffing never sees it drift. Check it directly
+        # so a new/changed principle upstream registers as an available update.
+        claude_md_stale = _principles_block_stale(target, source_dir)
 
     up_to_date = not changed and not missing and not claude_md_stale
 
@@ -541,6 +662,7 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None) -> dict:
         "extra": extra,
         "locally_modified": locally_modified,
         "claude_md_stale": claude_md_stale,
+        "source_note": source_note,
         "warning": warning,
     }
 
@@ -570,30 +692,40 @@ def update_studio(target: Path, studio_dir: Optional[Path] = None, force: bool =
 
     # Resolve the live source up front so both the check and the re-install copy
     # from upstream, not from the (possibly stale) installed snapshot (#20).
+    auto_resolved = studio_dir is None
     source_dir, warning = _resolve_source_dir(target, studio_dir)
+    enabled = auto_resolved and warning is None
 
-    # Check what needs updating
-    status = check_studio(target, source_dir)
+    # Read (and copy) from the default branch's committed tree, not whatever
+    # branch the source checkout is parked on. One materialization covers both
+    # the check and the re-install so they agree on the source.
+    with _source_at_default_branch(source_dir, enabled) as (effective_dir, source_note):
+        # Check what needs updating (explicit dir, so check_studio won't re-materialize).
+        status = check_studio(target, effective_dir)
 
-    if status["up_to_date"]:
-        return {"updated": 0, "added": 0, "removed": 0, "locally_modified": status["locally_modified"], "claude_md_refreshed": False, "warning": warning}
+        if status["up_to_date"]:
+            return {"updated": 0, "added": 0, "removed": 0, "locally_modified": status["locally_modified"], "claude_md_refreshed": False, "source_note": source_note, "warning": warning}
 
-    # Preview precondition: refuse to clobber locally-edited snapshot files unless forced.
-    locally_modified = status.get("locally_modified", [])
-    if locally_modified and not force:
-        return {"blocked": True, "locally_modified": locally_modified,
-                "updated": 0, "added": 0, "removed": 0, "claude_md_refreshed": False, "warning": warning}
+        # Preview precondition: refuse to clobber locally-edited snapshot files unless forced.
+        locally_modified = status.get("locally_modified", [])
+        if locally_modified and not force:
+            return {"blocked": True, "locally_modified": locally_modified,
+                    "updated": 0, "added": 0, "removed": 0, "claude_md_refreshed": False, "source_note": source_note, "warning": warning}
 
-    # Re-install (install_studio is idempotent and preserves user dirs). This
-    # also re-injects the coding-principles block into CLAUDE.md, refreshing it
-    # in place between the sentinel markers and leaving the rest of the file be.
-    install_studio(target, source_dir)
+        # Re-install (install_studio is idempotent and preserves user dirs). This
+        # also re-injects the coding-principles block into CLAUDE.md, refreshing it
+        # in place between the sentinel markers and leaving the rest of the file be.
+        # Copy from the materialized tree, but record the durable upstream in
+        # VERSION — not the throwaway worktree path, which is gone after this.
+        override = source_dir if effective_dir != source_dir else None
+        install_studio(target, effective_dir, source_path_override=override)
 
-    return {
-        "updated": len(status["changed"]),
-        "added": len(status["missing"]),
-        "removed": 0,  # We don't remove extra files
-        "locally_modified": locally_modified,
-        "claude_md_refreshed": status.get("claude_md_stale", False),
-        "warning": warning,
-    }
+        return {
+            "updated": len(status["changed"]),
+            "added": len(status["missing"]),
+            "removed": 0,  # We don't remove extra files
+            "locally_modified": locally_modified,
+            "claude_md_refreshed": status.get("claude_md_stale", False),
+            "source_note": source_note,
+            "warning": warning,
+        }

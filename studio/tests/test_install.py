@@ -7,9 +7,11 @@ Tests cover:
   - slash commands copied verbatim (no rewriting needed)
 """
 import json
+import subprocess
 import pytest
 from pathlib import Path
 
+import install
 from install import (
     install_studio,
     check_studio,
@@ -579,3 +581,72 @@ class TestClaudeMdSync:
         # No source-file churn, so counts are zero, but it was not a no-op.
         assert result["updated"] == 0
         assert result["added"] == 0
+
+
+class TestSourceAtDefaultBranch:
+    """The backstop that makes check/update read the finished `main` version of
+    Studio source, never whatever branch the source checkout is parked on."""
+
+    @staticmethod
+    def _make_source_repo(root: Path) -> Path:
+        """A minimal git repo shaped like Studio (studio/ under root) with `main`
+        committed. Returns the studio/ dir."""
+        studio = root / "studio"
+        studio.mkdir(parents=True)
+        subprocess.run(["git", "-c", "init.defaultBranch=main", "init", "-q", str(root)], check=True)
+        subprocess.run(["git", "-C", str(root), "config", "user.email", "t@t"], check=True)
+        subprocess.run(["git", "-C", str(root), "config", "user.name", "t"], check=True)
+        (studio / "marker.txt").write_text("main version\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(root), "add", "-A"], check=True)
+        subprocess.run(["git", "-C", str(root), "commit", "-qm", "init"], check=True)
+        return studio
+
+    def test_disabled_yields_original(self, tmp_path):
+        studio = self._make_source_repo(tmp_path / "src")
+        with install._source_at_default_branch(studio, enabled=False) as (src, note):
+            assert src == studio
+            assert note is None
+
+    def test_non_git_yields_original(self, tmp_path):
+        plain = tmp_path / "plain" / "studio"
+        plain.mkdir(parents=True)
+        with install._source_at_default_branch(plain, enabled=True) as (src, note):
+            assert src == plain
+            assert note is None
+
+    def test_on_main_clean_uses_fast_path(self, tmp_path):
+        studio = self._make_source_repo(tmp_path / "src")
+        # Already on main + clean → source used directly, no worktree spun up.
+        with install._source_at_default_branch(studio, enabled=True) as (src, note):
+            assert src == studio
+            assert note is None
+
+    def test_reads_main_when_parked_on_feature_branch(self, tmp_path):
+        root = tmp_path / "src"
+        studio = self._make_source_repo(root)
+        # Park on a feature branch that changes the marker, plus an uncommitted edit.
+        subprocess.run(["git", "-C", str(root), "checkout", "-q", "-b", "feature"], check=True)
+        (studio / "marker.txt").write_text("feature version\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(root), "commit", "-qam", "feat"], check=True)
+        (studio / "marker.txt").write_text("uncommitted edit\n", encoding="utf-8")
+
+        with install._source_at_default_branch(studio, enabled=True) as (src, note):
+            assert src != studio
+            assert (src / "marker.txt").read_text(encoding="utf-8") == "main version\n"
+            assert note is not None and "feature" in note
+
+        # The throwaway worktree is cleaned up: only the primary remains.
+        listed = subprocess.run(
+            ["git", "-C", str(root), "worktree", "list"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip().splitlines()
+        assert len(listed) == 1
+
+    def test_reads_committed_main_when_dirty_on_main(self, tmp_path):
+        root = tmp_path / "src"
+        studio = self._make_source_repo(root)
+        # Still on main, but with an uncommitted edit → read committed main, not it.
+        (studio / "marker.txt").write_text("uncommitted edit\n", encoding="utf-8")
+        with install._source_at_default_branch(studio, enabled=True) as (src, note):
+            assert (src / "marker.txt").read_text(encoding="utf-8") == "main version\n"
+            assert note is None  # on main (just dirty), so no branch was bypassed
