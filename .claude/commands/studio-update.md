@@ -44,6 +44,15 @@ real upstream, so it may report "up to date" when it isn't. In that case, tell t
 update from the upstream Studio source repo instead:
 `python studio/run_phase.py update --target <this-repo>`. Do not trust the result until then.
 
+**If the output says the Studio source is behind its remote** (a "source is N commits behind
+`origin/main`" block; `check-install` exits non-zero), the source repo Studio is comparing against
+is itself out of date — its local `main` hasn't pulled. This is caught by a quick `git fetch` of
+the source; `check-install` then compares against `origin/main` instead of the stale local tree, so
+it won't report a false "up to date." `update` handles this for you: it reinstalls from `origin/main`
+rather than no-opping. Either way, tell the user to run `git -C <source> pull` so their own source
+checkout catches up (Studio never pulls it for them). Pass `--no-fetch` to skip this network check
+when working offline.
+
 **If the output contains a `⚠️ … LOCAL EDITS` block** (installed snapshot files the user edited),
 this is the clobber preview. **STOP and surface it to the user before updating.** `update` will
 refuse to overwrite these unless `--force` is passed. For each listed file: if it's project config,

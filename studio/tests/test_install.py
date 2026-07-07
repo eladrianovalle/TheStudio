@@ -7,6 +7,7 @@ Tests cover:
   - slash commands copied verbatim (no rewriting needed)
 """
 import json
+import shutil
 import subprocess
 import pytest
 from pathlib import Path
@@ -650,3 +651,332 @@ class TestSourceAtDefaultBranch:
         with install._source_at_default_branch(studio, enabled=True) as (src, note):
             assert (src / "marker.txt").read_text(encoding="utf-8") == "main version\n"
             assert note is None  # on main (just dirty), so no branch was bypassed
+
+
+class TestCheckStudioStaleness:
+    """check-install refuses a false 'up to date' when the resolved Studio source
+    is itself behind its own git remote (the #20 follow-up). Hermetic: a temp git
+    source repo wired to a LOCAL BARE remote, no network."""
+
+    @staticmethod
+    def _git(repo: Path, *args: str) -> None:
+        subprocess.run(["git", "-C", str(repo), *args],
+                       check=True, capture_output=True, text=True)
+
+    def _source_repo_with_remote(self, tmp_path, studio_dir):
+        """Build a hermetic Studio source repo (a copy of the real studio/ tree)
+        on `main`, wired to a bare origin remote sharing one commit. Returns the
+        studio/ dir inside it."""
+        root = tmp_path / "src"
+        studio = root / "studio"
+        shutil.copytree(
+            studio_dir, studio,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache"),
+        )
+        remote = tmp_path / "origin.git"
+        subprocess.run(
+            ["git", "-c", "init.defaultBranch=main", "init", "--bare", "-q", str(remote)],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-c", "init.defaultBranch=main", "init", "-q", str(root)],
+            check=True, capture_output=True,
+        )
+        self._git(root, "config", "user.email", "t@t")
+        self._git(root, "config", "user.name", "t")
+        self._git(root, "remote", "add", "origin", str(remote))
+        self._git(root, "add", "-A")
+        self._git(root, "commit", "-qm", "init")
+        self._git(root, "push", "-q", "-u", "origin", "main")
+        return studio
+
+    def _advance_origin(self, tmp_path, remote_name="origin.git"):
+        """Push one new commit onto the bare remote's main through a throwaway
+        clone, so the source repo's local main falls behind origin/main. The new
+        commit adds a non-source file, so it moves the ref WITHOUT changing any
+        installed file — isolating staleness from the file diff."""
+        remote = tmp_path / remote_name
+        clone = tmp_path / "advancer"
+        subprocess.run(["git", "clone", "-q", str(remote), str(clone)],
+                       check=True, capture_output=True)
+        self._git(clone, "config", "user.email", "t@t")
+        self._git(clone, "config", "user.name", "t")
+        (clone / "NOTES.txt").write_text("moved origin ahead\n", encoding="utf-8")
+        self._git(clone, "add", "-A")
+        self._git(clone, "commit", "-qm", "advance origin")
+        self._git(clone, "push", "-q", "origin", "main")
+
+    def test_stale_source_refuses_up_to_date(self, target_dir, tmp_path, monkeypatch):
+        """A source whose local main is behind origin returns up_to_date=False and
+        a stale `staleness`, even though every installed file still matches."""
+        source = self._source_repo_with_remote(tmp_path, install._get_studio_root())
+        install_studio(target_dir, source)
+        self._advance_origin(tmp_path)
+        # check_studio(studio_dir=None) auto-resolves the source through _get_studio_root.
+        monkeypatch.setattr(install, "_get_studio_root", lambda: source)
+
+        status = check_studio(target_dir)  # fetch=True catches the unfetched origin
+
+        assert status["up_to_date"] is False
+        assert status["staleness"] is not None
+        assert status["staleness"]["is_stale"] is True
+        assert status["staleness"]["behind"] == 1
+        assert status["staleness"]["remote_ref"] == "origin/main"
+        # Isolated staleness signal: the honest diff, not phantom file changes.
+        assert status["changed"] == []
+        assert status["missing"] == []
+
+    def test_even_source_still_reports_up_to_date(self, target_dir, tmp_path, monkeypatch):
+        """Regression guard: an even/clean source (not behind origin) must still
+        report up_to_date=True and must not be falsely flagged stale."""
+        source = self._source_repo_with_remote(tmp_path, install._get_studio_root())
+        install_studio(target_dir, source)
+        monkeypatch.setattr(install, "_get_studio_root", lambda: source)
+
+        status = check_studio(target_dir)  # fetch against origin, which is even
+
+        assert status["up_to_date"] is True
+        assert status["staleness"] is not None
+        assert status["staleness"]["is_stale"] is False
+
+    def test_no_fetch_uses_cached_refs(self, target_dir, tmp_path, monkeypatch):
+        """--no-fetch (fetch=False) compares against cached refs only. Origin moved
+        ahead but was never fetched, so the cached refs still look even → not stale."""
+        source = self._source_repo_with_remote(tmp_path, install._get_studio_root())
+        install_studio(target_dir, source)
+        self._advance_origin(tmp_path)  # origin ahead, but source never fetches it
+        monkeypatch.setattr(install, "_get_studio_root", lambda: source)
+
+        status = check_studio(target_dir, fetch=False)
+
+        assert status["staleness"] is not None
+        assert status["staleness"]["is_stale"] is False
+        assert status["up_to_date"] is True
+
+    def test_handler_exits_nonzero_on_stale_source(self, target_dir, tmp_path, monkeypatch):
+        """The check-install handler prints a block and exits non-zero over a stale
+        source, so a false 'up to date' can never reach stdout."""
+        import argparse
+        import run_phase
+
+        source = self._source_repo_with_remote(tmp_path, install._get_studio_root())
+        install_studio(target_dir, source)
+        self._advance_origin(tmp_path)
+        monkeypatch.setattr(install, "_get_studio_root", lambda: source)
+
+        args = argparse.Namespace(target=target_dir, no_fetch=False)
+        with pytest.raises(SystemExit) as exc:
+            run_phase._do_check_install(args)
+        assert exc.value.code == 1
+
+    def test_status_is_json_serializable_over_stale_source(
+        self, target_dir, tmp_path, monkeypatch
+    ):
+        """The check_studio return stays plain-data — `staleness` is a dict, not a
+        dataclass — so a caller can json.dumps the whole status without choking."""
+        import json
+
+        source = self._source_repo_with_remote(tmp_path, install._get_studio_root())
+        install_studio(target_dir, source)
+        self._advance_origin(tmp_path)
+        monkeypatch.setattr(install, "_get_studio_root", lambda: source)
+
+        status = check_studio(target_dir)
+
+        assert isinstance(status["staleness"], dict)
+        assert status["staleness"]["is_stale"] is True
+        json.dumps(status)  # must not raise
+
+    def test_handler_shows_local_edits_over_stale_source(
+        self, target_dir, tmp_path, monkeypatch, capsys
+    ):
+        """A user with local edits over a stale source sees the LOCAL EDITS clobber
+        preview from check-install itself, not only when a later update refuses."""
+        import argparse
+        import run_phase
+
+        source = self._source_repo_with_remote(tmp_path, install._get_studio_root())
+        install_studio(target_dir, source)
+        self._advance_origin(tmp_path)
+        monkeypatch.setattr(install, "_get_studio_root", lambda: source)
+        # Drift an installed snapshot file so it registers as a local edit.
+        edited = target_dir / ".studio" / "source" / "run_phase.py"
+        edited.write_text(
+            edited.read_text(encoding="utf-8") + "\n# local edit\n", encoding="utf-8"
+        )
+
+        args = argparse.Namespace(target=target_dir, no_fetch=False)
+        with pytest.raises(SystemExit) as exc:
+            run_phase._do_check_install(args)
+        assert exc.value.code == 1
+        out = capsys.readouterr().out
+        assert "behind" in out          # the stale-source block printed
+        assert "LOCAL EDITS" in out     # and the clobber preview alongside it
+
+
+# A source file that install_studio copies into .studio/source/ — editing it on
+# origin/main is how we prove the update re-installs the fresher tree.
+_STALE_MARKER_KEY = "docs/SCOPES_GUIDE.md"
+_STALE_MARKER_LINE = "\nUPDATED-ON-ORIGIN-MAIN marker line\n"
+
+
+class TestUpdateStudioStaleness:
+    """/studio-update (update_studio) refuses to no-op over a stale source and
+    re-installs from origin/main, computing staleness in its OWN scope rather than
+    inheriting it from the delegated check_studio. Hermetic: a temp git source repo
+    wired to a LOCAL BARE remote, no network."""
+
+    @staticmethod
+    def _git(repo, *args):
+        subprocess.run(["git", "-C", str(repo), *args],
+                       check=True, capture_output=True, text=True)
+
+    def _source_repo_with_remote(self, tmp_path, studio_dir):
+        """Build a hermetic Studio source repo (a copy of the real studio/ tree)
+        on `main`, wired to a bare origin remote sharing one commit. Returns the
+        studio/ dir inside it."""
+        root = tmp_path / "src"
+        studio = root / "studio"
+        shutil.copytree(
+            studio_dir, studio,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache"),
+        )
+        remote = tmp_path / "origin.git"
+        subprocess.run(
+            ["git", "-c", "init.defaultBranch=main", "init", "--bare", "-q", str(remote)],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-c", "init.defaultBranch=main", "init", "-q", str(root)],
+            check=True, capture_output=True,
+        )
+        self._git(root, "config", "user.email", "t@t")
+        self._git(root, "config", "user.name", "t")
+        self._git(root, "remote", "add", "origin", str(remote))
+        self._git(root, "add", "-A")
+        self._git(root, "commit", "-qm", "init")
+        self._git(root, "push", "-q", "-u", "origin", "main")
+        return studio
+
+    def _advance_origin_with_source_edit(self, tmp_path):
+        """Push one commit onto the bare remote that EDITS an installed source file,
+        so the source's local main falls behind an origin/main that carries newer
+        Studio content. Returns the new content of that file, so a test can assert
+        the consumer ends up matching it after update. No network (local bare)."""
+        remote = tmp_path / "origin.git"
+        clone = tmp_path / "advancer"
+        subprocess.run(["git", "clone", "-q", str(remote), str(clone)],
+                       check=True, capture_output=True)
+        self._git(clone, "config", "user.email", "t@t")
+        self._git(clone, "config", "user.name", "t")
+        marker = clone / "studio" / _STALE_MARKER_KEY
+        new_content = marker.read_text(encoding="utf-8") + _STALE_MARKER_LINE
+        marker.write_text(new_content, encoding="utf-8")
+        self._git(clone, "add", "-A")
+        self._git(clone, "commit", "-qm", "advance origin with source edit")
+        self._git(clone, "push", "-q", "origin", "main")
+        return new_content
+
+    def test_update_stale_source_reinstalls_from_origin(
+        self, target_dir, tmp_path, monkeypatch
+    ):
+        """THE DELEGATION-TRAP GUARD. The source's local main is behind an
+        origin/main that carries newer Studio content. update_studio must NOT
+        no-op: it installs origin/main's content, so the consumer's installed file
+        ends up matching origin's NEWER version. Fails if staleness is wrongly
+        routed through the delegated check_studio (which reads the stale local main
+        with an explicit dir → staleness off → false 'already up to date')."""
+        source = self._source_repo_with_remote(tmp_path, install._get_studio_root())
+        install_studio(target_dir, source)  # consumer gets the OLD local-main content
+        newer = self._advance_origin_with_source_edit(tmp_path)
+        monkeypatch.setattr(install, "_get_studio_root", lambda: source)
+
+        result = update_studio(target_dir)  # fetch=True catches the unfetched origin
+
+        # It proceeded (did not take the 'already up to date' no-op).
+        assert not result.get("blocked")
+        assert result["updated"] > 0
+        assert result["staleness"] is not None
+        assert result["staleness"]["is_stale"] is True
+        assert result["staleness"]["behind"] == 1
+        assert result["staleness"]["remote_ref"] == "origin/main"
+        # The consumer's installed file now matches origin/main's NEWER version.
+        installed = target_dir / ".studio" / "source" / _STALE_MARKER_KEY
+        assert installed.read_text(encoding="utf-8") == newer
+
+    def test_no_fetch_over_stale_source_no_ops_as_today(
+        self, target_dir, tmp_path, monkeypatch
+    ):
+        """--no-fetch (fetch=False) can't see the unfetched origin, so the cached
+        refs still look even → update behaves exactly as today (a clean no-op)."""
+        source = self._source_repo_with_remote(tmp_path, install._get_studio_root())
+        install_studio(target_dir, source)
+        self._advance_origin_with_source_edit(tmp_path)  # origin ahead, never fetched
+        monkeypatch.setattr(install, "_get_studio_root", lambda: source)
+
+        result = update_studio(target_dir, fetch=False)
+
+        assert result["staleness"] is not None
+        assert result["staleness"]["is_stale"] is False
+        assert result["updated"] == 0 and result["added"] == 0
+
+    def test_even_source_update_behaves_as_today(
+        self, target_dir, tmp_path, monkeypatch
+    ):
+        """Regression guard: an even/clean source (not behind origin) still no-ops
+        when the consumer already matches, and is not falsely flagged stale."""
+        source = self._source_repo_with_remote(tmp_path, install._get_studio_root())
+        install_studio(target_dir, source)
+        monkeypatch.setattr(install, "_get_studio_root", lambda: source)
+
+        result = update_studio(target_dir)  # fetch against origin, which is even
+
+        assert result["staleness"] is not None
+        assert result["staleness"]["is_stale"] is False
+        assert result["updated"] == 0 and result["added"] == 0
+
+    def test_stale_source_blocked_on_local_modification(
+        self, target_dir, tmp_path, monkeypatch
+    ):
+        """The clobber precondition still holds over a stale source: a locally
+        edited installed file blocks the update (unless --force), even though the
+        source is behind origin and would otherwise re-install from it."""
+        source = self._source_repo_with_remote(tmp_path, install._get_studio_root())
+        install_studio(target_dir, source)
+        self._advance_origin_with_source_edit(tmp_path)
+        monkeypatch.setattr(install, "_get_studio_root", lambda: source)
+        # Drift an installed file so update has something it would clobber.
+        edited = target_dir / ".studio" / "source" / "scopes.py"
+        edited.write_text(edited.read_text(encoding="utf-8") + "\n# local edit\n",
+                          encoding="utf-8")
+
+        blocked = update_studio(target_dir)
+        assert blocked.get("blocked") is True
+        assert "scopes.py" in blocked["locally_modified"]
+        assert blocked["staleness"]["is_stale"] is True
+
+        # --force overrides the block and still re-installs from origin/main.
+        forced = update_studio(target_dir, force=True)
+        assert not forced.get("blocked")
+        assert forced["updated"] > 0
+        assert forced["staleness"]["is_stale"] is True
+
+    def test_update_handler_prints_pull_hint_over_stale_source(
+        self, target_dir, tmp_path, monkeypatch, capsys
+    ):
+        """The update handler surfaces the staleness note and the one command that
+        catches the user's own source checkout up (never pulling it for them)."""
+        import argparse
+        import run_phase
+
+        source = self._source_repo_with_remote(tmp_path, install._get_studio_root())
+        install_studio(target_dir, source)
+        self._advance_origin_with_source_edit(tmp_path)
+        monkeypatch.setattr(install, "_get_studio_root", lambda: source)
+
+        args = argparse.Namespace(target=target_dir, force=False, no_fetch=False)
+        run_phase._do_update(args)
+
+        out = capsys.readouterr().out
+        assert "origin/main" in out
+        assert "git -C" in out and "pull" in out

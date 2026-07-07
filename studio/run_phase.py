@@ -2048,6 +2048,12 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Path to the target project directory.",
     )
+    check_install_parser.add_argument(
+        "--no-fetch",
+        action="store_true",
+        help="Skip the network fetch of the Studio source's remote; compare "
+             "against cached refs only (for offline use).",
+    )
 
     update_parser = subparsers.add_parser(
         "update", help="Update installed Studio from source."
@@ -2062,6 +2068,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--force",
         action="store_true",
         help="Overwrite even locally-modified snapshot files (default: refuse and list them).",
+    )
+    update_parser.add_argument(
+        "--no-fetch",
+        action="store_true",
+        help="Skip the network fetch of the Studio source's remote; compare "
+             "against cached refs only (for offline use).",
     )
 
     # --- Clarity commands ---
@@ -3055,11 +3067,24 @@ def _do_init(args: argparse.Namespace) -> None:
     print("NOTE: Start a NEW Claude Code session (not just /clear) to discover the commands.")
 
 
+def _print_local_edits_preview(locally_modified: list) -> None:
+    """Print the clobber preview: installed files the user edited that an update
+    would overwrite. No-op when there are none. Shared so the preview shows in
+    both the normal report and the stale-source path (which exits early)."""
+    if not locally_modified:
+        return
+    print(f"\n⚠️  {len(locally_modified)} installed file(s) have LOCAL EDITS that update would overwrite:")
+    for rel in locally_modified:
+        print(f"   - .studio/source/{rel}")
+    print("   If any is project config, move it to <repo>/.studio/<name>.toml (update never")
+    print("   touches that). update will refuse to clobber these unless run with --force.")
+
+
 def _do_check_install(args: argparse.Namespace) -> None:
     """Check if installed Studio is up to date."""
-    from install import check_studio
+    from install import check_studio, _resolve_source_dir
     target = Path(args.target).resolve()
-    status = check_studio(target)
+    status = check_studio(target, fetch=not args.no_fetch)
     if not status["installed"]:
         print(f"Studio is NOT installed at {target}")
         print(f"Run: {_entrypoint()} init --target {target}")
@@ -3068,6 +3093,32 @@ def _do_check_install(args: argparse.Namespace) -> None:
         print(f"WARNING: {status['warning']}\n")
     if status.get("source_note"):
         print(f"Note: {status['source_note']}.")
+
+    # A stale source (its own local main behind origin) makes any "up to date"
+    # false: the installed files match a source that is itself out of date. Refuse
+    # the green verdict — show the honest diff against origin, name the one command
+    # that catches the source up, and exit non-zero so nothing prints "up to date".
+    staleness = status.get("staleness")
+    if staleness and staleness["is_stale"]:
+        source_dir, _ = _resolve_source_dir(target, None)
+        print(
+            f"Studio source is {staleness['behind']} commit(s) behind "
+            f"{staleness['remote_ref']}; comparing against {staleness['remote_ref']} "
+            f"instead of the stale local copy."
+        )
+        if status["changed"]:
+            print(f"  Changed: {', '.join(status['changed'])}")
+        if status["missing"]:
+            print(f"  Missing: {', '.join(status['missing'])}")
+        if status.get("claude_md_stale"):
+            print("  CLAUDE.md: coding-principles block is behind the current template")
+        print(f"\nCatch your source up first:  git -C {source_dir} pull")
+        print(f"Then:  {_entrypoint()} update --target {target}")
+        # Surface the clobber preview too, so a user with local edits over a stale
+        # source learns about it now, not only when a later update refuses.
+        _print_local_edits_preview(status["locally_modified"])
+        sys.exit(1)
+
     if status["up_to_date"]:
         print(f"Studio at {target} is up to date.")
     else:
@@ -3080,24 +3131,37 @@ def _do_check_install(args: argparse.Namespace) -> None:
             print("  CLAUDE.md: coding-principles block is behind the current template")
         print(f"\nRun: {_entrypoint()} update --target {target}")
 
-    locally_modified = status["locally_modified"]
-    if locally_modified:
-        print(f"\n⚠️  {len(locally_modified)} installed file(s) have LOCAL EDITS that update would overwrite:")
-        for rel in locally_modified:
-            print(f"   - .studio/source/{rel}")
-        print("   If any is project config, move it to <repo>/.studio/<name>.toml (update never")
-        print("   touches that). update will refuse to clobber these unless run with --force.")
+    _print_local_edits_preview(status["locally_modified"])
 
 
 def _do_update(args: argparse.Namespace) -> None:
     """Update installed Studio from source."""
-    from install import update_studio
+    from install import update_studio, _resolve_source_dir
     target = Path(args.target).resolve()
-    result = update_studio(target, force=getattr(args, "force", False))
+    result = update_studio(
+        target,
+        force=getattr(args, "force", False),
+        fetch=not getattr(args, "no_fetch", False),
+    )
     if result.get("warning"):
         print(f"WARNING: {result['warning']}\n")
     if result.get("source_note"):
         print(f"Note: {result['source_note']}.")
+
+    # A stale source (its own local main behind origin) would falsely no-op; the
+    # update instead read and re-installed from origin/main. Say so, and name the
+    # one command that catches the user's own source checkout up (we never pull it
+    # for them).
+    staleness = result.get("staleness")
+    if staleness and staleness["is_stale"]:
+        source_dir, _ = _resolve_source_dir(target, None)
+        print(
+            f"Studio source was {staleness['behind']} commit(s) behind "
+            f"{staleness['remote_ref']}; installed from {staleness['remote_ref']} "
+            f"instead of the stale local copy."
+        )
+        print(f"Catch your source up:  git -C {source_dir} pull")
+
     if result.get("blocked"):
         mods = result["locally_modified"]
         print(f"Update BLOCKED: {len(mods)} installed file(s) have local edits that would be overwritten:")
