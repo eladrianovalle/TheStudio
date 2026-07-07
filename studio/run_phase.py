@@ -3067,6 +3067,19 @@ def _do_init(args: argparse.Namespace) -> None:
     print("NOTE: Start a NEW Claude Code session (not just /clear) to discover the commands.")
 
 
+def _print_local_edits_preview(locally_modified: list) -> None:
+    """Print the clobber preview: installed files the user edited that an update
+    would overwrite. No-op when there are none. Shared so the preview shows in
+    both the normal report and the stale-source path (which exits early)."""
+    if not locally_modified:
+        return
+    print(f"\n⚠️  {len(locally_modified)} installed file(s) have LOCAL EDITS that update would overwrite:")
+    for rel in locally_modified:
+        print(f"   - .studio/source/{rel}")
+    print("   If any is project config, move it to <repo>/.studio/<name>.toml (update never")
+    print("   touches that). update will refuse to clobber these unless run with --force.")
+
+
 def _do_check_install(args: argparse.Namespace) -> None:
     """Check if installed Studio is up to date."""
     from install import check_studio, _resolve_source_dir
@@ -3086,11 +3099,11 @@ def _do_check_install(args: argparse.Namespace) -> None:
     # the green verdict — show the honest diff against origin, name the one command
     # that catches the source up, and exit non-zero so nothing prints "up to date".
     staleness = status.get("staleness")
-    if staleness and staleness.is_stale:
+    if staleness and staleness["is_stale"]:
         source_dir, _ = _resolve_source_dir(target, None)
         print(
-            f"Studio source is {staleness.behind} commit(s) behind "
-            f"{staleness.remote_ref}; comparing against {staleness.remote_ref} "
+            f"Studio source is {staleness['behind']} commit(s) behind "
+            f"{staleness['remote_ref']}; comparing against {staleness['remote_ref']} "
             f"instead of the stale local copy."
         )
         if status["changed"]:
@@ -3101,6 +3114,9 @@ def _do_check_install(args: argparse.Namespace) -> None:
             print("  CLAUDE.md: coding-principles block is behind the current template")
         print(f"\nCatch your source up first:  git -C {source_dir} pull")
         print(f"Then:  {_entrypoint()} update --target {target}")
+        # Surface the clobber preview too, so a user with local edits over a stale
+        # source learns about it now, not only when a later update refuses.
+        _print_local_edits_preview(status["locally_modified"])
         sys.exit(1)
 
     if status["up_to_date"]:
@@ -3115,13 +3131,7 @@ def _do_check_install(args: argparse.Namespace) -> None:
             print("  CLAUDE.md: coding-principles block is behind the current template")
         print(f"\nRun: {_entrypoint()} update --target {target}")
 
-    locally_modified = status["locally_modified"]
-    if locally_modified:
-        print(f"\n⚠️  {len(locally_modified)} installed file(s) have LOCAL EDITS that update would overwrite:")
-        for rel in locally_modified:
-            print(f"   - .studio/source/{rel}")
-        print("   If any is project config, move it to <repo>/.studio/<name>.toml (update never")
-        print("   touches that). update will refuse to clobber these unless run with --force.")
+    _print_local_edits_preview(status["locally_modified"])
 
 
 def _do_update(args: argparse.Namespace) -> None:
@@ -3143,11 +3153,11 @@ def _do_update(args: argparse.Namespace) -> None:
     # one command that catches the user's own source checkout up (we never pull it
     # for them).
     staleness = result.get("staleness")
-    if staleness and staleness.is_stale:
+    if staleness and staleness["is_stale"]:
         source_dir, _ = _resolve_source_dir(target, None)
         print(
-            f"Studio source was {staleness.behind} commit(s) behind "
-            f"{staleness.remote_ref}; installed from {staleness.remote_ref} "
+            f"Studio source was {staleness['behind']} commit(s) behind "
+            f"{staleness['remote_ref']}; installed from {staleness['remote_ref']} "
             f"instead of the stale local copy."
         )
         print(f"Catch your source up:  git -C {source_dir} pull")

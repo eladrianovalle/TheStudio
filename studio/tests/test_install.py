@@ -719,9 +719,9 @@ class TestCheckStudioStaleness:
 
         assert status["up_to_date"] is False
         assert status["staleness"] is not None
-        assert status["staleness"].is_stale is True
-        assert status["staleness"].behind == 1
-        assert status["staleness"].remote_ref == "origin/main"
+        assert status["staleness"]["is_stale"] is True
+        assert status["staleness"]["behind"] == 1
+        assert status["staleness"]["remote_ref"] == "origin/main"
         # Isolated staleness signal: the honest diff, not phantom file changes.
         assert status["changed"] == []
         assert status["missing"] == []
@@ -737,7 +737,7 @@ class TestCheckStudioStaleness:
 
         assert status["up_to_date"] is True
         assert status["staleness"] is not None
-        assert status["staleness"].is_stale is False
+        assert status["staleness"]["is_stale"] is False
 
     def test_no_fetch_uses_cached_refs(self, target_dir, tmp_path, monkeypatch):
         """--no-fetch (fetch=False) compares against cached refs only. Origin moved
@@ -750,7 +750,7 @@ class TestCheckStudioStaleness:
         status = check_studio(target_dir, fetch=False)
 
         assert status["staleness"] is not None
-        assert status["staleness"].is_stale is False
+        assert status["staleness"]["is_stale"] is False
         assert status["up_to_date"] is True
 
     def test_handler_exits_nonzero_on_stale_source(self, target_dir, tmp_path, monkeypatch):
@@ -768,6 +768,50 @@ class TestCheckStudioStaleness:
         with pytest.raises(SystemExit) as exc:
             run_phase._do_check_install(args)
         assert exc.value.code == 1
+
+    def test_status_is_json_serializable_over_stale_source(
+        self, target_dir, tmp_path, monkeypatch
+    ):
+        """The check_studio return stays plain-data — `staleness` is a dict, not a
+        dataclass — so a caller can json.dumps the whole status without choking."""
+        import json
+
+        source = self._source_repo_with_remote(tmp_path, install._get_studio_root())
+        install_studio(target_dir, source)
+        self._advance_origin(tmp_path)
+        monkeypatch.setattr(install, "_get_studio_root", lambda: source)
+
+        status = check_studio(target_dir)
+
+        assert isinstance(status["staleness"], dict)
+        assert status["staleness"]["is_stale"] is True
+        json.dumps(status)  # must not raise
+
+    def test_handler_shows_local_edits_over_stale_source(
+        self, target_dir, tmp_path, monkeypatch, capsys
+    ):
+        """A user with local edits over a stale source sees the LOCAL EDITS clobber
+        preview from check-install itself, not only when a later update refuses."""
+        import argparse
+        import run_phase
+
+        source = self._source_repo_with_remote(tmp_path, install._get_studio_root())
+        install_studio(target_dir, source)
+        self._advance_origin(tmp_path)
+        monkeypatch.setattr(install, "_get_studio_root", lambda: source)
+        # Drift an installed snapshot file so it registers as a local edit.
+        edited = target_dir / ".studio" / "source" / "run_phase.py"
+        edited.write_text(
+            edited.read_text(encoding="utf-8") + "\n# local edit\n", encoding="utf-8"
+        )
+
+        args = argparse.Namespace(target=target_dir, no_fetch=False)
+        with pytest.raises(SystemExit) as exc:
+            run_phase._do_check_install(args)
+        assert exc.value.code == 1
+        out = capsys.readouterr().out
+        assert "behind" in out          # the stale-source block printed
+        assert "LOCAL EDITS" in out     # and the clobber preview alongside it
 
 
 # A source file that install_studio copies into .studio/source/ — editing it on
@@ -853,9 +897,9 @@ class TestUpdateStudioStaleness:
         assert not result.get("blocked")
         assert result["updated"] > 0
         assert result["staleness"] is not None
-        assert result["staleness"].is_stale is True
-        assert result["staleness"].behind == 1
-        assert result["staleness"].remote_ref == "origin/main"
+        assert result["staleness"]["is_stale"] is True
+        assert result["staleness"]["behind"] == 1
+        assert result["staleness"]["remote_ref"] == "origin/main"
         # The consumer's installed file now matches origin/main's NEWER version.
         installed = target_dir / ".studio" / "source" / _STALE_MARKER_KEY
         assert installed.read_text(encoding="utf-8") == newer
@@ -873,7 +917,7 @@ class TestUpdateStudioStaleness:
         result = update_studio(target_dir, fetch=False)
 
         assert result["staleness"] is not None
-        assert result["staleness"].is_stale is False
+        assert result["staleness"]["is_stale"] is False
         assert result["updated"] == 0 and result["added"] == 0
 
     def test_even_source_update_behaves_as_today(
@@ -888,7 +932,7 @@ class TestUpdateStudioStaleness:
         result = update_studio(target_dir)  # fetch against origin, which is even
 
         assert result["staleness"] is not None
-        assert result["staleness"].is_stale is False
+        assert result["staleness"]["is_stale"] is False
         assert result["updated"] == 0 and result["added"] == 0
 
     def test_stale_source_blocked_on_local_modification(
@@ -909,13 +953,13 @@ class TestUpdateStudioStaleness:
         blocked = update_studio(target_dir)
         assert blocked.get("blocked") is True
         assert "scopes.py" in blocked["locally_modified"]
-        assert blocked["staleness"].is_stale is True
+        assert blocked["staleness"]["is_stale"] is True
 
         # --force overrides the block and still re-installs from origin/main.
         forced = update_studio(target_dir, force=True)
         assert not forced.get("blocked")
         assert forced["updated"] > 0
-        assert forced["staleness"].is_stale is True
+        assert forced["staleness"]["is_stale"] is True
 
     def test_update_handler_prints_pull_hint_over_stale_source(
         self, target_dir, tmp_path, monkeypatch, capsys

@@ -105,6 +105,28 @@ def test_ahead_only_is_not_stale(tmp_path):
     assert result.behind == 0
 
 
+def test_never_fetched_origin_caught_only_when_fetching(tmp_path):
+    """A remote configured but never fetched has no origin/main tracking ref yet.
+    fetch=True establishes it and catches the staleness; fetch=False can't see it.
+    Guards the fetch-before-ref-check ordering."""
+    repo, remote = _make_repo_with_remote(tmp_path)
+    _advance_origin(tmp_path, remote, 2)
+    # Simulate "remote added by hand, never fetched": drop the tracking ref.
+    _git(repo, "update-ref", "-d", "refs/remotes/origin/main")
+
+    # No fetch → no tracking ref to compare against → bows out, not stale.
+    refs_only = _source_staleness(repo, fetch=False)
+    assert refs_only.is_stale is False
+    assert refs_only.remote_ref is None
+
+    # A fetch creates the ref first, then the staleness is caught.
+    fetched = _source_staleness(repo, fetch=True)
+    assert fetched.is_stale is True
+    assert fetched.behind == 2
+    assert fetched.fetched is True
+    assert fetched.remote_ref == "origin/main"
+
+
 def test_diverged_is_stale(tmp_path):
     repo, remote = _make_repo_with_remote(tmp_path)
     # Local gains its own commit; origin gains a different one → the branches fork.

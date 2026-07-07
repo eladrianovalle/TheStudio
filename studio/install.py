@@ -23,7 +23,7 @@ import shutil
 import subprocess
 import tempfile
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple
@@ -313,18 +313,24 @@ def _source_staleness(
         )
 
     remote_ref = f"origin/{branch}"
+
+    # Fetch FIRST, then look for the tracking ref. A remote that was configured
+    # by hand but never fetched has no refs/remotes/origin/<branch> yet; checking
+    # before fetching would bow out as "origin not configured" on exactly the
+    # unfetched-origin case this detection exists to catch. The fetch creates the
+    # ref; if it fails (offline), we fall back to whatever cached ref exists.
+    fetched = False
+    if fetch:
+        fetched = _git_fetch(repo, branch, timeout=timeout)
+
     origin_ref_exists = _git_out(
         repo, "rev-parse", "--verify", "--quiet", f"refs/remotes/{remote_ref}"
     ) is not None
     if not origin_ref_exists:
         return SourceStaleness(
-            is_stale=False, behind=0, remote_ref=None, fetched=False,
-            reason=f"no {remote_ref} tracking ref (origin not configured)",
+            is_stale=False, behind=0, remote_ref=None, fetched=fetched,
+            reason=f"no {remote_ref} tracking ref (origin not configured or unreachable)",
         )
-
-    fetched = False
-    if fetch:
-        fetched = _git_fetch(repo, branch, timeout=timeout)
 
     # `--left-right --count A...B` prints "<left>\t<right>": left = commits only
     # on A (local, i.e. ahead), right = commits only on B (origin, i.e. behind).
@@ -730,9 +736,11 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None, fetch: bool = 
             branch instead of the checkout's parked branch, naming what was bypassed
         warning: str | None: set when the live source could not be resolved
             (e.g. run from a stale snapshot), so the result may be unreliable
-        staleness: SourceStaleness | None: whether the resolved source is itself
-            behind its git remote (None when not computed, e.g. an explicit
-            studio_dir was passed so staleness detection is disabled)
+        staleness: dict | None: whether the resolved source is itself behind its
+            git remote, as a plain dict (``SourceStaleness`` fields via
+            ``dataclasses.asdict``, so the whole return stays JSON-serializable).
+            None when not computed, e.g. an explicit studio_dir was passed so
+            staleness detection is disabled.
     """
     target = Path(target).resolve()
     dot_studio = target / ".studio"
@@ -819,7 +827,7 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None, fetch: bool = 
         "claude_md_stale": claude_md_stale,
         "source_note": source_note,
         "warning": warning,
-        "staleness": staleness,
+        "staleness": asdict(staleness) if staleness else None,
     }
 
 
@@ -883,13 +891,13 @@ def update_studio(
         status = check_studio(target, effective_dir)
 
         if status["up_to_date"] and not (staleness and staleness.is_stale):
-            return {"updated": 0, "added": 0, "removed": 0, "locally_modified": status["locally_modified"], "claude_md_refreshed": False, "source_note": source_note, "warning": warning, "staleness": staleness}
+            return {"updated": 0, "added": 0, "removed": 0, "locally_modified": status["locally_modified"], "claude_md_refreshed": False, "source_note": source_note, "warning": warning, "staleness": asdict(staleness) if staleness else None}
 
         # Preview precondition: refuse to clobber locally-edited snapshot files unless forced.
         locally_modified = status.get("locally_modified", [])
         if locally_modified and not force:
             return {"blocked": True, "locally_modified": locally_modified,
-                    "updated": 0, "added": 0, "removed": 0, "claude_md_refreshed": False, "source_note": source_note, "warning": warning, "staleness": staleness}
+                    "updated": 0, "added": 0, "removed": 0, "claude_md_refreshed": False, "source_note": source_note, "warning": warning, "staleness": asdict(staleness) if staleness else None}
 
         # Re-install (install_studio is idempotent and preserves user dirs). This
         # also re-injects the coding-principles block into CLAUDE.md, refreshing it
@@ -907,5 +915,5 @@ def update_studio(
             "claude_md_refreshed": status.get("claude_md_stale", False),
             "source_note": source_note,
             "warning": warning,
-            "staleness": staleness,
+            "staleness": asdict(staleness) if staleness else None,
         }
