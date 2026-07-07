@@ -2069,6 +2069,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Overwrite even locally-modified snapshot files (default: refuse and list them).",
     )
+    update_parser.add_argument(
+        "--no-fetch",
+        action="store_true",
+        help="Skip the network fetch of the Studio source's remote; compare "
+             "against cached refs only (for offline use).",
+    )
 
     # --- Clarity commands ---
     show_clarity_parser = subparsers.add_parser(
@@ -3120,13 +3126,32 @@ def _do_check_install(args: argparse.Namespace) -> None:
 
 def _do_update(args: argparse.Namespace) -> None:
     """Update installed Studio from source."""
-    from install import update_studio
+    from install import update_studio, _resolve_source_dir
     target = Path(args.target).resolve()
-    result = update_studio(target, force=getattr(args, "force", False))
+    result = update_studio(
+        target,
+        force=getattr(args, "force", False),
+        fetch=not getattr(args, "no_fetch", False),
+    )
     if result.get("warning"):
         print(f"WARNING: {result['warning']}\n")
     if result.get("source_note"):
         print(f"Note: {result['source_note']}.")
+
+    # A stale source (its own local main behind origin) would falsely no-op; the
+    # update instead read and re-installed from origin/main. Say so, and name the
+    # one command that catches the user's own source checkout up (we never pull it
+    # for them).
+    staleness = result.get("staleness")
+    if staleness and staleness.is_stale:
+        source_dir, _ = _resolve_source_dir(target, None)
+        print(
+            f"Studio source was {staleness.behind} commit(s) behind "
+            f"{staleness.remote_ref}; installed from {staleness.remote_ref} "
+            f"instead of the stale local copy."
+        )
+        print(f"Catch your source up:  git -C {source_dir} pull")
+
     if result.get("blocked"):
         mods = result["locally_modified"]
         print(f"Update BLOCKED: {len(mods)} installed file(s) have local edits that would be overwritten:")

@@ -823,7 +823,9 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None, fetch: bool = 
     }
 
 
-def update_studio(target: Path, studio_dir: Optional[Path] = None, force: bool = False) -> dict:
+def update_studio(
+    target: Path, studio_dir: Optional[Path] = None, force: bool = False, fetch: bool = True
+) -> dict:
     """Update an installed Studio from the source.
 
     Preserves user customizations in .studio/ (roles/, scopes.toml, etc.)
@@ -834,9 +836,21 @@ def update_studio(target: Path, studio_dir: Optional[Path] = None, force: bool =
     Returns ``{"blocked": True, "locally_modified": [...]}`` instead of updating.
     Pass ``force=True`` to overwrite anyway.
 
+    ``fetch`` controls whether the staleness check does a short network fetch of
+    the source's remote before comparing (default True; ``--no-fetch`` on the CLI
+    passes False to compare against cached refs only).
+
+    When the resolved source's own local main is behind its origin, the update
+    reads and re-installs from ``origin/main`` instead of the stale local tree,
+    and refuses to no-op: a false "already up to date" over a stale source can't
+    happen. The source repo itself is never mutated — the returned ``staleness``
+    lets the handler print the one ``git -C <source> pull`` command that catches
+    the user's checkout up.
+
     Returns dict with counts of updated/added/removed files, plus a ``warning``
     key (str | None) when the live source could not be resolved (e.g. run from a
-    stale snapshot; see ``_resolve_source_dir``).
+    stale snapshot; see ``_resolve_source_dir``) and a ``staleness`` key
+    (SourceStaleness | None) describing whether the source was behind its remote.
     """
     target = Path(target).resolve()
     dot_studio = target / ".studio"
@@ -852,21 +866,30 @@ def update_studio(target: Path, studio_dir: Optional[Path] = None, force: bool =
     source_dir, warning = _resolve_source_dir(target, studio_dir)
     enabled = auto_resolved and warning is None
 
+    # Is the resolved source itself behind its own remote? Compute this HERE, in
+    # update's own scope — NOT via the delegated check_studio below, which is
+    # called with an explicit dir, so staleness detection is off inside it. When
+    # the source is stale, materialize and re-install from origin/main (the fresh
+    # tree), and fold is_stale into the no-op short-circuit so a stale source
+    # PROCEEDS to reinstall instead of falsely reporting "already up to date".
+    staleness = _source_staleness(source_dir, fetch=fetch) if enabled else None
+    override_ref = staleness.remote_ref if (staleness and staleness.is_stale) else None
+
     # Read (and copy) from the default branch's committed tree, not whatever
     # branch the source checkout is parked on. One materialization covers both
     # the check and the re-install so they agree on the source.
-    with _source_at_default_branch(source_dir, enabled) as (effective_dir, source_note):
+    with _source_at_default_branch(source_dir, enabled, override_ref) as (effective_dir, source_note):
         # Check what needs updating (explicit dir, so check_studio won't re-materialize).
         status = check_studio(target, effective_dir)
 
-        if status["up_to_date"]:
-            return {"updated": 0, "added": 0, "removed": 0, "locally_modified": status["locally_modified"], "claude_md_refreshed": False, "source_note": source_note, "warning": warning}
+        if status["up_to_date"] and not (staleness and staleness.is_stale):
+            return {"updated": 0, "added": 0, "removed": 0, "locally_modified": status["locally_modified"], "claude_md_refreshed": False, "source_note": source_note, "warning": warning, "staleness": staleness}
 
         # Preview precondition: refuse to clobber locally-edited snapshot files unless forced.
         locally_modified = status.get("locally_modified", [])
         if locally_modified and not force:
             return {"blocked": True, "locally_modified": locally_modified,
-                    "updated": 0, "added": 0, "removed": 0, "claude_md_refreshed": False, "source_note": source_note, "warning": warning}
+                    "updated": 0, "added": 0, "removed": 0, "claude_md_refreshed": False, "source_note": source_note, "warning": warning, "staleness": staleness}
 
         # Re-install (install_studio is idempotent and preserves user dirs). This
         # also re-injects the coding-principles block into CLAUDE.md, refreshing it
@@ -884,4 +907,5 @@ def update_studio(target: Path, studio_dir: Optional[Path] = None, force: bool =
             "claude_md_refreshed": status.get("claude_md_stale", False),
             "source_note": source_note,
             "warning": warning,
+            "staleness": staleness,
         }
