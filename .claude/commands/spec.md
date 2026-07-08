@@ -156,7 +156,7 @@ spec that hides its soft spots is worse than one that names them.
 ## Build Plan
 How this maps to buildable units — ideally a short list of MVI units (each a complete, usable
 interaction; "build a skateboard, not a wheel"), in dependency order. This is the bridge to
-`/studio-implement`.
+`/forge`.
 ````
 
 Keep the writing human (Coding Principles §6): plain language, say what a thing does and why it
@@ -205,5 +205,5 @@ python ".studio/source/run_phase.py" rate --run-dir {run_dir} --score {1-5} --no
   rejected or shaky architecture gets surfaced, not silently shipped.
 - **Specs are tracked.** They live in `specs/` (or `.studio/specs/` in a consuming repo), are meant
   to be committed, and stay linked to their ticket. They are not throwaway `output/` artifacts.
-- **A spec precedes the build.** Once approved, this is what `/studio-implement` and the feature
+- **A spec precedes the build.** Once approved, this is what `/forge` and the feature
   work build against. (See Coding Principle 9, "Spec Before Build.")

@@ -1,4 +1,4 @@
-# Studio Implement (Writer/Editor Loop)
+# Forge (Writer/Editor Loop)
 
 Build one MVI unit through the implementation writer/editor loop: a writer agent builds a
 complete, usable unit and commits its passing state; a fresh editor agent (carrying the
@@ -63,7 +63,7 @@ relies on a clean base.
 Print a short block, then proceed (unless `--plan`):
 
 ```
-/studio-implement
+/forge
   unit_id:  <slug>
   title:    <MVI outcome>
   branch:   <branch>

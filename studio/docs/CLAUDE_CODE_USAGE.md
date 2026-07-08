@@ -399,12 +399,12 @@ Override keys replace the base; unspecified keys inherit from the manifest. Vali
 
 ---
 
-## Implementation Loop (`/studio-implement`)
+## Implementation Loop (`/forge`)
 
 Brings the advocate/contrarian cadence into **implementation**, the writer/editor analogue of the planning-phase debate. One agent writes a complete unit; a fresh editor agent refines it; then it's delivered.
 
 ```
-/studio-implement Users can create and view a profile (hardcoded storage)
+/forge Users can create and view a profile (hardcoded storage)
 ```
 
 How it runs:

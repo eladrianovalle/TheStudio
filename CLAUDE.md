@@ -150,10 +150,10 @@ The **Contrarian is an editor by default**: beyond hunting flaws and edge cases,
 
 ## Implementation Loop (Claude Code)
 
-The same advocate/contrarian cadence also runs during **implementation**, via `/studio-implement`:
+The same advocate/contrarian cadence also runs during **implementation**, via `/forge`:
 
 ```
-/studio-implement Users can create and view a profile (hardcoded storage)
+/forge Users can create and view a profile (hardcoded storage)
 ```
 
 A **writer** agent builds one complete MVI unit and commits its passing state; a fresh **editor** agent (the `CONTRARIAN_MANDATE` applied to code) cuts/refines it against the writer's diff and reverts if an edit breaks green: a one-way pipeline gated on **"MVI unit complete AND tests green."** It runs the `.claude/workflows/implementation-loop.js` Claude Code Workflow, config-driven via `implementation_loop.toml` (editor on/off, read scope, output budget, mutation/static gates), with knobs exposed through `python -m impl_loop`. It is the executor described in `studio/docs/IMPLEMENTATION_LOOP_SPEC.md`. Status: executor + config shipped; cadence tuning (gate granularity vs. editor yield) is ongoing.

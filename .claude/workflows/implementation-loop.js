@@ -189,7 +189,7 @@ if (!entryGate) {
   return { delivered: true, flagged: true, editorRan: false, writer }
 }
 
-// Config knob (editor.mandate="off" → editor_enabled=false, merged into args by /studio-implement):
+// Config knob (editor.mandate="off" → editor_enabled=false, merged into args by /forge):
 // skip the editor pass entirely and deliver the writer's version.
 if (unit.editor_enabled === false) {
   log(`editor_enabled=false (mandate off) — delivering the writer's version, no editor pass.`)

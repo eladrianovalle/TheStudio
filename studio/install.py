@@ -3,7 +3,7 @@ Cross-repo Studio installer.
 
 Copies Studio source, slash commands, workflows, config, and manifest into a
 target project so that all slash commands (`/run-phase`, `/run-studio-phase`,
-`/studio-implement`, `/smoke`, `/unstale`, `/detest`, `/offload`,
+`/forge`, `/smoke`, `/unstale`, `/detest`, `/offload`,
 `/studio-update`, `/studio-setup`) work natively, including the pause-and-ask
 collaboration protocol and the implementation-loop workflow.
 
@@ -75,7 +75,7 @@ SLASH_COMMANDS = [
     "detest.md",
     "offload.md",
     "studio-setup.md",
-    "studio-implement.md",
+    "forge.md",
     "smoke.md",
     "spec.md",
 ]

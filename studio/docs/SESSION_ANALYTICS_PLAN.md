@@ -7,7 +7,7 @@ own repos). The "central ledger" is just a local file path, and there are no
 multi-user or access concerns to design around.
 
 **Status: first slice shipped.** The recommended first slice (see the bottom
-section) is built, via the `/studio-implement` writer/editor loop:
+section) is built, via the `/forge` writer/editor loop:
 
 - `session.json`, auto-written at finalize. `session.py` holds the pure
   record builder (`build_session_record` + the `_summarize_*` helpers); the
@@ -30,7 +30,7 @@ below still apply to what shipped.
 ## The problem this solves
 
 Rating a run at finalize is noise: a Studio run is a *planning session*, and its
-specs/decisions get implemented later (via `/studio-implement` or by hand in a
+specs/decisions get implemented later (via `/forge` or by hand in a
 consuming repo). You can't judge whether the plan was good before it's built. So
 `rate` after a run is close to useless, and the outcome ledger it feeds only sees
 the runs you bothered to rate.
@@ -149,7 +149,7 @@ from consuming repos, compact/dedup only in the tool repo.
 The plan's real value shows up only when implemented, the honest hard part.
 Lowest-ceremony approach, added once a month of session records exists:
 
-- **Automatable:** `/studio-implement` (and rerun) carries `--from-run <run_id>`,
+- **Automatable:** `/forge` (and rerun) carries `--from-run <run_id>`,
   writes `spawned_by` into its own record and appends the implement-run id into
   the parent session's `outcome.implementations`. Free when implementation
   happens in the same repo.

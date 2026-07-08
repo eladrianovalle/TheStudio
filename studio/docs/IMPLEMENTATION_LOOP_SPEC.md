@@ -1,7 +1,7 @@
 # Implementation Writer/Editor Loop Spec
 
 > **Status: shipped (executor + config); cadence tuning ongoing.** The Workflow shell
-> (`.claude/workflows/implementation-loop.js`), the `/studio-implement` trigger, and the config
+> (`.claude/workflows/implementation-loop.js`), the `/forge` trigger, and the config
 > loader (`studio/impl_loop.py` + `config/implementation_loop.toml`) are built and merged. What
 > remains is the cadence lab: tuning gate granularity against the success/kill metric. This doc
 > is the design of record; the "Build phases" section tracks what's done.
@@ -272,15 +272,15 @@ gated on reviewing the one before it.
 2. ✅ **Extract config + harden**: `studio/config/implementation_loop.toml` + `studio/impl_loop.py`
    (`LoopConfig` + `load_loop_config()`), patterned on `scopes.py`, with loader tests. Plus
    `runtime_knobs()` / `python -m impl_loop` so the workflow consumes the config, and the
-   `/studio-implement` command. *Done.*
+   `/forge` command. *Done.*
 3. ⏳ **Cadence lab**: capture the no-editor baseline, run real units, tune granularity against the
    success/kill metric, write the result back into config. *Pending*. Only ~2 data points so far.
 
 The documentation contract is satisfied: `CLAUDE.md` (Architecture + Implementation Loop section)
-and `CLAUDE_CODE_USAGE.md` (`/studio-implement` section) document the shipped loop.
+and `CLAUDE_CODE_USAGE.md` (`/forge` section) document the shipped loop.
 
 > **Implementation gotchas** (cost three no-op runs to find; documented in
-> `.claude/commands/studio-implement.md`): `Workflow({name})` resolves a *frozen registry snapshot*
+> `.claude/commands/forge.md`): `Workflow({name})` resolves a *frozen registry snapshot*
 > and ignores on-disk edits, so invoke by `scriptPath`; and the Workflow `args` arrive as a *JSON
 > string*, not an object, so the workflow `JSON.parse`s them.
 
