@@ -335,6 +335,31 @@ Or set `STUDIO_ARTIFACT_ROOT` as an environment variable.
 
 Priority: `--artifact-root` flag > `STUDIO_ARTIFACT_ROOT` env > cwd-based detection.
 
+### Staying up to date (automatic nudge)
+
+You don't have to remember to check whether your installed Studio is current. When you run
+`studio init` (or `update`), Studio installs a small **SessionStart hook** into your project's
+`.claude/settings.local.json`. At the start of each Claude Code session it runs a quick,
+cached check: has the Studio source moved past the commit you installed from? If so, it surfaces
+a single line telling you to run `/studio-update`. If you're current, it says nothing.
+
+- **Quiet and cheap.** It checks the network at most once a day (bounded, best-effort `git fetch`,
+  cached in `.studio/update-check.json`) and is near-instant on repeat sessions. It works offline,
+  never changes your files, and can never slow down or break a session — if anything goes wrong it
+  just stays silent.
+- **Nudges once per update.** After it points out a given update, it stays quiet until either a
+  newer update appears or you actually run `/studio-update`.
+- **Turn it off** two ways: `studio init --no-hook` / `studio update --no-hook` skips (or removes)
+  the hook, and creating an empty `.studio/update-check.off` file disables the check durably, even
+  if a future `update` would otherwise re-add the hook.
+- **One caveat worth knowing.** The check only works on the machine that ran `studio init` — the
+  one that has the Studio source on disk. A teammate who clones your project but never had Studio
+  source gets a safe no-op, never a false nudge. The hook lives in `settings.local.json` (per-user,
+  gitignored) precisely so it isn't committed and inflicted on teammates.
+
+Because it's machine-local, add `.studio/update-check.json` to your `.gitignore` if it isn't
+already covered.
+
 ## Artifacts
 
 When running from the Studio repo, outputs go to `studio/output/<phase>/run_<phase>_<timestamp>/`.

@@ -79,6 +79,10 @@ If `STUDIO_ROOT` is set, the helper script reads it automatically; otherwise adj
 ## 8. Maintenance
 - Update Studio path info if the repo moves or if `STUDIO_ROOT` changes.
 - Keep the canon table fresh; stale references cause hallucinated guidance.
+- Staying current is automatic: a SessionStart hook nudges you to run `/studio-update` when your
+  installed Studio falls behind upstream (once per update, quiet otherwise). Turn it off with
+  `studio update --no-hook` or an empty `.studio/update-check.off`; add `.studio/update-check.json`
+  to `.gitignore`.
 - Record notable Studio runs at the bottom of this file (date, run_id, takeaway) so teammates can rehydrate context quickly.
 
 ---
