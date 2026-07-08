@@ -281,3 +281,32 @@ def test_handler_exit_zero_on_garbage_target(tmp_path, capsys):
     )
     assert proc.returncode == 0
     assert proc.stdout.strip() == ""
+
+
+def test_load_update_cache_discards_bad_last_check(tmp_path):
+    """A hand-edited/corrupt cache whose last_check isn't a number is treated as a
+    cold start, not left to blow up the TTL math (`now - last_check`) later. Guards
+    the compute_update_check "never raises" contract."""
+    from install import _load_update_cache, UPDATE_CHECK_CACHE
+
+    studio = tmp_path / ".studio"
+    studio.mkdir(parents=True)
+    (studio / UPDATE_CHECK_CACHE).write_text(
+        json.dumps({"last_check": "not-a-number", "source_commit": "abc123"}),
+        encoding="utf-8",
+    )
+    assert _load_update_cache(tmp_path) == {}
+
+
+def test_load_update_cache_discards_non_string_commit(tmp_path):
+    """A cache whose commit fields are the wrong type is discarded, so the SHA
+    compares can't raise on a corrupt file."""
+    from install import _load_update_cache, UPDATE_CHECK_CACHE
+
+    studio = tmp_path / ".studio"
+    studio.mkdir(parents=True)
+    (studio / UPDATE_CHECK_CACHE).write_text(
+        json.dumps({"last_check": 123.0, "source_commit": ["not", "a", "str"]}),
+        encoding="utf-8",
+    )
+    assert _load_update_cache(tmp_path) == {}

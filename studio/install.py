@@ -394,7 +394,20 @@ def _load_update_cache(target: Path) -> Dict:
         data = json.loads(cache_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, ValueError):
         return {}
-    return data if isinstance(data, dict) else {}
+    if not isinstance(data, dict):
+        return {}
+    # Discard a hand-edited/corrupt cache whose fields are the wrong type, so the
+    # TTL math (``now - last_check``) and the SHA compares can't raise later. A bad
+    # cache then behaves exactly like a cold start rather than wedging the check.
+    if not isinstance(data.get("last_check"), (int, float)):
+        return {}
+    # Commit fields may be a SHA string or None (e.g. notified_commit before any
+    # notification); reject only an outright wrong type (list/dict/number) that a
+    # hand-edit could introduce.
+    for key in ("source_commit", "notified_commit"):
+        if key in data and not isinstance(data[key], (str, type(None))):
+            return {}
+    return data
 
 
 def _write_update_cache(target: Path, cache: Dict) -> None:
@@ -517,9 +530,16 @@ def _hook_command() -> str:
     ``command not found`` and the check silently never runs — for exactly the one
     user (the installer) it targets. Baking the resolving interpreter also settles
     the ``python`` vs ``python3`` question outright.
+
+    Both the interpreter and the script path are absolute (the script via
+    ``$CLAUDE_PROJECT_DIR``): Claude Code runs hook commands from the session's
+    working directory, which may be a subdirectory of the repo, not the project
+    root. A cwd-relative script path would make Python exit 2 ("can't open file")
+    and surface a hook error at session start, breaking the always-exit-0 contract.
+    Both paths are quoted so a space in either doesn't split the command.
     """
     return (
-        f'{sys.executable} ".studio/source/run_phase.py" '
+        f'"{sys.executable}" "$CLAUDE_PROJECT_DIR/.studio/source/run_phase.py" '
         f'check-updates --target "$CLAUDE_PROJECT_DIR"'
     )
 
@@ -558,7 +578,24 @@ def _install_sessionstart_hook(target: Path, *, enabled: bool) -> None:
     else:
         data = {}
 
+    # Guard the fields the same way as the top-level object: if the user's file
+    # already has a `hooks` that isn't an object, or a `SessionStart` that isn't a
+    # list, don't clobber their unexpected shape — warn and leave it be. (Without
+    # this, `hooks.setdefault(...)` on a list or iterating a dict `SessionStart`
+    # would raise out of install_studio, despite the never-raises contract.)
+    if "hooks" in data and not isinstance(data["hooks"], dict):
+        print(
+            f"  WARNING: {settings_path} has a non-object 'hooks'; "
+            "left it untouched and skipped the update-check hook."
+        )
+        return
     hooks = data.setdefault("hooks", {})
+    if "SessionStart" in hooks and not isinstance(hooks["SessionStart"], list):
+        print(
+            f"  WARNING: {settings_path} has a non-list 'hooks.SessionStart'; "
+            "left it untouched and skipped the update-check hook."
+        )
+        return
     entries = hooks.setdefault("SessionStart", [])
 
     # Find our own entry (the group whose command contains the marker).
@@ -1114,6 +1151,17 @@ def update_studio(
             f"Studio not installed at {target}. Run 'init' first."
         )
 
+    # Install/refresh (or, when disabled, remove) the SessionStart update-check hook
+    # up front, so it's handled on EVERY path — including the up-to-date and blocked
+    # short-circuits below, which return before the re-install. Otherwise
+    # `update --no-hook` on an already-current repo (the most common way someone
+    # turns the nudge off) would silently no-op and leave the hook in place. The
+    # re-install path passes install_hook=False so this isn't done twice. The hook
+    # lives in .claude/settings.local.json, separate from the snapshot, so it's
+    # correct to handle even when a re-install is blocked on local edits.
+    hook_enabled = install_hook and not (dot_studio / UPDATE_CHECK_SENTINEL).exists()
+    _install_sessionstart_hook(target, enabled=hook_enabled)
+
     # Resolve the live source up front so both the check and the re-install copy
     # from upstream, not from the (possibly stale) installed snapshot (#20).
     auto_resolved = studio_dir is None
@@ -1151,7 +1199,9 @@ def update_studio(
         # Copy from the materialized tree, but record the durable upstream in
         # VERSION — not the throwaway worktree path, which is gone after this.
         override = source_dir if effective_dir != source_dir else None
-        install_studio(target, effective_dir, source_path_override=override, install_hook=install_hook)
+        # install_hook=False: update_studio already handled the hook up front (above),
+        # on every path, so don't let the re-install touch it a second time.
+        install_studio(target, effective_dir, source_path_override=override, install_hook=False)
 
         return {
             "updated": len(status["changed"]),
