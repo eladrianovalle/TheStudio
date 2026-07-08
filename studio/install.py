@@ -22,6 +22,7 @@ import json
 import shutil
 import subprocess
 import tempfile
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
@@ -357,6 +358,148 @@ def _source_staleness(
         fetched=fetched,
         reason=reason,
     )
+
+
+UPDATE_CHECK_CACHE = "update-check.json"
+UPDATE_CHECK_SENTINEL = "update-check.off"
+UPDATE_CHECK_TTL_SECONDS = 24 * 3600
+UPDATE_ADDITIONAL_CONTEXT = (
+    "A Studio update is available upstream. Tell the user: run /studio-update "
+    "to refresh the installed Studio copy."
+)
+
+
+@dataclass(frozen=True)
+class UpdateCheck:
+    """Whether a consuming repo's installed Studio snapshot is behind upstream.
+
+    Produced by ``compute_update_check``. Best-effort: every branch that can't
+    answer cleanly (opted out, offline, no source on this machine, not a git
+    repo, already current) returns ``should_notify=False`` with a ``reason``,
+    so the caller degrades to silence instead of nudging on a guess.
+    """
+    should_notify: bool
+    reason: Optional[str]
+
+
+def _load_update_cache(target: Path) -> Dict:
+    """Read the update-check cache under ``<target>/.studio/update-check.json``.
+
+    Returns an empty dict when the file is missing or corrupt, so the caller
+    treats a bad cache the same as a cold start. Never raises.
+    """
+    cache_path = target / ".studio" / UPDATE_CHECK_CACHE
+    try:
+        data = json.loads(cache_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_update_cache(target: Path, cache: Dict) -> None:
+    """Write the update-check cache. Swallows any write failure.
+
+    The check is advisory and must never fail a session, so a read-only
+    filesystem or a missing ``.studio`` directory degrades to "cache not
+    written" rather than raising.
+    """
+    cache_path = target / ".studio" / UPDATE_CHECK_CACHE
+    try:
+        cache_path.write_text(
+            json.dumps(cache, indent=2) + "\n", encoding="utf-8"
+        )
+    except OSError:
+        pass
+
+
+def compute_update_check(
+    target: Path, *, now: Optional[float] = None, fetch_timeout: float = 5.0
+) -> UpdateCheck:
+    """Decide whether to nudge that ``target``'s installed Studio is behind upstream.
+
+    Best-effort and NEVER raises. Compares the commit the snapshot was installed
+    from (``.studio/VERSION``) against the current ``origin/<branch>`` HEAD of the
+    live Studio source it was installed from. A network fetch happens at most once
+    per ``UPDATE_CHECK_TTL_SECONDS`` (governed by the cache); everything else is
+    read live so running ``/studio-update`` clears the nudge immediately.
+
+    Every "can't tell" branch returns ``should_notify=False`` with a descriptive
+    ``reason``. ``now`` is injectable for deterministic TTL tests.
+    """
+    now = now if now is not None else time.time()
+
+    studio_dir = target / ".studio"
+
+    # Opt-out: a one-bit sentinel file silences the check entirely.
+    if (studio_dir / UPDATE_CHECK_SENTINEL).exists():
+        return UpdateCheck(should_notify=False, reason="disabled")
+
+    # Installed commit: the SHA the snapshot was installed from.
+    try:
+        version = json.loads(
+            (studio_dir / "VERSION").read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError, ValueError):
+        return UpdateCheck(should_notify=False, reason="VERSION unreadable")
+    installed_commit = version.get("commit")
+    if not installed_commit or installed_commit == "unknown":
+        return UpdateCheck(
+            should_notify=False, reason="installed commit missing or unknown"
+        )
+
+    # Resolve the live upstream source. Any warning means the source isn't on
+    # this machine (teammate clone), moved, or points back at the snapshot —
+    # the same resolution check-install/update use.
+    source_dir, warning = _resolve_source_dir(target, None)
+    if warning:
+        return UpdateCheck(should_notify=False, reason=warning)
+
+    branch = _default_branch_ref_local(source_dir) or "main"
+    remote_ref = f"refs/remotes/origin/{branch}"
+
+    cache = _load_update_cache(target)
+    fresh = (
+        "source_commit" in cache
+        and now - cache.get("last_check", 0) < UPDATE_CHECK_TTL_SECONDS
+    )
+    if fresh:
+        source_commit = cache["source_commit"]
+        did_fetch = False
+    else:
+        _git_fetch(source_dir, branch, timeout=fetch_timeout)
+        did_fetch = True
+        source_commit = _git_out(
+            source_dir, "rev-parse", "--verify", "--quiet", remote_ref
+        )
+
+    # No origin ref: offline first run, no origin, not a git repo, detached.
+    # Write no cache so the next online session retries.
+    if source_commit is None:
+        return UpdateCheck(
+            should_notify=False,
+            reason=f"could not resolve {remote_ref} (offline or no origin)",
+        )
+
+    update_available = source_commit != installed_commit
+    should_notify = update_available and source_commit != cache.get(
+        "notified_commit"
+    )
+
+    _write_update_cache(
+        target,
+        {
+            "last_check": now if did_fetch else cache.get("last_check", now),
+            "source_commit": source_commit,
+            "notified_commit": (
+                source_commit if should_notify else cache.get("notified_commit")
+            ),
+        },
+    )
+
+    reason = None if should_notify else (
+        "up to date" if not update_available else "already notified"
+    )
+    return UpdateCheck(should_notify=should_notify, reason=reason)
 
 
 @contextmanager

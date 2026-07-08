@@ -215,7 +215,7 @@ SUBCOMMANDS = {
     "prepare", "finalize", "cleanup", "validate",
     "record-decisions", "check-decisions",
     "extract-decisions", "inject-context",
-    "init", "check-install", "update",
+    "init", "check-install", "check-updates", "update",
     "show-clarity", "set-clarity", "recompute-clarity",
     "record-metrics", "show-metrics", "offload", "setup",
     "rate", "stats", "notify",
@@ -2055,6 +2055,18 @@ def build_parser() -> argparse.ArgumentParser:
              "against cached refs only (for offline use).",
     )
 
+    check_updates_parser = subparsers.add_parser(
+        "check-updates",
+        help="Print a one-line update nudge if the installed Studio snapshot is "
+             "behind upstream. Silent when current. Invoked by the SessionStart hook.",
+    )
+    check_updates_parser.add_argument(
+        "--target",
+        type=Path,
+        required=True,
+        help="Path to the target project directory.",
+    )
+
     update_parser = subparsers.add_parser(
         "update", help="Update installed Studio from source."
     )
@@ -3134,6 +3146,27 @@ def _do_check_install(args: argparse.Namespace) -> None:
     _print_local_edits_preview(status["locally_modified"])
 
 
+def _do_check_updates(args: argparse.Namespace) -> None:
+    """Print a one-line SessionStart nudge when the installed snapshot is behind.
+
+    Invoked by the SessionStart hook, so it must NEVER fail the session: every
+    path is wrapped and the process always exits 0. Silent when current, offline,
+    or anything at all goes wrong.
+    """
+    try:
+        import install
+        result = install.compute_update_check(Path(args.target).resolve())
+        if result.should_notify:
+            print(json.dumps({
+                "hookSpecificOutput": {
+                    "hookEventName": "SessionStart",
+                    "additionalContext": install.UPDATE_ADDITIONAL_CONTEXT,
+                }
+            }))
+    except Exception:
+        pass
+
+
 def _do_update(args: argparse.Namespace) -> None:
     """Update installed Studio from source."""
     from install import update_studio, _resolve_source_dir
@@ -3305,6 +3338,8 @@ def _dispatch(args: argparse.Namespace) -> None:
         _do_init(args)
     elif args.command == "check-install":
         _do_check_install(args)
+    elif args.command == "check-updates":
+        _do_check_updates(args)
     elif args.command == "update":
         _do_update(args)
     elif args.command == "show-clarity":
