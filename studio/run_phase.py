@@ -2038,6 +2038,11 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Path to the target project directory.",
     )
+    init_parser.add_argument(
+        "--no-hook",
+        action="store_true",
+        help="Do not install the SessionStart update-check hook.",
+    )
 
     check_install_parser = subparsers.add_parser(
         "check-install", help="Check if installed Studio is up to date."
@@ -2086,6 +2091,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip the network fetch of the Studio source's remote; compare "
              "against cached refs only (for offline use).",
+    )
+    update_parser.add_argument(
+        "--no-hook",
+        action="store_true",
+        help="Do not install the SessionStart update-check hook.",
     )
 
     # --- Clarity commands ---
@@ -3070,7 +3080,7 @@ def _do_init(args: argparse.Namespace) -> None:
     target = Path(args.target).resolve()
     if not target.is_dir():
         raise FileNotFoundError(f"Target directory not found: {target}")
-    dot_studio = install_studio(target)
+    dot_studio = install_studio(target, install_hook=not args.no_hook)
     print(f"Studio installed to {dot_studio}")
     print(f"  Slash commands: {target / '.claude' / 'commands'}")
     print(f"  Source: {dot_studio / 'source'}")
@@ -3175,6 +3185,7 @@ def _do_update(args: argparse.Namespace) -> None:
         target,
         force=getattr(args, "force", False),
         fetch=not getattr(args, "no_fetch", False),
+        install_hook=not getattr(args, "no_hook", False),
     )
     if result.get("warning"):
         print(f"WARNING: {result['warning']}\n")

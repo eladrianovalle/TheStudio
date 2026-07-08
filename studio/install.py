@@ -21,6 +21,7 @@ import hashlib
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from contextlib import contextmanager
@@ -502,6 +503,106 @@ def compute_update_check(
     return UpdateCheck(should_notify=should_notify, reason=reason)
 
 
+# Substring that identifies OUR SessionStart hook entry among any others the user
+# has configured. The check-updates subcommand name is stable and unique enough to
+# recognize our command on re-install without matching anyone else's hook.
+_HOOK_MARKER = "check-updates"
+
+
+def _hook_command() -> str:
+    """The exact shell command our SessionStart hook runs.
+
+    Uses the absolute ``sys.executable`` captured at install time, not a bare
+    ``python``: on a stock macOS only ``python3`` exists, so ``python`` is
+    ``command not found`` and the check silently never runs — for exactly the one
+    user (the installer) it targets. Baking the resolving interpreter also settles
+    the ``python`` vs ``python3`` question outright.
+    """
+    return (
+        f'{sys.executable} ".studio/source/run_phase.py" '
+        f'check-updates --target "$CLAUDE_PROJECT_DIR"'
+    )
+
+
+def _install_sessionstart_hook(target: Path, *, enabled: bool) -> None:
+    """Merge (or remove) our SessionStart update-check hook in the target.
+
+    Writes to ``<target>/.claude/settings.local.json`` — the per-user, gitignored
+    settings file, NOT the shared ``settings.json``. The check is machine-local
+    (both the source path and the interpreter path are absolute to the installer's
+    box), so committing the hook would inflict an unresolvable command on every
+    teammate.
+
+    Best-effort and NEVER raises. Identifies our own entry by the ``check-updates``
+    substring so it stays idempotent across re-installs and refreshes the command
+    (interpreter/version) in place. Every other key and hook in the file is left
+    untouched. If the file exists but doesn't parse as JSON, prints a one-line
+    warning and returns rather than clobbering a file it can't read.
+
+    When ``enabled`` is False (``--no-hook`` or the opt-out sentinel), any existing
+    entry of ours is removed and none is added.
+    """
+    settings_path = target / ".claude" / "settings.local.json"
+
+    if settings_path.exists():
+        try:
+            data = json.loads(settings_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, ValueError):
+            print(
+                f"  WARNING: {settings_path} is not valid JSON; "
+                "left it untouched and skipped the update-check hook."
+            )
+            return
+        if not isinstance(data, dict):
+            print(
+                f"  WARNING: {settings_path} is not a JSON object; "
+                "left it untouched and skipped the update-check hook."
+            )
+            return
+    else:
+        data = {}
+
+    hooks = data.setdefault("hooks", {})
+    entries = hooks.setdefault("SessionStart", [])
+
+    # Find our own entry (the group whose command contains the marker).
+    our_entry = None
+    for entry in entries:
+        for inner in entry.get("hooks", []):
+            if _HOOK_MARKER in inner.get("command", ""):
+                our_entry = entry
+                break
+        if our_entry is not None:
+            break
+
+    if not enabled:
+        if our_entry is None:
+            return  # Nothing of ours to remove; leave the file as-is.
+        entries.remove(our_entry)
+        # Drop now-empty containers we own, so we leave no empty scaffolding behind.
+        if not entries:
+            del hooks["SessionStart"]
+        if not hooks:
+            del data["hooks"]
+    elif our_entry is not None:
+        # Refresh the command in place (new interpreter/version across updates).
+        for inner in our_entry.get("hooks", []):
+            if _HOOK_MARKER in inner.get("command", ""):
+                inner["command"] = _hook_command()
+    else:
+        entries.append(
+            {"hooks": [{"type": "command", "command": _hook_command()}]}
+        )
+
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        settings_path.write_text(
+            json.dumps(data, indent=2) + "\n", encoding="utf-8"
+        )
+    except OSError:
+        pass
+
+
 @contextmanager
 def _source_at_default_branch(
     studio_dir: Path, enabled: bool, override_ref: Optional[str] = None
@@ -746,6 +847,7 @@ def install_studio(
     target: Path,
     studio_dir: Optional[Path] = None,
     source_path_override: Optional[Path] = None,
+    install_hook: bool = True,
 ) -> Path:
     """Install Studio into a target project directory.
 
@@ -851,6 +953,12 @@ def install_studio(
 
     # Inject coding principles into target's CLAUDE.md
     _inject_principles_into_claude_md(target, studio_dir)
+
+    # Install (or refresh) the SessionStart update-check hook. A present opt-out
+    # sentinel is a durable "leave me alone": it disables the hook and removes any
+    # entry a prior install left behind.
+    hook_enabled = install_hook and not (dot_studio / UPDATE_CHECK_SENTINEL).exists()
+    _install_sessionstart_hook(target, enabled=hook_enabled)
 
     return dot_studio
 
@@ -975,7 +1083,8 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None, fetch: bool = 
 
 
 def update_studio(
-    target: Path, studio_dir: Optional[Path] = None, force: bool = False, fetch: bool = True
+    target: Path, studio_dir: Optional[Path] = None, force: bool = False, fetch: bool = True,
+    install_hook: bool = True,
 ) -> dict:
     """Update an installed Studio from the source.
 
@@ -1048,7 +1157,7 @@ def update_studio(
         # Copy from the materialized tree, but record the durable upstream in
         # VERSION — not the throwaway worktree path, which is gone after this.
         override = source_dir if effective_dir != source_dir else None
-        install_studio(target, effective_dir, source_path_override=override)
+        install_studio(target, effective_dir, source_path_override=override, install_hook=install_hook)
 
         return {
             "updated": len(status["changed"]),
