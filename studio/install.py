@@ -535,9 +535,9 @@ def _install_sessionstart_hook(target: Path, *, enabled: bool) -> None:
 
     Best-effort and NEVER raises. Identifies our own entry by the ``check-updates``
     substring so it stays idempotent across re-installs and refreshes the command
-    (interpreter/version) in place. Every other key and hook in the file is left
-    untouched. If the file exists but doesn't parse as JSON, prints a one-line
-    warning and returns rather than clobbering a file it can't read.
+    (interpreter/version) on re-install. Every other key and hook in the file is
+    left untouched. If the file exists but doesn't hold a JSON object, prints a
+    one-line warning and returns rather than clobbering a file it can't read.
 
     When ``enabled`` is False (``--no-hook`` or the opt-out sentinel), any existing
     entry of ours is removed and none is added.
@@ -547,13 +547,9 @@ def _install_sessionstart_hook(target: Path, *, enabled: bool) -> None:
     if settings_path.exists():
         try:
             data = json.loads(settings_path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                raise ValueError
         except (json.JSONDecodeError, ValueError):
-            print(
-                f"  WARNING: {settings_path} is not valid JSON; "
-                "left it untouched and skipped the update-check hook."
-            )
-            return
-        if not isinstance(data, dict):
             print(
                 f"  WARNING: {settings_path} is not a JSON object; "
                 "left it untouched and skipped the update-check hook."
@@ -568,31 +564,29 @@ def _install_sessionstart_hook(target: Path, *, enabled: bool) -> None:
     # Find our own entry (the group whose command contains the marker).
     our_entry = None
     for entry in entries:
-        for inner in entry.get("hooks", []):
-            if _HOOK_MARKER in inner.get("command", ""):
-                our_entry = entry
-                break
-        if our_entry is not None:
+        commands = (inner.get("command", "") for inner in entry.get("hooks", []))
+        if any(_HOOK_MARKER in command for command in commands):
+            our_entry = entry
             break
 
-    if not enabled:
-        if our_entry is None:
-            return  # Nothing of ours to remove; leave the file as-is.
+    if our_entry is None and not enabled:
+        return  # Nothing of ours, and none wanted: leave the file as-is.
+
+    # Remove any stale entry of ours, then re-add fresh when enabled. Re-adding
+    # (rather than editing in place) refreshes the command in one path — the
+    # interpreter or source path can change across updates.
+    if our_entry is not None:
         entries.remove(our_entry)
-        # Drop now-empty containers we own, so we leave no empty scaffolding behind.
-        if not entries:
-            del hooks["SessionStart"]
-        if not hooks:
-            del data["hooks"]
-    elif our_entry is not None:
-        # Refresh the command in place (new interpreter/version across updates).
-        for inner in our_entry.get("hooks", []):
-            if _HOOK_MARKER in inner.get("command", ""):
-                inner["command"] = _hook_command()
-    else:
+    if enabled:
         entries.append(
             {"hooks": [{"type": "command", "command": _hook_command()}]}
         )
+
+    # Drop now-empty containers we own, so we leave no empty scaffolding behind.
+    if not entries:
+        hooks.pop("SessionStart", None)
+    if not hooks:
+        data.pop("hooks", None)
 
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     try:
