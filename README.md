@@ -252,7 +252,7 @@ python $STUDIO_ROOT/run_phase.py prepare --phase tech --text "Build lobby system
 
 First run auto-scaffolds `.studio/` and creates a bridge doc. Override with `--artifact-root` or `STUDIO_ARTIFACT_ROOT` env var. Priority: flag > env > cwd detection.
 
-Keep installed copies current: `python studio/run_phase.py check-install --target <path>` and `update --target <path>`.
+Keep installed copies current: `python studio/run_phase.py check-install --target <path>` and `update --target <path>`. `init`/`update` also install a per-user SessionStart hook that quietly nudges you to run `/studio-update` when your installed Studio falls behind upstream — once per update, silent otherwise, offline-safe, and never able to break a session. Opt out with `--no-hook` or an empty `.studio/update-check.off`. See [CLAUDE_CODE_USAGE.md](./studio/docs/CLAUDE_CODE_USAGE.md#staying-up-to-date-automatic-nudge).
 
 ---
 

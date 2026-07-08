@@ -21,7 +21,9 @@ import hashlib
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
@@ -359,6 +361,279 @@ def _source_staleness(
     )
 
 
+UPDATE_CHECK_CACHE = "update-check.json"
+UPDATE_CHECK_SENTINEL = "update-check.off"
+UPDATE_CHECK_TTL_SECONDS = 24 * 3600
+UPDATE_ADDITIONAL_CONTEXT = (
+    "A Studio update is available upstream. Tell the user: run /studio-update "
+    "to refresh the installed Studio copy."
+)
+
+
+@dataclass(frozen=True)
+class UpdateCheck:
+    """Whether a consuming repo's installed Studio snapshot is behind upstream.
+
+    Produced by ``compute_update_check``. Best-effort: every branch that can't
+    answer cleanly (opted out, offline, no source on this machine, not a git
+    repo, already current) returns ``should_notify=False`` with a ``reason``,
+    so the caller degrades to silence instead of nudging on a guess.
+    """
+    should_notify: bool
+    reason: Optional[str]
+
+
+def _load_update_cache(target: Path) -> Dict:
+    """Read the update-check cache under ``<target>/.studio/update-check.json``.
+
+    Returns an empty dict when the file is missing or corrupt, so the caller
+    treats a bad cache the same as a cold start. Never raises.
+    """
+    cache_path = target / ".studio" / UPDATE_CHECK_CACHE
+    try:
+        data = json.loads(cache_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    # Discard a hand-edited/corrupt cache whose fields are the wrong type, so the
+    # TTL math (``now - last_check``) and the SHA compares can't raise later. A bad
+    # cache then behaves exactly like a cold start rather than wedging the check.
+    if not isinstance(data.get("last_check"), (int, float)):
+        return {}
+    # Commit fields may be a SHA string or None (e.g. notified_commit before any
+    # notification); reject only an outright wrong type (list/dict/number) that a
+    # hand-edit could introduce.
+    for key in ("source_commit", "notified_commit"):
+        if key in data and not isinstance(data[key], (str, type(None))):
+            return {}
+    return data
+
+
+def _write_update_cache(target: Path, cache: Dict) -> None:
+    """Write the update-check cache. Swallows any write failure.
+
+    The check is advisory and must never fail a session, so a read-only
+    filesystem or a missing ``.studio`` directory degrades to "cache not
+    written" rather than raising.
+    """
+    cache_path = target / ".studio" / UPDATE_CHECK_CACHE
+    try:
+        cache_path.write_text(
+            json.dumps(cache, indent=2) + "\n", encoding="utf-8"
+        )
+    except OSError:
+        pass
+
+
+def compute_update_check(
+    target: Path, *, now: Optional[float] = None, fetch_timeout: float = 5.0
+) -> UpdateCheck:
+    """Decide whether to nudge that ``target``'s installed Studio is behind upstream.
+
+    Best-effort and NEVER raises. Compares the commit the snapshot was installed
+    from (``.studio/VERSION``) against the current ``origin/<branch>`` HEAD of the
+    live Studio source it was installed from. A network fetch happens at most once
+    per ``UPDATE_CHECK_TTL_SECONDS`` (governed by the cache); everything else is
+    read live so running ``/studio-update`` clears the nudge immediately.
+
+    Every "can't tell" branch returns ``should_notify=False`` with a descriptive
+    ``reason``. ``now`` is injectable for deterministic TTL tests.
+    """
+    now = now if now is not None else time.time()
+
+    studio_dir = target / ".studio"
+
+    # Opt-out: a one-bit sentinel file silences the check entirely.
+    if (studio_dir / UPDATE_CHECK_SENTINEL).exists():
+        return UpdateCheck(should_notify=False, reason="disabled")
+
+    # Installed commit: the SHA the snapshot was installed from.
+    try:
+        version = json.loads(
+            (studio_dir / "VERSION").read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError, ValueError):
+        return UpdateCheck(should_notify=False, reason="VERSION unreadable")
+    installed_commit = version.get("commit")
+    if not installed_commit or installed_commit == "unknown":
+        return UpdateCheck(
+            should_notify=False, reason="installed commit missing or unknown"
+        )
+
+    # Resolve the live upstream source. Any warning means the source isn't on
+    # this machine (teammate clone), moved, or points back at the snapshot —
+    # the same resolution check-install/update use.
+    source_dir, warning = _resolve_source_dir(target, None)
+    if warning:
+        return UpdateCheck(should_notify=False, reason=warning)
+
+    branch = _default_branch_ref_local(source_dir) or "main"
+    remote_ref = f"refs/remotes/origin/{branch}"
+
+    cache = _load_update_cache(target)
+    fresh = (
+        "source_commit" in cache
+        and now - cache.get("last_check", 0) < UPDATE_CHECK_TTL_SECONDS
+    )
+    if fresh:
+        source_commit = cache["source_commit"]
+        did_fetch = False
+    else:
+        _git_fetch(source_dir, branch, timeout=fetch_timeout)
+        did_fetch = True
+        source_commit = _git_out(
+            source_dir, "rev-parse", "--verify", "--quiet", remote_ref
+        )
+
+    # No origin ref: offline first run, no origin, not a git repo, detached.
+    # Write no cache so the next online session retries.
+    if source_commit is None:
+        return UpdateCheck(
+            should_notify=False,
+            reason=f"could not resolve {remote_ref} (offline or no origin)",
+        )
+
+    update_available = source_commit != installed_commit
+    should_notify = update_available and source_commit != cache.get(
+        "notified_commit"
+    )
+
+    _write_update_cache(
+        target,
+        {
+            "last_check": now if did_fetch else cache.get("last_check", now),
+            "source_commit": source_commit,
+            "notified_commit": (
+                source_commit if should_notify else cache.get("notified_commit")
+            ),
+        },
+    )
+
+    reason = None if should_notify else (
+        "up to date" if not update_available else "already notified"
+    )
+    return UpdateCheck(should_notify=should_notify, reason=reason)
+
+
+# Substring that identifies OUR SessionStart hook entry among any others the user
+# has configured. The check-updates subcommand name is stable and unique enough to
+# recognize our command on re-install without matching anyone else's hook.
+_HOOK_MARKER = "check-updates"
+
+
+def _hook_command() -> str:
+    """The exact shell command our SessionStart hook runs.
+
+    Uses the absolute ``sys.executable`` captured at install time, not a bare
+    ``python``: on a stock macOS only ``python3`` exists, so ``python`` is
+    ``command not found`` and the check silently never runs — for exactly the one
+    user (the installer) it targets. Baking the resolving interpreter also settles
+    the ``python`` vs ``python3`` question outright.
+
+    Both the interpreter and the script path are absolute (the script via
+    ``$CLAUDE_PROJECT_DIR``): Claude Code runs hook commands from the session's
+    working directory, which may be a subdirectory of the repo, not the project
+    root. A cwd-relative script path would make Python exit 2 ("can't open file")
+    and surface a hook error at session start, breaking the always-exit-0 contract.
+    Both paths are quoted so a space in either doesn't split the command.
+    """
+    return (
+        f'"{sys.executable}" "$CLAUDE_PROJECT_DIR/.studio/source/run_phase.py" '
+        f'check-updates --target "$CLAUDE_PROJECT_DIR"'
+    )
+
+
+def _install_sessionstart_hook(target: Path, *, enabled: bool) -> None:
+    """Merge (or remove) our SessionStart update-check hook in the target.
+
+    Writes to ``<target>/.claude/settings.local.json`` — the per-user, gitignored
+    settings file, NOT the shared ``settings.json``. The check is machine-local
+    (both the source path and the interpreter path are absolute to the installer's
+    box), so committing the hook would inflict an unresolvable command on every
+    teammate.
+
+    Best-effort and NEVER raises. Identifies our own entry by the ``check-updates``
+    substring so it stays idempotent across re-installs and refreshes the command
+    (interpreter/version) on re-install. Every other key and hook in the file is
+    left untouched. If the file exists but doesn't hold a JSON object, prints a
+    one-line warning and returns rather than clobbering a file it can't read.
+
+    When ``enabled`` is False (``--no-hook`` or the opt-out sentinel), any existing
+    entry of ours is removed and none is added.
+    """
+    settings_path = target / ".claude" / "settings.local.json"
+
+    if settings_path.exists():
+        try:
+            data = json.loads(settings_path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                raise ValueError
+        except (json.JSONDecodeError, ValueError):
+            print(
+                f"  WARNING: {settings_path} is not a JSON object; "
+                "left it untouched and skipped the update-check hook."
+            )
+            return
+    else:
+        data = {}
+
+    # Guard the fields the same way as the top-level object: if the user's file
+    # already has a `hooks` that isn't an object, or a `SessionStart` that isn't a
+    # list, don't clobber their unexpected shape — warn and leave it be. (Without
+    # this, `hooks.setdefault(...)` on a list or iterating a dict `SessionStart`
+    # would raise out of install_studio, despite the never-raises contract.)
+    if "hooks" in data and not isinstance(data["hooks"], dict):
+        print(
+            f"  WARNING: {settings_path} has a non-object 'hooks'; "
+            "left it untouched and skipped the update-check hook."
+        )
+        return
+    hooks = data.setdefault("hooks", {})
+    if "SessionStart" in hooks and not isinstance(hooks["SessionStart"], list):
+        print(
+            f"  WARNING: {settings_path} has a non-list 'hooks.SessionStart'; "
+            "left it untouched and skipped the update-check hook."
+        )
+        return
+    entries = hooks.setdefault("SessionStart", [])
+
+    # Find our own entry (the group whose command contains the marker).
+    our_entry = None
+    for entry in entries:
+        commands = (inner.get("command", "") for inner in entry.get("hooks", []))
+        if any(_HOOK_MARKER in command for command in commands):
+            our_entry = entry
+            break
+
+    if our_entry is None and not enabled:
+        return  # Nothing of ours, and none wanted: leave the file as-is.
+
+    # Remove any stale entry of ours, then re-add fresh when enabled. Re-adding
+    # (rather than editing in place) refreshes the command in one path — the
+    # interpreter or source path can change across updates.
+    if our_entry is not None:
+        entries.remove(our_entry)
+    if enabled:
+        entries.append(
+            {"hooks": [{"type": "command", "command": _hook_command()}]}
+        )
+
+    # Drop now-empty containers we own, so we leave no empty scaffolding behind.
+    if not entries:
+        hooks.pop("SessionStart", None)
+    if not hooks:
+        data.pop("hooks", None)
+
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        settings_path.write_text(
+            json.dumps(data, indent=2) + "\n", encoding="utf-8"
+        )
+    except OSError:
+        pass
+
+
 @contextmanager
 def _source_at_default_branch(
     studio_dir: Path, enabled: bool, override_ref: Optional[str] = None
@@ -603,6 +878,7 @@ def install_studio(
     target: Path,
     studio_dir: Optional[Path] = None,
     source_path_override: Optional[Path] = None,
+    install_hook: bool = True,
 ) -> Path:
     """Install Studio into a target project directory.
 
@@ -708,6 +984,12 @@ def install_studio(
 
     # Inject coding principles into target's CLAUDE.md
     _inject_principles_into_claude_md(target, studio_dir)
+
+    # Install (or refresh) the SessionStart update-check hook. A present opt-out
+    # sentinel is a durable "leave me alone": it disables the hook and removes any
+    # entry a prior install left behind.
+    hook_enabled = install_hook and not (dot_studio / UPDATE_CHECK_SENTINEL).exists()
+    _install_sessionstart_hook(target, enabled=hook_enabled)
 
     return dot_studio
 
@@ -832,7 +1114,8 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None, fetch: bool = 
 
 
 def update_studio(
-    target: Path, studio_dir: Optional[Path] = None, force: bool = False, fetch: bool = True
+    target: Path, studio_dir: Optional[Path] = None, force: bool = False, fetch: bool = True,
+    install_hook: bool = True,
 ) -> dict:
     """Update an installed Studio from the source.
 
@@ -867,6 +1150,17 @@ def update_studio(
         raise FileNotFoundError(
             f"Studio not installed at {target}. Run 'init' first."
         )
+
+    # Install/refresh (or, when disabled, remove) the SessionStart update-check hook
+    # up front, so it's handled on EVERY path — including the up-to-date and blocked
+    # short-circuits below, which return before the re-install. Otherwise
+    # `update --no-hook` on an already-current repo (the most common way someone
+    # turns the nudge off) would silently no-op and leave the hook in place. The
+    # re-install path passes install_hook=False so this isn't done twice. The hook
+    # lives in .claude/settings.local.json, separate from the snapshot, so it's
+    # correct to handle even when a re-install is blocked on local edits.
+    hook_enabled = install_hook and not (dot_studio / UPDATE_CHECK_SENTINEL).exists()
+    _install_sessionstart_hook(target, enabled=hook_enabled)
 
     # Resolve the live source up front so both the check and the re-install copy
     # from upstream, not from the (possibly stale) installed snapshot (#20).
@@ -905,7 +1199,9 @@ def update_studio(
         # Copy from the materialized tree, but record the durable upstream in
         # VERSION — not the throwaway worktree path, which is gone after this.
         override = source_dir if effective_dir != source_dir else None
-        install_studio(target, effective_dir, source_path_override=override)
+        # install_hook=False: update_studio already handled the hook up front (above),
+        # on every path, so don't let the re-install touch it a second time.
+        install_studio(target, effective_dir, source_path_override=override, install_hook=False)
 
         return {
             "updated": len(status["changed"]),
