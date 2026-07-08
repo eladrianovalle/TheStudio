@@ -139,7 +139,7 @@ class TestInstallStudio:
         assert (source / "impl_loop.py").is_file()
         assert (source / "config" / "implementation_loop.toml").is_file()
         # Slash command
-        assert (target_dir / ".claude" / "commands" / "studio-implement.md").is_file()
+        assert (target_dir / ".claude" / "commands" / "forge.md").is_file()
         # Claude Code workflow (copied verbatim, like commands)
         wf = target_dir / ".claude" / "workflows" / "implementation-loop.js"
         assert wf.is_file()

@@ -305,7 +305,7 @@ def test_cli_no_arg_emits_default_knobs():
 def test_cli_explicit_path_reflects_override():
     """An explicit config path arg flows into the emitted knobs.
 
-    This is how /studio-implement passes an installed repo's project override
+    This is how /forge passes an installed repo's project override
     (`.studio/implementation_loop.toml`), which lives outside the snapshot chain.
     """
     with tempfile.TemporaryDirectory() as tmp:

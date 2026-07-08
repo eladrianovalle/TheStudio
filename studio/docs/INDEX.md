@@ -17,7 +17,7 @@
 - **[TEST_DRIVEN_GUIDE.md](./TEST_DRIVEN_GUIDE.md)** - Test-driven discipline for tech phase
 - **[AI_TDD_METHODOLOGY.md](./AI_TDD_METHODOLOGY.md)** - Full AI-TDD methodology (scenario-first, stack boundary, mutation verification)
 - **[MVI_METHODOLOGY.md](./MVI_METHODOLOGY.md)** - Minimum Viable Interaction: every milestone ends in something usable
-- **[IMPLEMENTATION_LOOP_SPEC.md](./IMPLEMENTATION_LOOP_SPEC.md)** - Writer/editor implementation loop (`/studio-implement`): design, gate semantics, config knobs
+- **[IMPLEMENTATION_LOOP_SPEC.md](./IMPLEMENTATION_LOOP_SPEC.md)** - Writer/editor implementation loop (`/forge`): design, gate semantics, config knobs
 - **[STORAGE_MANAGEMENT.md](./STORAGE_MANAGEMENT.md)** - Cleanup, TTL, and storage budgets
 
 ## Integration
