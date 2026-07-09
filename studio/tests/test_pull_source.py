@@ -288,11 +288,11 @@ def _installable_source_behind(tmp_path, monkeypatch):
     return source, consumer, marker
 
 
-def _update_args(target, **overrides):
+def _update_args(target):
     """Build the argparse namespace ``_do_update`` reads."""
-    base = dict(target=target, force=False, no_fetch=False, no_hook=True, pull_source=False)
-    base.update(overrides)
-    return argparse.Namespace(**base)
+    return argparse.Namespace(
+        target=target, force=False, no_fetch=False, no_hook=True, pull_source=False
+    )
 
 
 def test_update_auto_pull_fast_forwards_source(tmp_path, monkeypatch):
