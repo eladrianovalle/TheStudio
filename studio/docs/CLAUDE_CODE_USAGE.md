@@ -360,6 +360,33 @@ a single line telling you to run `/studio-update`. If you're current, it says no
 Because it's machine-local, add `.studio/update-check.json` to your `.gitignore` if it isn't
 already covered.
 
+### Let update catch your source up for you (opt-in)
+
+There's a recurring friction if you *develop* Studio in one repo and *use* it from others: you merge
+a change on GitHub (the remote moves ahead), but the source checkout on your machine — the one every
+consumer reads from — never gets pulled. So the next `/studio-update` in any project correctly sees
+the source is behind, installs the newer code straight from the remote, and reminds you to
+`git -C <source> pull` by hand. You don't, and it recurs.
+
+You can tell Studio to just do that pull for you. Set it once, on your **source** checkout:
+
+```toml
+# <your-studio-source>/.studio/update.toml
+[update]
+auto_pull_source = true
+```
+
+From then on, `/studio-update` (from any consumer on that machine) will **fast-forward your source
+checkout** to the latest before installing, whenever it's safe — so the source stays current and the
+nag stops. Prefer a one-off instead of the config? Pass `studio update --pull-source`.
+
+It is deliberately careful, because it's touching your git repo: **fast-forward only**, and only
+when the source is clean, sitting on its default branch, and simply behind the remote. If anything is
+off — uncommitted changes, you're on a feature branch, your local work has diverged — it changes
+nothing and falls back to today's behavior (install from the remote, print the manual-pull hint). It
+never does a merge, a force, or a rebase. The `update.toml` lives in the source repo's gitignored
+`.studio/`, so it's a per-machine preference — one line covers all your consumer repos.
+
 ## Artifacts
 
 When running from the Studio repo, outputs go to `studio/output/<phase>/run_<phase>_<timestamp>/`.
