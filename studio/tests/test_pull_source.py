@@ -62,21 +62,19 @@ def _make_source(tmp_path, name="src"):
     return repo, remote
 
 
-def _advance_origin(tmp_path, remote, commits=1, clone_name="advancer"):
-    """Push ``commits`` new commits onto the bare ``remote``'s main branch.
+def _advance_origin(tmp_path, remote):
+    """Push one new commit onto the bare ``remote``'s main branch.
 
     Done through a throwaway clone so the source repo's cached ``origin/main``
     stays put until it chooses to fetch. Returns the new origin HEAD SHA.
     """
-    clone = tmp_path / clone_name
+    clone = tmp_path / "advancer"
     subprocess.run(["git", "clone", "-q", str(remote), str(clone)], check=True)
     _git(clone, "config", "user.email", "t@t")
     _git(clone, "config", "user.name", "t")
-    for index in range(commits):
-        marker = f"{clone_name}_c{index}"
-        (clone / f"{marker}.txt").write_text(f"{marker}\n", encoding="utf-8")
-        _git(clone, "add", "-A")
-        _git(clone, "commit", "-qm", marker)
+    (clone / "advance.txt").write_text("advance\n", encoding="utf-8")
+    _git(clone, "add", "-A")
+    _git(clone, "commit", "-qm", "advance")
     _git(clone, "push", "-q", "origin", "main")
     return _head(clone)
 
