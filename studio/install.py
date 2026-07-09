@@ -30,6 +30,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple
 
+from config_loading import tomllib
+
 # Files to copy from studio/ into .studio/source/
 SOURCE_FILES = [
     "run_phase.py",
@@ -359,6 +361,93 @@ def _source_staleness(
         fetched=fetched,
         reason=reason,
     )
+
+
+def _source_auto_pull_enabled(source_dir: Path) -> bool:
+    """Return whether the SOURCE repo opted into auto fast-forward.
+
+    Reads ``[update] auto_pull_source`` from the source repo's own
+    ``.studio/update.toml``. LOCATION IS LOAD-BEARING: the config is read from the
+    SOURCE repo's top-level ``.studio/``, found via ``git rev-parse
+    --show-toplevel`` on ``source_dir`` — NOT ``get_artifact_root()`` (the consumer
+    repo) and NOT ``get_studio_root()`` (the installed snapshot). One line on the
+    developer's source checkout covers every consumer on that machine.
+
+    Best-effort and NEVER raises: returns False on a non-git dir, a missing file,
+    a missing ``[update]`` table, a missing key, or malformed TOML.
+    """
+    top = _git_out(source_dir, "rev-parse", "--show-toplevel")
+    if top is None:
+        return False
+    config_path = Path(top) / ".studio" / "update.toml"
+    if not config_path.is_file():
+        return False
+    try:
+        with config_path.open("rb") as handle:
+            data = tomllib.load(handle)
+    except (OSError, tomllib.TOMLDecodeError):
+        return False
+    section = data.get("update")
+    return bool(section.get("auto_pull_source", False)) if isinstance(section, dict) else False
+
+
+@dataclass(frozen=True)
+class SourcePull:
+    """Outcome of trying to fast-forward a Studio source checkout to its origin.
+
+    Produced by ``_fast_forward_source``. ``pulled`` is True only when the
+    fast-forward actually happened; on any skip ``reason`` says why and nothing
+    was mutated.
+    """
+    pulled: bool               # did the fast-forward happen
+    reason: Optional[str]      # why it was skipped (None on success)
+    new_head: Optional[str]    # short sha the source now points at (None if not pulled)
+
+
+def _fast_forward_source(source_dir: Path, staleness: SourceStaleness) -> SourcePull:
+    """Fast-forward ``source_dir``'s local default branch to its origin, if safe.
+
+    Performs the fast-forward ONLY when every precondition below holds, in order;
+    on any failure it returns ``SourcePull(pulled=False, reason=...)`` and mutates
+    nothing. Best-effort and NEVER raises. It reuses ``staleness`` (origin was
+    already fetched and ``behind`` already counted by ``_source_staleness``) and
+    does NO extra network work.
+    """
+    # (1) The source must have a LOCAL default branch to fast-forward.
+    branch = _default_branch_ref_local(source_dir)
+    if branch is None:
+        return SourcePull(False, "source has no local default branch", None)
+
+    # (2) LOAD-BEARING SAFETY GUARD: HEAD must actually be that default branch.
+    # staleness.is_stale is computed on local main vs origin/main regardless of
+    # where HEAD currently sits, so a detached HEAD (mid-rebase) or a feature
+    # branch could be "stale" while a blind `merge --ff-only origin/main` would
+    # move the wrong ref. Refuse unless HEAD IS the default branch.
+    current = _git_out(source_dir, "rev-parse", "--abbrev-ref", "HEAD")
+    if current != branch:
+        where = current if current is not None else "a detached HEAD"
+        return SourcePull(
+            False, f"source HEAD is on {where}, not the default branch {branch}", None
+        )
+
+    # (3) The working tree must be clean. Kept deliberately dumb — any output from
+    # status --porcelain means skip. Gitignored clutter (.studio/, output/, ...)
+    # never shows, so ordinary developer state doesn't falsely block the ff.
+    if _git_out(source_dir, "status", "--porcelain"):
+        return SourcePull(False, "source working tree has uncommitted changes", None)
+
+    # (4) The move must be a true fast-forward. _git_out runs with check=True and
+    # returns None on a non-zero exit; git refuses a non-ff (diverged/ahead, or a
+    # lingering MERGE_HEAD) and leaves HEAD and the tree untouched, so a refused
+    # ff is a guaranteed no-op.
+    remote_ref = staleness.remote_ref
+    if _git_out(source_dir, "merge", "--ff-only", remote_ref) is None:
+        return SourcePull(
+            False, f"source has diverged from {remote_ref} (not fast-forwardable)", None
+        )
+
+    new_head = _git_out(source_dir, "rev-parse", "--short", "HEAD")
+    return SourcePull(True, None, new_head)
 
 
 UPDATE_CHECK_CACHE = "update-check.json"
