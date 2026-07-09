@@ -12,6 +12,8 @@ All fixtures are hermetic. Each test builds a real temp git repo under
 remote through a throwaway clone so the ``source`` checkout's local default branch
 is strictly BEHIND origin without having fetched. Nothing here touches the network.
 """
+import argparse
+import shutil
 import subprocess
 
 import install
@@ -209,3 +211,186 @@ def test_ff_skips_when_diverged(tmp_path):
     assert result.new_head is None
     assert "diverged" in result.reason or "fast-forward" in result.reason
     assert _head(repo) == before  # HEAD unchanged
+
+
+# --- update_studio wiring + CLI output (Units 3+4) -----------------------------
+#
+# These drive the whole opt-in end to end. A FULL, installable copy of the real
+# studio/ tree is committed to a bare-remote-backed source repo, a consumer is
+# installed from it, then origin is advanced one commit so the source's local main
+# trails it. Auto-resolve is routed at the hermetic source by monkeypatching
+# ``install._get_studio_root`` (the same trick the source-staleness tests use), so
+# ``update_studio(consumer)`` resolves the source cleanly and ``enabled`` is True.
+
+STUDIO_ROOT = install._get_studio_root()
+
+
+def _installable_source_behind(tmp_path, monkeypatch):
+    """Build a full installable Studio source whose local main is BEHIND origin,
+    install a consumer from it, and route auto-resolve at the source.
+
+    Returns ``(source, consumer, marker)`` where ``source`` is the ``studio/`` dir
+    inside the source repo, ``consumer`` is the installed target, and ``marker`` is
+    the text the advance commit appended to ``run_phase.py`` on origin — so a
+    re-install that reads the caught-up tree snapshots it into the consumer.
+    """
+    root = tmp_path / "src"
+    source = root / "studio"
+    shutil.copytree(
+        STUDIO_ROOT, source,
+        ignore=shutil.ignore_patterns(
+            "__pycache__", "*.pyc", ".pytest_cache", "output", "knowledge",
+        ),
+    )
+    remote = tmp_path / "origin.git"
+    subprocess.run(
+        ["git", "-c", "init.defaultBranch=main", "init", "--bare", "-q", str(remote)],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-c", "init.defaultBranch=main", "init", "-q", str(root)],
+        check=True,
+    )
+    _git(root, "config", "user.email", "t@t")
+    _git(root, "config", "user.name", "t")
+    _git(root, "remote", "add", "origin", str(remote))
+    # Gitignore .studio/ so the per-machine update.toml the opt-in lives in never
+    # dirties the tree — mirrors the real repo, and is what keeps the ff unblocked.
+    (root / ".gitignore").write_text(
+        ".studio/\nstudio/output/\nstudio/knowledge/\n__pycache__/\n", encoding="utf-8"
+    )
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "init")
+    _git(root, "push", "-q", "-u", "origin", "main")
+
+    # Consumer installed from the source AT the old commit.
+    consumer = tmp_path / "consumer"
+    consumer.mkdir()
+    install.install_studio(consumer, source)
+
+    # Advance origin one commit that touches a real source file, so a re-install
+    # from the caught-up tree visibly drifts the consumer's snapshot. Done through
+    # a throwaway clone; the source's local main stays put until it fetches.
+    marker = "# pull-source integration marker\n"
+    clone = tmp_path / "advancer"
+    subprocess.run(["git", "clone", "-q", str(remote), str(clone)], check=True)
+    _git(clone, "config", "user.email", "t@t")
+    _git(clone, "config", "user.name", "t")
+    run_phase_py = clone / "studio" / "run_phase.py"
+    run_phase_py.write_text(
+        run_phase_py.read_text(encoding="utf-8") + marker, encoding="utf-8"
+    )
+    _git(clone, "add", "-A")
+    _git(clone, "commit", "-qm", "advance")
+    _git(clone, "push", "-q", "origin", "main")
+
+    monkeypatch.setattr(install, "_get_studio_root", lambda: source)
+    return source, consumer, marker
+
+
+def _update_args(target, **overrides):
+    """Build the argparse namespace ``_do_update`` reads."""
+    base = dict(target=target, force=False, no_fetch=False, no_hook=True, pull_source=False)
+    base.update(overrides)
+    return argparse.Namespace(**base)
+
+
+def test_update_auto_pull_fast_forwards_source(tmp_path, monkeypatch):
+    """Source config opts in + source is cleanly behind → update_studio (auto-
+    resolved) fast-forwards the source, clears staleness, and re-installs from the
+    caught-up LOCAL tree (no origin worktree materialized)."""
+    source, consumer, marker = _installable_source_behind(tmp_path, monkeypatch)
+    _write_update_toml(source.parent, "[update]\nauto_pull_source = true\n")
+    origin_head = _head(tmp_path / "advancer")
+
+    result = install.update_studio(consumer)
+
+    assert result["source_pull"]["pulled"] is True
+    assert result["staleness"] is None
+    assert result["source_note"] is None          # clean fast path → LOCAL tree read
+    assert _head(source) == origin_head           # source caught up to origin
+    # The re-install read the caught-up local tree: its marker is now snapshotted.
+    snapshot = (consumer / ".studio" / "source" / "run_phase.py").read_text(encoding="utf-8")
+    assert marker in snapshot
+
+
+def test_update_opted_in_but_dirty_falls_back(tmp_path, monkeypatch):
+    """Opted in but the source working tree is dirty → the ff is skipped with a
+    reason and the update falls back to today's origin/main path (staleness intact)."""
+    source, consumer, _ = _installable_source_behind(tmp_path, monkeypatch)
+    _write_update_toml(source.parent, "[update]\nauto_pull_source = true\n")
+    # Dirty a TRACKED source file so the ff precondition (clean tree) fails.
+    tracked = source / "run_phase.py"
+    tracked.write_text(tracked.read_text(encoding="utf-8") + "# local edit\n", encoding="utf-8")
+
+    result = install.update_studio(consumer)
+
+    assert result["source_pull"]["pulled"] is False
+    assert result["source_pull"]["reason"]
+    assert result["staleness"]["is_stale"] is True   # fell back to origin path
+
+
+def test_update_not_opted_in_unchanged(tmp_path, monkeypatch):
+    """No config and no flag → no pull is attempted and the staleness path is
+    byte-for-byte today's behavior (read from origin, print the nag)."""
+    source, consumer, _ = _installable_source_behind(tmp_path, monkeypatch)
+
+    result = install.update_studio(consumer)
+
+    assert result["source_pull"] is None
+    assert result["staleness"]["is_stale"] is True
+    assert result["source_note"]                     # read from origin, as before
+
+
+def test_update_pull_source_flag_overrides_absent_config(tmp_path, monkeypatch):
+    """The --pull-source flag forces the ff even with no config present."""
+    source, consumer, _ = _installable_source_behind(tmp_path, monkeypatch)
+    origin_head = _head(tmp_path / "advancer")
+
+    result = install.update_studio(consumer, pull_source=True)
+
+    assert result["source_pull"]["pulled"] is True
+    assert result["staleness"] is None
+    assert _head(source) == origin_head
+
+
+def test_do_update_prints_fast_forwarded(tmp_path, monkeypatch, capsys):
+    """_do_update prints the 'Fast-forwarded ...' line on a successful pull."""
+    import run_phase
+
+    source, consumer, _ = _installable_source_behind(tmp_path, monkeypatch)
+    _write_update_toml(source.parent, "[update]\nauto_pull_source = true\n")
+
+    run_phase._do_update(_update_args(consumer))
+
+    out = capsys.readouterr().out
+    assert "Fast-forwarded your Studio source to" in out
+    assert "Catch your source up:" not in out
+
+
+def test_do_update_prints_nag_when_not_opted_in(tmp_path, monkeypatch, capsys):
+    """Not opted in over a stale source → the existing manual-pull nag prints."""
+    import run_phase
+
+    source, consumer, _ = _installable_source_behind(tmp_path, monkeypatch)
+
+    run_phase._do_update(_update_args(consumer))
+
+    out = capsys.readouterr().out
+    assert "Catch your source up:" in out
+    assert "Fast-forwarded" not in out
+
+
+def test_do_update_prints_couldnt_when_ff_blocked(tmp_path, monkeypatch, capsys):
+    """Opted in but the ff couldn't run → the 'Wanted to ... but couldn't' line prints."""
+    import run_phase
+
+    source, consumer, _ = _installable_source_behind(tmp_path, monkeypatch)
+    _write_update_toml(source.parent, "[update]\nauto_pull_source = true\n")
+    tracked = source / "run_phase.py"
+    tracked.write_text(tracked.read_text(encoding="utf-8") + "# local edit\n", encoding="utf-8")
+
+    run_phase._do_update(_update_args(consumer))
+
+    out = capsys.readouterr().out
+    assert "Wanted to fast-forward your Studio source but couldn't:" in out

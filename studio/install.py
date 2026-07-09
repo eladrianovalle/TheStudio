@@ -1204,7 +1204,7 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None, fetch: bool = 
 
 def update_studio(
     target: Path, studio_dir: Optional[Path] = None, force: bool = False, fetch: bool = True,
-    install_hook: bool = True,
+    install_hook: bool = True, pull_source: bool = False,
 ) -> dict:
     """Update an installed Studio from the source.
 
@@ -1264,6 +1264,19 @@ def update_studio(
     # tree), and fold is_stale into the no-op short-circuit so a stale source
     # PROCEEDS to reinstall instead of falsely reporting "already up to date".
     staleness = _source_staleness(source_dir, fetch=fetch) if enabled else None
+
+    # Opt-in: fast-forward the user's OWN source checkout when it is cleanly behind
+    # origin, so consumers stop getting the recurring "go pull it yourself" nag.
+    do_pull = enabled and (pull_source or _source_auto_pull_enabled(source_dir))
+    source_pull = None
+    if do_pull and staleness and staleness.is_stale:
+        source_pull = _fast_forward_source(source_dir, staleness)
+        if source_pull.pulled:
+            # Source is now current: clear staleness so override_ref becomes None,
+            # the install reads the caught-up LOCAL tree (not origin/main), and the
+            # manual-pull nag is suppressed. The pull is reported via source_pull.
+            staleness = None
+
     override_ref = staleness.remote_ref if (staleness and staleness.is_stale) else None
 
     # Read (and copy) from the default branch's committed tree, not whatever
@@ -1274,13 +1287,13 @@ def update_studio(
         status = check_studio(target, effective_dir)
 
         if status["up_to_date"] and not (staleness and staleness.is_stale):
-            return {"updated": 0, "added": 0, "removed": 0, "locally_modified": status["locally_modified"], "claude_md_refreshed": False, "source_note": source_note, "warning": warning, "staleness": asdict(staleness) if staleness else None}
+            return {"updated": 0, "added": 0, "removed": 0, "locally_modified": status["locally_modified"], "claude_md_refreshed": False, "source_note": source_note, "warning": warning, "staleness": asdict(staleness) if staleness else None, "source_pull": asdict(source_pull) if source_pull else None}
 
         # Preview precondition: refuse to clobber locally-edited snapshot files unless forced.
         locally_modified = status.get("locally_modified", [])
         if locally_modified and not force:
             return {"blocked": True, "locally_modified": locally_modified,
-                    "updated": 0, "added": 0, "removed": 0, "claude_md_refreshed": False, "source_note": source_note, "warning": warning, "staleness": asdict(staleness) if staleness else None}
+                    "updated": 0, "added": 0, "removed": 0, "claude_md_refreshed": False, "source_note": source_note, "warning": warning, "staleness": asdict(staleness) if staleness else None, "source_pull": asdict(source_pull) if source_pull else None}
 
         # Re-install (install_studio is idempotent and preserves user dirs). This
         # also re-injects the coding-principles block into CLAUDE.md, refreshing it
@@ -1301,4 +1314,5 @@ def update_studio(
             "source_note": source_note,
             "warning": warning,
             "staleness": asdict(staleness) if staleness else None,
+            "source_pull": asdict(source_pull) if source_pull else None,
         }

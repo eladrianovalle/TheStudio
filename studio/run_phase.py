@@ -2097,6 +2097,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Do not install the SessionStart update-check hook.",
     )
+    update_parser.add_argument(
+        "--pull-source",
+        action="store_true",
+        help="Fast-forward your own Studio SOURCE checkout to origin before "
+             "installing, when it is cleanly behind (overrides the source config).",
+    )
 
     # --- Clarity commands ---
     show_clarity_parser = subparsers.add_parser(
@@ -3186,6 +3192,7 @@ def _do_update(args: argparse.Namespace) -> None:
         force=getattr(args, "force", False),
         fetch=not getattr(args, "no_fetch", False),
         install_hook=not getattr(args, "no_hook", False),
+        pull_source=getattr(args, "pull_source", False),
     )
     if result.get("warning"):
         print(f"WARNING: {result['warning']}\n")
@@ -3193,18 +3200,32 @@ def _do_update(args: argparse.Namespace) -> None:
         print(f"Note: {result['source_note']}.")
 
     # A stale source (its own local main behind origin) would falsely no-op; the
-    # update instead read and re-installed from origin/main. Say so, and name the
-    # one command that catches the user's own source checkout up (we never pull it
-    # for them).
+    # update instead read and re-installed from origin/main. When the user opted
+    # into the fast-forward and it happened, say the source is now current. When it
+    # didn't (or they never opted in), fall back to naming the one command that
+    # catches their own source checkout up — plus, if an opted-in pull was skipped,
+    # why we couldn't do it.
+    source_pull = result.get("source_pull")
     staleness = result.get("staleness")
-    if staleness and staleness["is_stale"]:
-        source_dir, _ = _resolve_source_dir(target, None)
+    if source_pull and source_pull["pulled"]:
         print(
-            f"Studio source was {staleness['behind']} commit(s) behind "
-            f"{staleness['remote_ref']}; installed from {staleness['remote_ref']} "
-            f"instead of the stale local copy."
+            f"Fast-forwarded your Studio source to {source_pull['new_head']}; "
+            "your local checkout is now current."
         )
-        print(f"Catch your source up:  git -C {source_dir} pull")
+    else:
+        if source_pull and source_pull["reason"]:
+            print(
+                "Wanted to fast-forward your Studio source but couldn't: "
+                f"{source_pull['reason']}."
+            )
+        if staleness and staleness["is_stale"]:
+            source_dir, _ = _resolve_source_dir(target, None)
+            print(
+                f"Studio source was {staleness['behind']} commit(s) behind "
+                f"{staleness['remote_ref']}; installed from {staleness['remote_ref']} "
+                f"instead of the stale local copy."
+            )
+            print(f"Catch your source up:  git -C {source_dir} pull")
 
     if result.get("blocked"):
         mods = result["locally_modified"]
