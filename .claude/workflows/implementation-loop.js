@@ -14,6 +14,10 @@ export const meta = {
 // ---------------------------------------------------------------------------
 const DEFAULT_UNIT = {
   unit_id: 'unit_impl_loop_config',
+  // Optional model override for the writer + editor agents (e.g. 'fable', 'sonnet',
+  // 'opus'). Passed straight to agent()'s `model` opt; undefined inherits the
+  // session model (the prior behavior), so this is a no-op unless callers set it.
+  model: undefined,
   title: 'Studio can load implementation_loop.toml into a LoopConfig (with project-local override)',
   // Run from repo root; tests live under studio/.
   test_command: 'cd studio && python -m pytest tests/test_impl_loop.py -q',
@@ -170,7 +174,7 @@ const unit = { ...DEFAULT_UNIT, ...overrides }
 log(`Unit: ${unit.unit_id} — ${unit.title}`)
 
 phase('Writer')
-const writer = await agent(writerPrompt(unit), { schema: WRITER_HANDOFF, label: `writer:${unit.unit_id}`, phase: 'Writer' })
+const writer = await agent(writerPrompt(unit), { schema: WRITER_HANDOFF, label: `writer:${unit.unit_id}`, phase: 'Writer', model: unit.model })
 
 // Entry gate — purely mechanical: writer declared done AND machine checks pass.
 // NOTE the static-check duality: `static_checks` (config array) gates WHETHER static checking is
@@ -197,7 +201,7 @@ if (unit.editor_enabled === false) {
 }
 
 phase('Edit')
-const editor = await agent(editorPrompt(unit, writer), { schema: EDITOR_HANDOFF, label: `editor:${unit.unit_id}`, phase: 'Edit' })
+const editor = await agent(editorPrompt(unit, writer), { schema: EDITOR_HANDOFF, label: `editor:${unit.unit_id}`, phase: 'Edit', model: unit.model })
 
 // Exit gate — edit must hold (tests green) AND authoritative MVI verdict.
 const editHeld = !!(editor && editor.tests && editor.tests.passed && !editor.reverted)
