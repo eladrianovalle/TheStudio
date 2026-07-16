@@ -139,6 +139,14 @@ class TestApplyVerdictsToRun:
         assert reloaded[0].verdict is None
         assert reloaded[0].verified_confidence is None
 
+    def test_out_of_range_index_raises_clear_error(self, tmp_path):
+        # A stale index (e.g. findings.json shrank between select and write-back)
+        # should fail with a clear message, not a bare IndexError.
+        save_findings_json(tmp_path, [_finding("medium"), _finding("high")])
+
+        with pytest.raises(ValueError, match="out of range"):
+            apply_verdicts_to_run(tmp_path, [{"index": 5, "verdict": "confirmed"}])
+
 
 # ---------------------------------------------------------------------------
 # The Select step — the real Python the JS shell shells out to. Covering it here
