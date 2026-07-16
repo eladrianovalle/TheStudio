@@ -71,16 +71,18 @@ const selected = await agent(
     `  cd studio && python -c '${SELECT_SNIPPET}' "${runDir}"`,
     ``,
     `(If this Workflow runs in an installed repo, the modules live under .studio/source/ — cd there instead.)`,
-    `Return exactly the JSON array it prints: a list of { index, quote } objects. If it prints [], return [].`,
+    `Return a JSON object { "findings": [...] } wrapping the array it prints (a list of { index, quote } objects). If it prints [], return { "findings": [] }.`,
   ].join('\n'),
   {
-    schema: { type: 'array', items: { type: 'object', required: ['index', 'quote'], additionalProperties: false, properties: { index: { type: 'integer' }, quote: { type: 'string' } } } },
+    // NOTE: a custom tool's top-level input schema MUST be an object — the Anthropic API rejects a
+    // bare top-level array (400 input_schema.type). So the array of findings is wrapped in `findings`.
+    schema: { type: 'object', additionalProperties: false, required: ['findings'], properties: { findings: { type: 'array', items: { type: 'object', required: ['index', 'quote'], additionalProperties: false, properties: { index: { type: 'integer' }, quote: { type: 'string' } } } } } },
     label: 'select-medium-findings',
     phase: 'Select',
   },
 )
 
-const eligible = Array.isArray(selected) ? selected : []
+const eligible = (selected && Array.isArray(selected.findings)) ? selected.findings : []
 log(`Eligible Medium findings: ${eligible.length}`)
 if (eligible.length === 0) {
   return { verified: 0, confirmed: 0, demoted: 0, uncertain: 0 }
