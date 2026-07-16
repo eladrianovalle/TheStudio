@@ -62,7 +62,11 @@ single-owner mechanisms (theirs surface decisions ad hoc via AskUserQuestion).
 
 ## What we took (shipped)
 
-Two mechanisms ported directly, plus this doc:
+> **Status: the whole steal-list is worked through.** Every item below and in the roadmap table
+> shipped (or was deliberately declined) — all merged to `main` on 2026-07-16. See the roadmap
+> table for the per-item PRs.
+
+The first two mechanisms, ported directly (these shipped alongside R3 + R5 in **PR #65**):
 
 1. **Quote-to-promote + confidence bands in the contrarian's finding discipline**
    (`scopes.py`, `CONTRARIAN_MANDATE`). Every flaw the contrarian raises must quote the exact thing
@@ -82,20 +86,27 @@ Two mechanisms ported directly, plus this doc:
    `unresolved_concerns` and writes a `reviewer-concerns.md` artifact, so the second agent's most
    valuable output survives instead of being lost.
 
-## Roadmap — the rest of the steal-list
+## Roadmap — worked through (all merged 2026-07-16)
 
-Ranked by leverage for Studio. Each becomes its own `/spec` when picked up.
+Every item was taken as far as it deserved: spec'd where it needed a spec, forged, smoked, and
+reviewed as its own PR — or deliberately declined. Nothing here is still pending.
 
-| # | Idea | What it buys | Rough effort | Notes |
-|---|------|--------------|--------------|-------|
-| R1 | **Independent verifier subagent** for contrarian findings | A finding is confirmed by a fresh agent that sees only the quoted `file:line` + the demote rules, *not* the original reasoning (anti-anchoring); +1 confidence when two agree. The verification arm behind the quote-to-promote gate we just shipped. | M | Natural next step after the confidence gate; pairs with it. |
-| R2 | **Compile skills/commands from templates + CI freshness gate** | Kills doc-rot structurally: `gen --dry-run \| git diff --exit-code` fails CI if a committed command doc drifts from source. This is what `/unstale` chases by hand. | L | Biggest architectural lift. gstack's own caution: don't hardcode install paths in generated output — resolve the root at runtime. |
-| R3 | **Named failure-mode citations as prompt anchors** | Encode past regressions directly in prompts ("this is the precise failure of the all-decisions-pause bug"). We keep these scars in memory; gstack keeps them in the prompt where they actually fire. | S | Cheap, high-value. Start with the decision-pause and impl-loop-in-worktree scars. |
-| R4 | **Delta-based alerts with N-consecutive-check persistence** | For any run-over-run comparison (ratings, session health, stats trends): alert on *changes* not absolutes, and only when a pattern persists 2+ checks. Best anti-noise rule they have. | S | Fits `stats.py` / session-health trends. |
-| R5 | **Lone-critical override in the scoped debate** | Don't let the integrator's synthesis bury a single serious contrarian finding just because the room didn't reach consensus on it. | S | Small change to integrator/polish guidance. |
-| R6 | **AI-slop blacklist + "would a designer be embarrassed?" self-gate** | A concrete rejection list for the design phase (and any UI work), plus an anti-convergence directive (vary the look across generations). Directly useful for game UI/marketing output. | M | Adapt their 11-item list to game dev. |
-| R7 | **Goodwill Reservoir UX score** | A UX heuristic that starts at 70 and is docked for dark patterns / credited for good behavior — makes "taste" a debuggable number. | M | Design-phase deliverable. |
-| R8 | **Secret-sink test harness with positive controls** | If Studio ever handles credentials: seed a fake secret, assert it never leaks to stdout/files/telemetry, *and* keep controls that deliberately leak to prove the detector works. | M | Only if/when we touch secrets (currently env-only webhooks). Lower priority. |
+| # | Idea | What it buys | Status |
+|---|------|--------------|--------|
+| R1 | **Independent verifier subagent** for contrarian findings | A finding is confirmed by a fresh agent that sees only the quoted `file:line` + the demote rules, *not* the original reasoning (anti-anchoring); +1 confidence when two agree. | ✅ **#66** — spec'd (`specs/contrarian-finding-verifier.md`), forged as 2 MVI units (`findings.py` + `finding-verifier.js`), live-smoked. |
+| R2 | **Compile skills/commands from templates + CI freshness gate** | Was meant to kill doc-rot by generating the reference docs from source. | 🔄 **#67** — the `/spec` debate **rejected codegen for Studio**: unlike gstack, Studio's reference docs are *intentionally richer than the code*, so generating would delete authored prose. Shipped instead as **doc-parity tests** (`test_doc_parity.py`, `specs/doc-parity-tests.md`) — assert the names match, keep the prose. |
+| R3 | **Named failure-mode citations as prompt anchors** | Encode past regressions directly in prompts where they fire, not just in memory. | ✅ **#65** — the all-decisions-pause scar, in the decision protocol. |
+| R4 | **Delta-based alerts with N-consecutive-check persistence** | Run-over-run stats trends: alert on *changes* not absolutes, only when a regression persists 2+ checks. | ✅ **#68** — `detect_trend_alerts` in `stats.py` (rating/tokens/cost). |
+| R5 | **Lone-critical override in the scoped debate** | Don't let the integrator's synthesis bury a single serious contrarian finding. | ✅ **#65** — in the integrator duel's synthesis step. |
+| R6 | **AI-slop blacklist + "would a designer be embarrassed?" self-gate** | A concrete rejection list + anti-convergence directive for the design phase. | ✅ **#69** — 11-item blacklist adapted for games, in `design_mandate.py`, gated to the design phase. |
+| R7 | **Goodwill Reservoir UX score** | A UX heuristic (start at 70, dock/credit) that makes "taste" a debuggable number. | ✅ **#69** — with a "report the score with its ledger" rule so it's auditable. |
+| R8 | **Secret-sink test harness with positive controls** | Leak detection for credentials in logs/artifacts/telemetry. | ⛔ **Declined on merit** — Studio's entire secret surface is one env-var webhook URL; leak-detection machinery for that is speculative. Revisit only if Studio starts handling real secrets. |
+
+**Meta-note worth keeping:** this whole list was built *with* Studio's own tools, and they earned their
+keep under real load — `/spec` killed R2's codegen premise before a line shipped; `/forge`'s Reviewer
+Concerns caught an install-wiring gap on its first real run; the R1 smoke caught three bugs the build
+agent had silently worked around. The borrowing wasn't "copy gstack" — it was understand it, reshape
+what didn't fit (R2), and refuse what didn't earn its place (R8).
 
 ## Source
 
