@@ -89,6 +89,7 @@ SLASH_COMMANDS = [
 # Claude Code Workflows to copy to {target}/.claude/workflows/ (verbatim, like commands)
 WORKFLOW_FILES = [
     "implementation-loop.js",
+    "finding-verifier.js",
 ]
 
 # Sentinels for CLAUDE.md injection: update replaces content between these markers
