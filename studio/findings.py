@@ -170,8 +170,9 @@ def extract_findings_from_run(run_dir: Path) -> list[Finding]:
     return results
 
 
-def save_findings_json(run_dir: Path, findings: list[Finding]) -> Path:
+def save_findings_json(run_dir: Path | str, findings: list[Finding]) -> Path:
     """Save findings to findings.json in the run directory. Returns the path."""
+    run_dir = Path(run_dir)  # accept a str path too (the Workflow shell passes sys.argv[1])
     data = [
         {
             "confidence": f.confidence,
@@ -189,8 +190,9 @@ def save_findings_json(run_dir: Path, findings: list[Finding]) -> Path:
     return path
 
 
-def load_findings_json(run_dir: Path) -> list[Finding]:
+def load_findings_json(run_dir: Path | str) -> list[Finding]:
     """Load findings from findings.json. Returns empty list if file missing."""
+    run_dir = Path(run_dir)  # accept a str path too (the Workflow shell passes sys.argv[1])
     path = run_dir / "findings.json"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))

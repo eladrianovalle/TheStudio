@@ -52,19 +52,11 @@ const VERIFIER_HANDOFF = {
 // the ONLY thing the per-finding verifier is allowed to see.
 // ---------------------------------------------------------------------------
 phase('Select')
-const SELECT_SNIPPET = [
-  'import json, sys',
-  'from findings import load_findings_json',
-  'from verifier import select_findings_to_verify',
-  'run_dir = sys.argv[1]',
-  'findings = load_findings_json(run_dir)',
-  'rows = [',
-  '    {"index": i, "quote": f.quote}',
-  '    for i, f in enumerate(findings)',
-  '    if f in select_findings_to_verify(findings)',
-  ']',
-  'print(json.dumps(rows))',
-].join('; ')
+// The whole selector is one real Python function (verifier.select_rows_for_run), so this stays a
+// single valid statement-per-`;` line. The earlier form built a multi-line list comprehension and
+// joined it with '; ', which is a SyntaxError — it only ran because the agent hand-fixed it.
+const SELECT_SNIPPET =
+  'import json, sys; from verifier import select_rows_for_run; print(json.dumps(select_rows_for_run(sys.argv[1])))'
 const selected = await agent(
   [
     `List the Medium-confidence findings eligible for verification in the run directory \`${runDir}\`.`,

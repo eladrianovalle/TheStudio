@@ -41,6 +41,29 @@ def select_findings_to_verify(findings: list[Finding]) -> list[Finding]:
     return [f for f in findings if f.confidence == "medium"]
 
 
+def select_rows_for_run(run_dir) -> list[dict]:
+    """Select rows for the verifier Workflow's Select step.
+
+    Returns ``[{"index": i, "quote": f.quote}]`` for each Medium finding in
+    ``run_dir``'s findings.json. The index is the finding's position in the
+    ordered list — the key apply_verdicts_to_run uses to match a verdict back.
+    The quote is the ONLY thing the per-finding verifier is shown; the
+    anti-anchoring firewall itself lives in the Workflow shell.
+
+    This lives here, as real Python the gate can test, rather than as a
+    multi-line ``python -c`` string built inside the JS shell — that string form
+    silently produced invalid Python (a list comprehension joined by "; ") and
+    only limped through because the Select agent hand-repaired it at runtime.
+    """
+    findings = load_findings_json(run_dir)
+    eligible_ids = {id(f) for f in select_findings_to_verify(findings)}
+    return [
+        {"index": i, "quote": f.quote}
+        for i, f in enumerate(findings)
+        if id(f) in eligible_ids
+    ]
+
+
 def apply_verdict(
     finding: Finding,
     verdict: str,

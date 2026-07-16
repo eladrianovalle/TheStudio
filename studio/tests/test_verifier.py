@@ -13,6 +13,7 @@ from verifier import (
     apply_verdict,
     apply_verdicts_to_run,
     select_findings_to_verify,
+    select_rows_for_run,
 )
 
 
@@ -156,3 +157,46 @@ class TestApplyVerdictsToRun:
         reloaded = load_findings_json(tmp_path)
         assert reloaded[0].verdict is None
         assert reloaded[0].verified_confidence is None
+
+
+# ---------------------------------------------------------------------------
+# The Select step — the real Python the JS shell shells out to. Covering it here
+# is the point: the shell's generated `python -c` string cannot be unit-tested,
+# and the earlier inline version was invalid Python that only ran because the
+# Select agent hand-repaired it (PR #66 review).
+# ---------------------------------------------------------------------------
+
+class TestSelectRowsForRun:
+    """select_rows_for_run returns {index, quote} rows for the Medium findings."""
+
+    def test_returns_index_and_quote_for_medium_only(self, tmp_path):
+        save_findings_json(
+            tmp_path,
+            [
+                _finding("medium", "flaw zero"),
+                _finding("high", "flaw one"),
+                _finding("medium", "flaw two"),
+            ],
+        )
+        rows = select_rows_for_run(tmp_path)
+
+        # The High finding (index 1) is excluded; the Medium ones keep their
+        # original positions so the write-back can match verdicts back by index.
+        assert rows == [
+            {"index": 0, "quote": "`x.py:1` — \"flaw zero\""},
+            {"index": 2, "quote": "`x.py:1` — \"flaw two\""},
+        ]
+
+    def test_accepts_a_str_path(self, tmp_path):
+        # The Workflow shell passes sys.argv[1] — a str, not a Path. This is the
+        # regression for the TypeError ('str' / 'str') the direct command hit.
+        save_findings_json(tmp_path, [_finding("medium")])
+        rows = select_rows_for_run(str(tmp_path))
+        assert [r["index"] for r in rows] == [0]
+
+    def test_no_medium_returns_empty(self, tmp_path):
+        save_findings_json(tmp_path, [_finding("high"), _finding("low")])
+        assert select_rows_for_run(tmp_path) == []
+
+    def test_missing_findings_json_returns_empty(self, tmp_path):
+        assert select_rows_for_run(tmp_path) == []
