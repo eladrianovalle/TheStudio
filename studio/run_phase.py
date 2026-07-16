@@ -43,6 +43,7 @@ from run_phase_roles import (
     parse_iteration_from_filename,
     resolve_role_list,
 )
+from design_mandate import DESIGN_CRITIQUE_GUIDE
 from scopes import (
     CONTRARIAN_MANDATE,
     allocate_iterations,
@@ -874,6 +875,12 @@ def build_instruction_doc(
         roles_section.append("")
         roles_section.extend(CONTRARIAN_MANDATE)
         roles_section.append("")
+        # The anti-slop blacklist, embarrassment gate, and Goodwill Reservoir are
+        # design-phase only: they judge game UI/menus/store pages, not market or
+        # tech work, so they stay out of those phases' instructions.
+        if phase == "design":
+            roles_section.extend(DESIGN_CRITIQUE_GUIDE)
+            roles_section.append("")
     if phase != "studio":
         if is_qmode:
             roles_section.extend([

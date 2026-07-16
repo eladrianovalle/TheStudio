@@ -43,6 +43,7 @@ SOURCE_FILES = [
     "verifier.py",
     "question_mode.py",
     "scopes.py",
+    "design_mandate.py",
     "cleanup.py",
     "rerun.py",
     "verdict.py",

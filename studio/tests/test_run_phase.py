@@ -147,6 +147,36 @@ def test_instruction_doc_has_contrarian_editor_mandate(studio_root):
     assert "Default to deletion" in instructions
 
 
+def test_design_phase_has_slop_blacklist_and_goodwill_reservoir(studio_root):
+    """Design runs carry the anti-slop blacklist, embarrassment gate, and Goodwill Reservoir."""
+    run_id = run_phase.prepare_run(make_prepare_args(phase="design"))
+    run_dir = studio_root / "output" / "design" / run_id
+    instructions = (run_dir / "instructions.md").read_text()
+    assert "AI-slop blacklist" in instructions
+    assert "Goodwill Reservoir" in instructions
+    assert "embarrassment self-gate" in instructions
+
+
+def test_market_phase_omits_design_critique_guide(studio_root):
+    """The design critique guide is design-only — market runs must not carry it."""
+    run_id = run_phase.prepare_run(make_prepare_args(phase="market"))
+    run_dir = studio_root / "output" / "market" / run_id
+    instructions = (run_dir / "instructions.md").read_text()
+    assert "AI-slop blacklist" not in instructions
+    assert "Goodwill Reservoir" not in instructions
+    assert "embarrassment self-gate" not in instructions
+
+
+def test_tech_phase_omits_design_critique_guide(studio_root):
+    """The design critique guide is design-only — tech runs must not carry it."""
+    run_id = run_phase.prepare_run(make_prepare_args(phase="tech"))
+    run_dir = studio_root / "output" / "tech" / run_id
+    instructions = (run_dir / "instructions.md").read_text()
+    assert "AI-slop blacklist" not in instructions
+    assert "Goodwill Reservoir" not in instructions
+    assert "embarrassment self-gate" not in instructions
+
+
 def test_instruction_doc_has_open_questions_preflight(studio_root):
     """Deliverable runs open with a required open-questions pre-flight."""
     run_id = run_phase.prepare_run(make_prepare_args())
