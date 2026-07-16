@@ -899,6 +899,157 @@ def test_format_stats_omits_session_health_when_empty():
     assert "Session health" not in out
 
 
+# --- Trend alerts (delta-based, 2+-consecutive-run persistence) ---
+
+def _trend_run(created_iso, *, score=None, tokens=None, cost=None, run_id=None):
+    """Build a minimal enriched run dict for detect_trend_alerts tests.
+
+    created_iso orders the runs; score/tokens/cost each become a per-run point in
+    that metric's series (left off when None, mirroring an unrated or unmetered
+    run).
+    """
+    run = {"run_id": run_id or f"run_{created_iso}", "created_iso": created_iso}
+    if score is not None:
+        run["_rating"] = {"score": score}
+    if tokens is not None:
+        run["metrics"] = {"total_tokens": tokens}
+    if cost is not None:
+        run["cost"] = cost
+    return run
+
+
+def test_detect_trend_alerts_empty():
+    """No runs yields no alerts and does not crash."""
+    from stats import detect_trend_alerts
+    assert detect_trend_alerts([]) == []
+
+
+def test_detect_trend_alerts_single_dip_is_a_blip():
+    """One worsening step (a single-run dip) must NOT alert."""
+    from stats import detect_trend_alerts
+    runs = [
+        _trend_run("2026-01-01", score=5),
+        _trend_run("2026-01-02", score=4),  # one dip only
+    ]
+    assert detect_trend_alerts(runs) == []
+
+
+def test_detect_trend_alerts_two_consecutive_regressions_fire():
+    """A rating falling across 2+ consecutive runs alerts with the slide window."""
+    from stats import detect_trend_alerts
+    runs = [
+        _trend_run("2026-01-01", score=5),
+        _trend_run("2026-01-02", score=4),
+        _trend_run("2026-01-03", score=3),
+    ]
+    alerts = detect_trend_alerts(runs)
+    assert len(alerts) == 1
+    alert = alerts[0]
+    assert alert["metric"] == "rating"
+    assert alert["direction"] == "down"
+    assert alert["consecutive"] == 2
+    assert alert["from_value"] == 5
+    assert alert["to_value"] == 3
+    assert alert["pct_change"] == pytest.approx(-0.4)
+    assert alert["runs"] == ["run_2026-01-01", "run_2026-01-02", "run_2026-01-03"]
+
+
+def test_detect_trend_alerts_improving_never_fires():
+    """A metric moving the good way (rating up, tokens down) raises no alert."""
+    from stats import detect_trend_alerts
+    runs = [
+        _trend_run("2026-01-01", score=3, tokens=30000),
+        _trend_run("2026-01-02", score=4, tokens=20000),
+        _trend_run("2026-01-03", score=5, tokens=10000),
+    ]
+    assert detect_trend_alerts(runs) == []
+
+
+def test_detect_trend_alerts_recovery_breaks_the_streak():
+    """A dip that recovers on the newest run is not a persistent regression."""
+    from stats import detect_trend_alerts
+    runs = [
+        _trend_run("2026-01-01", score=5),
+        _trend_run("2026-01-02", score=3),  # dipped
+        _trend_run("2026-01-03", score=4),  # recovered — streak broken at the tail
+    ]
+    assert detect_trend_alerts(runs) == []
+
+
+def test_detect_trend_alerts_not_enough_history():
+    """A single rated run cannot form a run-over-run trend; no alert, no crash."""
+    from stats import detect_trend_alerts
+    assert detect_trend_alerts([_trend_run("2026-01-01", score=2)]) == []
+
+
+def test_detect_trend_alerts_tokens_rising_fire():
+    """Tokens climbing across 2+ consecutive runs alerts with direction up."""
+    from stats import detect_trend_alerts
+    runs = [
+        _trend_run("2026-01-01", tokens=10000),
+        _trend_run("2026-01-02", tokens=12000),
+        _trend_run("2026-01-03", tokens=15000),
+    ]
+    alerts = detect_trend_alerts(runs)
+    assert len(alerts) == 1
+    assert alerts[0]["metric"] == "tokens"
+    assert alerts[0]["direction"] == "up"
+    assert alerts[0]["from_value"] == 10000
+    assert alerts[0]["to_value"] == 15000
+
+
+def test_detect_trend_alerts_ignores_sub_threshold_noise():
+    """Moves below the relative-change floor are noise, not a regression."""
+    from stats import detect_trend_alerts
+    runs = [
+        _trend_run("2026-01-01", tokens=10000),
+        _trend_run("2026-01-02", tokens=10100),  # +1%
+        _trend_run("2026-01-03", tokens=10200),  # +1%
+    ]
+    assert detect_trend_alerts(runs) == []
+
+
+def test_detect_trend_alerts_orders_by_created_iso():
+    """Out-of-order input is sorted chronologically before the trend is read."""
+    from stats import detect_trend_alerts
+    runs = [
+        _trend_run("2026-01-03", score=3),
+        _trend_run("2026-01-01", score=5),
+        _trend_run("2026-01-02", score=4),
+    ]
+    alerts = detect_trend_alerts(runs)
+    assert len(alerts) == 1
+    assert alerts[0]["from_value"] == 5
+    assert alerts[0]["to_value"] == 3
+
+
+def test_format_stats_renders_trend_alerts():
+    """format_stats shows the Trend Alerts block when alerts are present."""
+    from stats import detect_trend_alerts
+    agg = run_phase.aggregate_stats([
+        {"run_id": "r1", "phase": "market", "status": "COMPLETED",
+         "verdict": "APPROVED", "metrics": {}, "_rating": None, "_decisions": []},
+    ])
+    alerts = detect_trend_alerts([
+        _trend_run("2026-01-01", score=5),
+        _trend_run("2026-01-02", score=4),
+        _trend_run("2026-01-03", score=3),
+    ])
+    out = run_phase.format_stats(agg, trend_alerts=alerts)
+    assert "Trend Alerts" in out
+    assert "Human rating falling" in out
+
+
+def test_format_stats_omits_trend_alerts_when_empty():
+    """No alerts means no Trend Alerts block."""
+    agg = run_phase.aggregate_stats([
+        {"run_id": "r1", "phase": "market", "status": "COMPLETED",
+         "verdict": "APPROVED", "metrics": {}, "_rating": None, "_decisions": []},
+    ])
+    out = run_phase.format_stats(agg, trend_alerts=[])
+    assert "Trend Alerts" not in out
+
+
 class _FakeStdin:
     def __init__(self, tty):
         self._tty = tty
