@@ -94,9 +94,12 @@ if (eligible.length === 0) {
 // be handed the argument for why the code is wrong.
 // ---------------------------------------------------------------------------
 phase('Verify')
-const verdicts = []
-for (const item of eligible) {
-  const verdict = await agent(
+// The per-finding verifications are independent (each fresh agent sees only its own quote — the
+// firewall), so they run concurrently instead of one slow round-trip at a time. parallel() is a
+// barrier: it awaits every thunk and returns results in input order; a thunk that errors resolves
+// to null, so we filter before use. The runtime caps real concurrency, so passing all findings is safe.
+const verdicts = (await parallel(eligible.map((item) => () =>
+  agent(
     [
       `You are an INDEPENDENT verifier. Below is a single quoted claim pulled from a code review.`,
       `You are NOT told what anyone thinks is wrong with it, and you must not guess at their reasoning.`,
@@ -117,14 +120,10 @@ for (const item of eligible) {
       `Give a one-line reason from YOUR OWN read of the code.`,
     ].join('\n'),
     { schema: VERIFIER_HANDOFF, label: `verify-finding-${item.index}`, phase: 'Verify' },
-  )
-  if (verdict) {
-    verdicts.push({
-      index: item.index,
-      verdict: verdict.verdict,
-    })
-    log(`Finding #${item.index}: ${verdict.verdict}`)
-  }
+  ).then((verdict) => (verdict ? { index: item.index, verdict: verdict.verdict } : null)),
+))).filter(Boolean)
+for (const v of verdicts) {
+  log(`Finding #${v.index}: ${v.verdict}`)
 }
 
 // ---------------------------------------------------------------------------
