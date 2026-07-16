@@ -104,11 +104,12 @@ A Claude Code Workflow, `.claude/workflows/finding-verifier.js`, built the same 
   code) and the demotion rules. It returns a `VERIFIER_HANDOFF`:
 
   ```jsonc
-  { "finding_id": "contrarian_1.md#3",
-    "verdict": "confirmed | unconfirmed | uncertain",
-    "resulting_confidence": "high | medium | low",
+  { "verdict": "confirmed | unconfirmed | uncertain",
     "one_line_reason": "..." }
   ```
+  The write-back keys each verdict to its finding by list position (the Select step's `index`), and
+  derives confidence from the verdict alone — the agent returns no confidence override (see Key
+  Decisions).
 
 - **Aggregation → write-back:** `confirmed` → confidence +1 band (Medium→High) and tag
   "verified — two voices agree"; `unconfirmed` → demote (Medium→Low, moved to lower-confidence

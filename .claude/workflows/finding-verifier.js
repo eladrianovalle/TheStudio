@@ -34,14 +34,17 @@ log(`Run dir: ${runDir}`)
 // ---------------------------------------------------------------------------
 const VERIFIER_HANDOFF = {
   type: 'object',
-  required: ['finding_id', 'verdict', 'one_line_reason'],
+  required: ['verdict', 'one_line_reason'],
   additionalProperties: false,
   properties: {
-    finding_id: { type: 'integer', description: 'index of the finding in the ordered findings.json list' },
+    // No finding_id: the write-back keys each verdict to its finding by the loop's item.index (which
+    // we trust over an agent-echoed index anyway), so making the agent return one is wasted output.
     verdict: { type: 'string', enum: ['confirmed', 'unconfirmed', 'uncertain'] },
     // No resulting_confidence override: confidence tracks veracity (two voices agree -> promote),
     // never severity. The write-back always derives it from the verdict — confirmed promotes,
     // unconfirmed demotes, uncertain leaves it. Whether a real flaw is *minor* is a separate axis.
+    // one_line_reason is deliberately scaffolding: it isn't persisted, but forcing the agent to state
+    // its own read of the code sharpens the independent verdict.
     one_line_reason: { type: 'string', description: 'one line, from the verifier\'s own read of the code — not the contrarian\'s argument (it never saw it)' },
   },
 }
@@ -99,7 +102,7 @@ for (const item of eligible) {
       `You are NOT told what anyone thinks is wrong with it, and you must not guess at their reasoning.`,
       `Judge only this: reading the real code at the cited location, does this quoted code actually have a problem?`,
       ``,
-      `QUOTE (finding #${item.finding_id ?? item.index}):`,
+      `QUOTE (finding #${item.index}):`,
       `${item.quote}`,
       ``,
       `The quote is \`file:line\` — "exact code/text". You MAY open that file at that line and read the`,
@@ -111,7 +114,7 @@ for (const item of eligible) {
       `- "unconfirmed": you read the code and cannot find the alleged problem.`,
       `- "uncertain": the quote (even with the code) doesn't give you enough to judge.`,
       ``,
-      `Set finding_id to ${item.index}. Give a one-line reason from YOUR OWN read of the code.`,
+      `Give a one-line reason from YOUR OWN read of the code.`,
     ].join('\n'),
     { schema: VERIFIER_HANDOFF, label: `verify-finding-${item.index}`, phase: 'Verify' },
   )

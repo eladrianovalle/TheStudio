@@ -28,13 +28,41 @@ def _workflow_files():
     return sorted(_WORKFLOW_DIR.glob("*.js"))
 
 
+def _top_level_type(src: str, pos: int):
+    """Read the ``type: '...'`` declared at brace-depth 1 of an object literal.
+
+    ``pos`` points just inside the object's opening ``{``. We walk forward
+    tracking brace depth and return the ``type`` at depth 1 (the object's own),
+    NOT merely the first ``type:`` anywhere — a nested property's ``type: 'array'``
+    must not be mistaken for the schema's top-level type (that miss is exactly the
+    top-level-array 400 this guard exists to catch). Returns None if the object
+    declares no top-level type.
+    """
+    depth = 1  # pos is already inside the opening brace
+    i, n = pos, len(src)
+    while i < n and depth > 0:
+        c = src[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+        elif depth == 1 and src.startswith("type", i) and (
+            i == 0 or not (src[i - 1].isalnum() or src[i - 1] == "_")
+        ):
+            m = re.match(r"type\s*:\s*['\"](\w+)['\"]", src[i:])
+            if m:
+                return m.group(1)
+        i += 1
+    return None
+
+
 def _schema_top_level_types(src: str):
     """Yield the top-level ``type`` of every ``agent()`` schema in a shell.
 
     Schemas appear two ways: inline ``schema: { ... }`` in an agent() options
-    object, and named consts ``const X_HANDOFF = { ... }`` / ``X_SCHEMA``. In
-    this codebase a schema object always lists ``type`` as its first key, so the
-    first ``type: '...'`` after the opening brace is the top-level type.
+    object, and named consts ``const X_HANDOFF = { ... }`` / ``X_SCHEMA`` passed
+    by reference. Each is read structurally by brace depth (see _top_level_type),
+    so the check does not depend on ``type`` being written as the first key.
     """
     anchors = [m.end() for m in re.finditer(r"schema:\s*\{", src)]
     anchors += [
@@ -42,9 +70,9 @@ def _schema_top_level_types(src: str):
         for m in re.finditer(r"const\s+\w*(?:HANDOFF|SCHEMA)\w*\s*=\s*\{", src)
     ]
     for pos in anchors:
-        t = re.search(r"type:\s*['\"](\w+)['\"]", src[pos:])
-        if t:
-            yield t.group(1)
+        t = _top_level_type(src, pos)
+        if t is not None:
+            yield t
 
 
 class TestWorkflowSchemas:

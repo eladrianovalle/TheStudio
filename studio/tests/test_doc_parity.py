@@ -31,12 +31,19 @@ def _cli_command_names() -> set[str]:
     return set(subparsers.choices)
 
 
-def _api_md_command_names() -> set[str]:
-    """Command names in the `Command | Description` table of docs/API.md."""
+def _table_first_column(doc_name: str, header: str) -> set[str]:
+    """Backticked tokens in the first column of the markdown table under ``header``.
+
+    Used for the doc tables whose first column IS the source-of-truth name list:
+    API.md's command table and SCOPES_GUIDE.md's Scope Fields table. A name counts
+    as documented only if it has its own row, not merely a prose mention anywhere
+    in the file — otherwise a common-word field like `focus` is effectively
+    unguarded (the word appears throughout the prose regardless of the field).
+    """
     names: set[str] = set()
     in_table = False
-    for line in (_DOCS / "API.md").read_text(encoding="utf-8").splitlines():
-        if line.strip().startswith("| Command | Description |"):
+    for line in (_DOCS / doc_name).read_text(encoding="utf-8").splitlines():
+        if line.strip().startswith(header):
             in_table = True
             continue
         if in_table:
@@ -64,7 +71,7 @@ class TestCliCommandParity:
 
     def test_commands_and_api_md_table_match(self):
         code = _cli_command_names()
-        docs = _api_md_command_names()
+        docs = _table_first_column("API.md", "| Command | Description |")
         assert docs, "no `Command | Description` table found in API.md"
         undocumented = code - docs
         stale = docs - code
@@ -82,9 +89,14 @@ class TestScopeConfigParity:
     def test_fields_documented(self):
         # `name` is the `[scopes.<name>]` TOML section name, not a row key.
         fields = {f.name for f in dataclasses.fields(ScopeConfig)} - {"name"}
-        missing = _undocumented("SCOPES_GUIDE.md", fields)
+        documented = _table_first_column(
+            "SCOPES_GUIDE.md", "| Field | Required | Description |"
+        )
+        assert documented, "no Scope Fields table found in SCOPES_GUIDE.md"
+        missing = fields - documented
         assert not missing, (
-            f"ScopeConfig fields undocumented in SCOPES_GUIDE.md: {sorted(missing)}"
+            "ScopeConfig fields missing a row in the Scope Fields table of "
+            f"SCOPES_GUIDE.md: {sorted(missing)}"
         )
 
 
