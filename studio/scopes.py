@@ -374,6 +374,8 @@ def generate_scope_prompt(
         "- **P1 (Important):** State your assumption and continue, but flag it.",
         "- **P2 (Context):** Nice-to-know, logged for completeness.",
         "",
+        "> **Known failure mode — do not repeat.** Do not hold decisions for a closing section or defer them to the integrator. By the time a batched decision surfaces, the run has already assumed past it. Flag each one inline, the moment you hit it.",
+        "",
     ])
 
     if stance == "advocate":
