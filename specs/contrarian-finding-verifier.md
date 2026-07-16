@@ -136,6 +136,13 @@ A Claude Code Workflow, `.claude/workflows/finding-verifier.js`, built the same 
   as speculative machinery.
 - **The verifier reads the code, not the argument.** It gets the `file:line` so it can look at the
   real source; it never gets the contrarian's reasoning. Independence is the process boundary.
+- **Confidence tracks veracity, not severity — so confirmed always promotes** (decided from the live
+  smoke). The verify agent returns only a verdict; the write-back derives confidence (confirmed →
+  high, unconfirmed → low, uncertain → unchanged). It cannot override confidence to "hold a real but
+  minor flaw at medium" — that blends *is it real* with *is it bad*, which neither gstack (separate
+  severity + confidence numbers) nor Studio (priority separate from confidence) does anywhere else.
+  Whether a real flaw is minor is a severity axis; `Finding` has no severity field today, and adding
+  one is out of scope for R1.
 
 ## Non-Goals / Cut Scope
 

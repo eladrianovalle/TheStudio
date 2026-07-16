@@ -39,7 +39,9 @@ const VERIFIER_HANDOFF = {
   properties: {
     finding_id: { type: 'integer', description: 'index of the finding in the ordered findings.json list' },
     verdict: { type: 'string', enum: ['confirmed', 'unconfirmed', 'uncertain'] },
-    resulting_confidence: { type: 'string', enum: ['high', 'medium', 'low'], description: 'optional; derived from the verdict when omitted' },
+    // No resulting_confidence override: confidence tracks veracity (two voices agree -> promote),
+    // never severity. The write-back always derives it from the verdict — confirmed promotes,
+    // unconfirmed demotes, uncertain leaves it. Whether a real flaw is *minor* is a separate axis.
     one_line_reason: { type: 'string', description: 'one line, from the verifier\'s own read of the code — not the contrarian\'s argument (it never saw it)' },
   },
 }
@@ -111,11 +113,11 @@ for (const item of eligible) {
       `The quote is \`file:line\` — "exact code/text". You MAY open that file at that line and read the`,
       `surrounding code to judge it. Do NOT go looking for any review notes, comments, or argument about it.`,
       ``,
-      `Demotion rules — return a verdict:`,
-      `- "confirmed": you independently see a real problem in this code -> resulting_confidence "high".`,
-      `- "unconfirmed": you read the code and cannot find the alleged problem -> resulting_confidence "low".`,
-      `- "uncertain": the quote (even with the code) doesn't give you enough to judge -> confidence unchanged.`,
-      `You may omit resulting_confidence to let the write-back derive it from the verdict.`,
+      `Return a verdict on whether the flaw is real (this is a veracity judgment, not a severity one —`,
+      `do not weigh how minor or major it is, only whether it is real):`,
+      `- "confirmed": you independently see a real problem in this code.`,
+      `- "unconfirmed": you read the code and cannot find the alleged problem.`,
+      `- "uncertain": the quote (even with the code) doesn't give you enough to judge.`,
       ``,
       `Set finding_id to ${item.index}. Give a one-line reason from YOUR OWN read of the code.`,
     ].join('\n'),
@@ -125,7 +127,6 @@ for (const item of eligible) {
     verdicts.push({
       index: item.index,
       verdict: verdict.verdict,
-      resulting_confidence: verdict.resulting_confidence,
     })
     log(`Finding #${item.index}: ${verdict.verdict}`)
   }
