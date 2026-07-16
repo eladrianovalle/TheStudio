@@ -364,8 +364,11 @@ studio/
   run_phase_roles.py        # Role system: manifest, packs, dependencies, file naming
   role_overrides.py         # Project-local role customization (.studio/roles/*.json)
   persona_overrides.py      # Project-local phase persona overrides (.studio/personas.toml)
-  scopes.py                 # Three-tier scope allocation (alignment/depth/polish)
+  scopes.py                 # Three-tier scope allocation + CONTRARIAN_MANDATE (contrarian editor/evidence-gate)
+  design_mandate.py         # Design-phase critique guide: AI-slop blacklist + Goodwill Reservoir (design phase only)
   decision_points.py        # Inline decision point parsing, formatting, persistence
+  findings.py               # Contrarian FINDING-block parsing → findings.json (sibling of decision_points)
+  verifier.py               # Independent finding verifier: re-check Medium findings from only the quote, write back
   clarity.py                # Per-topic Clarity Score tracking and question density control
   question_mode.py          # Pre-flight question surfacing (--mode questions)
   install.py                # Cross-repo installer (init/check/update)
@@ -383,7 +386,7 @@ studio/
   config/studio_settings.toml # Cleanup settings
   config/implementation_loop.toml # Implementation writer/editor loop defaults
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 682 tests (pytest)
+  tests/                    # 823 tests (pytest)
 ```
 
 ---
@@ -394,7 +397,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-682 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, agent metrics tracking, quality ratings and cross-run stats, run outcome capture and cross-repo outcome export/import, session-health records and ledger auto-append, CLAUDE.md offload analysis, unstale audit configuration, smoke test configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
+823 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, contrarian FINDING-block parsing and the independent finding verifier, the design-phase critique guide (AI-slop blacklist + Goodwill Reservoir) gating, delta-based stats trend alerts, doc-parity (CLI/config docs vs source), clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, agent metrics tracking, quality ratings and cross-run stats, run outcome capture and cross-repo outcome export/import, session-health records and ledger auto-append, CLAUDE.md offload analysis, unstale audit configuration, smoke test configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 

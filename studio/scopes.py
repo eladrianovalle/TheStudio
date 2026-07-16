@@ -5,6 +5,11 @@ Scope-based iteration allocation for Studio runs.
 Enables users to allocate iteration budgets by scope level (alignment/depth/polish),
 spending more iterations on alignment (cheap to change) and fewer
 on polish (expensive to change).
+
+Also the home of the shared contrarian prompt data: ``CONTRARIAN_MANDATE`` (the
+always-on contrarian editor + evidence-gate identity) and the injection of
+``FINDING_BLOCK_TEMPLATE`` (from ``findings.py``) into the contrarian's
+instructions, so the finding emit-format and its parser cannot drift apart.
 """
 from __future__ import annotations
 

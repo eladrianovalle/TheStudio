@@ -156,7 +156,7 @@ The same advocate/contrarian cadence also runs during **implementation**, via `/
 /forge Users can create and view a profile (hardcoded storage)
 ```
 
-A **writer** agent builds one complete MVI unit and commits its passing state; a fresh **editor** agent (the `CONTRARIAN_MANDATE` applied to code) cuts/refines it against the writer's diff and reverts if an edit breaks green: a one-way pipeline gated on **"MVI unit complete AND tests green."** It runs the `.claude/workflows/implementation-loop.js` Claude Code Workflow, config-driven via `implementation_loop.toml` (editor on/off, read scope, output budget, mutation/static gates), with knobs exposed through `python -m impl_loop`. It is the executor described in `studio/docs/IMPLEMENTATION_LOOP_SPEC.md`. Status: executor + config shipped; cadence tuning (gate granularity vs. editor yield) is ongoing.
+A **writer** agent builds one complete MVI unit and commits its passing state; a fresh **editor** agent (the `CONTRARIAN_MANDATE` applied to code) cuts/refines it against the writer's diff and reverts if an edit breaks green — surfacing any real-but-unactionable critique as a **Reviewer Concern** (`reviewer-concerns.md`) instead of losing it on the revert: a one-way pipeline gated on **"MVI unit complete AND tests green."** It runs the `.claude/workflows/implementation-loop.js` Claude Code Workflow, config-driven via `implementation_loop.toml` (editor on/off, read scope, output budget, mutation/static gates), with knobs exposed through `python -m impl_loop`. It is the executor described in `studio/docs/IMPLEMENTATION_LOOP_SPEC.md`. Status: executor + config shipped; cadence tuning (gate granularity vs. editor yield) is ongoing.
 
 ## CLI Commands
 
@@ -203,10 +203,10 @@ All source lives under `studio/`. `run_phase.py` is the sole entrypoint using on
 `run_phase.py` is the CLI entrypoint; the rest are focused modules it imports.
 See **`studio/docs/ARCHITECTURE.md`** for the full per-module reference.
 
-- **Debate / flow:** `scopes.py`, `question_mode.py`, `decision_points.py` (owns the canonical decision-point emit/parse format), `clarity.py`, `verdict.py`, `rerun.py`
-- **Roles / personas:** `run_phase_roles.py`, `role_overrides.py`, `persona_overrides.py` (+ `studio.manifest.json`, `role_packs/`)
-- **Diagnostics:** `stats.py` (pure cross-run aggregation, ratings, and the outcome summary that `rate`/`export-outcomes`/`import-outcomes` feed), `session.py` (pure; builds the automatic `session.json` health record finalize writes for each run)
-- **Implementation loop:** `impl_loop.py`. Config for `.claude/workflows/implementation-loop.js`; see `studio/docs/IMPLEMENTATION_LOOP_SPEC.md`
+- **Debate / flow:** `scopes.py` (+ `CONTRARIAN_MANDATE`), `question_mode.py`, `decision_points.py` (owns the canonical decision-point emit/parse format), `findings.py` (the parseable `FINDING` block → `findings.json`), `verifier.py` (independent finding verifier, behind `finding-verifier.js`), `clarity.py`, `verdict.py`, `rerun.py`
+- **Roles / personas:** `run_phase_roles.py`, `role_overrides.py`, `persona_overrides.py`, `design_mandate.py` (design-phase-only AI-slop blacklist + Goodwill Reservoir critique guide) (+ `studio.manifest.json`, `role_packs/`)
+- **Diagnostics:** `stats.py` (pure cross-run aggregation, ratings, the outcome summary that `rate`/`export-outcomes`/`import-outcomes` feed, and `detect_trend_alerts` — run-over-run regressions that persist 2+ consecutive runs), `session.py` (pure; builds the automatic `session.json` health record finalize writes for each run)
+- **Workflows / loops:** `impl_loop.py` (config for `.claude/workflows/implementation-loop.js`, the `/forge` writer/editor loop — see `studio/docs/IMPLEMENTATION_LOOP_SPEC.md`) and `.claude/workflows/finding-verifier.js` (the independent finding verifier; core in `verifier.py`)
 - **Cross-repo + hygiene:** `install.py`, `setup.py`, `offload.py`, `cleanup.py`
 - **Shared:** `config_loading.py` (the single TOML loader), `validators/`, `integrations/slack_digest.py`
 
