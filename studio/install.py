@@ -39,6 +39,8 @@ SOURCE_FILES = [
     "role_overrides.py",
     "persona_overrides.py",
     "decision_points.py",
+    "findings.py",
+    "verifier.py",
     "question_mode.py",
     "scopes.py",
     "cleanup.py",
@@ -87,6 +89,7 @@ SLASH_COMMANDS = [
 # Claude Code Workflows to copy to {target}/.claude/workflows/ (verbatim, like commands)
 WORKFLOW_FILES = [
     "implementation-loop.js",
+    "finding-verifier.js",
 ]
 
 # Sentinels for CLAUDE.md injection: update replaces content between these markers

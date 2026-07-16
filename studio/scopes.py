@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from decision_points import DECISION_BLOCK_TEMPLATE
+from findings import FINDING_BLOCK_TEMPLATE
 
 
 VALID_DEBATE_MODES = {"all_roles", "per_role"}
@@ -42,6 +43,9 @@ CONTRARIAN_MANDATE = [
     "- **Quote before you claim.** For every flaw or objection, quote the exact thing you are critiquing — the specific claim, feature, step, or line from the advocate's proposal. If you cannot point at the exact thing, you have not verified it: mark the finding `(unverified)` and treat it as low-confidence.",
     "- **Rate your confidence, and let the rating set how loudly you raise it.** *High* — you quoted the exact thing and showed concretely why it breaks: state it plainly as a finding. *Medium* — a real pattern you cannot fully prove here: raise it, tagged \"verify this.\" *Low / unverified* — no quote, or a hunch: collect these under a short **Lower-confidence notes** list at the end, kept out of your main findings; drop one entirely unless, if it were true, it would be fatal (a P0).",
     "- **A vibe is not a finding.** \"This looks off\" or \"this might not scale\" earns nothing on its own. Either cite the evidence, or leave it out.",
+    "- **Also emit each finding as a FINDING block so it is captured.** Alongside your prose, write every finding that clears this gate as the block below — same quote-and-rate content, in a form that parses into findings.json for stats, dedup, and independent verification:",
+    "",
+    *FINDING_BLOCK_TEMPLATE.splitlines(),
 ]
 
 
