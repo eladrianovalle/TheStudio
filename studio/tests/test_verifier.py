@@ -1,9 +1,10 @@
 """Tests for the independent finding verifier (Unit 2 core).
 
 Tests cover:
-  - select_findings_to_verify: filters to Medium only (High/Low skipped)
+  - select_findings_to_verify / select_rows_for_run: filter to Medium only
+    (High/Low skipped), and the Select rows expose only {index, quote}
   - apply_verdict: confirmed->high, unconfirmed->low, uncertain->unchanged,
-    explicit resulting_confidence override, unknown verdict rejected
+    unknown verdict rejected (confidence derives from the verdict alone)
   - apply_verdicts_to_run: round trip through findings.json (write, apply, reload)
 """
 import pytest

@@ -55,15 +55,15 @@ def _table_first_column(doc_name: str, header: str) -> set[str]:
     return names
 
 
-def _undocumented(doc_name: str, names: set[str]) -> set[str]:
-    """Names not mentioned in a doc. A config key counts as documented if its
-    name appears as a whole word anywhere — a TOML example (`key = value`), a
-    backticked mention, or prose all count; only a genuinely absent name fails."""
+def _toml_assigned_keys(doc_name: str) -> set[str]:
+    """Keys that appear as a TOML assignment (`key = value`) in a doc.
+
+    The loop config is documented as a TOML block, not a table, so a field counts
+    as documented only when it's genuinely defined (`field = ...`) — not merely
+    named in prose, which would let a common-word field like `mandate` pass on an
+    incidental sentence mention."""
     text = (_DOCS / doc_name).read_text(encoding="utf-8")
-    return {
-        name for name in names
-        if not re.search(rf"\b{re.escape(name)}\b", text)
-    }
+    return set(re.findall(r"(?m)^\s*([a-z_]+)\s*=", text))
 
 
 class TestCliCommandParity:
@@ -105,8 +105,10 @@ class TestLoopConfigParity:
 
     def test_fields_documented(self):
         fields = {f.name for f in dataclasses.fields(LoopConfig)}
-        missing = _undocumented("IMPLEMENTATION_LOOP_SPEC.md", fields)
+        documented = _toml_assigned_keys("IMPLEMENTATION_LOOP_SPEC.md")
+        assert documented, "no TOML assignments found in IMPLEMENTATION_LOOP_SPEC.md"
+        missing = fields - documented
         assert not missing, (
-            "LoopConfig fields undocumented in IMPLEMENTATION_LOOP_SPEC.md: "
-            f"{sorted(missing)}"
+            "LoopConfig fields not defined in the TOML config block of "
+            f"IMPLEMENTATION_LOOP_SPEC.md: {sorted(missing)}"
         )

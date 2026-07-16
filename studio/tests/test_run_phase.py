@@ -1009,6 +1009,39 @@ def test_detect_trend_alerts_ignores_sub_threshold_noise():
     assert detect_trend_alerts(runs) == []
 
 
+def test_detect_trend_alerts_cost_rising_fire():
+    """Cost climbing across 2+ consecutive runs alerts on the third tracked metric."""
+    from stats import detect_trend_alerts
+    runs = [
+        _trend_run("2026-01-01", cost=1.00),
+        _trend_run("2026-01-02", cost=1.50),
+        _trend_run("2026-01-03", cost=2.50),
+    ]
+    alerts = detect_trend_alerts(runs)
+    assert len(alerts) == 1
+    assert alerts[0]["metric"] == "cost"
+    assert alerts[0]["direction"] == "up"
+    assert alerts[0]["from_value"] == 1.00
+    assert alerts[0]["to_value"] == 2.50
+
+
+def test_detect_trend_alerts_zero_baseline_does_not_divide():
+    """A zero value as a baseline breaks the streak instead of dividing by zero.
+
+    tokens 0 -> 10000 -> 20000: the step off the zero baseline has no meaningful
+    relative change, so it ends the streak. Only the one real worsening step
+    remains (below the 2-consecutive threshold), so there's no alert — and,
+    load-bearingly, no ZeroDivisionError.
+    """
+    from stats import detect_trend_alerts
+    runs = [
+        _trend_run("2026-01-01", tokens=0),
+        _trend_run("2026-01-02", tokens=10000),
+        _trend_run("2026-01-03", tokens=20000),
+    ]
+    assert detect_trend_alerts(runs) == []
+
+
 def test_detect_trend_alerts_orders_by_created_iso():
     """Out-of-order input is sorted chronologically before the trend is read."""
     from stats import detect_trend_alerts

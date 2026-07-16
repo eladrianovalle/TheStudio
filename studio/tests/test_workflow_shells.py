@@ -93,6 +93,49 @@ class TestWorkflowSchemas:
         )
 
 
+class TestSchemaGuardParser:
+    """Prove the guard reads the *top-level* type and isn't fooled by a nested
+    one — its whole reason to exist. Without this, the guard could silently stop
+    catching the top-level-array 400 it was written for (PR #66)."""
+
+    def test_flags_a_top_level_array_schema(self):
+        # The exact PR #66 bug: a bare top-level array the Anthropic API rejects.
+        src = "await agent(p, { schema: { type: 'array', items: { type: 'object' } } })"
+        assert list(_schema_top_level_types(src)) == ["array"]
+
+    def test_reads_top_level_object_past_a_nested_array_and_non_first_type(self):
+        # `type` is NOT the first key AND a nested property is an array; the walker
+        # must still report the object's own top-level type, not the nested one.
+        src = (
+            "const X_HANDOFF = { additionalProperties: false, "
+            "properties: { xs: { type: 'array', items: { type: 'string' } } }, "
+            "type: 'object' }"
+        )
+        assert list(_schema_top_level_types(src)) == ["object"]
+
+    def test_object_with_no_top_level_type_yields_nothing(self):
+        src = "await agent(p, { schema: { properties: { x: { type: 'string' } } } })"
+        assert list(_schema_top_level_types(src)) == []
+
+
+class TestVerifierFirewall:
+    """The R1 anti-anchoring firewall lives in finding-verifier.js's Verify prompt:
+    it may carry the finding's quote and nothing else from the contrarian. A leak
+    of the flaw/impact/reasoning is the one thing the whole feature exists to avoid."""
+
+    def test_verify_prompt_carries_only_the_quote(self):
+        src = (_WORKFLOW_DIR / "finding-verifier.js").read_text()
+        verify_block = src[src.index("phase('Verify')"):src.index("phase('Write-back')")]
+        assert "item.quote" in verify_block, "the quote must reach the verifier"
+        # The per-finding item only holds {index, quote}; a future edit that fed
+        # the contrarian's fields into the prompt would breach the firewall.
+        for leaked in ("item.flaw", "item.impact", "item.reason", "item.confidence"):
+            assert leaked not in verify_block, (
+                f"Verify prompt references {leaked!r} — the contrarian's reasoning "
+                "would leak past the firewall"
+            )
+
+
 class TestReviewerConcernsWiring:
     """Pin that the /forge loop surfaces the editor's unresolved_concerns."""
 
