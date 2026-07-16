@@ -120,14 +120,18 @@ wait for the completion notification.
 
 ### Step 5: Report the result
 
-The workflow returns `{ delivered, flagged, editorRan, finalVersion, writer, editor }`. Summarize
-for the user:
+The workflow returns `{ delivered, flagged, editorRan, finalVersion, reviewerConcerns, writer, editor }`.
+Summarize for the user:
 
 - **What was built** + final test status (`editor.tests` / `writer.tests`).
 - **What the editor changed** (`editor.edits`): the cuts/merges/restructures, or "nothing to cut".
 - **MVI verdict** (`editor.mvi_verdict`): call out explicitly if the editor *overturned* the
   writer's `mvi_claimed` (unit not actually usable → it's flagged, not silently shipped).
 - **Reverted?** (`editor.reverted`): if an edit broke green and was rolled back to `writer_sha`.
+- **Reviewer concerns** (`reviewerConcerns`): if non-empty, list them — these are real problems the
+  editor found but couldn't fix this pass (would break green, is load-bearing, or out of unit scope).
+  They are NOT blockers on delivery, but they are the loop's most useful output when the editor had
+  to revert. Point at `.studio/output/impl_loop/<unit_id>/reviewer-concerns.md`.
 - Point to the handoff records under `.studio/output/impl_loop/<unit_id>/`.
 
 If `flagged` is true, make clear the unit did NOT pass the full gate (delivered for inspection,

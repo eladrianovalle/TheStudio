@@ -974,6 +974,8 @@ def build_instruction_doc(
             "",
             "When you encounter a gap, ambiguity, or fork that could meaningfully change your approach, flag it as a decision point. Do NOT silently assume — surface it. This applies to **every pass** — the pre-flight front-loads the obvious questions, but each later pass must keep raising new ones as they surface.",
             "",
+            "> **Known failure mode — do not repeat.** An earlier version let agents hold their decisions and present them in a batch at the end (or leave them for the integrator). By then the run had already built on top of the unasked question, so the answer arrived too late to matter. Surface each decision the moment you hit it, per agent, inline — never collect them into a closing section and never defer them downstream.",
+            "",
             "### Format",
             "",
             "Use a markdown blockquote with a bold DECISION header:",
@@ -1097,6 +1099,7 @@ def build_instruction_doc(
                     "2. Add `### Integrator Contrarian` critiquing feasibility, ops risk, and sequencing. End with `VERDICT: APPROVED/REJECTED`.",
                     "3. If REJECTED, adjust with one additional mini-iteration (max 2 total) before continuing.",
                     "4. Close with `### Integrated Plan` that synthesizes both perspectives and lists next steps.",
+                    "   **Lone-critical override:** a single serious finding from one role's contrarian must not be dropped just because it wasn't the consensus or another role disagreed. Carry it into the plan — either resolved, or explicitly logged as an accepted risk with the reason. Synthesis reconciles findings; it never quietly buries the inconvenient one.",
                 ]
             )
 
