@@ -28,13 +28,41 @@ def _workflow_files():
     return sorted(_WORKFLOW_DIR.glob("*.js"))
 
 
+def _top_level_type(src: str, pos: int):
+    """Read the ``type: '...'`` declared at brace-depth 1 of an object literal.
+
+    ``pos`` points just inside the object's opening ``{``. We walk forward
+    tracking brace depth and return the ``type`` at depth 1 (the object's own),
+    NOT merely the first ``type:`` anywhere — a nested property's ``type: 'array'``
+    must not be mistaken for the schema's top-level type (that miss is exactly the
+    top-level-array 400 this guard exists to catch). Returns None if the object
+    declares no top-level type.
+    """
+    depth = 1  # pos is already inside the opening brace
+    i, n = pos, len(src)
+    while i < n and depth > 0:
+        c = src[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+        elif depth == 1 and src.startswith("type", i) and (
+            i == 0 or not (src[i - 1].isalnum() or src[i - 1] == "_")
+        ):
+            m = re.match(r"type\s*:\s*['\"](\w+)['\"]", src[i:])
+            if m:
+                return m.group(1)
+        i += 1
+    return None
+
+
 def _schema_top_level_types(src: str):
     """Yield the top-level ``type`` of every ``agent()`` schema in a shell.
 
     Schemas appear two ways: inline ``schema: { ... }`` in an agent() options
-    object, and named consts ``const X_HANDOFF = { ... }`` / ``X_SCHEMA``. In
-    this codebase a schema object always lists ``type`` as its first key, so the
-    first ``type: '...'`` after the opening brace is the top-level type.
+    object, and named consts ``const X_HANDOFF = { ... }`` / ``X_SCHEMA`` passed
+    by reference. Each is read structurally by brace depth (see _top_level_type),
+    so the check does not depend on ``type`` being written as the first key.
     """
     anchors = [m.end() for m in re.finditer(r"schema:\s*\{", src)]
     anchors += [
@@ -42,9 +70,9 @@ def _schema_top_level_types(src: str):
         for m in re.finditer(r"const\s+\w*(?:HANDOFF|SCHEMA)\w*\s*=\s*\{", src)
     ]
     for pos in anchors:
-        t = re.search(r"type:\s*['\"](\w+)['\"]", src[pos:])
-        if t:
-            yield t.group(1)
+        t = _top_level_type(src, pos)
+        if t is not None:
+            yield t
 
 
 class TestWorkflowSchemas:
@@ -63,6 +91,49 @@ class TestWorkflowSchemas:
             f"{wf.name}: agent() schema(s) with non-object top-level type "
             f"{non_object} — the API rejects a top-level array/etc."
         )
+
+
+class TestSchemaGuardParser:
+    """Prove the guard reads the *top-level* type and isn't fooled by a nested
+    one — its whole reason to exist. Without this, the guard could silently stop
+    catching the top-level-array 400 it was written for (PR #66)."""
+
+    def test_flags_a_top_level_array_schema(self):
+        # The exact PR #66 bug: a bare top-level array the Anthropic API rejects.
+        src = "await agent(p, { schema: { type: 'array', items: { type: 'object' } } })"
+        assert list(_schema_top_level_types(src)) == ["array"]
+
+    def test_reads_top_level_object_past_a_nested_array_and_non_first_type(self):
+        # `type` is NOT the first key AND a nested property is an array; the walker
+        # must still report the object's own top-level type, not the nested one.
+        src = (
+            "const X_HANDOFF = { additionalProperties: false, "
+            "properties: { xs: { type: 'array', items: { type: 'string' } } }, "
+            "type: 'object' }"
+        )
+        assert list(_schema_top_level_types(src)) == ["object"]
+
+    def test_object_with_no_top_level_type_yields_nothing(self):
+        src = "await agent(p, { schema: { properties: { x: { type: 'string' } } } })"
+        assert list(_schema_top_level_types(src)) == []
+
+
+class TestVerifierFirewall:
+    """The R1 anti-anchoring firewall lives in finding-verifier.js's Verify prompt:
+    it may carry the finding's quote and nothing else from the contrarian. A leak
+    of the flaw/impact/reasoning is the one thing the whole feature exists to avoid."""
+
+    def test_verify_prompt_carries_only_the_quote(self):
+        src = (_WORKFLOW_DIR / "finding-verifier.js").read_text()
+        verify_block = src[src.index("phase('Verify')"):src.index("phase('Write-back')")]
+        assert "item.quote" in verify_block, "the quote must reach the verifier"
+        # The per-finding item only holds {index, quote}; a future edit that fed
+        # the contrarian's fields into the prompt would breach the firewall.
+        for leaked in ("item.flaw", "item.impact", "item.reason", "item.confidence"):
+            assert leaked not in verify_block, (
+                f"Verify prompt references {leaked!r} — the contrarian's reasoning "
+                "would leak past the firewall"
+            )
 
 
 class TestReviewerConcernsWiring:

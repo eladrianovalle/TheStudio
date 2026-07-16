@@ -30,15 +30,20 @@ _VERDICT_TO_CONFIDENCE: dict[str, str | None] = {
 }
 
 
-def select_findings_to_verify(findings: list[Finding]) -> list[Finding]:
-    """Return only the findings eligible for an independent second opinion.
+def _is_eligible(finding: Finding) -> bool:
+    """A finding gets an independent second opinion iff it's Medium confidence.
 
-    MVI = Medium confidence only. High is already the most self-gated tier (the
-    shipped contrarian gate defines High as "quoted and shown"), and Low is
-    already demoted out of the main list, so re-checking either duplicates work.
-    Medium is the tier literally tagged "verify this."
+    The single source of the eligibility rule. High is already the most
+    self-gated tier (the shipped contrarian gate defines High as "quoted and
+    shown"), and Low is already demoted out of the main list, so re-checking
+    either duplicates work. Medium is the tier literally tagged "verify this."
     """
-    return [f for f in findings if f.confidence == "medium"]
+    return finding.confidence == "medium"
+
+
+def select_findings_to_verify(findings: list[Finding]) -> list[Finding]:
+    """Return only the findings eligible for an independent second opinion (Medium)."""
+    return [f for f in findings if _is_eligible(f)]
 
 
 def select_rows_for_run(run_dir) -> list[dict]:
@@ -56,25 +61,22 @@ def select_rows_for_run(run_dir) -> list[dict]:
     only limped through because the Select agent hand-repaired it at runtime.
     """
     findings = load_findings_json(run_dir)
-    eligible_ids = {id(f) for f in select_findings_to_verify(findings)}
     return [
         {"index": i, "quote": f.quote}
         for i, f in enumerate(findings)
-        if id(f) in eligible_ids
+        if _is_eligible(f)
     ]
 
 
-def apply_verdict(
-    finding: Finding,
-    verdict: str,
-    resulting_confidence: str | None = None,
-) -> Finding:
+def apply_verdict(finding: Finding, verdict: str) -> Finding:
     """Record a verifier's verdict on a finding and set its verified confidence.
 
-    verdict is one of 'confirmed' | 'unconfirmed' | 'uncertain'. The resulting
-    verified_confidence is the caller's resulting_confidence when passed, else it
-    is derived from the verdict: confirmed -> 'high' (promoted), unconfirmed ->
-    'low' (demoted), uncertain -> unchanged (the finding's current confidence).
+    verdict is one of 'confirmed' | 'unconfirmed' | 'uncertain'. The verified
+    confidence is derived from the verdict alone: confirmed -> 'high' (promoted),
+    unconfirmed -> 'low' (demoted), uncertain -> unchanged (the finding's current
+    confidence). Confidence tracks veracity (two voices agree -> promote), never
+    severity, so the verdict alone decides it — there is deliberately no caller
+    override (see specs/contrarian-finding-verifier.md).
 
     Mutates and returns the same Finding, mirroring how the finding record is the
     overlay that carries its own verified confidence (no separate artifact).
@@ -86,13 +88,10 @@ def apply_verdict(
         )
 
     finding.verdict = verdict
-    if resulting_confidence is not None:
-        finding.verified_confidence = resulting_confidence
-    else:
-        derived = _VERDICT_TO_CONFIDENCE[verdict]
-        # 'uncertain' derives None -> carry the finding's own confidence through,
-        # so verified_confidence is always populated after a verdict.
-        finding.verified_confidence = derived if derived is not None else finding.confidence
+    derived = _VERDICT_TO_CONFIDENCE[verdict]
+    # 'uncertain' derives None -> carry the finding's own confidence through,
+    # so verified_confidence is always populated after a verdict.
+    finding.verified_confidence = derived if derived is not None else finding.confidence
     return finding
 
 
@@ -102,18 +101,14 @@ def apply_verdicts_to_run(run_dir, verdicts: list[dict]) -> list[Finding]:
     verdicts is a list of records, each keyed to a finding by its position in the
     ordered findings.json list::
 
-        {"index": 2, "verdict": "confirmed", "resulting_confidence": "high"}
+        {"index": 2, "verdict": "confirmed"}
 
-    resulting_confidence is optional; when omitted it is derived from the verdict
-    (see apply_verdict). Returns the updated Finding list (also persisted).
+    The verified confidence is derived from the verdict (see apply_verdict).
+    Returns the updated Finding list (also persisted).
     """
     findings = load_findings_json(run_dir)
     for verdict_record in verdicts:
         index = verdict_record["index"]
-        apply_verdict(
-            findings[index],
-            verdict_record["verdict"],
-            verdict_record.get("resulting_confidence"),
-        )
+        apply_verdict(findings[index], verdict_record["verdict"])
     save_findings_json(run_dir, findings)
     return findings

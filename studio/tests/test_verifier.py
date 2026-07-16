@@ -1,9 +1,10 @@
 """Tests for the independent finding verifier (Unit 2 core).
 
 Tests cover:
-  - select_findings_to_verify: filters to Medium only (High/Low skipped)
+  - select_findings_to_verify / select_rows_for_run: filter to Medium only
+    (High/Low skipped), and the Select rows expose only {index, quote}
   - apply_verdict: confirmed->high, unconfirmed->low, uncertain->unchanged,
-    explicit resulting_confidence override, unknown verdict rejected
+    unknown verdict rejected (confidence derives from the verdict alone)
   - apply_verdicts_to_run: round trip through findings.json (write, apply, reload)
 """
 import pytest
@@ -83,14 +84,6 @@ class TestApplyVerdict:
         assert f.confidence == "medium"
         assert f.verified_confidence == "medium"
 
-    def test_explicit_resulting_confidence_wins(self):
-        f = _finding("medium")
-        apply_verdict(f, "confirmed", resulting_confidence="medium")
-
-        assert f.verdict == "confirmed"
-        # Explicit override beats the confirmed->high derivation.
-        assert f.verified_confidence == "medium"
-
     def test_returns_same_finding(self):
         f = _finding("medium")
         assert apply_verdict(f, "confirmed") is f
@@ -136,18 +129,6 @@ class TestApplyVerdictsToRun:
         # The untouched High finding keeps its unset verifier fields.
         assert reloaded[1].verdict is None
         assert reloaded[1].verified_confidence is None
-
-    def test_explicit_resulting_confidence_round_trips(self, tmp_path):
-        save_findings_json(tmp_path, [_finding("medium")])
-
-        apply_verdicts_to_run(
-            tmp_path,
-            [{"index": 0, "verdict": "uncertain", "resulting_confidence": "high"}],
-        )
-
-        reloaded = load_findings_json(tmp_path)
-        assert reloaded[0].verdict == "uncertain"
-        assert reloaded[0].verified_confidence == "high"
 
     def test_no_verdicts_leaves_findings_untouched(self, tmp_path):
         save_findings_json(tmp_path, [_finding("medium")])
