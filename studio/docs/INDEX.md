@@ -10,6 +10,8 @@
 - **[CODING_PRINCIPLES.md](./CODING_PRINCIPLES.md)** - Karpathy-inspired coding principles (injected into target CLAUDE.md on install)
 - **[RUN_PHASE_SPLIT_PLAN.md](./RUN_PHASE_SPLIT_PLAN.md)** - Deferred plan for decomposing `run_phase.py` (config_loading + stats already extracted)
 - **[SESSION_ANALYTICS_PLAN.md](./SESSION_ANALYTICS_PLAN.md)** - Auto session-health metrics: design + status (first slice shipped: `session.json` at finalize, ledger auto-append, `stats` session-health block; `studio outcome` + session linking still deferred)
+- **[GSTACK_COMPARISON.md](./GSTACK_COMPARISON.md)** - Study of garrytan/gstack: what Studio borrowed, why, and the (completed) roadmap
+- **[specs/](../../specs/)** - Tracked architecture specs (the source of truth a feature is built against; e.g. `contrarian-finding-verifier.md`, `doc-parity-tests.md`)
 
 ## Workflow Features
 - **[SCOPES_GUIDE.md](./SCOPES_GUIDE.md)** - Scope-based iteration allocation

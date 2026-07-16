@@ -153,6 +153,8 @@ The dashboard opens with an **"Outcomes (did it ship / what changed)"** section:
 
 The dashboard also renders a **"Session health"** block, computed from each run's `session.json` (see Section 4.1) by `stats.summarize_session_health`. It reports five auto-measured signals over the finalized sessions on record: assumed-P0 rate (P0s guessed instead of asked), convergence (median iterations + rejection rate), clarity gain per session, tokens per settled decision, and editor liveness (share of sessions whose final doc shrank). With enough sessions it splits earlier vs. recent to show the trend. With `--json`, the emitted dict gains a `session_health` key holding this summary.
 
+Near the top the dashboard surfaces a **"Trend Alerts"** block when a metric is regressing, computed by `stats.detect_trend_alerts`. It applies a delta-based rule: a metric — human rating (falling), tokens/run or cost/run (rising) — is flagged only when it has worsened by ≥5% relative across **2+ consecutive runs**, so a single-run blip never fires. The block is omitted entirely when nothing is regressing. With `--json`, the emitted dict gains a `trend_alerts` key holding the list of alerts (metric, direction, consecutive-run count, from/to values, pct change).
+
 ---
 
 ### 1.7 `export-outcomes` arguments
