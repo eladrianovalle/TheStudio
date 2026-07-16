@@ -22,9 +22,8 @@ from __future__ import annotations
 import itertools
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 
 # --- Canonical emit format (single source of truth) --------------------------
@@ -82,9 +81,9 @@ class Finding:
     flaw: str
     quote: str
     impact: str
-    source_file: Optional[str] = field(default=None)
-    verdict: Optional[str] = field(default=None)
-    verified_confidence: Optional[str] = field(default=None)
+    source_file: str | None = None
+    verdict: str | None = None
+    verified_confidence: str | None = None
 
 
 def parse_findings(text: str, source_file: str | None = None) -> list[Finding]:
