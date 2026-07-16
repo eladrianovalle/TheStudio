@@ -109,6 +109,12 @@ def apply_verdicts_to_run(run_dir, verdicts: list[dict]) -> list[Finding]:
     findings = load_findings_json(run_dir)
     for verdict_record in verdicts:
         index = verdict_record["index"]
+        if not 0 <= index < len(findings):
+            raise ValueError(
+                f"verdict index {index} is out of range for "
+                f"{len(findings)} finding(s); findings.json may have changed "
+                f"since the verdicts were selected"
+            )
         apply_verdict(findings[index], verdict_record["verdict"])
     save_findings_json(run_dir, findings)
     return findings
