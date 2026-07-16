@@ -40,6 +40,7 @@ SOURCE_FILES = [
     "persona_overrides.py",
     "decision_points.py",
     "findings.py",
+    "verifier.py",
     "question_mode.py",
     "scopes.py",
     "cleanup.py",
