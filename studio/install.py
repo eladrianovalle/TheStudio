@@ -39,6 +39,7 @@ SOURCE_FILES = [
     "role_overrides.py",
     "persona_overrides.py",
     "decision_points.py",
+    "findings.py",
     "question_mode.py",
     "scopes.py",
     "cleanup.py",
