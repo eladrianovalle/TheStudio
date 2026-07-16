@@ -87,7 +87,8 @@ The **editor** returns the same shape with `stage: "editor"`, its own `writer_sh
 diffs against the writer's), updated `tests` (re-run after its edits), an `edits` summary of what
 was cut / merged / renamed (and what, if anything, was lost), and `mvi_verdict`: its
 **authoritative** judgment of whether the unit is a usable interaction, which can overturn the
-writer's `mvi_claimed`. It does **not** carry a
+writer's `mvi_claimed`. It also carries `unresolved_concerns`: valid critiques it could not act on
+this pass (see "Reviewer Concerns" below), empty when there are none. It does **not** carry a
 separate `behavior_preserved` flag: "tests stay green" plus the `load_bearing` escalation already
 encode that invariant, so a third self-attested boolean was cut as redundant.
 
@@ -161,6 +162,17 @@ shallow-merges over (mirrors `persona_overrides.py` and `role_overrides.py`).
   `git reset --hard <writer_sha>` (or `git checkout <writer_sha> -- <files_touched>`) and records
   the disagreement in `edits`. Without that commit there is nothing to revert to: the snapshot
   is what makes "keep the writer's version" executable at all.
+
+- **Reviewer Concerns (persist the disagreement, don't loop on it):** the pipeline is one-way by
+  design — it never hands work back for another round, which is what keeps it from thrashing. The
+  cost of that is a real critique the editor *can't* act on this pass (it would break green, hit a
+  `load_bearing` item, or falls outside the unit) would simply vanish on revert. So the editor
+  records each such critique in `unresolved_concerns` — the concern (quoting what it's about), why
+  it couldn't be resolved (`breaks_green` | `load_bearing` | `out_of_unit_scope`), and the smallest
+  follow-up that would — and writes them to `reviewer-concerns.md` in the run directory. This is the
+  same move gstack's plan-review loop makes when a writer/editor pair deadlocks: stop looping,
+  persist the unresolved issue into the artifact so a human (or the next unit) sees it. It keeps the
+  loop one-way without throwing away the second agent's most valuable output.
 
 ### 4. Config: `implementation_loop.toml`
 

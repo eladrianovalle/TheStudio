@@ -34,6 +34,14 @@ CONTRARIAN_MANDATE = [
     "- **Collapse, don't accumulate.** Prefer merging two things into one over adding a third. Prefer removing an option over adding configuration to support it.",
     "- **Guard the essence.** Cutting serves clarity and the core problem — never amputate what the problem genuinely requires. If a cut would break the core, say so and stop.",
     "- **Cut concepts, not clarity.** Remove features, layers, and options — but never compress readable code into dense or clever code to save lines. Explicit names and obvious steps are part of the essence you protect, not fat to trim.",
+    "",
+    "**Findings must earn their place — quote first, then rate.**",
+    "",
+    "Hunting flaws only helps when the flaws are real. A confident-sounding critique that turns out to be wrong wastes the room's attention and makes every later finding easier to wave off. So gate each flaw on evidence before you raise it:",
+    "",
+    "- **Quote before you claim.** For every flaw or objection, quote the exact thing you are critiquing — the specific claim, feature, step, or line from the advocate's proposal. If you cannot point at the exact thing, you have not verified it: mark the finding `(unverified)` and treat it as low-confidence.",
+    "- **Rate your confidence, and let the rating set how loudly you raise it.** *High* — you quoted the exact thing and showed concretely why it breaks: state it plainly as a finding. *Medium* — a real pattern you cannot fully prove here: raise it, tagged \"verify this.\" *Low / unverified* — no quote, or a hunch: collect these under a short **Lower-confidence notes** list at the end, kept out of your main findings; drop one entirely unless, if it were true, it would be fatal (a P0).",
+    "- **A vibe is not a finding.** \"This looks off\" or \"this might not scale\" earns nothing on its own. Either cite the evidence, or leave it out.",
 ]
 
 

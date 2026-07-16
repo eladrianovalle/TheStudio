@@ -98,6 +98,24 @@ const EDITOR_HANDOFF = {
     mvi_verdict: { type: 'boolean', description: 'AUTHORITATIVE: could someone use this unit? Overturns writer.mvi_claimed.' },
     edits: { type: 'string', description: 'what was cut / merged / renamed, and what (if anything) was lost' },
     reverted: { type: 'boolean', description: 'true if the editor reset to writer_sha because an edit broke green or hit a load_bearing item' },
+    // Reviewer Concerns — the third path between "edit it" and "silently drop it". A real problem the
+    // editor spotted but could NOT resolve within the tests-green + load_bearing + read-scope bounds.
+    // The loop is one-way (no re-run debate), so without this the critique evaporates on revert. Persisted
+    // so it surfaces to the human / the next unit instead of being lost.
+    unresolved_concerns: {
+      type: 'array',
+      description: 'problems the editor could not safely act on this pass; empty if none',
+      items: {
+        type: 'object',
+        required: ['concern', 'why_unresolved'],
+        additionalProperties: false,
+        properties: {
+          concern: { type: 'string', description: 'the specific problem, quoting the thing it is about' },
+          why_unresolved: { type: 'string', enum: ['breaks_green', 'load_bearing', 'out_of_unit_scope'], description: 'why it could not be fixed in this pass' },
+          suggested_followup: { type: 'string', description: 'the smallest next step that would resolve it' },
+        },
+      },
+    },
     stage: { type: 'string', enum: ['editor'] },
   },
 }
@@ -146,6 +164,15 @@ function editorPrompt(u, writer) {
     `- Do NOT remove a load_bearing item (${JSON.stringify(writer.load_bearing || [])}) without escalating.`,
     `- If an edit breaks tests, or you must touch a load_bearing item, REVERT: \`git reset --hard ${writer.writer_sha}\``,
     `  and set reverted=true. Never deliver red code from an edit.`,
+    ``,
+    `Reviewer Concerns — the third path. When you spot a REAL problem you cannot safely fix in this pass —`,
+    `an edit that would break green, a load_bearing item you'd need to touch, or something genuinely wrong that`,
+    `sits outside this unit's scope — do NOT force a breaking edit and do NOT let the concern evaporate on a`,
+    `revert. Record it in unresolved_concerns: the concern (quote the thing it's about), why_unresolved`,
+    `(breaks_green | load_bearing | out_of_unit_scope), and the smallest suggested_followup that would resolve`,
+    `it. This loop does not hand work back and forth, so this list is the ONLY place a valid-but-unactionable`,
+    `critique survives. Leave it empty if there is genuinely nothing. If it is non-empty, also write it as a`,
+    `readable checklist to ${runDir(u)}/reviewer-concerns.md (one item per section: concern, why, follow-up).`,
     ``,
     `Then render mvi_verdict: AUTHORITATIVELY judge "if we stopped here, could someone use this unit?" against`,
     `the title "${u.title}". This can overturn the writer's claim.`,
@@ -232,12 +259,17 @@ if (editHeld && editor && !editor.committed) {
   editor.committed = true
 }
 
-log(`Done. editorRan=${!!editor} editHeld=${editHeld} mvi_verdict=${editor?.mvi_verdict} reverted=${editor?.reverted} committed=${editor?.committed}`)
+const reviewerConcerns = (editor && Array.isArray(editor.unresolved_concerns)) ? editor.unresolved_concerns : []
+if (reviewerConcerns.length) {
+  log(`Editor logged ${reviewerConcerns.length} unresolved concern(s) → ${runDir(unit)}/reviewer-concerns.md`)
+}
+log(`Done. editorRan=${!!editor} editHeld=${editHeld} mvi_verdict=${editor?.mvi_verdict} reverted=${editor?.reverted} committed=${editor?.committed} concerns=${reviewerConcerns.length}`)
 return {
   delivered: true,
   flagged: !exitGate,                // delivered, but editor couldn't confirm a usable green unit
   editorRan: true,
   finalVersion: editHeld ? 'editor' : 'writer',
+  reviewerConcerns,                  // valid-but-unactionable critiques the one-way loop would otherwise lose
   writer,
   editor,
 }
