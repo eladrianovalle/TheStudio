@@ -89,6 +89,7 @@ from stats import (
     _parse_usage_log,
     _summarize_metrics,
     aggregate_stats,
+    detect_trend_alerts,
     format_stats,
     summarize_outcomes,
     summarize_session_health,
@@ -2859,6 +2860,11 @@ def show_stats(args: argparse.Namespace) -> None:
 
     agg = aggregate_stats(runs)
 
+    # Trend alerts: run-over-run regressions that persist across 2+ consecutive
+    # runs (rating falling, tokens/cost climbing). detect_trend_alerts orders by
+    # created_iso itself, so the raw run list is fine to hand over.
+    trend_alerts = detect_trend_alerts(runs)
+
     # Session health: the automatic finalize records, oldest first so the
     # recent-vs-earlier trend split is chronological. The --phase filter above
     # already narrowed `runs`, so this respects it.
@@ -2876,7 +2882,10 @@ def show_stats(args: argparse.Namespace) -> None:
     outcomes = summarize_outcomes(outcome_records)
 
     if getattr(args, "json", False):
-        print(json.dumps({**agg, "outcomes": outcomes, "session_health": session_health}, indent=2))
+        print(json.dumps(
+            {**agg, "outcomes": outcomes, "session_health": session_health, "trend_alerts": trend_alerts},
+            indent=2,
+        ))
         return
 
     usage = None
@@ -2892,7 +2901,10 @@ def show_stats(args: argparse.Namespace) -> None:
     if snapshot is not None and snapshot.topics:
         clarity_note = f"{len(snapshot.topics)} topics tracked (run 'show-clarity' for the table)"
 
-    print(format_stats(agg, usage=usage, clarity_note=clarity_note, outcomes=outcomes, session_health=session_health))
+    print(format_stats(
+        agg, usage=usage, clarity_note=clarity_note, outcomes=outcomes,
+        session_health=session_health, trend_alerts=trend_alerts,
+    ))
 
 
 def inject_context(args: argparse.Namespace) -> None:
