@@ -259,7 +259,14 @@ if (editHeld && editor && !editor.committed) {
   editor.committed = true
 }
 
-const reviewerConcerns = (editor && Array.isArray(editor.unresolved_concerns)) ? editor.unresolved_concerns : []
+// Pure aggregation, extracted into a named function so the reviewerConcerns contract is
+// unit-testable without running the workflow. The Workflow sandbox can't be imported (no fs/module
+// access), so .claude/workflows/lib/workflow-shells.test.mjs loads THIS function from source and
+// exercises it — the test drives the real code, not a copy.
+function collectReviewerConcerns(editor) {
+  return (editor && Array.isArray(editor.unresolved_concerns)) ? editor.unresolved_concerns : []
+}
+const reviewerConcerns = collectReviewerConcerns(editor)
 if (reviewerConcerns.length) {
   log(`Editor logged ${reviewerConcerns.length} unresolved concern(s) → ${runDir(unit)}/reviewer-concerns.md`)
 }
