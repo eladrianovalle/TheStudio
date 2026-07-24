@@ -20,24 +20,6 @@ python ".studio/source/run_phase.py" check-install --target .
 
 If already up to date, tell the user and stop.
 
-**If that command fails to run at all** — a Python traceback, `ModuleNotFoundError`, or
-`ImportError` instead of a normal report — the installed snapshot is broken or too old to run
-itself (a past install bug, or a snapshot predating a module that current code imports). **Do not
-debug the traceback and do not try to fix the snapshot by hand.** Run the check and update from the
-**upstream** Studio repo instead, pointing at this project — the upstream copy is current and its
-`update` re-copies a working snapshot in, repairing it:
-
-```bash
-# The upstream repo path is recorded in this project's .studio/VERSION under "source_path".
-python "<upstream>/studio/run_phase.py" check-install --target .
-python "<upstream>/studio/run_phase.py" update --target .
-```
-
-Read `source_path` from `.studio/VERSION` to find `<upstream>`. If it's missing or the path no
-longer exists, tell the user you need the path to their Studio source repo to recover. Use the
-upstream entrypoint for Step 3 as well; skip the snapshot entrypoint entirely until the update has
-repaired it.
-
 **If the output contains a `WARNING:` line** (e.g. "running from the installed snapshot … cannot
 compare against live source"), the check/update is running against the snapshot and cannot see the
 real upstream, so it may report "up to date" when it isn't. In that case, tell the user to run the
