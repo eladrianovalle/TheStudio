@@ -191,6 +191,17 @@ class TestAcceptanceCriteriaWiring:
             "criteriaVerdicts must be in the workflow's return object"
         )
 
+    def test_the_exit_gate_reads_the_grades_not_just_mvi_verdict(self):
+        """The rule itself is tested in JS; this pins that the gate actually consults it.
+
+        Without this the grades are advisory: an editor could fail a criterion, claim
+        mvi_verdict=true anyway, and the unit would ship unflagged.
+        """
+        src = self._loop_source()
+        gate = next(line for line in src.splitlines() if line.startswith("const exitGate"))
+        assert "criteriaHeld" in gate, "the grades never reach the exit gate"
+        assert "everyCriterionPassed(criteria, criteriaVerdicts)" in src
+
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 def test_js_shell_unit_tests():

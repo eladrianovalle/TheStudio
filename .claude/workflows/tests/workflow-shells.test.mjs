@@ -158,6 +158,42 @@ test('with zero criteria the editor still judges against the title', () => {
   assert.equal(editorPrompt({ ...UNIT, acceptance_criteria: [] }, WRITER), prompt)
 })
 
+// The gate's criteria rule. mvi_verdict is an agent's boolean and can contradict the grades the same
+// agent returned, so the gate reads the grades instead of taking its word.
+const everyCriterionPassed = loadFunction('../implementation-loop.js', 'everyCriterionPassed')
+const passing = (criterion) => ({ criterion, verdict: 'pass', evidence: 'a test that fails without it' })
+
+test('every criterion graded pass holds the gate', () => {
+  assert.equal(everyCriterionPassed(['a', 'b'], [passing('a'), passing('b')]), true)
+})
+
+test('a criterion that did not pass fails the gate, whatever mvi_verdict said', () => {
+  const failed = { criterion: 'b', verdict: 'fail', evidence: 'the flag does not exist yet' }
+  assert.equal(everyCriterionPassed(['a', 'b'], [passing('a'), failed]), false)
+  // unverifiable is not a pass either: "nobody confirmed this" is the honest, flagged answer.
+  const unverifiable = { criterion: 'b', verdict: 'unverifiable', evidence: 'needs a browser' }
+  assert.equal(everyCriterionPassed(['a', 'b'], [passing('a'), unverifiable]), false)
+})
+
+test('grading fewer or more criteria than the unit carried fails the gate', () => {
+  assert.equal(everyCriterionPassed(['a', 'b', 'c'], [passing('a'), passing('b')]), false)
+  assert.equal(everyCriterionPassed(['a'], [passing('a'), passing('b')]), false)
+  assert.equal(everyCriterionPassed(['a'], []), false)
+})
+
+test('a junk verdict entry fails the gate rather than counting as a pass', () => {
+  assert.equal(everyCriterionPassed(['a'], [null]), false)
+  assert.equal(everyCriterionPassed(['a'], [{ criterion: 'a' }]), false)
+  assert.equal(everyCriterionPassed(['a'], ['pass']), false)
+})
+
+test('a unit that carried no criteria always holds the gate', () => {
+  // Deliberate: a spec-less run has nothing to enforce, and this rule must not invent a new way for
+  // one to ship flagged. Stray verdicts on such a run are ignored, not punished.
+  assert.equal(everyCriterionPassed([], []), true)
+  assert.equal(everyCriterionPassed([], [passing('never asked for')]), true)
+})
+
 test('a malformed criteria payload leaves both prompts on the no-criteria path', () => {
   const junk = { ...UNIT, acceptance_criteria: 'not an array' }
   assert.equal(writerPrompt(junk), writerPrompt(UNIT))

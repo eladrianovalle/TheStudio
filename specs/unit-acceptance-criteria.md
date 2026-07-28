@@ -275,8 +275,18 @@ through two channels is the accumulation the mandate tells us to collapse.
 
 ### When a criterion fails
 
-One failure → `mvi_verdict=false` → the existing exit gate fails → the existing
-`{ delivered: true, flagged: true }`.
+One failure → the exit gate fails → the existing `{ delivered: true, flagged: true }`.
+
+**The gate reads the grades directly, not just `mvi_verdict`.** The first version of this design routed
+everything through the boolean: a failing criterion was supposed to make the editor set
+`mvi_verdict=false`, and the gate would notice. That trusts an agent to stay consistent with itself
+across two fields. It doesn't hold — an editor can return `verdict: 'fail'` on a criterion while
+claiming `mvi_verdict: true`, or hand back three verdicts for five criteria, and the run would ship
+unflagged. That is worse than having no criteria at all, because it manufactures confidence instead of
+merely lacking it. So the gate also requires that every criterion the unit carried came back graded
+`pass`. Two conditions, no new field, and the same shape as the two safety nets the loop already has
+for red-without-revert and kept-without-commit. A unit that carried no criteria is untouched by the
+rule.
 
 - **The code still ships.** Nothing reverts. Revert exists for *broken green*, not unmet scope.
 - **No retry.** The loop spec is explicit: the writer runs once, the editor runs once, the unit is
@@ -381,8 +391,9 @@ mean anything.
    - **Acceptance criteria:**
      - [ ] Passing `acceptance_criteria: [...]` in `args` makes the editor return one `criteria_verdicts`
            entry per criterion, each with `criterion`, `verdict`, and `evidence`.
-     - [ ] With zero criteria, both prompts' output is byte-identical to today's, and `criteria_verdicts`
-           comes back empty.
+     - [ ] With zero criteria, the writer prompt is byte-identical to today's, the editor prompt adds
+           only the one sentence telling it to leave `criteria_verdicts` empty, and nothing else in
+           either prompt changes.
      - [ ] A failing criterion delivers `{ delivered: true, flagged: true }` with nothing reverted and no
            retry.
      - [ ] The failing criteria appear in the run log and the verdicts appear in the return payload.

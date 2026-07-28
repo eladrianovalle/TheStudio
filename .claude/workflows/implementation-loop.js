@@ -282,9 +282,28 @@ if (unit.editor_enabled === false) {
 phase('Edit')
 const editor = await agent(editorPrompt(unit, writer), { schema: EDITOR_HANDOFF, label: `editor:${unit.unit_id}`, phase: 'Edit', model: unit.model })
 
-// Exit gate — edit must hold (tests green) AND authoritative MVI verdict.
+// Exit gate — edit must hold (tests green), authoritative MVI verdict, AND every acceptance
+// criterion the unit carried came back graded pass.
 const editHeld = !!(editor && editor.tests && editor.tests.passed && !editor.reverted)
-const exitGate = !!(editor && editor.tests && editor.tests.passed && editor.mvi_verdict)
+
+// One grade per acceptance criterion the unit carried — empty on a spec-less run, and empty rather
+// than a crash if the editor returns something that isn't a list.
+const criteriaVerdicts = (editor && Array.isArray(editor.criteria_verdicts)) ? editor.criteria_verdicts : []
+
+// The gate reads the grades itself instead of trusting mvi_verdict to reflect them. An editor can
+// return `verdict: 'fail'` while claiming the unit is usable, or grade three of five criteria, and
+// that payload would otherwise ship unflagged — the same self-inconsistency the two safety nets
+// below already correct for. Pure and named for the same reason collectReviewerConcerns is: the
+// rule is testable from workflow-shells.test.mjs without running the workflow.
+function everyCriterionPassed(criteria, verdicts) {
+  if (!criteria.length) return true                    // a spec-less run has nothing to enforce
+  if (verdicts.length !== criteria.length) return false // graded fewer (or more) than it was handed
+  return verdicts.every((entry) => entry && entry.verdict === 'pass')
+}
+const criteria = unitCriteria(unit)
+const criteriaHeld = everyCriterionPassed(criteria, criteriaVerdicts)
+
+const exitGate = !!(editor && editor.tests && editor.tests.passed && editor.mvi_verdict && criteriaHeld)
 
 // Safety net: if the editor broke green but did not revert itself, force the revert.
 if (editor && editor.tests && editor.tests.passed === false && !editor.reverted) {
@@ -322,13 +341,14 @@ const reviewerConcerns = collectReviewerConcerns(editor)
 if (reviewerConcerns.length) {
   log(`Editor logged ${reviewerConcerns.length} unresolved concern(s) → ${runDir(unit)}/reviewer-concerns.md`)
 }
-// One grade per acceptance criterion the unit carried — empty on a spec-less run, and empty rather
-// than a crash if the editor returns something that isn't a list.
-const criteriaVerdicts = (editor && Array.isArray(editor.criteria_verdicts)) ? editor.criteria_verdicts : []
 const failedCriteria = criteriaVerdicts.filter((v) => v && v.verdict !== 'pass')
 if (failedCriteria.length) {
   // Name them: a criterion that didn't pass is the reason this unit ships flagged.
   log(`Criteria not passing (${failedCriteria.length}/${criteriaVerdicts.length}): ${failedCriteria.map((v) => `[${v.verdict}] ${v.criterion}`).join(' | ')}`)
+}
+if (criteria.length && criteriaVerdicts.length !== criteria.length) {
+  // Otherwise a run flagged purely for a short verdict list looks flagged for no reason.
+  log(`Criteria graded ${criteriaVerdicts.length}/${criteria.length} — an ungraded criterion flags the unit.`)
 }
 log(`Done. editorRan=${!!editor} editHeld=${editHeld} mvi_verdict=${editor?.mvi_verdict} reverted=${editor?.reverted} committed=${editor?.committed} concerns=${reviewerConcerns.length} criteria=${criteriaVerdicts.length}`)
 return {

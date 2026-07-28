@@ -127,7 +127,12 @@ The gate is the checkpoint, and it has **two distinct moments**, not one rule ap
 - **Exit gate (after the editor): adds the authoritative judgment.** The edit must hold (tests
   still green) **and** the editor renders its `mvi_verdict`. The editor (the fresh, skeptical
   second agent) can overturn the writer's claim. If it judges the unit *not* a usable interaction,
-  that is a surfaced finding (deliver flagged / escalate), never a silent pass.
+  that is a surfaced finding (deliver flagged / escalate), never a silent pass. When the unit
+  carries acceptance criteria, the gate also checks the grades **itself** rather than trusting
+  `mvi_verdict` to reflect them: every criterion the unit was handed has to come back graded
+  `pass`. An editor that fails a criterion while still claiming the unit is usable, or that grades
+  three of five, is contradicting itself — and that is the one payload shape that would turn this
+  feature into false confidence rather than a check.
 
 So the writer never has to "define MVI" to hand off; it only has to declare it believes it's done.
 The editor owns the verdict the gate actually trusts. Be honest about what is *machine-enforced*
