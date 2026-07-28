@@ -2,7 +2,7 @@
 feature: Writer Escalation Channel
 slug: writer-escalation-channel
 ticket: none
-status: draft
+status: approved
 studio_run: .studio/output/tech/run_tech_20260728_155545
 ---
 
