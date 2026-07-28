@@ -235,8 +235,8 @@ test('the exit gate still fails on red tests, a withheld MVI verdict, or a missi
 })
 
 // ---------------------------------------------------------------------------
-// implementation-loop.js — the entry gate. It decides whether the editor pass happens at all, which
-// makes it the loop's only load-bearing branch, and nothing exercised it until now.
+// implementation-loop.js — the entry gate. It decides whether the editor pass happens at all, and
+// nothing exercised it until now.
 // ---------------------------------------------------------------------------
 const passesEntryGate = loadFunction('../implementation-loop.js', 'passesEntryGate')
 
@@ -263,6 +263,8 @@ test('an escalated writer fails the entry gate through the existing mechanics', 
   // Either mechanic shuts the gate on its own, so it does not depend on both arriving together.
   assert.equal(passesEntryGate({ ...escalated, mvi_claimed: true }, true), false)
   assert.equal(passesEntryGate({ ...escalated, tests: GREEN_WRITER.tests }, true), false)
+  // The gate is computed before the loop's `if (!writer)` abort, so it also has to survive a writer
+  // that returned nothing, or a handoff with no tests block, without throwing.
   assert.equal(passesEntryGate(null, true), false)
   assert.equal(passesEntryGate({ mvi_claimed: true }, true), false)
 })
