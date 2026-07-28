@@ -51,13 +51,12 @@ This unit's criteria are the `- [ ]` bullets under that entry's `**Acceptance cr
 Copy each criterion **verbatim** into `acceptance_criteria` (Step 2's args block) — the exact
 sentence from the spec, not a paraphrase, a shortening, a softening, or two bullets merged into one.
 Same quote discipline the contrarian mandate imposes on findings: the spec's words are the words the
-editor grades and quotes back in its verdicts. The plan echo prints them, so a drifted copy is
-visible before the loop runs.
+editor grades and quotes back in its verdicts.
 
 **If the spec cannot produce criteria for this unit, STOP before the loop.** Do not run the loop, and
 do not quietly fall back to an ungraded run: a typo'd `--spec` is an error, not a silent request for
-defaults (the same reason `load_loop_config` raises on a missing explicit config path). A run that
-looks graded and isn't is worse than one that never claimed to be. Print all three of these:
+defaults. A run that looks graded and isn't is worse than one that never claimed to be. Print all
+three of these:
 
 1. **Which reason it was**, by name:
    - **missing file** — nothing at the resolved path (say which path you tried);
@@ -82,9 +81,6 @@ running the loop — don't hard-stop, and never proceed silently:
 > **Options:** (a) proceed with these criteria as-is (b) approve the spec first, then re-run
 > (c) run without `--spec` and judge against the title
 ```
-
-Mid-flow drafts are common enough that stopping the run is the wrong tool; deciding it in one line is
-the right one.
 
 ### Step 2: Parse the request into a unit object
 
