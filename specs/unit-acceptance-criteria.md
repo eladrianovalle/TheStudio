@@ -49,9 +49,10 @@ flowchart TD
     V -->|no| FLAG["mvi_verdict = false<br/>→ delivered FLAGGED<br/>nothing reverts, no retry"]
 ```
 
-Two things this deliberately does **not** change. `mvi_verdict` stays a boolean, so the exit gate
-reads it exactly as it does today — there is no new gate, only a better-grounded input to the existing
-one. And the MVI question survives: criteria are **added** to the judgment, not substituted for it.
+`mvi_verdict` stays a boolean, and the MVI question survives: criteria are **added** to the judgment,
+not substituted for it. What the first version of this design got wrong was leaving the gate to read
+that boolean alone — see "When a criterion fails" for why the gate now also matches each criterion
+against the grades itself.
 
 ## How It Works (Technical)
 
