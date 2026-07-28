@@ -2,7 +2,7 @@
 feature: Unit Acceptance Criteria from the Approved Spec
 slug: unit-acceptance-criteria
 ticket: none
-status: draft
+status: approved
 studio_run: .studio/output/tech/run_tech_20260728_211955
 ---
 
