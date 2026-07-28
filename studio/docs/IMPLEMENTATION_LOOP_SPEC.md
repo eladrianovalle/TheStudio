@@ -79,6 +79,7 @@ persisted to the run directory.
   "mvi_claimed": true,              // writer's DECLARATION that the unit is a complete thought — the handoff trigger
   "mutation_check": { "performed": true, "assertions_broken": 2, "caught": true },  // attested
   "load_bearing": ["the retry in save_profile guards a real race; do not cut"],
+  "stuck": "…",       // present ONLY when the writer stopped deliberately: the blocker, quoted. Absent normally
   "stage": "writer"   // "writer" | "editor"
 }
 ```
@@ -115,6 +116,16 @@ against the unit's `title`, exactly as it always did.
 `load_bearing` is the writer's signal: these choices look cuttable but aren't. The editor must
 not remove a `load_bearing` item without escalating (below).
 
+`stuck` is the writer's escalation channel, and it is present only when the writer stopped on
+purpose: the specific blocker, quoting the file, test, or interface it is about. Without it a
+genuinely blocked writer had two ways out and both were bad — invent a `writer_sha` and pretend it
+finished, or return no valid handoff at all, which aborts the run with `writer_failed` and explains
+nothing. An escalating writer instead commits whatever partial work it has as
+`writer(stuck): <unit_id>` (with `--allow-empty`, because "read and read, changed nothing" is the
+likeliest blocker and leaves a clean tree), reports that SHA, reports `tests` honestly, and sets
+`mvi_claimed: false`. So no field leaves `required`, the dead end is a commit someone can read, and
+`git log --grep='^writer(stuck):'` is the escalation tally.
+
 ### 2. The gate: "MVI unit complete AND tests green"
 
 The gate is the checkpoint, and it has **two distinct moments**, not one rule applied twice:
@@ -136,6 +147,17 @@ So the writer never has to "define MVI" to hand off; it only has to declare it b
 The editor owns the verdict the gate actually trusts. Be honest about what is *machine-enforced*
 versus *agent-attested*: conflating the two would manufacture exactly the false confidence the
 "Tests green" criterion warns against.
+
+The two things the writer says about itself are not the same kind of claim, and the entry gate treats
+them differently on purpose. `mvi_claimed` is a claim about the work's **quality**, which only the
+fresh editor can judge — so it can *request* the editor pass but never grant it. `stuck` is a claim
+about the writer's **own state**, where no other agent has better access, so there is no second
+opinion to defer to. It still extends no trust: an escalation opens no gate. It fails the entry gate
+through the existing mechanics (`mvi_claimed: false`, red tests) and takes the existing
+deliver-flagged path, adding no branch. A writer's declaration can never open a gate, only explain
+why the gate stayed shut. The corollary is that `stuck` is deliberately *not* in the gate expression:
+a green, claimed unit that also files an advisory `stuck` note still gets its editor pass, matching
+the existing rule that a self-reported problem is not a delivery blocker.
 
 **Machine-enforced (deterministic; the orchestrator branches on these):**
 
@@ -237,7 +259,10 @@ Notes on what was cut vs the first draft:
   cadence-lab token numbers meaningful.
 - **`deliver_on_gate_fail`** must leave red code **uncommitted** and tag the failure in the unit's
   `impl--unit_NN--*.json` record, so a delivered-but-failing unit is never mistaken for a passing
-  one.
+  one. One exception: a deliberate escalation commits its partial work as `writer(stuck): <unit_id>`,
+  because `writer_sha` is required and there is nothing honest to put in it otherwise. The rule's
+  intent survives — that label, plus `tests.passed: false` and `mvi_claimed: false` in the record,
+  means nobody mistakes it for a passing unit — and committing keeps the tree clean between units.
 
 ## The executor shell (Claude-specific, disposable)
 

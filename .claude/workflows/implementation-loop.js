@@ -84,6 +84,7 @@ const WRITER_HANDOFF = {
       },
     },
     load_bearing: { type: 'array', items: { type: 'string' }, description: 'looks cuttable but is not — off-limits to the editor without escalation' },
+    stuck: { type: 'string', description: 'set ONLY when the writer stopped deliberately: the specific blocker, quoting the file/test/interface it is about. Absent on a normal run.' },
     stage: { type: 'string', enum: ['writer'] },
   },
 }
@@ -170,12 +171,24 @@ function writerPrompt(u) {
     `- Build a usable interaction, not a partial component (MVI). No speculative scope beyond the unit.`,
     `- Hold AI-TDD: write the tests and run them.${u.require_mutation_check === false ? ' (Mutation check disabled by config: require_mutation_check=false.)' : ` Then run the configured mutation check on the code you touched: \`${u.mutation_command}\` (scope + runner live in studio/setup.cfg), and report the outcome in mutation_check. If mutmut isn't installed, fall back to hand-mutating — break 2-3 critical assertions, confirm the tests FAIL, then restore.`}`,
     `- Run the unit tests: \`${u.test_command}\`${(Array.isArray(u.static_checks) && u.static_checks.length === 0) ? ' (static check skipped — config static_checks=[]).' : `  and the static check: \`${u.static_check}\`.`}`,
-    `- When (and only when) tests pass, COMMIT the passing state on the current branch`,
+    `- When (and only when) tests pass, COMMIT the passing state on the current branch (one exception: escalation, below).`,
     `  (\`git add -A && git commit -m "writer: ${u.unit_id}"\`) and capture the short SHA — that is writer_sha.`,
     `- Persist your handoff: \`mkdir -p ${runDir(u)}\` then write it to ${runDir(u)}/impl--${u.unit_id}--writer.json.`,
     `- Set mvi_claimed=true ONLY if you believe the unit is a complete, usable thought. This is a trigger you`,
     `  pull, not a verdict — the editor renders the authoritative MVI verdict next.`,
     `- List anything load_bearing (looks cuttable but is not, with the reason).`,
+    `- It is always OK to stop and say this is too hard for me. Bad work is worse than no work, and you will`,
+    `  NOT be penalized for escalating. What IS penalized is faking done: weakening a test to get green,`,
+    `  stubbing a function you could not write, or claiming a complete thought you know is a fragment.`,
+    `- Escalate on the trigger, not the feeling. STOP when you notice any of: you have read file after file`,
+    `  without getting closer to a change you can actually make; you cannot make the tests pass without`,
+    `  changing what the unit is supposed to mean; a dependency, interface, or file this unit needs does not`,
+    `  exist or contradicts the instructions; you are about to weaken, skip, or delete a test to get to green.`,
+    `- To escalate: commit what you have with \`git add -A && git commit --allow-empty -m "writer(stuck): ${u.unit_id}"\``,
+    `  and report that short SHA as writer_sha. If you never got as far as running the tests, run \`${u.test_command}\``,
+    `  once so \`tests\` holds a real result. Then report \`tests\` honestly (passed=false and the real exit_code),`,
+    `  set mvi_claimed=false, and put the blocker in \`stuck\` — the specific thing you got stuck on, quoting the`,
+    `  file, test, or interface it is about. Persist the handoff JSON either way.`,
     `Return the writer handoff object.`,
   ].join('\n')
 }
@@ -265,6 +278,11 @@ const entryGate = !!(writer && writer.mvi_claimed && writer.tests && writer.test
 if (!writer) {
   log('Writer agent failed to return a handoff — aborting.')
   return { delivered: false, reason: 'writer_failed' }
+}
+// A stuck writer stopped on purpose; that reads differently from a crash or a red test, so say it
+// out loud in the transcript — and say it whichever way the gate falls.
+if (writer.stuck) {
+  log(`Writer escalated (stopped deliberately): ${writer.stuck}`)
 }
 if (!entryGate) {
   // deliver_on_gate_fail: do not spin. Leave the writer's state, flag it.

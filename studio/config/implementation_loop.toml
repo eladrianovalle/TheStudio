@@ -4,7 +4,11 @@
 # .studio/implementation_loop.toml. See studio/docs/IMPLEMENTATION_LOOP_SPEC.md §4.
 
 [loop]
-deliver_on_gate_fail = true   # if the writer can't reach green, deliver flagged (uncommitted) rather than spin
+# if the writer can't reach green, deliver flagged (uncommitted) rather than spin. One exception: a
+# writer that escalates commits its partial work as `writer(stuck): <unit_id>`, since writer_sha is
+# required and there'd be nothing honest to put in it — the label plus tests.passed=false keeps that
+# commit from ever looking like a passing unit.
+deliver_on_gate_fail = true
 
 [gate]
 test_command = "pytest -q"       # per-repo; the only stack-specific knob. Runs the unit-scoped tests.

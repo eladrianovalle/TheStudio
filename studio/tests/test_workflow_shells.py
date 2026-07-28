@@ -150,6 +150,45 @@ class TestReviewerConcernsWiring:
         )
 
 
+class TestWriterEscalationChannel:
+    """Pin the writer's escalation channel: a blocked writer can say so instead of
+    faking a finish. Both halves live outside any testable function — the schema
+    field (a shape the live API either accepts or 400s on) and the prompt prose.
+    """
+
+    def _loop_source(self):
+        return (_WORKFLOW_DIR / "implementation-loop.js").read_text()
+
+    def test_stuck_is_optional_and_required_is_unchanged(self):
+        src = self._loop_source()
+        handoff = src[src.index("const WRITER_HANDOFF"):src.index("const EDITOR_HANDOFF")]
+        # Declared, or a writer that fills `stuck` gets its whole handoff rejected
+        # (the schema sets additionalProperties: false).
+        assert "stuck:" in handoff, "the writer has no way to report what blocked it"
+        # And NOT required: an escalation must not be the only valid handoff shape,
+        # and a normal run never sets the field at all.
+        top_level_required = re.search(r"required: \[([^\]]*)\]", handoff).group(1)
+        declared = re.findall(r"'([^']+)'", top_level_required)
+        assert declared == [
+            "unit_id",
+            "writer_sha",
+            "files_touched",
+            "tests",
+            "mvi_claimed",
+            "stage",
+        ], f"the writer handoff's required fields changed: {declared}"
+
+    def test_writer_prompt_carries_the_escalation_licence(self):
+        src = self._loop_source()
+        prompt = src[src.index("function writerPrompt"):src.index("function editorPrompt")]
+        # The shortest invariant fragment on purpose: the wording around it will be
+        # tuned, so the tripwire must not sit on the tunable part.
+        assert "always OK to stop" in prompt, (
+            "the writer prompt no longer says stopping is allowed — without the "
+            "licence, a blocked writer's only options are faking green or dying"
+        )
+
+
 class TestAcceptanceCriteriaWiring:
     """Pin that the /forge loop can grade a unit against acceptance criteria.
 
