@@ -92,6 +92,26 @@ this pass (see "Reviewer Concerns" below), empty when there are none. It does **
 separate `behavior_preserved` flag: "tests stay green" plus the `load_bearing` escalation already
 encode that invariant, so a third self-attested boolean was cut as redundant.
 
+When the unit carries **acceptance criteria** — checkable statements of what "done" means, copied
+verbatim from the approved spec into the unit's `acceptance_criteria` — the editor grades each one
+and returns `criteria_verdicts`, one entry per criterion:
+
+```jsonc
+"criteria_verdicts": [
+  {
+    "criterion": "A deleted profile returns 404",           // verbatim from the spec's Build Plan
+    "verdict": "pass",                                       // "pass" | "fail" | "unverifiable"
+    "evidence": "test_deleted_profile_404s passes (profile.py:88)"  // what was actually checked
+  }
+]
+```
+
+`unverifiable` exists so the editor never has to invent a grade: it reads a diff and runs the
+unit's tests, with no browser and no Play mode, and some criteria simply can't be checked from
+there. Anything short of `pass` means the unit ships **flagged** — nothing reverts, and there is no
+retry. A run with no criteria (no spec pointer) returns the field empty and the editor judges
+against the unit's `title`, exactly as it always did.
+
 `load_bearing` is the writer's signal: these choices look cuttable but aren't. The editor must
 not remove a `load_bearing` item without escalating (below).
 
@@ -107,7 +127,10 @@ The gate is the checkpoint, and it has **two distinct moments**, not one rule ap
 - **Exit gate (after the editor): adds the authoritative judgment.** The edit must hold (tests
   still green) **and** the editor renders its `mvi_verdict`. The editor (the fresh, skeptical
   second agent) can overturn the writer's claim. If it judges the unit *not* a usable interaction,
-  that is a surfaced finding (deliver flagged / escalate), never a silent pass.
+  that is a surfaced finding (deliver flagged / escalate), never a silent pass. When the unit
+  carries acceptance criteria, the gate also checks the grades **itself** rather than trusting
+  `mvi_verdict` to reflect them: every criterion has to be matched, by its own text, to a passing
+  grade that carries evidence.
 
 So the writer never has to "define MVI" to hand off; it only has to declare it believes it's done.
 The editor owns the verdict the gate actually trusts. Be honest about what is *machine-enforced*
@@ -127,7 +150,7 @@ not the writer about its own work):**
 
 | Component | Criterion | Source |
 | --- | --- | --- |
-| MVI complete | Editor's exit-gate `mvi_verdict`: *"If we stopped here, could someone use what we've built?"* judged against the unit's `title`. Overturns the writer's `mvi_claimed`. | `MVI_METHODOLOGY.md` |
+| MVI complete | Editor's exit-gate `mvi_verdict`: *"If we stopped here, could someone use what we've built?"* — judged against the unit's `title`, or, when the unit carries acceptance criteria, `true` only if the unit is usable as a complete interaction **and** every criterion passes. Overturns the writer's `mvi_claimed`. | `MVI_METHODOLOGY.md` |
 | Mutation verified | Run the configured `mutation_command` (mutmut; scope in `setup.cfg`) on the touched code; survivors → strengthen tests and redo. Falls back to hand-mutating 2-3 assertions if mutmut is absent. | `AI_TDD_METHODOLOGY.md` |
 | No anti-patterns | No self-mocking tests, hallucinated assertions, green-checkmark traps. | `AI_TDD_METHODOLOGY.md` |
 
@@ -148,7 +171,10 @@ shallow-merges over (mirrors `persona_overrides.py` and `role_overrides.py`).
   accumulate, guard the essence. With one code-specific bound, **behavior preservation**: the
   editor may restructure and delete freely *as long as tests stay green*, and may not touch a
   `load_bearing` item without escalating. The editor also renders the authoritative `mvi_verdict`
-  at the exit gate, which can overturn the writer's claim.
+  at the exit gate, which can overturn the writer's claim. When the unit carries acceptance
+  criteria, it grades each one first — `pass`, `fail`, or `unverifiable`, with the evidence it
+  actually checked — and is told to ignore what the handoff, the commit message, and the comments
+  *say* the unit does: only the criteria and the running code count.
 
 - **Writer mandate** = build exactly one complete MVI unit: a usable interaction, not a partial
   component (`MVI_METHODOLOGY.md`). No speculative scope. When it believes the unit is a complete
