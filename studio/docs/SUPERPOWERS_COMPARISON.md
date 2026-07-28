@@ -250,8 +250,17 @@ assert that a phrase appears in the module defining that phrase. Also dropped, a
 the candidate's headline evidence does not hold. The "0 of 10 planted defects" number is real
 (`docs/superpowers/specs/2026-06-10-strict-cost-sdd-design.md:205-214`) but it measured *forced-haiku*
 reviewers, only 1 of the 10 was the rationale downgrade, and superpowers' actual fix was killing the
-cheap-reviewer tier ("DEAD, as pre-registered"). **This borrowing is structural reasoning, not
-measured evidence. Label it speculative.**
+cheap-reviewer tier ("DEAD, as pre-registered"). **This borrowing was structural reasoning, not
+measured evidence** — originally labelled speculative on that basis.
+
+**Upgraded to convergent (2026-07-28).** A second, unrelated source states the same rule
+independently. Alexey Grigorev's AI-native development write-up defines a QA agent role whose closing
+instruction is: "Ignore what the implementation says it does. Only the acceptance criteria and the
+running code count" — and separately, "When the same agent writes and judges the code, it's grading
+its own homework." That is this borrowing, arrived at by a different person solving a different
+problem with a different toolchain. Two independent practitioners is weaker evidence than a
+measurement and much stronger than one project's reasoning. Still no number behind it, so the
+scorecard row stands unchanged; but "speculative" understated it.
 
 ### 5. Let the /forge editor look outside its read scope — against a risk it names
 
@@ -477,6 +486,58 @@ vetting passes read three different ways. It is the highest-value change here an
 likely to cause a regression, because the clauses it touches were added on purpose after the
 human-readable-code feedback. If forge output starts getting denser rather than smaller, that is the
 tell, and the revert is one commit.
+
+## Postscript: a second source, read 2026-07-28
+
+After this study was written we read Alexey Grigorev's *AI-Native Development: Specifications, Loop and
+Graph Engineering* ([alexeyondata.substack.com](https://alexeyondata.substack.com/p/ai-native-development-specifications)),
+the first article in the AI Dev Tools Zoomcamp series. It describes a workflow with no knowledge of
+superpowers or of Studio: brainstorm a vague idea into a spec in a chat assistant, decompose it into a
+backlog, then run three agent roles — a product manager who grooms each task, an engineer who
+implements it, and a QA engineer who returns PASS or FAIL against the task's acceptance criteria.
+
+Most of it Studio already does, and does harder. Spec-before-code is `/spec`. A reviewer separate from
+the implementer is `/forge`'s editor, and an adversarial editor with a cut mandate is stronger than a
+PASS/FAIL check. The tool-agnostic `AGENTS.md` bootstrap is the same multi-harness layer we rejected
+from superpowers, for the same reason. And the article's own closing caveat retires its headline idea:
+"this approach takes significantly more time and tokens than a direct loop with only a software
+engineer. In many cases, you don't need this complexity."
+
+Three things it changed here:
+
+- **It upgraded item 4 from speculative to convergent.** See that section. Two unrelated sources
+  independently landing on "the author's stated rationale does not settle the critique" is the closest
+  thing to external validation this list has.
+- **Three sources now agree that a deferred critique must not vanish silently.** gstack gave us
+  Reviewer Concerns. superpowers states it as a rule with teeth — "every adjudication is a ledger
+  entry — a silent discard is forbidden." This article states it at grooming time instead of review
+  time: "If something does not belong in this task, do not silently drop it. File a follow-up issue and
+  list it under out of scope with a link to that issue, so it is clear what was moved and where it
+  went." Three unrelated projects converging on one principle is the strongest signal in either study,
+  and it argues for hardening Reviewer Concerns rather than leaving it a best-effort side instruction.
+  The concrete shape stays the one the rejection table already landed on: require a disposition per
+  concern from *this* run in `/forge`'s reporting step. Nothing larger — the "named consumer" version
+  is still rejected, for the reasons recorded there.
+- **It found a real gap: no Studio unit carries checkable acceptance criteria.** The article's groomed
+  task has four sections — Goal, Acceptance criteria ("someone should be able to point at the screen
+  and say yes or no"), Out of scope, and Constraints — written before an engineer starts. Studio has no
+  equivalent. A `/forge` unit carries a `title` and free-text `instructions`, and the editor's
+  *authoritative* `mvi_verdict` is judged against the `title` alone
+  (`.claude/workflows/implementation-loop.js:177`). So the one binding quality verdict in the
+  implementation loop has a single line of prose to check against, while `/spec` already produces MVI
+  build units that could carry criteria. Specced separately as
+  [`specs/unit-acceptance-criteria.md`](../../specs/unit-acceptance-criteria.md).
+
+Two smaller notes, neither promoted to a proposal. The article keeps context in per-topic documents
+loaded *conditionally* ("Before writing tests, read `_docs/testing-guidelines.md`") rather than all at
+once — our docs index is a catalog, not a conditional loader, and the difference is free context
+economy if we ever feel the squeeze. And it uses a standing prompt to keep documents alive: "Based on
+the corrections I made, find the relevant documents and update them." We have `/unstale` for audits but
+no reflex for capturing a correction at the moment it happens. Both are cheap; neither is a feature.
+
+Rejected outright: the PM/engineer/QA orchestrator graph (Studio's staged debate with an integrator is
+richer, and the article concedes the cost), GitHub issues as the canonical backlog (a workflow swap
+with no win for a repo whose backlog is specs and run artifacts), and the multi-harness bootstrap.
 
 ## Source
 
