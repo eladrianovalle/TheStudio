@@ -51,7 +51,7 @@ Slash commands are the main way you use Studio day to day. `init` installs them 
 **Build**
 | Command | What it does |
 |---------|--------------|
-| `/forge` | Build one MVI unit through the writer/editor loop, gated on tests-green |
+| `/forge` | Build one MVI unit through the writer/editor loop, gated on tests-green; when the unit carries acceptance criteria, the editor grades them one at a time |
 | `/smoke` | Stand up a live, running version so you can hand-test it (stack-agnostic) |
 
 **Keep the project honest**
