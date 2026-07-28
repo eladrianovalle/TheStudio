@@ -2,7 +2,7 @@
 feature: Pre-committed Verification for Prompt-Shaped Features
 slug: prompt-feature-verification
 ticket: none
-status: draft
+status: approved
 studio_run: .studio/output/tech/run_tech_20260728_192832
 ---
 
