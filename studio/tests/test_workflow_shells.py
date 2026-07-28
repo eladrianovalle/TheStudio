@@ -150,6 +150,52 @@ class TestReviewerConcernsWiring:
         )
 
 
+class TestAcceptanceCriteriaWiring:
+    """Pin that the /forge loop can grade a unit against acceptance criteria.
+
+    The JS tests cover the prompt behavior. These guard the two pieces that live outside a
+    testable function — the editor's schema (a shape the live API either accepts or 400s on)
+    and the single call site that reads the returned verdicts.
+    """
+
+    def _loop_source(self):
+        return (_WORKFLOW_DIR / "implementation-loop.js").read_text()
+
+    def test_criteria_verdicts_declared_but_not_required(self):
+        src = self._loop_source()
+        handoff = src[src.index("const EDITOR_HANDOFF"):src.index("function writerPrompt")]
+        assert "criteria_verdicts" in handoff, "the editor has no way to return per-criterion grades"
+        # Optional, exactly like unresolved_concerns: a spec-less run grades nothing, and
+        # additionalProperties: false means a required-but-absent field would fail the payload.
+        top_level_required = re.search(r"required: \[([^\]]*)\]", handoff).group(1)
+        assert "criteria_verdicts" not in top_level_required
+        assert "unresolved_concerns" not in top_level_required
+        # Each entry carries the criterion, the grade, and the evidence actually checked.
+        assert "required: ['criterion', 'verdict', 'evidence']" in handoff
+        assert "enum: ['pass', 'fail', 'unverifiable']" in handoff
+
+    def test_verdicts_surfaced_in_log_and_return_with_safe_guard(self):
+        src = self._loop_source()
+        # Non-array / missing field must default to [], never crash the delivery.
+        assert "Array.isArray(editor.criteria_verdicts)" in src
+        assert "verdict !== 'pass'" in src, "nothing selects the criteria that didn't pass"
+        # The failing criteria are named in the run log, not just counted.
+        log_lines = [
+            line for line in src.splitlines()
+            if "failedCriteria.map" in line and line.strip().startswith("log(")
+        ]
+        assert log_lines, "the failing criteria must be named in the run log"
+        assert "v.criterion" in log_lines[0]
+        # The verdicts are part of the workflow's return payload.
+        assert re.search(r"return\s*\{[\s\S]*?criteriaVerdicts[\s\S]*?\}", src), (
+            "criteriaVerdicts must be in the workflow's return object"
+        )
+
+    def test_editor_off_says_criteria_were_not_graded(self):
+        src = self._loop_source()
+        assert "criteria ungraded (editor off)" in src
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 def test_js_shell_unit_tests():
     """Run the node:test suite exercising the shells' pure helpers.

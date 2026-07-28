@@ -35,9 +35,20 @@ const DEFAULT_UNIT = {
     '  malformed TOML -> clear error; .studio override beats shipped default. Mirror the scopes loader tests.',
     'This is one complete MVI unit: when done, Studio can actually load the loop config end-to-end.',
   ].join('\n'),
+  // Checkable acceptance criteria for this unit, copied verbatim from the approved spec's Build
+  // Plan by /forge --spec. Empty on a spec-less run: the editor then judges against the title, as
+  // it always did.
+  acceptance_criteria: [],
 }
 
 const runDir = (u) => `.studio/output/impl_loop/${u.unit_id}`
+
+// The one place acceptance criteria are read, so both prompts see the same list and a malformed
+// `args` payload degrades to "no criteria" instead of injecting junk into a prompt.
+function unitCriteria(u) {
+  if (!u || !Array.isArray(u.acceptance_criteria)) return []
+  return u.acceptance_criteria.filter((c) => typeof c === 'string' && c.trim())
+}
 
 // ---------------------------------------------------------------------------
 // Handoff schemas — the portable baton (spec §1). Plain, serializable fields.
@@ -116,6 +127,21 @@ const EDITOR_HANDOFF = {
         },
       },
     },
+    // One grade per acceptance criterion the unit carried. Optional like unresolved_concerns: a
+    // spec-less run has no criteria to grade, so an absent field is normal, not a failure.
+    criteria_verdicts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['criterion', 'verdict', 'evidence'],
+        additionalProperties: false,
+        properties: {
+          criterion: { type: 'string', description: 'the criterion, verbatim from the spec' },
+          verdict: { type: 'string', enum: ['pass', 'fail', 'unverifiable'] },
+          evidence: { type: 'string', description: 'what was actually checked — a test and its result, a file:line, a command run; or why it could not be checked' },
+        },
+      },
+    },
     stage: { type: 'string', enum: ['editor'] },
   },
 }
@@ -125,12 +151,20 @@ const EDITOR_HANDOFF = {
 // strings + the gate logic below, so a port rewrites only this shell.
 // ---------------------------------------------------------------------------
 function writerPrompt(u) {
+  const criteria = unitCriteria(u)
   return [
     `You are the WRITER in an implementation writer/editor loop. Build ONE complete MVI unit, then declare done.`,
     ``,
     `UNIT: ${u.title}`,
     ``,
     u.instructions,
+    ...(criteria.length ? [
+      ``,
+      `ACCEPTANCE CRITERIA — the definition of done for this unit, from the approved spec:`,
+      ...criteria.map((c, i) => `  ${i + 1}. ${c}`),
+      `The editor will judge each of these against the running code, one by one. Build so each is true,`,
+      `and cover them in the tests you write.`,
+    ] : []),
     ``,
     `Discipline:`,
     `- Build a usable interaction, not a partial component (MVI). No speculative scope beyond the unit.`,
@@ -147,6 +181,7 @@ function writerPrompt(u) {
 }
 
 function editorPrompt(u, writer) {
+  const criteria = unitCriteria(u)
   return [
     `You are the EDITOR in an implementation writer/editor loop — a fresh agent reviewing the writer's unit.`,
     ``,
@@ -174,8 +209,25 @@ function editorPrompt(u, writer) {
     `critique survives. Leave it empty if there is genuinely nothing. If it is non-empty, also write it as a`,
     `readable checklist to ${runDir(u)}/reviewer-concerns.md (one item per section: concern, why, follow-up).`,
     ``,
-    `Then render mvi_verdict: AUTHORITATIVELY judge "if we stopped here, could someone use this unit?" against`,
-    `the title "${u.title}". This can overturn the writer's claim.`,
+    ...(criteria.length ? [
+      `Then render the verdict against the ACCEPTANCE CRITERIA from the approved spec — the definition of`,
+      `done for this unit:`,
+      ...criteria.map((c, i) => `  ${i + 1}. ${c}`),
+      ``,
+      `For EACH criterion, decide pass, fail, or unverifiable, and record it in criteria_verdicts: the`,
+      `criterion verbatim, the verdict, and the evidence you actually checked (a test name and its result,`,
+      `a file:line you read, or a command you ran). Use unverifiable when the criterion cannot be checked`,
+      `from the diff and the unit's tests — you have no browser and no Play mode — and say in evidence why.`,
+      `Ignore what the writer's handoff, the commit message, or the comments SAY the unit does — only the`,
+      `criteria and the running code count. A test that merely restates a criterion's wording is not`,
+      `evidence the criterion holds: check it against what the code does, not what a test is named.`,
+      `Set mvi_verdict=true only if the unit is usable as a complete interaction AND every criterion passes.`,
+      `This can overturn the writer's claim.`,
+    ] : [
+      `Then render mvi_verdict: AUTHORITATIVELY judge "if we stopped here, could someone use this unit?" against`,
+      `the title "${u.title}" (no acceptance criteria were supplied — this run had no --spec pointer). Leave`,
+      `criteria_verdicts empty. This can overturn the writer's claim.`,
+    ]),
     ``,
     `Keep your edits rationale under ${u.output_budget || 400} words.`,
     `Deliver: if you KEPT your edits (tests green, not reverted), commit them — \`git commit -am "editor: ${u.unit_id}"\``,
@@ -223,7 +275,7 @@ if (!entryGate) {
 // Config knob (editor.mandate="off" → editor_enabled=false, merged into args by /forge):
 // skip the editor pass entirely and deliver the writer's version.
 if (unit.editor_enabled === false) {
-  log(`editor_enabled=false (mandate off) — delivering the writer's version, no editor pass.`)
+  log(`editor_enabled=false (mandate off) — delivering the writer's version, no editor pass; criteria ungraded (editor off).`)
   return { delivered: true, flagged: false, editorRan: false, finalVersion: 'writer', writer }
 }
 
@@ -270,13 +322,23 @@ const reviewerConcerns = collectReviewerConcerns(editor)
 if (reviewerConcerns.length) {
   log(`Editor logged ${reviewerConcerns.length} unresolved concern(s) → ${runDir(unit)}/reviewer-concerns.md`)
 }
-log(`Done. editorRan=${!!editor} editHeld=${editHeld} mvi_verdict=${editor?.mvi_verdict} reverted=${editor?.reverted} committed=${editor?.committed} concerns=${reviewerConcerns.length}`)
+// One grade per acceptance criterion the unit carried — empty on a spec-less run. The Array.isArray
+// guard is inlined here because this is the only place the field is read: a malformed payload must
+// degrade to "nothing graded" rather than crash the delivery.
+const criteriaVerdicts = (editor && Array.isArray(editor.criteria_verdicts)) ? editor.criteria_verdicts : []
+const failedCriteria = criteriaVerdicts.filter((v) => v && v.verdict !== 'pass')
+if (failedCriteria.length) {
+  // Name them: a criterion that didn't pass is the reason this unit ships flagged.
+  log(`Criteria not passing (${failedCriteria.length}/${criteriaVerdicts.length}): ${failedCriteria.map((v) => `[${v.verdict}] ${v.criterion}`).join(' | ')}`)
+}
+log(`Done. editorRan=${!!editor} editHeld=${editHeld} mvi_verdict=${editor?.mvi_verdict} reverted=${editor?.reverted} committed=${editor?.committed} concerns=${reviewerConcerns.length} criteria=${criteriaVerdicts.length}`)
 return {
   delivered: true,
   flagged: !exitGate,                // delivered, but editor couldn't confirm a usable green unit
   editorRan: true,
   finalVersion: editHeld ? 'editor' : 'writer',
   reviewerConcerns,                  // valid-but-unactionable critiques the one-way loop would otherwise lose
+  criteriaVerdicts,                  // per-criterion grade + the evidence the editor checked
   writer,
   editor,
 }
