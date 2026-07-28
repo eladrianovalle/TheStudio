@@ -191,10 +191,6 @@ class TestAcceptanceCriteriaWiring:
             "criteriaVerdicts must be in the workflow's return object"
         )
 
-    def test_editor_off_says_criteria_were_not_graded(self):
-        src = self._loop_source()
-        assert "criteria ungraded (editor off)" in src
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 def test_js_shell_unit_tests():

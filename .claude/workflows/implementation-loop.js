@@ -322,9 +322,8 @@ const reviewerConcerns = collectReviewerConcerns(editor)
 if (reviewerConcerns.length) {
   log(`Editor logged ${reviewerConcerns.length} unresolved concern(s) → ${runDir(unit)}/reviewer-concerns.md`)
 }
-// One grade per acceptance criterion the unit carried — empty on a spec-less run. The Array.isArray
-// guard is inlined here because this is the only place the field is read: a malformed payload must
-// degrade to "nothing graded" rather than crash the delivery.
+// One grade per acceptance criterion the unit carried — empty on a spec-less run, and empty rather
+// than a crash if the editor returns something that isn't a list.
 const criteriaVerdicts = (editor && Array.isArray(editor.criteria_verdicts)) ? editor.criteria_verdicts : []
 const failedCriteria = criteriaVerdicts.filter((v) => v && v.verdict !== 'pass')
 if (failedCriteria.length) {
