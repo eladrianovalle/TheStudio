@@ -178,29 +178,28 @@ class TestAcceptanceCriteriaWiring:
         src = self._loop_source()
         # Non-array / missing field must default to [], never crash the delivery.
         assert "Array.isArray(editor.criteria_verdicts)" in src
-        assert "verdict !== 'pass'" in src, "nothing selects the criteria that didn't pass"
-        # The failing criteria are named in the run log, not just counted.
+        # The criteria that weren't confirmed are named in the run log, not just counted.
         log_lines = [
             line for line in src.splitlines()
-            if "failedCriteria.map" in line and line.strip().startswith("log(")
+            if "unconfirmed.join" in line and line.strip().startswith("log(")
         ]
-        assert log_lines, "the failing criteria must be named in the run log"
-        assert "v.criterion" in log_lines[0]
+        assert log_lines, "the unconfirmed criteria must be named in the run log"
         # The verdicts are part of the workflow's return payload.
         assert re.search(r"return\s*\{[\s\S]*?criteriaVerdicts[\s\S]*?\}", src), (
             "criteriaVerdicts must be in the workflow's return object"
         )
 
-    def test_the_exit_gate_reads_the_grades_not_just_mvi_verdict(self):
-        """The rule itself is tested in JS; this pins that the gate actually consults it.
+    def test_the_exit_gate_is_a_function_the_js_tests_can_reach(self):
+        """The gate's behavior is tested in JS; this pins that it stayed reachable from there.
 
-        Without this the grades are advisory: an editor could fail a criterion, claim
-        mvi_verdict=true anyway, and the unit would ship unflagged.
+        With the gate inline, neutralizing the criteria check left both suites green — so the
+        extraction is the thing that makes the JS tests able to catch it at all.
         """
         src = self._loop_source()
         gate = next(line for line in src.splitlines() if line.startswith("const exitGate"))
-        assert "criteriaHeld" in gate, "the grades never reach the exit gate"
-        assert "everyCriterionPassed(criteria, criteriaVerdicts)" in src
+        assert "passesExitGate(" in gate, "the gate is inline again — the JS tests cannot reach it"
+        assert "function passesExitGate(" in src
+        assert "function unconfirmedCriteria(" in src
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")

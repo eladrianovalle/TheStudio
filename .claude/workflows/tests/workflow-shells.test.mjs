@@ -158,40 +158,80 @@ test('with zero criteria the editor still judges against the title', () => {
   assert.equal(editorPrompt({ ...UNIT, acceptance_criteria: [] }, WRITER), prompt)
 })
 
-// The gate's criteria rule. mvi_verdict is an agent's boolean and can contradict the grades the same
-// agent returned, so the gate reads the grades instead of taking its word.
-const everyCriterionPassed = loadFunction('../implementation-loop.js', 'everyCriterionPassed')
+// The gate's criteria rule (unconfirmedCriteria) and the gate itself (passesExitGate).
+const unconfirmedCriteria = loadFunction('../implementation-loop.js', 'unconfirmedCriteria')
+const passesExitGate = loadFunction('../implementation-loop.js', 'passesExitGate')
 const passing = (criterion) => ({ criterion, verdict: 'pass', evidence: 'a test that fails without it' })
 
-test('every criterion graded pass holds the gate', () => {
-  assert.equal(everyCriterionPassed(['a', 'b'], [passing('a'), passing('b')]), true)
+test('every criterion confirmed by a matching pass leaves nothing unconfirmed', () => {
+  assert.deepEqual(unconfirmedCriteria(['a', 'b'], [passing('a'), passing('b')]), [])
+  // Matched on the criterion text, so verdict order does not matter.
+  assert.deepEqual(unconfirmedCriteria(['a', 'b'], [passing('b'), passing('a')]), [])
+  // Surrounding whitespace is not a mismatch; the criterion travels through markdown and JSON.
+  assert.deepEqual(unconfirmedCriteria(['a'], [passing('  a  ')]), [])
 })
 
-test('a criterion that did not pass fails the gate, whatever mvi_verdict said', () => {
+test('a criterion that did not pass is unconfirmed, whatever mvi_verdict said', () => {
   const failed = { criterion: 'b', verdict: 'fail', evidence: 'the flag does not exist yet' }
-  assert.equal(everyCriterionPassed(['a', 'b'], [passing('a'), failed]), false)
+  assert.deepEqual(unconfirmedCriteria(['a', 'b'], [passing('a'), failed]), ['b'])
   // unverifiable is not a pass either: "nobody confirmed this" is the honest, flagged answer.
   const unverifiable = { criterion: 'b', verdict: 'unverifiable', evidence: 'needs a browser' }
-  assert.equal(everyCriterionPassed(['a', 'b'], [passing('a'), unverifiable]), false)
+  assert.deepEqual(unconfirmedCriteria(['a', 'b'], [passing('a'), unverifiable]), ['b'])
 })
 
-test('grading fewer or more criteria than the unit carried fails the gate', () => {
-  assert.equal(everyCriterionPassed(['a', 'b', 'c'], [passing('a'), passing('b')]), false)
-  assert.equal(everyCriterionPassed(['a'], [passing('a'), passing('b')]), false)
-  assert.equal(everyCriterionPassed(['a'], []), false)
+test('grading one criterion three times does not confirm the other two', () => {
+  // The hole a count check leaves open: three passes, three criteria, two never looked at.
+  assert.deepEqual(
+    unconfirmedCriteria(['a', 'b', 'c'], [passing('a'), passing('a'), passing('a')]),
+    ['b', 'c'],
+  )
+  // Nor do verdicts naming criteria the unit never carried.
+  assert.deepEqual(unconfirmedCriteria(['a'], [passing('x'), passing('y')]), ['a'])
+  // A softened restatement is not the criterion it was handed.
+  assert.deepEqual(unconfirmedCriteria(['renders in under a second'], [passing('renders fast')]),
+    ['renders in under a second'])
+  assert.deepEqual(unconfirmedCriteria(['a'], []), ['a'])
 })
 
-test('a junk verdict entry fails the gate rather than counting as a pass', () => {
-  assert.equal(everyCriterionPassed(['a'], [null]), false)
-  assert.equal(everyCriterionPassed(['a'], [{ criterion: 'a' }]), false)
-  assert.equal(everyCriterionPassed(['a'], ['pass']), false)
+test('a pass with no evidence does not confirm anything', () => {
+  // evidence is required by the schema but an empty string satisfies it, which would make the field
+  // free to fill in. The gate is where that costs something.
+  assert.deepEqual(unconfirmedCriteria(['a'], [{ criterion: 'a', verdict: 'pass', evidence: '' }]), ['a'])
+  assert.deepEqual(unconfirmedCriteria(['a'], [{ criterion: 'a', verdict: 'pass', evidence: '   ' }]), ['a'])
 })
 
-test('a unit that carried no criteria always holds the gate', () => {
-  // Deliberate: a spec-less run has nothing to enforce, and this rule must not invent a new way for
-  // one to ship flagged. Stray verdicts on such a run are ignored, not punished.
-  assert.equal(everyCriterionPassed([], []), true)
-  assert.equal(everyCriterionPassed([], [passing('never asked for')]), true)
+test('one criterion graded both pass and fail stays unconfirmed', () => {
+  const failed = { criterion: 'a', verdict: 'fail', evidence: 'it does not' }
+  assert.deepEqual(unconfirmedCriteria(['a'], [passing('a'), failed]), ['a'])
+})
+
+test('a junk verdict entry confirms nothing', () => {
+  assert.deepEqual(unconfirmedCriteria(['a'], [null]), ['a'])
+  assert.deepEqual(unconfirmedCriteria(['a'], [{ criterion: 'a' }]), ['a'])
+})
+
+test('a unit that carried no criteria has nothing to confirm', () => {
+  // A spec-less run has nothing to enforce: stray verdicts are ignored, not punished.
+  assert.deepEqual(unconfirmedCriteria([], []), [])
+  assert.deepEqual(unconfirmedCriteria([], [passing('never asked for')]), [])
+})
+
+// The gate, not just the rule. Without these, neutralizing the criteria check leaves both suites green.
+const GREEN = { tests: { command: 'pytest -q', passed: true, exit_code: 0 }, mvi_verdict: true }
+
+test('the exit gate holds on a green unit with nothing unconfirmed', () => {
+  assert.equal(passesExitGate(GREEN, []), true)
+})
+
+test('the exit gate fails on an unconfirmed criterion even when the editor claims the unit is usable', () => {
+  assert.equal(passesExitGate(GREEN, ['b']), false)
+})
+
+test('the exit gate still fails on red tests, a withheld MVI verdict, or a missing editor', () => {
+  assert.equal(passesExitGate({ ...GREEN, tests: { command: 'pytest -q', passed: false, exit_code: 1 } }, []), false)
+  assert.equal(passesExitGate({ ...GREEN, mvi_verdict: false }, []), false)
+  assert.equal(passesExitGate(null, []), false)
+  assert.equal(passesExitGate({ mvi_verdict: true }, []), false)
 })
 
 test('a malformed criteria payload leaves both prompts on the no-criteria path', () => {

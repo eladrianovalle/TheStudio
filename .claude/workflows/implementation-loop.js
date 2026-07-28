@@ -283,27 +283,37 @@ phase('Edit')
 const editor = await agent(editorPrompt(unit, writer), { schema: EDITOR_HANDOFF, label: `editor:${unit.unit_id}`, phase: 'Edit', model: unit.model })
 
 // Exit gate — edit must hold (tests green), authoritative MVI verdict, AND every acceptance
-// criterion the unit carried came back graded pass.
+// criterion the unit carried confirmed by a matching pass.
 const editHeld = !!(editor && editor.tests && editor.tests.passed && !editor.reverted)
 
 // One grade per acceptance criterion the unit carried — empty on a spec-less run, and empty rather
 // than a crash if the editor returns something that isn't a list.
 const criteriaVerdicts = (editor && Array.isArray(editor.criteria_verdicts)) ? editor.criteria_verdicts : []
 
-// The gate reads the grades itself instead of trusting mvi_verdict to reflect them. An editor can
-// return `verdict: 'fail'` while claiming the unit is usable, or grade three of five criteria, and
-// that payload would otherwise ship unflagged — the same self-inconsistency the two safety nets
-// below already correct for. Pure and named for the same reason collectReviewerConcerns is: the
-// rule is testable from workflow-shells.test.mjs without running the workflow.
-function everyCriterionPassed(criteria, verdicts) {
-  if (!criteria.length) return true                    // a spec-less run has nothing to enforce
-  if (verdicts.length !== criteria.length) return false // graded fewer (or more) than it was handed
-  return verdicts.every((entry) => entry && entry.verdict === 'pass')
+// The criteria the gate could not confirm. Matching each criterion by its own text is what makes
+// this a check rather than a count: three verdicts that all name the same easy criterion would pass
+// a unit whose other two were never looked at. A pass also has to carry evidence, or the field the
+// schema requires costs nothing to fill. Extra verdicts nobody asked for are ignored, not punished.
+function unconfirmedCriteria(criteria, verdicts) {
+  return criteria.filter((criterion) => {
+    const graded = verdicts.filter((entry) =>
+      entry && typeof entry.criterion === 'string' && entry.criterion.trim() === criterion.trim())
+    if (!graded.length) return true
+    return !graded.every((entry) =>
+      entry.verdict === 'pass' && typeof entry.evidence === 'string' && entry.evidence.trim())
+  })
 }
-const criteria = unitCriteria(unit)
-const criteriaHeld = everyCriterionPassed(criteria, criteriaVerdicts)
 
-const exitGate = !!(editor && editor.tests && editor.tests.passed && editor.mvi_verdict && criteriaHeld)
+// NOTE: a named function, not an inline expression, so the JS shell tests can exercise the gate
+// itself and not merely the rule it calls. That distinction is load-bearing — with the gate inline,
+// neutralizing the criteria check left every test in both suites green.
+function passesExitGate(editor, unconfirmed) {
+  return !!(editor && editor.tests && editor.tests.passed && editor.mvi_verdict && !unconfirmed.length)
+}
+
+const criteria = unitCriteria(unit)
+const unconfirmed = unconfirmedCriteria(criteria, criteriaVerdicts)
+const exitGate = passesExitGate(editor, unconfirmed)
 
 // Safety net: if the editor broke green but did not revert itself, force the revert.
 if (editor && editor.tests && editor.tests.passed === false && !editor.reverted) {
@@ -341,14 +351,10 @@ const reviewerConcerns = collectReviewerConcerns(editor)
 if (reviewerConcerns.length) {
   log(`Editor logged ${reviewerConcerns.length} unresolved concern(s) → ${runDir(unit)}/reviewer-concerns.md`)
 }
-const failedCriteria = criteriaVerdicts.filter((v) => v && v.verdict !== 'pass')
-if (failedCriteria.length) {
-  // Name them: a criterion that didn't pass is the reason this unit ships flagged.
-  log(`Criteria not passing (${failedCriteria.length}/${criteriaVerdicts.length}): ${failedCriteria.map((v) => `[${v.verdict}] ${v.criterion}`).join(' | ')}`)
-}
-if (criteria.length && criteriaVerdicts.length !== criteria.length) {
-  // Otherwise a run flagged purely for a short verdict list looks flagged for no reason.
-  log(`Criteria graded ${criteriaVerdicts.length}/${criteria.length} — an ungraded criterion flags the unit.`)
+if (unconfirmed.length) {
+  // Name them: this is the reason the unit ships flagged. Each verdict and its evidence ride out in
+  // the payload, so the report can say whether a criterion failed, was ungradeable, or went ungraded.
+  log(`Criteria not confirmed (${unconfirmed.length}/${criteria.length}): ${unconfirmed.join(' | ')}`)
 }
 log(`Done. editorRan=${!!editor} editHeld=${editHeld} mvi_verdict=${editor?.mvi_verdict} reverted=${editor?.reverted} committed=${editor?.committed} concerns=${reviewerConcerns.length} criteria=${criteriaVerdicts.length}`)
 return {

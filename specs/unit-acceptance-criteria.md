@@ -283,10 +283,28 @@ everything through the boolean: a failing criterion was supposed to make the edi
 across two fields. It doesn't hold — an editor can return `verdict: 'fail'` on a criterion while
 claiming `mvi_verdict: true`, or hand back three verdicts for five criteria, and the run would ship
 unflagged. That is worse than having no criteria at all, because it manufactures confidence instead of
-merely lacking it. So the gate also requires that every criterion the unit carried came back graded
-`pass`. Two conditions, no new field, and the same shape as the two safety nets the loop already has
-for red-without-revert and kept-without-commit. A unit that carried no criteria is untouched by the
-rule.
+merely lacking it.
+
+So the gate requires that **every criterion the unit carried is matched, by its own text, to a passing
+grade that carries evidence.** Each of those three words is doing work, and the first draft of the gate
+got it wrong by counting instead:
+
+- **Matched by its own text**, not counted. A count check accepts three verdicts that all name the same
+  easy criterion and lets a unit whose other two were never looked at ship unflagged — the exact
+  hallucinated-or-softened-criterion risk this spec already names, arriving through the check meant to
+  catch it. Matching also removes the mirror problem, where a Build Plan that lists one criterion twice
+  flagged an honest single verdict.
+- **Passing**, where `unverifiable` is not a pass. "Nobody confirmed this" is a flagged answer, not a
+  green one.
+- **Carrying evidence.** `evidence` is a required field, but an empty string satisfies the schema, so
+  without this the field costs nothing to fill and deters nothing.
+
+Verdicts naming criteria the unit never carried are ignored rather than punished — they are noise, not
+a failure. A unit that carried no criteria is untouched by the whole rule.
+
+The gate lives in a named function for the same reason the rule does: with it inline, a mutation that
+neutralized the criteria check left every test in both suites green. An enforcement mechanism no test
+can reach is not enforcement.
 
 - **The code still ships.** Nothing reverts. Revert exists for *broken green*, not unmet scope.
 - **No retry.** The loop spec is explicit: the writer runs once, the editor runs once, the unit is
@@ -308,7 +326,7 @@ line: it already returns `flagged: true` and already logs why, so nobody is misl
 `.claude/commands/spec.md` (Build Plan template, Key Rules line); `.claude/commands/forge.md`
 (`--spec`/`--unit` arguments, resolution and the error table, the echo, the args block, the report);
 `.claude/workflows/implementation-loop.js` (the field, `unitCriteria`, both prompts, `EDITOR_HANDOFF`,
-the inlined guard, the log, the return); `.claude/workflows/tests/workflow-shells.test.mjs` (the
+the inlined guard, the gate, the log, the return); `.claude/workflows/tests/workflow-shells.test.mjs` (the
 harness change plus tests); `studio/tests/test_workflow_shells.py` (a new wiring class);
 `studio/docs/IMPLEMENTATION_LOOP_SPEC.md` (the editor paragraph and jsonc block, the agent-attested MVI
 row, the editor-mandate bullet); `studio/docs/CLAUDE_CODE_USAGE.md` (both the `/forge` and `/spec`
@@ -328,7 +346,7 @@ markdown and JS feature.
 | Decision | Ruling | Why |
 |---|---|---|
 | Where criteria come from | The approved spec, via `--spec` | Criteria then carry human approval before any code exists. Absorbs the `--spec` pointer an earlier study deferred, which closes the gap that study named: `/forge` never reads the approved spec. |
-| Who checks them | The editor's existing `mvi_verdict`, per criterion | Reuses the one binding verdict. No new gate — the exit gate's code is untouched. |
+| Who checks them | The exit gate, matching each criterion against the grades; `mvi_verdict` survives alongside it | An agent's boolean can contradict the grades the same agent returned, and the first version of this row trusted it to. See "When a criterion fails" for the amendment. |
 | Does the criteria check *replace* the MVI question? | **No. Both.** Usable as a complete interaction AND every criterion passes | Replacing it would let a unit that satisfies four narrow criteria and is still unusable pass clean — the exact failure MVI exists to prevent. |
 | Who parses the spec | The agent, not Python | A Build Plan is authored prose that is intentionally richer than code; a grammar in front of it crashes on authoring liberties. This is comprehension; the gate stays mechanical. |
 | Does the writer see the criteria? | **Yes** | It already sees `title` and `instructions` derived from the same spec, so hiding the criteria hides the wording while showing a paraphrase. The anchoring risk is paid for with one clause in the editor prompt. |
@@ -385,15 +403,15 @@ mean anything.
 
 1. **`loop_grades_criteria` — the loop grades criteria passed in `args`, one at a time.**
    `implementation-loop.js` (the `acceptance_criteria` field, `unitCriteria`, both prompts,
-   `EDITOR_HANDOFF`, the inlined guard, the log, the return), the JS harness change and its tests,
+   `EDITOR_HANDOFF`, the inlined guard, the gate, the log, the return), the JS harness change and its tests,
    `test_workflow_shells.py`'s new wiring class, `IMPLEMENTATION_LOOP_SPEC.md`, and the `CLAUDE.md` /
    `README.md` / `CHANGELOG.md` lines.
    - **Acceptance criteria:**
      - [ ] Passing `acceptance_criteria: [...]` in `args` makes the editor return one `criteria_verdicts`
            entry per criterion, each with `criterion`, `verdict`, and `evidence`.
-     - [ ] With zero criteria, the writer prompt is byte-identical to today's, the editor prompt adds
-           only the one sentence telling it to leave `criteria_verdicts` empty, and nothing else in
-           either prompt changes.
+     - [ ] With zero criteria, the writer prompt is byte-identical to today's, and the editor prompt
+           adds only the no-criteria clause and the instruction to leave `criteria_verdicts` empty —
+           nothing else in either prompt changes.
      - [ ] A failing criterion delivers `{ delivered: true, flagged: true }` with nothing reverted and no
            retry.
      - [ ] The failing criteria appear in the run log and the verdicts appear in the return payload.
