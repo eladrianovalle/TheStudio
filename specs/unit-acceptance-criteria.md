@@ -344,8 +344,13 @@ markdown and JS feature.
 ## Risks & Open Questions
 
 - **No existing spec carries criteria**, so `--spec` only does useful work for specs authored or
-  updated after the template lands. This is a real adoption lag and the echo line is the only thing
-  working against it.
+  updated after the template lands. Note what this risk is *not*: it is not an adoption problem. Every
+  one of the eleven completed `/forge` runs was already governed by an approved spec that named the
+  unit — the spec simply had no way to reach the loop, so a human retyped a lossy paraphrase of it into
+  free text. The workflow was already being followed; the wire was missing. That is why the echo line
+  matters less than it would if we were trying to change anyone's habits, and why the remaining gap is
+  narrow: specs already exist and are already approved before building, so the only thing standing
+  between a run and its real criteria is the criteria being written down in the Build Plan.
 - **Spec-backed runs will be flagged more often than title-only runs.** By design — the bar is higher
   and better grounded. It will still look like a regression in any flagged-rate metric, so anyone
   reading that number needs to know the population changed.
