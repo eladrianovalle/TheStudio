@@ -409,14 +409,18 @@ markdown and JS feature.
 
 ## Build Plan
 
-Two units. The loop goes first: it is the only unit with tests to run, and it is what makes criteria
-mean anything.
+How this maps to buildable units — a short list of MVI units (each a complete, usable interaction;
+"build a skateboard, not a wheel"), in dependency order. This is the bridge to `/forge`, which reads
+this section directly, so give every unit the same shape. Two units here, and the loop goes first: it
+is the only unit with tests to run, and it is what makes criteria mean anything.
 
-1. **`loop_grades_criteria` — the loop grades criteria passed in `args`, one at a time.**
-   `implementation-loop.js` (the `acceptance_criteria` field, `unitCriteria`, both prompts,
-   `EDITOR_HANDOFF`, the inlined guard, the gate, the log, the return), the JS harness change and its tests,
-   `test_workflow_shells.py`'s new wiring class, `IMPLEMENTATION_LOOP_SPEC.md`, and the `CLAUDE.md` /
-   `README.md` / `CHANGELOG.md` lines.
+1. **`loop_grades_criteria` — the loop grades criteria passed in `args`, one at a time.** What gets
+   built: `implementation-loop.js` (the `acceptance_criteria` field, `unitCriteria`, both prompts,
+   `EDITOR_HANDOFF`, the inlined guard, the gate, the log, the return), the JS harness change and its
+   tests, `test_workflow_shells.py`'s new wiring class, `IMPLEMENTATION_LOOP_SPEC.md`, and the
+   `CLAUDE.md` / `README.md` / `CHANGELOG.md` lines. Atomic by necessity: with
+   `additionalProperties: false`, shipping the prompt before the schema produces a rejected payload
+   and a dead editor stage.
    - **Acceptance criteria:**
      - [ ] Passing `acceptance_criteria: [...]` in `args` makes the editor return one `criteria_verdicts`
            entry per criterion, each with `criterion`, `verdict`, and `evidence`.
@@ -429,13 +433,14 @@ mean anything.
      - [ ] `node --test .claude/workflows/tests/workflow-shells.test.mjs` and
            `cd studio && python -m pytest tests/test_workflow_shells.py -q` are both green.
    - **Out of scope:** how criteria get *into* `args` — that is unit 2. Any revert or retry behavior.
-   - Atomic by necessity: with `additionalProperties: false`, shipping the prompt before the schema
-     produces a rejected payload and a dead editor stage.
 
-2. **`criteria_contract` — `/forge --spec <slug> --unit <id>` grades an approved spec's unit end to end.**
-   `spec.md`'s Build Plan template and Key Rules line, `forge.md`'s arguments / resolution / error table
-   / echo / args block / report, both sections of `CLAUDE_CODE_USAGE.md`, and this spec re-authored in
-   the new Build Plan shape.
+2. **`criteria_contract` — `/forge --spec <slug> --unit <id>` grades an approved spec's unit end to
+   end.** What gets built: `spec.md`'s Build Plan template and Key Rules line, `forge.md`'s arguments
+   / resolution / error table / echo / args block / report, both sections of `CLAUDE_CODE_USAGE.md`,
+   and this spec re-authored in the new Build Plan shape. Both ends of the wire ship together, so if
+   the locator turns out ambiguous it can be fixed on either side within one unit. The live run is
+   this unit's exit criterion, not a unit of its own — schema changes here have only ever failed
+   against the live API, which is why it cannot be skipped.
    - **Acceptance criteria:**
      - [ ] `--spec <slug>` resolves to `specs/<slug>.md` in the source repo and `.studio/specs/<slug>.md`
            in a consuming repo, using the repo-shape signal `forge.md` already uses.
@@ -447,9 +452,6 @@ mean anything.
      - [ ] One real `/forge --spec` run returns per-criterion verdicts from the live editor with no
            schema rejection from the API.
    - **Out of scope:** how `unit_id`, `title`, and `instructions` are derived from the free-text request.
-   - Both ends of the wire ship together, so if the locator turns out ambiguous it can be fixed on
-     either side within one unit. The live run is this unit's exit criterion, not a unit of its own —
-     schema changes here have only ever failed against the live API, which is why it cannot be skipped.
 
 Note the earlier four-unit plan was collapsed. Three of those four units were markdown-only, and the
 loop's entry gate is literally "the writer's tests passed" — so on three of four units the gate would

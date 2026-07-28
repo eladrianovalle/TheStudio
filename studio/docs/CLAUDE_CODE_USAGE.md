@@ -457,17 +457,21 @@ Brings the advocate/contrarian cadence into **implementation**, the writer/edito
 
 ```
 /forge Users can create and view a profile (hardcoded storage)
+/forge --spec unit-acceptance-criteria --unit criteria_contract
 ```
 
 How it runs:
-1. **Parse**: your request becomes one MVI unit (title, build instructions, inferred `test_command`).
-2. **Branch**: runs on a feature branch (creates `impl/<unit>` if you're on `main`); refuses a dirty tree.
-3. **Plan echo**: prints the unit + branch + test command, then runs (no separate confirmation step).
-4. **Writer**: builds the unit, runs tests + a mutation check, commits its passing state (`writer_sha`) — or, if it's genuinely blocked, stops and says what blocked it (`stuck`) instead of faking a finish.
-5. **Editor**: a fresh agent (the `CONTRARIAN_MANDATE` applied to code) diffs against `writer_sha`, cuts/refines, re-runs tests, and **reverts** if an edit breaks green. One-way pipeline, no ping-pong.
-6. **Report**: what was built, what the editor cut, the MVI verdict, whether anything reverted.
+1. **Criteria** (only with `--spec`): resolves the spec — `specs/<slug>.md` here, `.studio/specs/<slug>.md` in a consuming repo — and copies the named unit's acceptance criteria out of its `## Build Plan`, verbatim.
+2. **Parse**: your request becomes one MVI unit (title, build instructions, inferred `test_command`).
+3. **Branch**: runs on a feature branch (creates `impl/<unit>` if you're on `main`); refuses a dirty tree.
+4. **Plan echo**: prints the unit + branch + test command + the resolved criteria, then runs (no separate confirmation step).
+5. **Writer**: builds the unit, runs tests + a mutation check, commits its passing state (`writer_sha`) — or, if it's genuinely blocked, stops and says what blocked it (`stuck`) instead of faking a finish.
+6. **Editor**: a fresh agent (the `CONTRARIAN_MANDATE` applied to code) diffs against `writer_sha`, cuts/refines, re-runs tests, and **reverts** if an edit breaks green. One-way pipeline, no ping-pong.
+7. **Report**: what was built, what the editor cut, the MVI verdict, each criterion's grade + evidence, whether anything reverted.
 
 The gate is **"MVI unit complete AND tests green"**, split into an *entry* gate (writer declares done + tests/static pass → triggers the editor) and an *exit* gate (the editor's authoritative MVI verdict, which can overturn the writer's claim).
+
+**Grading against a spec (`--spec <slug-or-path>` + `--unit <unit_id>`)**: without it, the editor's one verdict is judged against the unit's title — a single line of prose. With it, the unit carries the approved spec's checkable criteria and the editor grades each one `pass` / `fail` / `unverifiable`, with the evidence it actually checked; the unit passes only if it's usable as a complete interaction **and** every criterion passes. A failed criterion ships the unit **flagged** — nothing reverts, no retry. A spec that can't produce criteria for the named unit stops the run before the loop (and says which reason, the unit ids it found, and your two ways forward: add criteria, or run without `--spec`); a `status: draft` spec pauses as a P1 decision instead. With no `--spec`, behavior is unchanged and the plan echo just mentions how many specs are available.
 
 **Config**: `implementation_loop.toml` (override at `.studio/implementation_loop.toml`): `mandate = "off"` disables the editor pass; `read_scope`, `output_budget`, `require_mutation_check`, `static_checks`, and `test_command` tune the loop. Knobs reach the workflow via `python -m impl_loop`.
 
@@ -479,7 +483,7 @@ In addition to phase runners, these slash commands are available:
 
 | Command | Purpose |
 |---------|---------|
-| `/spec` | Maps a feature's architecture into an approved, source-of-truth spec before you build it. Runs a discovery-forward, single advocate/contrarian `tech`-phase pass — scope-paced as an alignment scope (Open-Questions Pre-Flight surfaces and answers the architectural unknowns) then a depth scope (pressure-tests and finalizes the design) — then synthesizes one document that explains the feature in plain language *and* build-ready technical detail with a Mermaid diagram. On approval it's saved (tracked) under `specs/` (or `.studio/specs/` in a consuming repo) and linked to its ticket. Args: feature text, `--ticket`, `--id`, `--max-iterations` (default 2), `--plan`. |
+| `/spec` | Maps a feature's architecture into an approved, source-of-truth spec before you build it. Runs a discovery-forward, single advocate/contrarian `tech`-phase pass — scope-paced as an alignment scope (Open-Questions Pre-Flight surfaces and answers the architectural unknowns) then a depth scope (pressure-tests and finalizes the design) — then synthesizes one document that explains the feature in plain language *and* build-ready technical detail with a Mermaid diagram. On approval it's saved (tracked) under `specs/` (or `.studio/specs/` in a consuming repo) and linked to its ticket. Its **Build Plan is a contract, not a summary**: every unit gets a snake_case `unit_id` and three-to-six checkable acceptance criteria, which is what `/forge --spec <slug> --unit <id>` reads and grades the built unit against. Args: feature text, `--ticket`, `--id`, `--max-iterations` (default 2), `--plan`. |
 | `/smoke` | Stands up a live, running version of whatever the repo builds so you can hand-test it (web app on a URL, game in Play mode, service on a port, CLI). Stack-agnostic: self-detects how to run the project, or reads `.studio/smoke.toml` to pin the exact setup/build/launch, readiness check, and golden path. |
 | `/unstale` | Comprehensive staleness audit: aligns all docs, code comments, memory, and project tracking to current reality. Stack-agnostic: self-detects Rust/Unity/Node/Python/Go from marker files, or reads `.studio/unstale.toml` to pin exact snapshot commands and audit globs. |
 | `/detest` | Audits the repo's test suite against AI-TDD methodology; finds anti-patterns, fixes them. |
