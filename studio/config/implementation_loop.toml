@@ -5,9 +5,7 @@
 
 [loop]
 # if the writer can't reach green, deliver flagged (uncommitted) rather than spin. One exception: a
-# writer that escalates commits its partial work as `writer(stuck): <unit_id>`, since writer_sha is
-# required and there'd be nothing honest to put in it — the label plus tests.passed=false keeps that
-# commit from ever looking like a passing unit.
+# writer that escalates commits its partial work as `writer(stuck): <unit_id>` (spec §4 says why).
 deliver_on_gate_fail = true
 
 [gate]

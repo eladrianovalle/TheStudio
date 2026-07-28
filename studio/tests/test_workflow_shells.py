@@ -187,6 +187,12 @@ class TestWriterEscalationChannel:
             "the writer prompt no longer says stopping is allowed — without the "
             "licence, a blocked writer's only options are faking green or dying"
         )
+        # Not prose: drop this flag and the likeliest escalation ("read and read,
+        # changed nothing") commits nothing, so writer_sha points at someone else's work.
+        assert "--allow-empty" in prompt, (
+            "the escalation commit lost --allow-empty; on a clean tree it creates "
+            "no commit and writer_sha becomes a lie"
+        )
 
 
 class TestAcceptanceCriteriaWiring:
