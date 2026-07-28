@@ -274,7 +274,16 @@ const writer = await agent(writerPrompt(unit), { schema: WRITER_HANDOFF, label: 
 // travel together today. If the schema ever consolidates on the array, drive the command off it
 // here and in writerPrompt too, so the two don't drift.
 const staticRequired = !(Array.isArray(unit.static_checks) && unit.static_checks.length === 0)
-const entryGate = !!(writer && writer.mvi_claimed && writer.tests && writer.tests.passed && (!staticRequired || writer.static_ok !== false))
+
+// NOTE: named function, not an inline expression, so the JS shell tests can load and exercise it.
+// The gate is the only load-bearing branch here and its two subtleties — `static_ok !== false`
+// (absent is fine, explicit false is not) and the `!staticRequired ||` short-circuit — had no
+// coverage at all before this.
+function passesEntryGate(writer, staticRequired) {
+  return !!(writer && writer.mvi_claimed && writer.tests && writer.tests.passed && (!staticRequired || writer.static_ok !== false))
+}
+
+const entryGate = passesEntryGate(writer, staticRequired)
 if (!writer) {
   log('Writer agent failed to return a handoff — aborting.')
   return { delivered: false, reason: 'writer_failed' }
