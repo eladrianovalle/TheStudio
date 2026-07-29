@@ -108,7 +108,7 @@ below doesn't close it early — the spec file you write uses a normal three-bac
 feature: <human title>
 slug: <slug>
 ticket: <id-or-url, or "none">
-status: draft            # draft until the user approves, then: approved
+status: draft            # draft → approved (human approved it) → shipped (built AND verified)
 studio_run: <run_dir>    # the debate this spec came from
 ---
 
@@ -153,6 +153,23 @@ keep the build from sprawling.
 Known risks, unresolved contrarian concerns, and anything still genuinely open. Be honest here — a
 spec that hides its soft spots is worse than one that names them.
 
+## Verification
+Required only for a **prompt-shaped** feature — one whose behavior lives in an agent's prompt, where
+no test can tell you it broke. The test to apply: *could a failing pytest tell us this feature broke?*
+If yes, delete this section — the tests are the criterion and this would be theatre. If the only
+instrument is a person reading the output, keep it and fill it in.
+
+- **Pass criterion.** This feature works if and only if <observable outcome>. Write it as an *iff*,
+  now, before the build — so someone can disagree with it while disagreeing is still cheap.
+- **Baseline.** The same behavior with the feature off. Say how to reproduce it on demand. If you
+  can't make the old behavior fail, there's nothing here to improve on — treat it as a blocker and
+  surface it.
+- **Where the evidence goes.** `specs/<slug>-eval-results.md` (`.studio/specs/` in a consuming repo),
+  created from the skeleton when this spec is approved.
+- **Stop condition.** While that file still says `FILL_ME`, nobody may call this feature working and
+  this spec stays `status: approved`. You set it to `shipped` when you fill the file in — that flip is
+  the claim, and the spec-verification test is what makes the claim cost evidence.
+
 ## Build Plan
 How this maps to buildable units — a short list of MVI units (each a complete, usable interaction;
 "build a skateboard, not a wheel"), in dependency order. This is the bridge to `/forge`, which reads
@@ -192,6 +209,58 @@ the file (Coding Principles §8). Then:
   If a `--ticket` was given, remind the user to link/attach the spec on that ticket so the tracker
   and the spec stay tied together (offer to help if it's a GitHub issue reachable via `gh`). This
   approved document is now the spec the feature is built against.
+
+  **If the spec carries a `## Verification` section**, also create its evidence file now — empty,
+  before any data exists. That ordering is the whole point: headings written before the outcome is
+  known can't be arranged to flatter it. Write the skeleton below to
+  `specs/<slug>-eval-results.md` (`.studio/specs/<slug>-eval-results.md` in a consuming repo),
+  substituting `<Feature>` and `<slug>`, and **copy the pass criterion out of the spec word for
+  word** — don't summarize it, don't improve it. Leave every `FILL_ME` in place; each one marks data
+  that does not exist yet. Then run `git check-ignore -q <path>` on the file you just created: if it
+  exits 0, tell the user the evidence file is gitignored and would never be committed, and point
+  them at the `.gitignore` recipe in the bridge doc's Maintenance section.
+
+  ```markdown
+  # <Feature> — Verification Results
+
+  **Spec:** [`<slug>.md`](./<slug>.md). The pass criterion below was copied from that spec before
+  anything was measured. Don't edit it to match what happened — if it turned out to be the wrong
+  criterion, say so under "What this doesn't prove."
+
+  Every placeholder below marks data that does not exist yet. Replacing one is the act of reporting.
+  Deleting one without replacing it — dropping a row or a section — is what these pre-written headings
+  make conspicuous in review; the test only counts placeholders, so deletion is on your honour.
+
+  ## Pass criterion (written before the build)
+  > _Copy the iff from the spec's Verification section, word for word._
+
+  ## What happened
+  | Condition | What was run | Times | Criterion met | Notes |
+  |---|---|---|---|---|
+  | Baseline (feature off) | FILL_ME | FILL_ME | FILL_ME | FILL_ME |
+  | With the feature | FILL_ME | FILL_ME | FILL_ME | FILL_ME |
+
+  The baseline row should read "no". If the criterion was already met with the feature off, stop and
+  say so: a feature that fixes a problem you could never trigger has not been shown to do anything.
+
+  ## What this doesn't prove
+  Required — this section is the point of the file.
+  - Did the criterion pass *as written*, un-rewritten after the fact? Name every number that moved the
+    wrong way, cost included.
+  - What could a reader wrongly conclude from that table? At minimum: the sample size, the conditions
+    you did not test, and the alternative explanation you can't rule out. "Nothing" is not an answer;
+    if you can't name a limit, you haven't looked yet.
+
+  FILL_ME
+
+  ## Verdict
+  One of **criterion met** / **criterion not met** / **inconclusive, and why**.
+
+  FILL_ME
+  ```
+
+  The file gets no frontmatter of its own — a second `status:` sitting beside the spec's would just
+  be one more thing to drift.
 - **On changes requested:** revise the spec (and, if the change is architectural, offer another
   advocate/contrarian pass) and re-present. Don't mark it approved until they say so.
 
@@ -222,6 +291,12 @@ python ".studio/source/run_phase.py" rate --run-dir {run_dir} --score {1-5} --no
   technical detail, and carries a diagram. If an engineer couldn't build from it, it's not done.
 - **Approval is the gate.** A spec is the source of truth only after the user approves it. A
   rejected or shaky architecture gets surfaced, not silently shipped.
+- **A prompt-shaped feature says up front how you'd know it works.** When no failing test could tell
+  you the feature broke, the spec carries a `## Verification` section — the pass criterion as an
+  *iff*, agreed before the build — and approval creates the evidence file beside it. The spec stays
+  `approved` until that file is filled in: `shipped` is the claim that the feature works, and the
+  claim costs evidence. When a test *could* catch the breakage, leave the section out; prose beside a
+  test is theatre.
 - **Specs are tracked.** They live in `specs/` (or `.studio/specs/` in a consuming repo), are meant
   to be committed, and stay linked to their ticket. They are not throwaway `output/` artifacts.
 - **The Build Plan is a contract, not a summary.** Each unit carries checkable criteria, because

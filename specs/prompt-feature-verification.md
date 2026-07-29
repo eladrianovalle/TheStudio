@@ -359,30 +359,70 @@ honest criteria — that is a human reading what `/spec` produces.
   duplicated: the scorecard trigger — two shipped features with unfilled results files means the
   convention is decoration, so either enforce the stop condition or delete the tier. Check it at the
   next cadence review.
+- **Deleting a section is the cheat rule 3 misses, and it is the cheapest route to green.** The rule
+  asks only whether the placeholder token is gone, so a `shipped` spec whose results file is empty
+  passes with zero placeholders — and so does one where "What this doesn't prove" was quietly cut,
+  which is the section this spec itself calls the point of the file. Found by the loop's editor while
+  building the enforcing test. The skeleton's prose was corrected to stop claiming the test catches
+  this (it says deletion is conspicuous in review and on your honour), and the real fix — a fourth
+  rule asserting a `shipped` spec's results file still carries the required headings with non-empty
+  bodies — needs its own `/spec` pass rather than being bolted on here.
 
 ## Build Plan
 
-**U1 — the convention exists and produces both files.** `spec.md` (four edits), the §9 bullet in
-`CODING_PRINCIPLES.md` and its hand-mirror in `CLAUDE.md`, the bridge-doc recipe.
-*Usable alone:* the next `/spec` on a prompt-shaped feature produces a written criterion and an empty
-evidence file with "What this doesn't prove" already in it — the whole point of the borrowing, working
-with no test at all.
-*Verify:* this spec's own approval exercises it end to end — approving it creates
-`specs/prompt-feature-verification-eval-results.md` from the skeleton. That replaces a throwaway
-temp-dir rehearsal with a tracked artifact, and makes the convention's first customer the feature
-itself. Existing 824 tests still green.
+Re-authored in the per-unit shape the Build Plan template now requires, so `/forge --spec` can read
+this spec. Wording is preserved; only the structure changed.
 
-**U2 — the claim costs evidence.** `studio/tests/test_spec_verification.py`.
-*Usable alone:* flipping a spec to `shipped` with unfilled evidence fails CI.
-*Verify:* green against the real five. Then the six synthetic cases, each asserted to fail *and* the
-tolerance case asserted to pass — a test whose negative branch was never observed is the
-green-checkmark trap `/detest` hunts. Then hand-mutate: invert rule 3's condition and confirm a
-synthetic case goes red.
+1. **`verification_convention` — the convention exists and produces both files.** `spec.md` (four
+   edits: the frontmatter comment, the new template section, the Step 4 approval bullet, one Key Rules
+   bullet), the §9 bullet in `CODING_PRINCIPLES.md` and its hand-mirror in `CLAUDE.md`, and the
+   bridge-doc recipe in `STUDIO_BRIDGE_TEMPLATE.md` §8. Usable alone: the next `/spec` on a
+   prompt-shaped feature produces a written criterion and an empty evidence file with "What this
+   doesn't prove" already in it — the whole point of the borrowing, working with no test at all.
+   - **Acceptance criteria:**
+     - [ ] `spec.md`'s template gains a `## Verification` section between `## Risks & Open Questions`
+           and `## Build Plan`, carrying the pass criterion written as an *iff*, the baseline, where
+           the evidence goes, and the stop condition — plus the judgment test that tells an author to
+           **delete** the section when a failing pytest could catch the breakage.
+     - [ ] `spec.md`'s frontmatter comment documents the three-value lifecycle `draft → approved →
+           shipped`, and its Step 4 approval bullet creates `specs/<slug>-eval-results.md` from the
+           skeleton, copies the pass criterion word for word, and runs `git check-ignore` so an author
+           is told when the evidence file would never be committed.
+     - [ ] The prompt-shaped bullet is present in `studio/docs/CODING_PRINCIPLES.md` §9 and in
+           `CLAUDE.md`, and the two copies are byte-identical — checked by diffing them, not by
+           reading both.
+     - [ ] `specs/prompt-feature-verification-eval-results.md` exists, built from the skeleton, with
+           this spec's own pass criterion copied verbatim and every slot that has no data yet marked
+           `FILL_ME`. The convention's first customer is the feature itself.
+     - [ ] The full suite is green and no lower than 829.
+   - **Out of scope:** the enforcing test, which is unit 2. Nothing here fails CI yet.
 
-**U3 — the record.** `CHANGELOG.md`, the two `README.md` counts set from a fresh collection,
-`INDEX.md:15`, `CLAUDE_CODE_USAGE.md:482`.
-*Verify:* `pytest -q` count matches what the README claims; doc-parity green.
+2. **`verification_tests` — the claim costs evidence.** `studio/tests/test_spec_verification.py`.
+   Usable alone: flipping a spec to `shipped` with unfilled evidence fails CI.
+   - **Acceptance criteria:**
+     - [ ] The three rules are green against every real spec in `specs/`, with no rule firing on a
+           spec that legitimately has no `## Verification` section.
+     - [ ] Six synthetic cases prove each rule fires **and** does not over-fire, as "The enforcing
+           test" lists them: shipped-with-`FILL_ME` fails, approved-with-missing-sibling fails,
+           unknown-status fails, approved-with-`FILL_ME` **passes** (the tolerance, asserted not
+           assumed), no-Verification is ignored at any status, and shipped-and-filled passes. A test
+           whose negative branch was never observed is the green-checkmark trap `/detest` hunts.
+     - [ ] Inverting rule 3's condition by hand turns a synthetic case red, confirming the rule is
+           load-bearing rather than decorative.
+     - [ ] A spec at `status: shipped` whose evidence file still contains `FILL_ME` fails the suite.
+   - **Out of scope:** the convention itself, which unit 1 ships.
 
-One sequencing note: marking Phase 4 done in `studio/docs/SUPERPOWERS_COMPARISON.md` cannot happen
-here — that document lives only on the unmerged `docs/superpowers-study` branch. Either that merges
-first and U3 folds the update in, or it is a one-line follow-up afterwards.
+3. **`verification_record` — the record.** `CHANGELOG.md`, both `README.md` test counts, the `specs/`
+   entry in `INDEX.md`, and the `/spec` row in `CLAUDE_CODE_USAGE.md`.
+   - **Acceptance criteria:**
+     - [ ] Both README test counts are set from a fresh collection and match what `pytest -q` reports
+           — they were one behind before this unit, so copying the old number forward is a failure.
+     - [ ] The docs index entry for `specs/` names the `-eval-results.md` sibling, and the
+           `CLAUDE_CODE_USAGE.md` `/spec` row does too.
+     - [ ] Phase 4 is marked done in `studio/docs/SUPERPOWERS_COMPARISON.md`.
+     - [ ] Doc-parity tests are green and the full suite is no lower than the count in unit 2.
+   - **Out of scope:** any behavior change; this unit only records what the other two shipped.
+
+The earlier sequencing caveat is resolved: marking Phase 4 done in `SUPERPOWERS_COMPARISON.md` was
+blocked on that document living only on an unmerged branch. It has since merged to `main`, so unit 3
+folds the update in rather than leaving a dangling follow-up.
