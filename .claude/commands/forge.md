@@ -168,6 +168,14 @@ python .studio/source/impl_loop.py
 # prints knobs JSON, e.g. {"editor_enabled": true, "read_scope": "touched+importers", "output_budget": 400, ...}
 ```
 
+**If you resolved criteria in Step 1 and `editor_enabled` is `false`, STOP here — do not run the
+loop.** The editor is the only thing that grades criteria, so this pair asks for a graded run and
+supplies nobody to grade it. Say so plainly, and give the two ways forward: turn the editor mandate on
+(`[editor] mandate` in `implementation_loop.toml`), or drop `--spec` and accept an ungraded run. The
+loop also flags this combination if it is reached another way, but a contradiction visible before any
+agent runs should cost nothing to discover — the same reason a mistyped `--spec` stops in Step 1
+instead of quietly downgrading to an ungraded run.
+
 Then call the **Workflow** tool **by `scriptPath`** (NOT `name`; see Gotchas), pointing at this
 repo's copy of the workflow and merging the config knobs into the unit args:
 
