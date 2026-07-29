@@ -35,7 +35,7 @@ prose, no new machinery.
 flowchart TD
     W[Writer agent] -->|builds the unit| D{Did it get there?}
     D -->|yes| G[Handoff: mvi_claimed=true, tests green, writer_sha]
-    D -->|no, stuck| E["Handoff: mvi_claimed=false, tests red,<br/>stuck='the blocker',<br/>writer_sha = writer(stuck) commit"]
+    D -->|no, stuck| E["Handoff: mvi_claimed=false,<br/>tests = whatever the suite did,<br/>stuck='the blocker',<br/>writer_sha = writer(stuck) commit"]
     G --> GATE{Entry gate:<br/>mvi_claimed AND tests green}
     E --> GATE
     GATE -->|passes| ED[Editor pass]
@@ -47,8 +47,8 @@ flowchart TD
 ```
 
 The escalation takes no new path through the loop. It fails the existing entry gate through the
-existing mechanics — `mvi_claimed=false` and red tests already route to "deliver flagged, no editor
-pass" — so the control flow is untouched. What is new is that the record now carries *why*, the
+existing mechanics — `mvi_claimed=false` alone already routes to "deliver flagged, no editor pass" —
+so the control flow is untouched, and the gate needs nothing from the test result. What is new is that the record now carries *why*, the
 transcript says so out loud, and the partial work is a commit you can read.
 
 Note the dotted line: the escalation is logged as soon as it arrives, regardless of which way the
