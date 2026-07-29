@@ -263,9 +263,9 @@ test('an escalated writer fails the entry gate through the existing mechanics', 
   // Either mechanic shuts the gate on its own, so it does not depend on both arriving together.
   assert.equal(passesEntryGate({ ...escalated, mvi_claimed: true }, true), false)
   assert.equal(passesEntryGate({ ...escalated, tests: GREEN_WRITER.tests }, true), false)
-  // The gate is computed before the loop's `if (!writer)` abort, so it also has to survive a writer
-  // that returned nothing, or a handoff with no tests block, without throwing.
-  assert.equal(passesEntryGate(null, true), false)
+  // A handoff with no tests block reads as a shut gate, not a crash. The missing-writer case is
+  // gone from here on purpose: the gate is now computed below the loop's `if (!writer)` abort, so
+  // that state cannot reach it. The ordering that makes this safe is pinned from Python.
   assert.equal(passesEntryGate({ mvi_claimed: true }, true), false)
 })
 

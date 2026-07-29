@@ -194,6 +194,27 @@ class TestWriterEscalationChannel:
             "no commit and writer_sha becomes a lie"
         )
 
+    def test_the_entry_gate_is_computed_after_the_missing_writer_abort(self):
+        """Ordering is what lets `passesEntryGate` skip a null check on the writer.
+
+        The gate used to be computed above the `if (!writer)` abort, which is the only reason
+        it needed a `writer &&` guard at all — a guard whose one test could do nothing but
+        assert that a defensive branch existed. Below the abort, `writer` is known to exist.
+        Move the line back above and the null case returns with nothing to catch it, so the
+        ordering itself has to be the thing under test.
+        """
+        src = self._loop_source()
+        abort = src.index("log('Writer agent failed to return a handoff")
+        gate = src.index("const entryGate = passesEntryGate(")
+        assert gate > abort, (
+            "the entry gate is computed before the missing-writer abort again — either move it "
+            "back below, or restore the null guard it was relying on"
+        )
+        # And the guard really is gone, so this test is load-bearing rather than decorative.
+        signature = src[src.index("function passesEntryGate("):]
+        signature = signature[:signature.index("\n}")]
+        assert "writer &&" not in signature
+
     def test_escalating_does_not_ask_the_writer_to_misreport_its_tests(self):
         """`stuck` says the writer is blocked; `tests` says what the suite did.
 
