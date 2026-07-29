@@ -5,8 +5,8 @@ below was copied from that spec before anything was measured. Don't edit it to m
 if it turned out to be the wrong criterion, say so under "What this doesn't prove."
 
 Every placeholder below marks data that does not exist yet. Replacing one is the act of reporting.
-Deleting one without replacing it — dropping a row or a section — is what these pre-written headings
-make conspicuous in review; the test only counts placeholders, so deletion is on your honour.
+Dropping a whole section, or clearing a placeholder and writing nothing under its heading, fails the
+suite once this spec says `status: shipped` — every heading here needs an answer you wrote yourself.
 
 ## Pass criterion (written before the build)
 > This feature works if and only if the next prompt-shaped spec written after it
