@@ -261,8 +261,10 @@ Notes on what was cut vs the first draft:
   `impl--unit_NN--*.json` record, so a delivered-but-failing unit is never mistaken for a passing
   one. One exception: a deliberate escalation commits its partial work as `writer(stuck): <unit_id>`,
   because `writer_sha` is required and there is nothing honest to put in it otherwise. The rule's
-  intent survives — that label, plus `tests.passed: false` and `mvi_claimed: false` in the record,
-  means nobody mistakes it for a passing unit — and committing keeps the tree clean between units.
+  intent survives — that label, plus `mvi_claimed: false` and the blocker in `stuck`, means nobody
+  mistakes it for a passing unit — and committing keeps the tree clean between units. Note `tests` is
+  *not* part of that signal: an escalating writer reports whatever the suite actually did, including a
+  green result it never got to influence, because `stuck` is what says it was blocked.
 
 ## The executor shell (Claude-specific, disposable)
 

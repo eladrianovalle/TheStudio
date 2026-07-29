@@ -194,6 +194,23 @@ class TestWriterEscalationChannel:
             "no commit and writer_sha becomes a lie"
         )
 
+    def test_escalating_does_not_ask_the_writer_to_misreport_its_tests(self):
+        """`stuck` says the writer is blocked; `tests` says what the suite did.
+
+        The first draft told the writer to report `passed=false` and called that honest,
+        which it is not when the suite exits 0 — a writer blocked on scope or a missing
+        interface can be looking at a green suite. That corrupted the one machine-checked
+        field in the handoff to signal something `stuck` already says, and the entry gate
+        never needed it: `mvi_claimed=false` shuts the gate on its own (proven in
+        workflow-shells.test.mjs, where an escalated writer with a green suite still fails).
+        """
+        prompt = self._loop_source()
+        prompt = prompt[prompt.index("function writerPrompt"):prompt.index("function editorPrompt")]
+        assert "passed=false" not in prompt, (
+            "the writer prompt is asking for a fabricated test result again"
+        )
+        assert "the real exit code" in prompt
+
 
 class TestAcceptanceCriteriaWiring:
     """Pin that the /forge loop can grade a unit against acceptance criteria.
@@ -233,6 +250,22 @@ class TestAcceptanceCriteriaWiring:
         assert re.search(r"return\s*\{[\s\S]*?criteriaVerdicts[\s\S]*?\}", src), (
             "criteriaVerdicts must be in the workflow's return object"
         )
+
+    def test_mandate_off_still_flags_a_unit_that_carried_criteria(self):
+        """With no editor there is nobody to grade, so a graded run cannot ship clean.
+
+        `flagged` used to be the literal `false` on this path. A `/forge --spec` run with the
+        editor mandate off would then log "criteria ungraded" and still report a clean unit —
+        a silent downgrade to an ungraded run, which is exactly what a mistyped `--spec` is
+        made to stop. A run carrying no criteria still ships unflagged: nothing was promised.
+        """
+        src = self._loop_source()
+        branch = src[src.index("if (unit.editor_enabled === false)"):]
+        branch = branch[:branch.index("\n}")]
+        assert "flagged: false" not in branch, (
+            "the mandate-off path reports a clean unit again, even when criteria went ungraded"
+        )
+        assert "unitCriteria(unit)" in branch, "the branch does not consult the unit's criteria"
 
     def test_the_exit_gate_is_a_function_the_js_tests_can_reach(self):
         """The gate's behavior is tested in JS; this pins that it stayed reachable from there.

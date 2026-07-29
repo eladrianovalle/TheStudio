@@ -314,13 +314,23 @@ can reach is not enforcement.
   its verdict, and its evidence, and says plainly that a failure is flagged, not blocked.
 
 **Two paths where criteria are never graded.** No `--spec` — by design. And `mandate = "off"`, where no
-editor runs at all: that path ships `flagged: false` with nothing graded. `flagged` is deliberately
-left alone there, because on that path nothing has *ever* been graded — `mvi_verdict` never exists, and
-`flagged: false` already means "we didn't check, we trusted the writer." Criteria don't create that
-hole; they arrive in a path that never had a verdict to lose. Flipping the boolean would turn a
-deliberate cost saving into a permanent warning for everyone using that config. The existing log line
-gains a "criteria ungraded (editor off)" clause instead. The entry-gate-failure path needs no such
-line: it already returns `flagged: true` and already logs why, so nobody is misled there.
+editor runs at all. On the mandate-off path the answer depends on whether the run promised anything:
+
+- **No criteria carried:** ships `flagged: false`, and that is deliberate. Nothing has *ever* been
+  graded on that path — `mvi_verdict` never exists, and `flagged: false` already means "we didn't
+  check, we trusted the writer." Flipping the boolean would turn a deliberate cost saving into a
+  permanent warning for everyone using that config.
+- **Criteria carried:** ships `flagged: true`. **Amended 2026-07-28**, after review caught that the
+  first ruling covered this case by accident. The original argument — "criteria arrive in a path that
+  never had a verdict to lose" — holds for a run nobody asked to grade. It does not hold when a caller
+  passed `--spec`: they asked for specific checks, none were performed, and `flagged: false` would
+  report that as a clean unit. This spec already refuses the same failure in its other form, ruling
+  that a mistyped `--spec` must **stop** rather than "silently downgrade to an ungraded run" — and
+  config is just a quieter way to arrive at the same place. The narrow fix costs the config's users
+  nothing, because the warning only appears when they also pass criteria.
+
+The log line says which case it took. The entry-gate-failure path needs no such treatment: it already
+returns `flagged: true` and already logs why, so nobody is misled there.
 
 ### Documents that change
 

@@ -186,9 +186,11 @@ function writerPrompt(u) {
     `  exist or contradicts the instructions; you are about to weaken, skip, or delete a test to get to green.`,
     `- To escalate: commit what you have with \`git add -A && git commit --allow-empty -m "writer(stuck): ${u.unit_id}"\``,
     `  and report that short SHA as writer_sha. If you never got as far as running the tests, run \`${u.test_command}\``,
-    `  once so \`tests\` holds a real result. Then report \`tests\` honestly (passed=false and the real exit_code),`,
-    `  set mvi_claimed=false, and put the blocker in \`stuck\` — the specific thing you got stuck on, quoting the`,
-    `  file, test, or interface it is about. Persist the handoff JSON either way.`,
+    `  once so \`tests\` holds a real result. Report \`tests\` as what actually happened — the real exit code, and`,
+    `  \`passed\` matching it, even when a suite you never got to influence comes back green. Do NOT report a red`,
+    `  suite to signal that you are stuck; \`stuck\` is what says that. Set mvi_claimed=false, and put the blocker`,
+    `  in \`stuck\` — the specific thing you got stuck on, quoting the file, test, or interface it is about.`,
+    `  Persist the handoff JSON either way.`,
     `Return the writer handoff object.`,
   ].join('\n')
 }
@@ -301,9 +303,19 @@ if (!entryGate) {
 
 // Config knob (editor.mandate="off" → editor_enabled=false, merged into args by /forge):
 // skip the editor pass entirely and deliver the writer's version.
+//
+// A unit that carried criteria is the exception, and it ships FLAGGED. With no editor there is
+// nobody to grade them, so `flagged: false` would report a clean unit for a run that was explicitly
+// asked to check something and checked nothing. That is the silent downgrade to an ungraded run the
+// spec refuses elsewhere — a mistyped `--spec` stops rather than quietly proceeding, and this is the
+// same failure arriving through config instead of a typo. A run with no criteria keeps shipping
+// unflagged: nothing was ever promised there, so nothing is being withheld.
 if (unit.editor_enabled === false) {
-  log(`editor_enabled=false (mandate off) — delivering the writer's version, no editor pass; criteria ungraded (editor off).`)
-  return { delivered: true, flagged: false, editorRan: false, finalVersion: 'writer', writer }
+  const promisedGrades = unitCriteria(unit).length > 0
+  log(promisedGrades
+    ? `editor_enabled=false (mandate off) but the unit carried ${unitCriteria(unit).length} acceptance criterion(a) — nobody graded them, so this ships FLAGGED. Turn the editor mandate on, or run without criteria.`
+    : `editor_enabled=false (mandate off) — delivering the writer's version, no editor pass.`)
+  return { delivered: true, flagged: promisedGrades, editorRan: false, finalVersion: 'writer', writer }
 }
 
 phase('Edit')
