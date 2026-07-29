@@ -238,6 +238,130 @@ evidence. Either fill it in with what you actually observed, or set this spec ba
 `status: approved` and stop describing the feature as working.
 ```
 
+### Rule 4 — the shape has to survive the claim
+
+> **Not yet approved.** Everything above this line is built, merged and green. This section is a
+> proposed revision awaiting a human's yes. Delete this line at approval.
+
+Rules 1-3 count placeholders, which leaves two ways to reach green without reporting anything, both
+recorded in Risks below: delete a whole section, or clear a placeholder and write nothing under it. The
+second is the easier one, because the file's own printed guidance keeps the section looking full.
+
+**Rule 4.** With a `## Verification` section and `status: shipped`, every heading in
+`_REQUIRED_HEADINGS` must be **present** in the results file, and each one must have **at least one
+line the reporter wrote themselves**.
+
+An independent `if`, not gated on rule 3. An earlier draft made it an `elif` to keep an existing
+assertion untouched; that justification was measured and found false — the fixture it was protecting
+has no `## Verdict` heading, so it changed either way. `_violations` returns a list precisely so one CI
+run tells you everything that is wrong.
+
+`approved` is untouched. A hollow skeleton at `approved` is the pre-registration the whole convention
+rests on; a rule 4 that fired there would fail correct compliance.
+
+#### "A line the reporter wrote themselves"
+
+The load-bearing question is how to tell a report from the boilerplate it was written next to. The
+answer is to ask the template: **any line the skeleton printed is not a report.**
+
+```python
+def _printed_lines(command_text):
+    """Every non-blank, non-heading line /spec's evidence skeleton prints under a heading.
+
+    These are the lines an evidence file is born with — the questions, the guidance, the empty
+    table, the placeholders. Not one of them is somebody's finding.
+    """
+
+def _own_words(body, printed):
+    """Whether anything under this heading was written by the reporter.
+
+    A line the skeleton printed is not a report; neither is a blank one. Whatever survives
+    that, someone typed on purpose.
+    """
+    return any(line.strip() and line.strip() not in printed for line in body.splitlines())
+```
+
+One rule for all four headings — no second, looser tier. The printed set comes from the same
+extraction the heading agreement below already performs, so the marginal cost over a
+presence-only check is one frozenset, one predicate, and the two guard tests named below.
+
+Three alternatives were designed and rejected, each for a reason worth keeping:
+
+- **Reshaping the skeleton** so each section body held only its placeholder, with the guidance moved
+  into an HTML comment. Rejected after review. `spec.md` ships to consuming repos in
+  `SLASH_COMMANDS` and no test does, so invisible guidance would travel to exactly the repos with
+  nothing to make it safe — and this feature already replaced one marker (`<fill>`) for rendering as
+  zero visible characters. It also propagated across three tracked copies of the skeleton. The
+  printed-line exclusion identifies the boilerplate instead of hiding it, and needs no reshape at all.
+- **Excluding blockquotes** as "the printed question". Rejected: the copied pass criterion in the one
+  real evidence file *is* a blockquote, so the rule would have failed the only correct file in the
+  repo and taught reporters to avoid the shape their example demonstrates.
+- **Two tiers** — own-words for the prose sections, mere non-emptiness for the table and the
+  criterion. Rejected: it could not fire at all on `## What happened`, the section holding the data,
+  because any printed prompt there is a visible line forever.
+
+#### The messages
+
+Both keep rule 3's two honest exits, so nobody is cornered into deleting the test.
+
+```
+specs/foo.md is marked `status: shipped`, but foo-eval-results.md no longer has
+'## What this doesn't prove'. These headings were written before the data existed so they
+could not be dropped once the data turned out inconvenient. Either put the section back and
+answer it, or set this spec back to `status: approved`.
+```
+
+```
+specs/foo.md is marked `status: shipped`, but nothing under '## What this doesn't prove' in
+foo-eval-results.md was written by you — every line there is one /spec's skeleton printed, so
+the section is still asking its question with no answer under it. Either write what you
+actually found, or set this spec back to `status: approved`.
+```
+
+#### The heading list, agreed both ways
+
+`_REQUIRED_HEADINGS` is stated once in the test, and a second check asserts `spec.md`'s skeleton still
+prints those same four. Both directions matter: a heading required but no longer printed means new
+evidence files are born failing; a heading printed but not required can be deleted for free at
+`shipped`. This is the existing doc-parity shape — two documents that must agree, neither generated
+from the other — not a parser judging prose.
+
+Extraction is scoped to the fence beginning `# <Feature> — Verification Results`, because `spec.md`
+also carries the *spec* template with a different heading list. Lines are stripped before matching: the
+skeleton sits two spaces indented inside a bullet, and the same normalization makes the printed set
+comparable across the evidence file's own wrapping.
+
+#### The two guards this coupling demands
+
+Rule 4 now depends on finding the skeleton, and both failure directions are silent, so both are tested:
+
+1. **The block is findable and prints body lines.** If extraction returns nothing, every line counts as
+   own words and rule 4 never fires while the suite stays green. Moving that fence must turn the tree
+   red, not disarm the rule. Same shape as the existing `test_specs_dir_is_not_empty`.
+2. **Unfilled sections are still regenerable from the skeleton.** A section holding a placeholder has
+   by definition not been reported in, so every other line in it came from the template. If one
+   didn't, this file was built from a skeleton that no longer exists — and rule 4 would read that
+   stale line as a report. Rewording a guidance line therefore fails immediately, on the one real
+   file, with a message saying to rebuild it.
+
+That second guard is the honest answer to this design's one weakness. Tying the exclusion to text
+rather than to markup means an edited guidance line stops matching. The window where that is harmful is
+exactly the window where a file is unfilled, which is the window the guard covers.
+
+#### What it still does not catch, said plainly
+
+"N/A", "worked fine", or a single full stop all pass rule 4. It closes deletion and emptiness, not
+dishonesty. Anyone willing to retype a guidance line to defeat the check could type "N/A" in less time,
+and that is already recorded below as undetectable in principle. The realistic subject is a tired
+builder with nothing to report, who clears the placeholder or drops the section — not an adversary.
+
+Worth naming for the same reason: this rule is aimed at a **human** failure. A person who skips leaves
+holes, which is what this catches. An agent's characteristic failure is the opposite — it fills every
+blank with something plausible — and no completeness check sees that at all. Agent-side honesty in this
+repo is structural instead: a fresh reviewer that cannot see the first agent's reasoning, a gate that
+reads returned data rather than a summary boolean, a rule that a claim must quote what it is about.
+Those are different instruments and they are not interchangeable.
+
 ### Documents that change
 
 | File | Change |
@@ -313,6 +437,9 @@ honest criteria — that is a human reading what `/spec` produces.
 | Enforcement | A pytest | Studio's advantage over the source of this borrowing is that its rules are Python, not prose. |
 | Scope | Prompt-shaped features only | For a code feature the section would restate the test plan, and padding teaches readers to skim. |
 | How to tell approved from built | A third status, `shipped` | The recorded rule was self-contradictory: the sibling is *created* at approval full of placeholders, so failing on "approved + placeholder" fails on correct compliance. `approved` → must exist; `shipped` → must be filled. `shipped` is already Studio's word (`rate --shipped`). |
+| How to tell a report from the boilerplate beside it (rule 4) | Ask the template: any line the skeleton printed is not a report | **Added 2026-07-29.** Needs no change to the skeleton and no invisible markup, and reuses the extraction the heading agreement already performs. The alternatives each broke: reshaping the skeleton ships invisible guidance to consuming repos that get no test; excluding blockquotes fails the one real evidence file, whose copied criterion is a blockquote; a looser second tier for the table and the criterion cannot fire on them at all. |
+| Does a revision to an approved-and-built spec change `status`? | No — a visible "Not yet approved" line on the new section, removed at approval | `status` is the *input* to rules 2-4, so any value meaning "partly unapproved" switches the gate off on the spec that defines the gate. A `revision:` frontmatter key was designed and cut: its only consumer would be a grep, which is the dead-field mistake this repo already named in the escalation spec. |
+| Which failure does rule 4 aim at? | The human one | A person who skips leaves holes; that is what a completeness check sees. An agent fills every blank with something plausible, which no completeness check sees — agent-side honesty here is structural (independent reviewer, gate reads returned data, claims must quote). Stating this stops rule 4 being mistaken for coverage it does not have. |
 | Unknown status values | Rule 1 rejects them | Otherwise a stray capital letter disables the whole convention silently. |
 | Placeholder token | `FILL_ME`, not `<fill>` | `<fill>` parses as an HTML tag and renders as nothing, so an unfilled file would look finished. |
 | Skeleton size | Four sections, one table | Two of six sections were the same job twice; two tables with identical columns hid the comparison that is the point. |
@@ -363,10 +490,12 @@ honest criteria — that is a human reading what `/spec` produces.
   asks only whether the placeholder token is gone, so a `shipped` spec whose results file is empty
   passes with zero placeholders — and so does one where "What this doesn't prove" was quietly cut,
   which is the section this spec itself calls the point of the file. Found by the loop's editor while
-  building the enforcing test. The skeleton's prose was corrected to stop claiming the test catches
-  this (it says deletion is conspicuous in review and on your honour), and the real fix — a fourth
-  rule asserting a `shipped` spec's results file still carries the required headings with non-empty
-  bodies — needs its own `/spec` pass rather than being bolted on here.
+  building the enforcing test. **Closed by rule 4** (see "The enforcing test"), which asserts both
+  halves this bullet asked for: the required headings are present, and each carries a line the reporter
+  wrote rather than one the template printed. The `/spec` pass this bullet called for is what produced
+  it, and it found a third route the bullet had missed — clearing a placeholder and writing nothing,
+  which leaves the heading in place and is easier than deleting a section. The skeleton's honour-system
+  sentence goes with it.
 
 ## Build Plan
 
@@ -426,3 +555,43 @@ this spec. Wording is preserved; only the structure changed.
 The earlier sequencing caveat is resolved: marking Phase 4 done in `SUPERPOWERS_COMPARISON.md` was
 blocked on that document living only on an unmerged branch. It has since merged to `main`, so unit 3
 folds the update in rather than leaving a dangling follow-up.
+
+Units 1-3 are built and merged. The two below belong to the rule 4 revision.
+
+4. **`shape_rule` — a claim costs the whole shape.** `studio/tests/test_spec_verification.py` gains
+   `_REQUIRED_HEADINGS`, the skeleton extraction, `_printed_lines`, `_own_words`, `_section_body` and
+   rule 4; both fixtures gain a `## Verdict` section they were missing; the two preamble paragraphs
+   that would otherwise state something false are corrected — in `.claude/commands/spec.md` and in the
+   live evidence file. No section body in the skeleton changes.
+   - **Acceptance criteria:**
+     - [ ] At `status: shipped`, a results file missing a required heading fails, and so does one where
+           every line under a required heading is a line the skeleton printed. Both are checked against
+           the real skeleton, not a paraphrase of it.
+     - [ ] `test_approved_with_placeholders_passes` still passes — an unfilled skeleton at `approved` is
+           correct compliance and rule 4 must not fire there. So does
+           `test_specs_without_a_verification_section_are_left_alone`.
+     - [ ] An honest answer written as a blockquote passes, and a results file whose copied pass
+           criterion is a blockquote passes. The one real evidence file must not be failed by the rule
+           meant to protect it.
+     - [ ] Renaming the skeleton's title line turns a test red rather than silently disarming rule 4,
+           and rewording one printed guidance line turns the regenerable-from-skeleton guard red.
+     - [ ] Inverting `_own_words` turns both tolerance cases and every hollow case red — a rule whose
+           negative branch was never observed is the trap `/detest` hunts.
+     - [ ] `git diff` shows no change to any section body in the skeleton, and the live evidence file
+           still holds exactly 10 placeholders with its criterion lines byte-unchanged.
+   - **Out of scope:** any reshape of the skeleton; any change to rules 1-3; catching filler like
+     "N/A", which is recorded as undetectable in principle.
+
+5. **`shape_rule_record` — the record.** This spec's revision folded in (the "Not yet approved" line
+   removed), `CHANGELOG.md`, both `README.md` counts, and the `/spec` row in `CLAUDE_CODE_USAGE.md`.
+   - **Acceptance criteria:**
+     - [ ] Both README counts are set from a fresh `pytest -q` collection and match it. They were
+           already one behind before this work, so copying the old number forward is a failure.
+     - [ ] `CHANGELOG.md`'s claims that there are "three rules" and that deleting a section is an open
+           gap are corrected in place rather than contradicted by a new entry.
+     - [ ] No document still tells a reporter that deletion is "on your honour".
+     - [ ] The `/spec` usage row says a heading dropped or left unanswered fails CI, not just a
+           placeholder left in.
+     - [ ] Doc-parity and the verification tests are green, and the full suite is no lower than unit 4's
+           count.
+   - **Out of scope:** any behavior change.
