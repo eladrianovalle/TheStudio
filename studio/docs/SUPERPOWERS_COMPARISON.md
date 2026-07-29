@@ -459,9 +459,11 @@ without a written pass criterion and a place its evidence has to go. Also resolv
 Two changes from the proposal as written. The stop marker is `FILL_ME`, not `<fill>` — angle brackets
 parse as a raw HTML tag in CommonMark and render as zero visible characters, so the one file whose job
 is to look conspicuously unfinished would have rendered as complete. And the convention is enforced by
-`studio/tests/test_spec_verification.py`, three rules that leave existing specs alone and refuse only
-the `shipped` claim with unfilled evidence. Known gap, recorded in that spec's Risks: the rules count
-placeholders, so deleting a section is the cheat they miss.
+`studio/tests/test_spec_verification.py`, four rules that leave existing specs alone and refuse only
+the `shipped` claim — with unfilled evidence, with one of the evidence file's headings dropped, or with
+one left holding nothing but the guidance the skeleton printed. That last rule closed the deletion gap
+the first three missed; what remains is filler like "N/A", which that spec's Risks record as
+undetectable in principle.
 
 **Later, if the numbers ask for it.** The eval harness, under the re-entry condition above. Teaching
 `/forge` to read its approved spec, as its own spec — it is a real gap on Studio's own list, and the
@@ -481,7 +483,7 @@ pre-date baseline.
 | Writer escalation channel | Count of handoffs carrying a non-empty `escalation`; count of green-but-wrong units caught later | A genuinely stuck writer stops instead of guessing, and says what it needs | Field never used across ~10 units (the hole was theoretical), or used to dodge tractable work | Never populated across ~10 units → the schema hole was real but the failure was not; keep the field, drop the prompt prose |
 | Rationale is a claim | Whether a contrarian finding survives an advocate's justification; whether the editor logs a concern it previously dropped | Findings get engaged with rather than withdrawn after a good explanation | Iteration burn: runs take more passes to reach APPROVED because rebuttals no longer resolve anything | Median iterations-to-verdict rises across ~10 runs → the wording is fighting the rejection-feedback loop; revert |
 | Breadth valve + cite-don't-narrate | Per-unit editor token cost vs Phase 0; count of named-risk checks reported in `edits`; concerns raised that touch non-importer consumers | Real cross-cutting problems surface, at a small cost delta | Editor tokens climb with no new findings, or `edits` fills with narration | Editor cost up >25% over baseline with no new concerns across ~10 units → revert the valve |
-| Verification section + eval sibling | Share of prompt-shaped specs that carry a pass criterion; share of results files still at `<fill>` when the feature shipped | The criterion is written before the build and filled after | Results files sit unfilled and readers learn to skim past them | Two shipped features with unfilled results files → the convention is decoration; either enforce the stop condition or delete the tier |
+| Verification section + eval sibling | Share of prompt-shaped specs that carry a pass criterion; share of results files still at `FILL_ME` when the feature shipped | The criterion is written before the build and filled after | Results files sit unfilled and readers learn to skim past them | Two shipped features with unfilled results files → the convention is decoration; either enforce the stop condition or delete the tier |
 
 **Three top-line questions**, same as the gstack scorecard, tracked forward from Phase 0:
 
