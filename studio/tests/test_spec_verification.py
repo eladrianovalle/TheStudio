@@ -109,15 +109,16 @@ def _skeleton_block(command_text: str) -> list[str]:
     return block
 
 
-def _printed_lines(command_text: str) -> frozenset[str]:
+def _printed_lines(skeleton_lines: list[str]) -> frozenset[str]:
     """Every non-blank, non-heading line /spec's evidence skeleton prints under a heading.
 
     These are the lines an evidence file is born with — the questions, the guidance, the empty
-    table, the placeholders. Not one of them is somebody's finding.
+    table, the placeholders. Not one of them is somebody's finding. Takes the block
+    ``_skeleton_block`` already found, so the fence scoping happens in exactly one place.
     """
     printed: set[str] = set()
     in_section = False
-    for line in _skeleton_block(command_text):
+    for line in skeleton_lines:
         if line.startswith("#"):
             # The title, and the preamble under it, sit outside every section.
             in_section = line.startswith("## ")
@@ -150,9 +151,8 @@ def _own_words(body: str, printed: frozenset[str]) -> bool:
     return any(line.strip() and line.strip() not in printed for line in body.splitlines())
 
 
-_COMMAND_TEXT = SPEC_COMMAND.read_text(encoding="utf-8")
-_SKELETON_LINES = _skeleton_block(_COMMAND_TEXT)
-_PRINTED_LINES = _printed_lines(_COMMAND_TEXT)
+_SKELETON_LINES = _skeleton_block(SPEC_COMMAND.read_text(encoding="utf-8"))
+_PRINTED_LINES = _printed_lines(_SKELETON_LINES)
 
 
 def _violations(
