@@ -394,9 +394,11 @@ this spec. Wording is preserved; only the structure changed.
    - **Acceptance criteria:**
      - [ ] The three rules are green against every real spec in `specs/`, with no rule firing on a
            spec that legitimately has no `## Verification` section.
-     - [ ] Six synthetic cases are each asserted to **fail**, and the tolerance case is asserted to
-           **pass** — a test whose negative branch was never observed is the green-checkmark trap
-           `/detest` hunts.
+     - [ ] Six synthetic cases prove each rule fires **and** does not over-fire, as "The enforcing
+           test" lists them: shipped-with-`FILL_ME` fails, approved-with-missing-sibling fails,
+           unknown-status fails, approved-with-`FILL_ME` **passes** (the tolerance, asserted not
+           assumed), no-Verification is ignored at any status, and shipped-and-filled passes. A test
+           whose negative branch was never observed is the green-checkmark trap `/detest` hunts.
      - [ ] Inverting rule 3's condition by hand turns a synthetic case red, confirming the rule is
            load-bearing rather than decorative.
      - [ ] A spec at `status: shipped` whose evidence file still contains `FILL_ME` fails the suite.
