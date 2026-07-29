@@ -359,6 +359,14 @@ honest criteria — that is a human reading what `/spec` produces.
   duplicated: the scorecard trigger — two shipped features with unfilled results files means the
   convention is decoration, so either enforce the stop condition or delete the tier. Check it at the
   next cadence review.
+- **Deleting a section is the cheat rule 3 misses, and it is the cheapest route to green.** The rule
+  asks only whether the placeholder token is gone, so a `shipped` spec whose results file is empty
+  passes with zero placeholders — and so does one where "What this doesn't prove" was quietly cut,
+  which is the section this spec itself calls the point of the file. Found by the loop's editor while
+  building the enforcing test. The skeleton's prose was corrected to stop claiming the test catches
+  this (it says deletion is conspicuous in review and on your honour), and the real fix — a fourth
+  rule asserting a `shipped` spec's results file still carries the required headings with non-empty
+  bodies — needs its own `/spec` pass rather than being bolted on here.
 
 ## Build Plan
 

@@ -123,13 +123,16 @@ def _violations(
     return problems
 
 
-def _synthetic_spec(status: str, *, verification: bool) -> str:
-    """A minimal spec body for the synthetic cases below."""
+def _synthetic_spec(status: str, *, verification: bool, heading: str = "## Verification") -> str:
+    """A minimal spec body for the synthetic cases below.
+
+    `heading` exists so one case can widen it and prove the prefix match is doing real work.
+    """
     lines = ["---", "feature: Synthetic", "slug: synthetic", f"status: {status}", "---", ""]
     lines += ["# Synthetic — Architecture Spec", ""]
     if verification:
         lines += [
-            "## Verification",
+            heading,
             "",
             "- **Pass criterion.** This works if and only if something observable happens.",
             "",
@@ -219,6 +222,18 @@ class TestSyntheticSpecs:
     def test_approved_with_missing_results_file_fails(self):
         problems = _violations(
             "synthetic.md", _synthetic_spec("approved", verification=True),
+            "synthetic-eval-results.md", None,
+        )
+        assert len(problems) == 1
+        assert "does not exist" in problems[0]
+
+    def test_a_widened_verification_heading_is_still_gated(self):
+        # The prefix match, observed instead of asserted. Under line equality this heading would
+        # switch rules 2 and 3 off silently — a spec could promise evidence, ship none, and pass.
+        # The writer named the prefix match load-bearing while nothing tested it; this is the test.
+        problems = _violations(
+            "synthetic.md",
+            _synthetic_spec("approved", verification=True, heading="## Verification & Evidence"),
             "synthetic-eval-results.md", None,
         )
         assert len(problems) == 1

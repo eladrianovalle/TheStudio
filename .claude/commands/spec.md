@@ -227,9 +227,9 @@ the file (Coding Principles §8). Then:
   anything was measured. Don't edit it to match what happened — if it turned out to be the wrong
   criterion, say so under "What this doesn't prove."
 
-  Every `FILL_ME` marks data that does not exist yet. Replacing one is the act of reporting. Deleting
-  one without replacing it — dropping a row or a section — is the failure these pre-written headings
-  exist to catch.
+  Every placeholder below marks data that does not exist yet. Replacing one is the act of reporting.
+  Deleting one without replacing it — dropping a row or a section — is what these pre-written headings
+  make conspicuous in review; the test only counts placeholders, so deletion is on your honour.
 
   ## Pass criterion (written before the build)
   > _Copy the iff from the spec's Verification section, word for word._
