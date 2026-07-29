@@ -35,7 +35,7 @@ prose, no new machinery.
 flowchart TD
     W[Writer agent] -->|builds the unit| D{Did it get there?}
     D -->|yes| G[Handoff: mvi_claimed=true, tests green, writer_sha]
-    D -->|no, stuck| E["Handoff: mvi_claimed=false, tests red,<br/>stuck='the blocker',<br/>writer_sha = writer(stuck) commit"]
+    D -->|no, stuck| E["Handoff: mvi_claimed=false,<br/>tests = whatever the suite did,<br/>stuck='the blocker',<br/>writer_sha = writer(stuck) commit"]
     G --> GATE{Entry gate:<br/>mvi_claimed AND tests green}
     E --> GATE
     GATE -->|passes| ED[Editor pass]
@@ -47,8 +47,8 @@ flowchart TD
 ```
 
 The escalation takes no new path through the loop. It fails the existing entry gate through the
-existing mechanics — `mvi_claimed=false` and red tests already route to "deliver flagged, no editor
-pass" — so the control flow is untouched. What is new is that the record now carries *why*, the
+existing mechanics — `mvi_claimed=false` alone already routes to "deliver flagged, no editor pass" —
+so the control flow is untouched, and the gate needs nothing from the test result. What is new is that the record now carries *why*, the
 transcript says so out loud, and the partial work is a commit you can read.
 
 Note the dotted line: the escalation is logged as soon as it arrives, regardless of which way the
@@ -106,9 +106,18 @@ load-bearing verb.
 3. **Mechanics.** Commit what you have with
    `git add -A && git commit --allow-empty -m "writer(stuck): <unit_id>"` and report that short SHA
    as `writer_sha`. If you never got as far as running the tests, run the test command once so
-   `tests` holds a real result. Then report `tests` honestly (`passed=false` and the real
-   `exit_code`), set `mvi_claimed=false`, and put the blocker in `stuck` — the specific thing you got
-   stuck on, quoting the file, test, or interface it is about. Persist the handoff JSON either way.
+   `tests` holds a real result. Report `tests` as what actually happened — the real `exit_code` and a
+   `passed` that matches it, **even when a suite you never got to influence comes back green**. Do not
+   report a red suite to signal being blocked; `stuck` is what says that. Set `mvi_claimed=false`, and
+   put the blocker in `stuck` — the specific thing you got stuck on, quoting the file, test, or
+   interface it is about. Persist the handoff JSON either way.
+
+   **Amended 2026-07-28**, after review caught that the first version said to report `tests` "honestly
+   (`passed=false` …)" — two instructions that cannot both be followed. A writer blocked on scope, a
+   missing interface, or contradictory instructions can be looking at a green suite, and telling it to
+   claim red corrupts the one machine-checked field in the handoff in order to signal something `stuck`
+   already says. Nothing needed it: the entry gate closes on `mvi_claimed=false` by itself, which the
+   JS tests prove by putting a green suite on an escalated writer and watching the gate stay shut.
 
 `--allow-empty` is load-bearing, not defensive. The most likely trigger is "read and read, changed
 nothing," which leaves a clean tree where a plain `git commit` creates nothing at all (verified: it
@@ -193,7 +202,7 @@ top-level marker — a derived duplicate of one fact would drift, and this file 
 | Blocker as plain string or enum + prose? | Plain string | The cited precedent (`unresolved_concerns[].why_unresolved`) is an enum added for countability that **nothing counts** — verified, `stats.py` and `session.py` never read it. A four-value closed set derived from zero observed escalations would force miscategorization on the fifth blocker. The triggers do real work as prompt prose. |
 | Add `&& !writer.stuck` to the entry gate? | **No.** No control-flow change at all | Three cases: a compliant writer already fails the gate on `mvi_claimed=false`, so it is redundant; a lying writer leaves `stuck` empty, so it catches nothing; and a green unit filing an advisory note would lose its editor pass — inverting `forge.md:133`, which says self-reported concerns "are NOT blockers on delivery." |
 | Commit form | `--allow-empty`, unconditionally | The plain form silently creates nothing on a clean tree. The rejected alternative pointed `writer_sha` at a commit the writer never made, which the report would then invite someone to discard. |
-| Red code committed vs. spec's ban | Carve out the exception in both the spec and the config comment | The rule's intent — a failing unit is never mistaken for a passing one — survives via the `writer(stuck):` label plus `tests.passed=false` and `mvi_claimed=false` in the record. And `writer_sha` is required with nothing honest to hold otherwise. |
+| Red code committed vs. spec's ban | Carve out the exception in both the spec and the config comment | The rule's intent — a failing unit is never mistaken for a passing one — survives via the `writer(stuck):` label plus `mvi_claimed=false` and the blocker in `stuck`. And `writer_sha` is required with nothing honest to hold otherwise. (Amended: `tests.passed` is deliberately **not** part of that signal — see Mechanics.) |
 | Count escalations in `stats`? | No. `git log --grep` is the tally | It counts, dates, and leads to the diff at zero code cost. Instrumenting a signal with zero observed instances would repeat the dead-enum mistake one layer up. |
 | Top-level `escalated` marker? | No. Consumers read `writer.stuck` | A derived second source of truth for one fact will go stale. |
 

@@ -123,6 +123,9 @@ wait for the completion notification.
 The workflow returns `{ delivered, flagged, editorRan, finalVersion, reviewerConcerns, writer, editor }`.
 Summarize for the user:
 
+- **Writer escalated?** (`writer.stuck`): if present, lead with this — the writer stopped on purpose
+  rather than fake a finish. Quote the blocker as written, and point at the `writer(stuck): <unit_id>`
+  commit (`writer.writer_sha`) as the partial work to read, keep, or throw away.
 - **What was built** + final test status (`editor.tests` / `writer.tests`).
 - **What the editor changed** (`editor.edits`): the cuts/merges/restructures, or "nothing to cut".
 - **MVI verdict** (`editor.mvi_verdict`): call out explicitly if the editor *overturned* the

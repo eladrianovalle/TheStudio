@@ -234,6 +234,59 @@ test('the exit gate still fails on red tests, a withheld MVI verdict, or a missi
   assert.equal(passesExitGate({ mvi_verdict: true }, []), false)
 })
 
+// ---------------------------------------------------------------------------
+// implementation-loop.js — the entry gate. It decides whether the editor pass happens at all, and
+// nothing exercised it until now.
+// ---------------------------------------------------------------------------
+const passesEntryGate = loadFunction('../implementation-loop.js', 'passesEntryGate')
+
+// A writer that finished its unit: claimed done, tests green, static check clean.
+const GREEN_WRITER = {
+  mvi_claimed: true,
+  tests: { command: 'pytest -q', passed: true, exit_code: 0 },
+  static_ok: true,
+}
+
+test('the entry gate opens for a green, claimed unit', () => {
+  assert.equal(passesEntryGate(GREEN_WRITER, true), true)
+})
+
+test('an escalated writer fails the entry gate through the existing mechanics', () => {
+  // The gate has no `stuck` clause. An escalation fails it on mvi_claimed=false and red tests,
+  // exactly as any writer that never claimed done always has.
+  const escalated = {
+    mvi_claimed: false,
+    tests: { command: 'pytest -q', passed: false, exit_code: 1 },
+    stuck: 'studio/nonexistent_ledger.py does not exist and the unit forbids creating it',
+  }
+  assert.equal(passesEntryGate(escalated, true), false)
+  // Either mechanic shuts the gate on its own, so it does not depend on both arriving together.
+  assert.equal(passesEntryGate({ ...escalated, mvi_claimed: true }, true), false)
+  assert.equal(passesEntryGate({ ...escalated, tests: GREEN_WRITER.tests }, true), false)
+  // The gate is computed before the loop's `if (!writer)` abort, so it also has to survive a writer
+  // that returned nothing, or a handoff with no tests block, without throwing.
+  assert.equal(passesEntryGate(null, true), false)
+  assert.equal(passesEntryGate({ mvi_claimed: true }, true), false)
+})
+
+test('an advisory stuck note on a green unit still gets its editor pass', () => {
+  // The spec rejected `&& !writer.stuck` in the gate: a self-reported problem is not a delivery
+  // blocker. Add that clause back and this test goes red — which is the reason it exists.
+  const greenButWorried = { ...GREEN_WRITER, stuck: 'the fixture naming still bothers me' }
+  assert.equal(passesEntryGate(greenButWorried, true), true)
+  assert.equal(passesEntryGate(greenButWorried, false), true)
+})
+
+test('static_ok shuts the entry gate only when it is explicitly false', () => {
+  // Absent is fine: a writer that ran no static check simply never sets the field.
+  const noStaticField = { mvi_claimed: true, tests: GREEN_WRITER.tests }
+  assert.equal(passesEntryGate(noStaticField, true), true)
+  // An explicit false is a failed check, and it shuts the gate when static checking is required.
+  assert.equal(passesEntryGate({ ...GREEN_WRITER, static_ok: false }, true), false)
+  // The short-circuit: the same failed check is waived when the unit configured no static checks.
+  assert.equal(passesEntryGate({ ...GREEN_WRITER, static_ok: false }, false), true)
+})
+
 test('a malformed criteria payload leaves both prompts on the no-criteria path', () => {
   const junk = { ...UNIT, acceptance_criteria: 'not an array' }
   assert.equal(writerPrompt(junk), writerPrompt(UNIT))

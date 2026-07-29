@@ -463,7 +463,7 @@ How it runs:
 1. **Parse**: your request becomes one MVI unit (title, build instructions, inferred `test_command`).
 2. **Branch**: runs on a feature branch (creates `impl/<unit>` if you're on `main`); refuses a dirty tree.
 3. **Plan echo**: prints the unit + branch + test command, then runs (no separate confirmation step).
-4. **Writer**: builds the unit, runs tests + a mutation check, commits its passing state (`writer_sha`).
+4. **Writer**: builds the unit, runs tests + a mutation check, commits its passing state (`writer_sha`) — or, if it's genuinely blocked, stops and says what blocked it (`stuck`) instead of faking a finish.
 5. **Editor**: a fresh agent (the `CONTRARIAN_MANDATE` applied to code) diffs against `writer_sha`, cuts/refines, re-runs tests, and **reverts** if an edit breaks green. One-way pipeline, no ping-pong.
 6. **Report**: what was built, what the editor cut, the MVI verdict, whether anything reverted.
 

@@ -150,6 +150,68 @@ class TestReviewerConcernsWiring:
         )
 
 
+class TestWriterEscalationChannel:
+    """Pin the writer's escalation channel: a blocked writer can say so instead of
+    faking a finish. Both halves live outside any testable function — the schema
+    field (a shape the live API either accepts or 400s on) and the prompt prose.
+    """
+
+    def _loop_source(self):
+        return (_WORKFLOW_DIR / "implementation-loop.js").read_text()
+
+    def test_stuck_is_optional_and_required_is_unchanged(self):
+        src = self._loop_source()
+        handoff = src[src.index("const WRITER_HANDOFF"):src.index("const EDITOR_HANDOFF")]
+        # Declared, or a writer that fills `stuck` gets its whole handoff rejected
+        # (the schema sets additionalProperties: false).
+        assert "stuck:" in handoff, "the writer has no way to report what blocked it"
+        # And NOT required: an escalation must not be the only valid handoff shape,
+        # and a normal run never sets the field at all.
+        top_level_required = re.search(r"required: \[([^\]]*)\]", handoff).group(1)
+        declared = re.findall(r"'([^']+)'", top_level_required)
+        assert declared == [
+            "unit_id",
+            "writer_sha",
+            "files_touched",
+            "tests",
+            "mvi_claimed",
+            "stage",
+        ], f"the writer handoff's required fields changed: {declared}"
+
+    def test_writer_prompt_carries_the_escalation_licence(self):
+        src = self._loop_source()
+        prompt = src[src.index("function writerPrompt"):src.index("function editorPrompt")]
+        # The shortest invariant fragment on purpose: the wording around it will be
+        # tuned, so the tripwire must not sit on the tunable part.
+        assert "always OK to stop" in prompt, (
+            "the writer prompt no longer says stopping is allowed — without the "
+            "licence, a blocked writer's only options are faking green or dying"
+        )
+        # Not prose: drop this flag and the likeliest escalation ("read and read,
+        # changed nothing") commits nothing, so writer_sha points at someone else's work.
+        assert "--allow-empty" in prompt, (
+            "the escalation commit lost --allow-empty; on a clean tree it creates "
+            "no commit and writer_sha becomes a lie"
+        )
+
+    def test_escalating_does_not_ask_the_writer_to_misreport_its_tests(self):
+        """`stuck` says the writer is blocked; `tests` says what the suite did.
+
+        The first draft told the writer to report `passed=false` and called that honest,
+        which it is not when the suite exits 0 — a writer blocked on scope or a missing
+        interface can be looking at a green suite. That corrupted the one machine-checked
+        field in the handoff to signal something `stuck` already says, and the entry gate
+        never needed it: `mvi_claimed=false` shuts the gate on its own (proven in
+        workflow-shells.test.mjs, where an escalated writer with a green suite still fails).
+        """
+        prompt = self._loop_source()
+        prompt = prompt[prompt.index("function writerPrompt"):prompt.index("function editorPrompt")]
+        assert "passed=false" not in prompt, (
+            "the writer prompt is asking for a fabricated test result again"
+        )
+        assert "the real exit code" in prompt
+
+
 class TestAcceptanceCriteriaWiring:
     """Pin that the /forge loop can grade a unit against acceptance criteria.
 
@@ -188,6 +250,22 @@ class TestAcceptanceCriteriaWiring:
         assert re.search(r"return\s*\{[\s\S]*?criteriaVerdicts[\s\S]*?\}", src), (
             "criteriaVerdicts must be in the workflow's return object"
         )
+
+    def test_mandate_off_still_flags_a_unit_that_carried_criteria(self):
+        """With no editor there is nobody to grade, so a graded run cannot ship clean.
+
+        `flagged` used to be the literal `false` on this path. A `/forge --spec` run with the
+        editor mandate off would then log "criteria ungraded" and still report a clean unit —
+        a silent downgrade to an ungraded run, which is exactly what a mistyped `--spec` is
+        made to stop. A run carrying no criteria still ships unflagged: nothing was promised.
+        """
+        src = self._loop_source()
+        branch = src[src.index("if (unit.editor_enabled === false)"):]
+        branch = branch[:branch.index("\n}")]
+        assert "flagged: false" not in branch, (
+            "the mandate-off path reports a clean unit again, even when criteria went ungraded"
+        )
+        assert "unitCriteria(unit)" in branch, "the branch does not consult the unit's criteria"
 
     def test_the_exit_gate_is_a_function_the_js_tests_can_reach(self):
         """The gate's behavior is tested in JS; this pins that it stayed reachable from there.
