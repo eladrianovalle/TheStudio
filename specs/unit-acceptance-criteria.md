@@ -45,7 +45,7 @@ flowchart TD
     U --> W["Writer sees them —<br/>the definition of done"]
     W --> E["Editor grades EACH criterion:<br/>pass / fail / unverifiable<br/>+ the evidence checked"]
     E --> V{"Usable as a complete<br/>interaction AND every<br/>criterion passes?"}
-    V -->|yes| PASS["mvi_verdict = true<br/>→ existing exit gate"]
+    V -->|yes| PASS["mvi_verdict = true<br/>→ exit gate, which also matches<br/>each criterion to a passing,<br/>evidenced grade"]
     V -->|no| FLAG["mvi_verdict = false<br/>→ delivered FLAGGED<br/>nothing reverts, no retry"]
 ```
 
@@ -328,7 +328,9 @@ editor runs at all. On the mandate-off path the answer depends on whether the ru
   report that as a clean unit. This spec already refuses the same failure in its other form, ruling
   that a mistyped `--spec` must **stop** rather than "silently downgrade to an ungraded run" — and
   config is just a quieter way to arrive at the same place. The narrow fix costs the config's users
-  nothing, because the warning only appears when they also pass criteria.
+  nothing, because the warning only appears when they also pass criteria. `/forge` refuses this
+  combination before the loop as well (see the behavior table above), so the flag here is the
+  backstop for a Workflow invoked directly.
 
 The log line says which case it took. The entry-gate-failure path needs no such treatment: it already
 returns `flagged: true` and already logs why, so nobody is misled there.
@@ -366,7 +368,7 @@ markdown and JS feature.
 | `spec_ref` provenance field | **Cut** | Nothing would read it: it lives on the unit, not the handoff, and both handoffs forbid extra properties. A field nothing reads is the class already rejected once. |
 | A verdicts artifact file | No | Persisted in the handoff and surfaced in the report; a third copy has no reader. |
 | Duplicate a failed criterion into `unresolved_concerns`? | No | Its reasons don't describe "the spec asked for something this unit doesn't do," and double-reporting is accumulation. |
-| `mandate = "off"` ships `flagged: false` with criteria ungraded? | Yes, with a log clause | Nothing has ever been graded on that path; criteria don't create the hole. Flipping the boolean would surprise every user of a config they chose deliberately. |
+| Criteria asked for with the editor mandate off (`mandate = "off"`) | **`/forge` stops before the loop**; if the loop is reached anyway it delivers `flagged: true`. A run carrying no criteria still ships `flagged: false`. | **Amended 2026-07-28** after review. The editor is the only thing that grades criteria, so criteria plus no editor asks for a graded run and supplies nobody to grade it — the silent downgrade this spec already refuses for a mistyped `--spec`, arriving through config instead of a typo. Nothing was promised on a run with no criteria, so that path keeps shipping unflagged. |
 
 ## Non-Goals / Cut Scope
 
