@@ -13,7 +13,7 @@
 - **[GSTACK_COMPARISON.md](./GSTACK_COMPARISON.md)** - Study of garrytan/gstack: what Studio borrowed, why, and the (completed) roadmap
 - **[GSTACK_SCORECARD.md](./GSTACK_SCORECARD.md)** - The gstack retrospective + how we'll measure whether the borrowings improve or degrade Studio output (per-mechanism triggers, top-line metrics, exit rule)
 - **[SUPERPOWERS_COMPARISON.md](./SUPERPOWERS_COMPARISON.md)** - Study of obra/superpowers: 6 proposed borrowings that survived adversarial vetting, 25 rejected with reasons, and a phased plan that starts by capturing a baseline
-- **[specs/](../../specs/)** - Tracked architecture specs (the source of truth a feature is built against; e.g. `contrarian-finding-verifier.md`, `doc-parity-tests.md`)
+- **[specs/](../../specs/)** - Tracked architecture specs (the source of truth a feature is built against; e.g. `contrarian-finding-verifier.md`, `doc-parity-tests.md`). A prompt-shaped feature's spec also has a `<slug>-eval-results.md` sibling holding the evidence for its pass criterion, which has to be filled in before the spec may be called `shipped`
 
 ## Workflow Features
 - **[SCOPES_GUIDE.md](./SCOPES_GUIDE.md)** - Scope-based iteration allocation

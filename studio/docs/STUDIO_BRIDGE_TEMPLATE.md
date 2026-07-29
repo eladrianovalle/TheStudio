@@ -83,6 +83,18 @@ If `STUDIO_ROOT` is set, the helper script reads it automatically; otherwise adj
   installed Studio falls behind upstream (once per update, quiet otherwise). Turn it off with
   `studio update --no-hook` or an empty `.studio/update-check.off`; add `.studio/update-check.json`
   to `.gitignore`.
+- Studio's specs and their evidence files under `.studio/specs/` are **tracked docs meant to be
+  committed** — unlike `.studio/output/` and `.studio/knowledge/`, which must not be. If your
+  `.gitignore` ignores `.studio/`, git will silently refuse to track them, and the obvious one-line
+  fix does not work: git cannot re-include a file whose parent directory is excluded, so
+  `!.studio/specs/` under a `.studio/` rule does nothing. Use this form instead:
+
+  ```gitignore
+  .studio/*
+  !.studio/specs/
+  ```
+
+  Confirm with `git check-ignore -v .studio/specs/`.
 - Record notable Studio runs at the bottom of this file (date, run_id, takeaway) so teammates can rehydrate context quickly.
 
 ---
