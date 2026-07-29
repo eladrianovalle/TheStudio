@@ -159,12 +159,25 @@ the `collectReviewerConcerns` convention already in the file:
 // The gate is the only load-bearing branch here and its two subtleties — `static_ok !== false`
 // (absent is fine, explicit false is not) and the `!staticRequired ||` short-circuit — had no
 // coverage at all before this.
+//
+// It takes no null check on `writer` because it is only ever called below the abort that handles a
+// missing one. `writer.tests` is still guarded: the schema requires that field, but a guard costs
+// nothing and a missing one would read as a passing gate rather than a crash.
 function passesEntryGate(writer, staticRequired) {
-  return !!(writer && writer.mvi_claimed && writer.tests && writer.tests.passed && (!staticRequired || writer.static_ok !== false))
+  return !!(writer.mvi_claimed && writer.tests && writer.tests.passed && (!staticRequired || writer.static_ok !== false))
 }
 ```
 
-The call site becomes `const entryGate = passesEntryGate(writer, staticRequired)`.
+The call site becomes `const entryGate = passesEntryGate(writer, staticRequired)`, placed **below** the
+`if (!writer)` abort.
+
+**Amended 2026-07-29**, from a Reviewer Concern the loop filed on its own build. The first version put
+the call site above that abort, which is the only reason the function needed a `writer &&` guard — and
+that guard's one test could do nothing but assert a defensive branch existed. Below the abort, `writer`
+is known to exist, so the guard and its test both go. The ordering is now what carries the safety, so
+the ordering is what is tested (from Python, since the loop body is not loadable): move the call back
+above the abort and the suite goes red. `writer.tests` keeps its guard — the schema requires the field,
+but a missing one would read as a *passing* gate rather than a crash, which is the wrong way to fail.
 
 ### Reporting
 

@@ -281,15 +281,21 @@ const staticRequired = !(Array.isArray(unit.static_checks) && unit.static_checks
 // The gate is the only load-bearing branch here and its two subtleties — `static_ok !== false`
 // (absent is fine, explicit false is not) and the `!staticRequired ||` short-circuit — had no
 // coverage at all before this.
+//
+// It takes no null check on `writer` because it is only ever called below the abort that handles a
+// missing one. `writer.tests` is still guarded: the schema requires that field, but a guard costs
+// nothing and a missing one would read as a passing gate rather than a crash.
 function passesEntryGate(writer, staticRequired) {
-  return !!(writer && writer.mvi_claimed && writer.tests && writer.tests.passed && (!staticRequired || writer.static_ok !== false))
+  return !!(writer.mvi_claimed && writer.tests && writer.tests.passed && (!staticRequired || writer.static_ok !== false))
 }
 
-const entryGate = passesEntryGate(writer, staticRequired)
 if (!writer) {
   log('Writer agent failed to return a handoff — aborting.')
   return { delivered: false, reason: 'writer_failed' }
 }
+// Computed below the abort, so `writer` is known to exist by here. Moving this line back above the
+// abort reintroduces the null case, and the entry-gate ordering test is what says so.
+const entryGate = passesEntryGate(writer, staticRequired)
 // A stuck writer stopped on purpose; that reads differently from a crash or a red test, so say it
 // out loud in the transcript — and say it whichever way the gate falls.
 if (writer.stuck) {
