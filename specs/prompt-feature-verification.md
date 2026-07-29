@@ -283,8 +283,9 @@ both docs already in `SOURCE_FILES`, so this ships with no list edit; and no `.s
 since `output/` and `knowledge/` exist because Python writes into them unprompted while a specs dir is
 created by `/spec` when there is a spec). `API.md` — no new CLI surface. `/unstale` — it does not audit
 `specs/` today; adding it is a real but separate idea that also collides with its own "don't create new
-doc files" rule. `forge.md` — contains no reference to `/spec` or `specs/` at all; teaching `/forge` to
-read its criterion is a separate future item. `ARCHITECTURE.md` and `README.md`'s layout tables omit
+doc files" rule. `forge.md` — no longer true as written: `/forge --spec` now resolves a spec and reads a unit's
+acceptance criteria, shipped in `specs/unit-acceptance-criteria.md`. What it still does not read is
+this spec's `## Verification` section, which stays a separate item. `ARCHITECTURE.md` and `README.md`'s layout tables omit
 `specs/` entirely — pre-existing gaps, flagged not fixed.
 
 ## Verification

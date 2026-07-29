@@ -154,9 +154,28 @@ Known risks, unresolved contrarian concerns, and anything still genuinely open. 
 spec that hides its soft spots is worse than one that names them.
 
 ## Build Plan
-How this maps to buildable units — ideally a short list of MVI units (each a complete, usable
-interaction; "build a skateboard, not a wheel"), in dependency order. This is the bridge to
-`/forge`.
+How this maps to buildable units — a short list of MVI units (each a complete, usable interaction;
+"build a skateboard, not a wheel"), in dependency order. This is the bridge to `/forge`, which reads
+this section directly, so give every unit the same shape:
+
+1. **`<unit_id>` — <one-line usable outcome>.** What gets built: the files, the behavior, the tests.
+   - **Acceptance criteria:**
+     - [ ] <one checkable statement>
+     - [ ] <another>
+   - **Out of scope:** what this unit deliberately does not do.
+
+The criteria are the part `/forge` depends on, so write them with care:
+
+- **Make them checkable.** Someone should be able to look at the running code or the test output and
+  say yes or no. "Loading is fast" is not checkable. "The list renders in under a second with 1,000
+  rows" is.
+- **Describe outcomes, not steps.** What is true when the unit works — not which function you wrote.
+- **Three to six per unit.** If you need more, the unit is too big; split it.
+- **Keep them checkable from the code and its tests.** The `/forge` editor reads the diff and runs the
+  unit's tests; it has no browser and no Play mode. A criterion that only a human at the screen can
+  judge belongs in `/smoke`, not here.
+- **`<unit_id>` is a short snake_case handle, unique within this spec.** `/forge --spec <slug> --unit
+  <unit_id>` is how the builder pulls this unit's criteria, so don't rename it once the spec is approved.
 ````
 
 Keep the writing human (Coding Principles §6): plain language, say what a thing does and why it
@@ -205,5 +224,8 @@ python ".studio/source/run_phase.py" rate --run-dir {run_dir} --score {1-5} --no
   rejected or shaky architecture gets surfaced, not silently shipped.
 - **Specs are tracked.** They live in `specs/` (or `.studio/specs/` in a consuming repo), are meant
   to be committed, and stay linked to their ticket. They are not throwaway `output/` artifacts.
+- **The Build Plan is a contract, not a summary.** Each unit carries checkable criteria, because
+  `/forge --spec` judges the built unit against them one by one. Vague criteria there become a vague
+  verdict downstream.
 - **A spec precedes the build.** Once approved, this is what `/forge` and the feature
   work build against. (See Coding Principle 9, "Spec Before Build.")

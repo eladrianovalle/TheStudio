@@ -168,7 +168,7 @@ The call site becomes `const entryGate = passesEntryGate(writer, staticRequired)
 
 ### Reporting
 
-`.claude/commands/forge.md`, as the first bullet of Step 5:
+`.claude/commands/forge.md`, as the first bullet of the report step:
 
 ```markdown
 - **Writer escalated?** (`writer.stuck`): if present, lead with this — the writer stopped on purpose
@@ -200,7 +200,7 @@ top-level marker — a derived duplicate of one fact would drift, and this file 
 | Does an escalated unit count as delivered? | Deliver flagged (`delivered:true, flagged:true, editorRan:false`) | Reuses the path the entry gate already takes. No new abort branch, and escalations stay visible rather than vanishing into an abort. |
 | Schema shape | One optional string. No field leaves `required` | Because the writer commits, `writer_sha` always exists and `tests` can honestly report `passed:false`. No conditional schema needed — and there is no precedent for one in any workflow. |
 | Blocker as plain string or enum + prose? | Plain string | The cited precedent (`unresolved_concerns[].why_unresolved`) is an enum added for countability that **nothing counts** — verified, `stats.py` and `session.py` never read it. A four-value closed set derived from zero observed escalations would force miscategorization on the fifth blocker. The triggers do real work as prompt prose. |
-| Add `&& !writer.stuck` to the entry gate? | **No.** No control-flow change at all | Three cases: a compliant writer already fails the gate on `mvi_claimed=false`, so it is redundant; a lying writer leaves `stuck` empty, so it catches nothing; and a green unit filing an advisory note would lose its editor pass — inverting `forge.md:133`, which says self-reported concerns "are NOT blockers on delivery." |
+| Add `&& !writer.stuck` to the entry gate? | **No.** No control-flow change at all | Three cases: a compliant writer already fails the gate on `mvi_claimed=false`, so it is redundant; a lying writer leaves `stuck` empty, so it catches nothing; and a green unit filing an advisory note would lose its editor pass — inverting `forge.md`'s own rule that self-reported concerns "are NOT blockers on delivery." |
 | Commit form | `--allow-empty`, unconditionally | The plain form silently creates nothing on a clean tree. The rejected alternative pointed `writer_sha` at a commit the writer never made, which the report would then invite someone to discard. |
 | Red code committed vs. spec's ban | Carve out the exception in both the spec and the config comment | The rule's intent — a failing unit is never mistaken for a passing one — survives via the `writer(stuck):` label plus `mvi_claimed=false` and the blocker in `stuck`. And `writer_sha` is required with nothing honest to hold otherwise. (Amended: `tests.passed` is deliberately **not** part of that signal — see Mechanics.) |
 | Count escalations in `stats`? | No. `git log --grep` is the tally | It counts, dates, and leads to the diff at zero code cost. Instrumenting a signal with zero observed instances would repeat the dead-enum mistake one layer up. |

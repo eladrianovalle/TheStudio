@@ -45,7 +45,7 @@ flowchart TD
     U --> W["Writer sees them —<br/>the definition of done"]
     W --> E["Editor grades EACH criterion:<br/>pass / fail / unverifiable<br/>+ the evidence checked"]
     E --> V{"Usable as a complete<br/>interaction AND every<br/>criterion passes?"}
-    V -->|yes| PASS["mvi_verdict = true<br/>→ existing exit gate"]
+    V -->|yes| PASS["mvi_verdict = true<br/>→ exit gate, which also matches<br/>each criterion to a passing,<br/>evidenced grade"]
     V -->|no| FLAG["mvi_verdict = false<br/>→ delivered FLAGGED<br/>nothing reverts, no retry"]
 ```
 
@@ -125,6 +125,7 @@ discipline the contrarian mandate already imposes on findings.
 | No `--spec` | Proceed exactly as today: no criteria, the editor judges against the title. The echo names the specs available (see below). Zero regression. |
 | The spec cannot produce criteria for this unit — missing file, no `## Build Plan`, unknown or ambiguous `--unit`, or an empty criteria list | **STOP before the loop.** Print which of those it was, the unit ids found, and the two ways forward: add criteria to the spec, or run without `--spec`. Precedent: `load_loop_config` raises on an explicit missing path, because "a typo'd config path is an error rather than a silent request for defaults." A typo'd spec pointer must not silently downgrade to an ungraded run. |
 | Frontmatter `status: draft` | **Pause** as a decision point (P1). Only an approved spec is the source of truth, but mid-flow drafts are common enough that a hard stop is the wrong tool. |
+| Criteria resolved but the editor mandate is off (`editor_enabled: false`) | **STOP before the loop**, and name the two ways forward: turn the mandate on, or drop `--spec`. **Added 2026-07-28** after review. The editor is the only thing that grades criteria, so this pair asks for a graded run and supplies nobody to grade it — the same silent downgrade as a mistyped pointer, arriving through config. The loop flags the combination if it is reached another way, but a contradiction visible before any agent runs should cost nothing to find. |
 | Unit resolved with criteria | Proceed. |
 
 An earlier draft split the middle row into three, one of which (no `## Build Plan`) could not fire on
@@ -327,7 +328,9 @@ editor runs at all. On the mandate-off path the answer depends on whether the ru
   report that as a clean unit. This spec already refuses the same failure in its other form, ruling
   that a mistyped `--spec` must **stop** rather than "silently downgrade to an ungraded run" — and
   config is just a quieter way to arrive at the same place. The narrow fix costs the config's users
-  nothing, because the warning only appears when they also pass criteria.
+  nothing, because the warning only appears when they also pass criteria. `/forge` refuses this
+  combination before the loop as well (see the behavior table above), so the flag here is the
+  backstop for a Workflow invoked directly.
 
 The log line says which case it took. The entry-gate-failure path needs no such treatment: it already
 returns `flagged: true` and already logs why, so nobody is misled there.
@@ -365,7 +368,7 @@ markdown and JS feature.
 | `spec_ref` provenance field | **Cut** | Nothing would read it: it lives on the unit, not the handoff, and both handoffs forbid extra properties. A field nothing reads is the class already rejected once. |
 | A verdicts artifact file | No | Persisted in the handoff and surfaced in the report; a third copy has no reader. |
 | Duplicate a failed criterion into `unresolved_concerns`? | No | Its reasons don't describe "the spec asked for something this unit doesn't do," and double-reporting is accumulation. |
-| `mandate = "off"` ships `flagged: false` with criteria ungraded? | Yes, with a log clause | Nothing has ever been graded on that path; criteria don't create the hole. Flipping the boolean would surprise every user of a config they chose deliberately. |
+| Criteria asked for with the editor mandate off (`mandate = "off"`) | **`/forge` stops before the loop**; if the loop is reached anyway it delivers `flagged: true`. A run carrying no criteria still ships `flagged: false`. | **Amended 2026-07-28** after review. The editor is the only thing that grades criteria, so criteria plus no editor asks for a graded run and supplies nobody to grade it — the silent downgrade this spec already refuses for a mistyped `--spec`, arriving through config instead of a typo. Nothing was promised on a run with no criteria, so that path keeps shipping unflagged. |
 
 ## Non-Goals / Cut Scope
 
@@ -409,14 +412,18 @@ markdown and JS feature.
 
 ## Build Plan
 
-Two units. The loop goes first: it is the only unit with tests to run, and it is what makes criteria
-mean anything.
+How this maps to buildable units — a short list of MVI units (each a complete, usable interaction;
+"build a skateboard, not a wheel"), in dependency order. This is the bridge to `/forge`, which reads
+this section directly, so give every unit the same shape. Two units here, and the loop goes first: it
+is the only unit with tests to run, and it is what makes criteria mean anything.
 
-1. **`loop_grades_criteria` — the loop grades criteria passed in `args`, one at a time.**
-   `implementation-loop.js` (the `acceptance_criteria` field, `unitCriteria`, both prompts,
-   `EDITOR_HANDOFF`, the inlined guard, the gate, the log, the return), the JS harness change and its tests,
-   `test_workflow_shells.py`'s new wiring class, `IMPLEMENTATION_LOOP_SPEC.md`, and the `CLAUDE.md` /
-   `README.md` / `CHANGELOG.md` lines.
+1. **`loop_grades_criteria` — the loop grades criteria passed in `args`, one at a time.** What gets
+   built: `implementation-loop.js` (the `acceptance_criteria` field, `unitCriteria`, both prompts,
+   `EDITOR_HANDOFF`, the inlined guard, the gate, the log, the return), the JS harness change and its
+   tests, `test_workflow_shells.py`'s new wiring class, `IMPLEMENTATION_LOOP_SPEC.md`, and the
+   `CLAUDE.md` / `README.md` / `CHANGELOG.md` lines. Atomic by necessity: with
+   `additionalProperties: false`, shipping the prompt before the schema produces a rejected payload
+   and a dead editor stage.
    - **Acceptance criteria:**
      - [ ] Passing `acceptance_criteria: [...]` in `args` makes the editor return one `criteria_verdicts`
            entry per criterion, each with `criterion`, `verdict`, and `evidence`.
@@ -429,13 +436,14 @@ mean anything.
      - [ ] `node --test .claude/workflows/tests/workflow-shells.test.mjs` and
            `cd studio && python -m pytest tests/test_workflow_shells.py -q` are both green.
    - **Out of scope:** how criteria get *into* `args` — that is unit 2. Any revert or retry behavior.
-   - Atomic by necessity: with `additionalProperties: false`, shipping the prompt before the schema
-     produces a rejected payload and a dead editor stage.
 
-2. **`criteria_contract` — `/forge --spec <slug> --unit <id>` grades an approved spec's unit end to end.**
-   `spec.md`'s Build Plan template and Key Rules line, `forge.md`'s arguments / resolution / error table
-   / echo / args block / report, both sections of `CLAUDE_CODE_USAGE.md`, and this spec re-authored in
-   the new Build Plan shape.
+2. **`criteria_contract` — `/forge --spec <slug> --unit <id>` grades an approved spec's unit end to
+   end.** What gets built: `spec.md`'s Build Plan template and Key Rules line, `forge.md`'s arguments
+   / resolution / error table / echo / args block / report, both sections of `CLAUDE_CODE_USAGE.md`,
+   and this spec re-authored in the new Build Plan shape. Both ends of the wire ship together, so if
+   the locator turns out ambiguous it can be fixed on either side within one unit. The live run is
+   this unit's exit criterion, not a unit of its own — schema changes here have only ever failed
+   against the live API, which is why it cannot be skipped.
    - **Acceptance criteria:**
      - [ ] `--spec <slug>` resolves to `specs/<slug>.md` in the source repo and `.studio/specs/<slug>.md`
            in a consuming repo, using the repo-shape signal `forge.md` already uses.
@@ -447,9 +455,6 @@ mean anything.
      - [ ] One real `/forge --spec` run returns per-criterion verdicts from the live editor with no
            schema rejection from the API.
    - **Out of scope:** how `unit_id`, `title`, and `instructions` are derived from the free-text request.
-   - Both ends of the wire ship together, so if the locator turns out ambiguous it can be fixed on
-     either side within one unit. The live run is this unit's exit criterion, not a unit of its own —
-     schema changes here have only ever failed against the live API, which is why it cannot be skipped.
 
 Note the earlier four-unit plan was collapsed. Three of those four units were markdown-only, and the
 loop's entry gate is literally "the writer's tests passed" — so on three of four units the gate would
