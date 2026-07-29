@@ -299,6 +299,14 @@ report zero cases of being blocked by read scope. **Land this with the cadence l
 capture the current per-unit editor token cost first so a widened scope is measurable rather than
 assumed.
 
+**Declined 2026-07-28.** This was specced (`/spec`, PR #78) and the spec was rejected — on the
+condition this section had already named. The valve trades editor input cost for cross-cutting
+coverage, and there is no measurement of either side: the current per-unit editor cost was never
+captured, and ten real handoffs report nobody being blocked by the read scope. So the trade cannot be
+evaluated, only guessed at. The proposal is not wrong; it is unmeasured, and the honest move was to
+decline rather than ship on a hunch. Revisit after the Phase 0 baseline exists — the scorecard row
+below is the test it would then have to pass.
+
 ### 6. Pre-commit the shape of a verification, including what it will not show
 
 **Pitch.** An agent asked to write up its own results picks the sections that flatter them. Fix it by
@@ -435,10 +443,11 @@ required-fields, the prompt prose, the spec reconciliation, and one live /forge 
 output:** a blocked writer can stop and say why without faking a commit. Ships alone; needs nothing
 from Phase 3.
 
-**Phase 3 — the breadth valve, once there is a cost baseline to compare against.** Proposal item 5,
-plus the explicit decision about what `read_scope = "touched"` means now. **Usable output:** the
-editor can do a cross-cutting check legitimately and has to report it. Gated on Phase 0, because the
-whole point of `read_scope` is bounding the editor's input cost.
+**Phase 3 — the breadth valve. Declined 2026-07-28, not scheduled.** Proposal item 5 was specced and
+rejected: it was gated on the Phase 0 cost baseline, that baseline still does not exist, and no real
+handoff has yet reported being blocked by the read scope. Nothing here is blocked by dropping it —
+this phase never fed the others. See item 5 above for the full reasoning, and treat it as available to
+revisit once there is something to measure against.
 
 **Phase 4 — the verification convention. DONE 2026-07-28.** Proposal item 6, built to
 `specs/prompt-feature-verification.md`: `## Verification` in the spec template, the
