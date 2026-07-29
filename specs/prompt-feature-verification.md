@@ -205,7 +205,7 @@ def _has_verification_section(spec_text): ...  # prefix match on "## Verificatio
 def _violations(spec_name, spec_text, results_name, results_text): ...
 ```
 
-`_violations` implements three rules; the revision below adds a fourth:
+`_violations` implements four rules; the fourth has its own section below:
 
 1. **Known status.** Must be in `{draft, approved, shipped}`. Without this, a typo (`Shipped`, `ship`,
    `done`) silently disables rules 2 and 3 forever while the suite stays green.
