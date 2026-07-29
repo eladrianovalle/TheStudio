@@ -459,9 +459,11 @@ without a written pass criterion and a place its evidence has to go. Also resolv
 Two changes from the proposal as written. The stop marker is `FILL_ME`, not `<fill>` — angle brackets
 parse as a raw HTML tag in CommonMark and render as zero visible characters, so the one file whose job
 is to look conspicuously unfinished would have rendered as complete. And the convention is enforced by
-`studio/tests/test_spec_verification.py`, three rules that leave existing specs alone and refuse only
-the `shipped` claim with unfilled evidence. Known gap, recorded in that spec's Risks: the rules count
-placeholders, so deleting a section is the cheat they miss.
+`studio/tests/test_spec_verification.py`, four rules that leave existing specs alone and refuse only
+the `shipped` claim — with unfilled evidence, with one of the evidence file's headings dropped, or with
+one left holding nothing but the guidance the skeleton printed. That last rule closed the deletion gap
+the first three missed; what remains is filler like "N/A", which that spec's Risks record as
+undetectable in principle.
 
 **Later, if the numbers ask for it.** The eval harness, under the re-entry condition above. Teaching
 `/forge` to read its approved spec, as its own spec — it is a real gap on Studio's own list, and the

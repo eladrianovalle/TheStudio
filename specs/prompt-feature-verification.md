@@ -205,7 +205,7 @@ def _has_verification_section(spec_text): ...  # prefix match on "## Verificatio
 def _violations(spec_name, spec_text, results_name, results_text): ...
 ```
 
-`_violations` implements exactly three rules:
+`_violations` implements three rules; the revision below adds a fourth:
 
 1. **Known status.** Must be in `{draft, approved, shipped}`. Without this, a typo (`Shipped`, `ship`,
    `done`) silently disables rules 2 and 3 forever while the suite stays green.
@@ -239,9 +239,6 @@ evidence. Either fill it in with what you actually observed, or set this spec ba
 ```
 
 ### Rule 4 — the shape has to survive the claim
-
-> **Not yet approved.** Everything above this line is built, merged and green. This section is a
-> proposed revision awaiting a human's yes. Delete this line at approval.
 
 Rules 1-3 count placeholders, which leaves two ways to reach green without reporting anything, both
 recorded in Risks below: delete a whole section, or clear a placeholder and write nothing under it. The
@@ -478,7 +475,7 @@ honest criteria — that is a human reading what `/spec` produces.
   test has to be applicable in thirty seconds.
 - **Filler with no placeholder in it.** "N/A", "see the PR", "worked fine" all pass rule 3.
   Undetectable in principle.
-- **The `## Verification` heading becomes a load-bearing literal.** Reword it and rules 2–3 stop
+- **The `## Verification` heading becomes a load-bearing literal.** Reword it and rules 2–4 stop
   firing. This is not the anti-pattern of asserting prompt prose against the module that defines it —
   here two independent artifacts must agree and the heading is the interface, the same shape as the
   existing doc-parity test asserting a table header.
