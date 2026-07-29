@@ -440,11 +440,19 @@ plus the explicit decision about what `read_scope = "touched"` means now. **Usab
 editor can do a cross-cutting check legitimately and has to report it. Gated on Phase 0, because the
 whole point of `read_scope` is bounding the editor's input cost.
 
-**Phase 4 — the verification convention.** Proposal item 6: `## Verification` in the spec template,
-the `<slug>-eval-results.md` sibling with its `Spec:` back-link and mandatory "What this does not
-show," and the `<fill>` stop condition. **Usable output:** the next prompt-shaped feature cannot ship
-claiming it works without a written pass criterion and a place its evidence has to go. Also resolves
-the `.gitignore` / "specs are tracked" inconsistency for consuming repos.
+**Phase 4 — the verification convention. DONE 2026-07-28.** Proposal item 6, built to
+`specs/prompt-feature-verification.md`: `## Verification` in the spec template, the
+`<slug>-eval-results.md` sibling with its `Spec:` back-link and mandatory "What this doesn't prove,"
+and the stop condition. **Usable output:** the next prompt-shaped feature cannot ship claiming it works
+without a written pass criterion and a place its evidence has to go. Also resolves the `.gitignore` /
+"specs are tracked" inconsistency for consuming repos.
+
+Two changes from the proposal as written. The stop marker is `FILL_ME`, not `<fill>` — angle brackets
+parse as a raw HTML tag in CommonMark and render as zero visible characters, so the one file whose job
+is to look conspicuously unfinished would have rendered as complete. And the convention is enforced by
+`studio/tests/test_spec_verification.py`, three rules that leave existing specs alone and refuse only
+the `shipped` claim with unfilled evidence. Known gap, recorded in that spec's Risks: the rules count
+placeholders, so deleting a section is the cheat they miss.
 
 **Later, if the numbers ask for it.** The eval harness, under the re-entry condition above. Teaching
 `/forge` to read its approved spec, as its own spec — it is a real gap on Studio's own list, and the
