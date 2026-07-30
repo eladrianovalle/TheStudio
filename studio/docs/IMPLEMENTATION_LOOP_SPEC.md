@@ -336,7 +336,7 @@ gated on reviewing the one before it.
    own config loader as the first real run.
 2. ✅ **Extract config + harden**: `studio/config/implementation_loop.toml` + `studio/impl_loop.py`
    (`LoopConfig` + `load_loop_config()`), patterned on `scopes.py`, with loader tests. Plus
-   `runtime_knobs()` / `python -m impl_loop` so the workflow consumes the config, and the
+   `runtime_knobs()`, read by running the module as a script, so the workflow consumes the config, and the
    `/forge` command. *Done.*
 3. ⏳ **Cadence lab**: capture the no-editor baseline, run real units, tune granularity against the
    success/kill metric, write the result back into config. *Pending*. Only ~2 data points so far.

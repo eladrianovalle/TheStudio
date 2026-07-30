@@ -160,7 +160,7 @@ The same advocate/contrarian cadence also runs during **implementation**, via `/
 /forge Users can create and view a profile (hardcoded storage)
 ```
 
-A **writer** agent builds one complete MVI unit and commits its passing state; a fresh **editor** agent (the `CONTRARIAN_MANDATE` applied to code) cuts/refines it against the writer's diff and reverts if an edit breaks green — surfacing any real-but-unactionable critique as a **Reviewer Concern** (`reviewer-concerns.md`) instead of losing it on the revert: a one-way pipeline gated on **"MVI unit complete AND tests green."** Hand the unit a list of **acceptance criteria** (`acceptance_criteria`) and the editor grades them one at a time — `pass`, `fail`, or `unverifiable`, each with the evidence it checked — and only calls the unit done if it is usable as a complete interaction *and* every criterion passes. A failing criterion ships the unit flagged; it never reverts or retries. With no criteria the editor judges against the unit's title, as before. It runs the `.claude/workflows/implementation-loop.js` Claude Code Workflow, config-driven via `implementation_loop.toml` (editor on/off, read scope, output budget, mutation/static gates), with knobs exposed through `python -m impl_loop`. It is the executor described in `studio/docs/IMPLEMENTATION_LOOP_SPEC.md`. Status: executor + config shipped; cadence tuning (gate granularity vs. editor yield) is ongoing.
+A **writer** agent builds one complete MVI unit and commits its passing state; a fresh **editor** agent (the `CONTRARIAN_MANDATE` applied to code) cuts/refines it against the writer's diff and reverts if an edit breaks green — surfacing any real-but-unactionable critique as a **Reviewer Concern** (`reviewer-concerns.md`) instead of losing it on the revert: a one-way pipeline gated on **"MVI unit complete AND tests green."** Hand the unit a list of **acceptance criteria** — in practice via `/forge --spec <slug> --unit <unit_id>`, which copies them verbatim out of an approved spec's Build Plan — and the editor grades them one at a time — `pass`, `fail`, or `unverifiable`, each with the evidence it checked — and only calls the unit done if it is usable as a complete interaction *and* every criterion passes. A failing criterion ships the unit flagged; it never reverts or retries. With no criteria the editor judges against the unit's title, as before. It runs the `.claude/workflows/implementation-loop.js` Claude Code Workflow, config-driven via `implementation_loop.toml` (editor on/off, read scope, output budget, mutation/static gates), with knobs read by running `impl_loop.py` as a script. It is the executor described in `studio/docs/IMPLEMENTATION_LOOP_SPEC.md`. Status: executor + config shipped; cadence tuning (gate granularity vs. editor yield) is ongoing.
 
 ## CLI Commands
 
@@ -196,7 +196,8 @@ python studio/run_phase.py update --target /path/to/project
 Other subcommands are documented in `studio/docs/API.md`: decision management
 (`check-decisions`, `record-decisions`, `extract-decisions`, `inject-context`),
 clarity (`show-clarity`, `set-clarity`, `recompute-clarity`), metrics
-(`record-metrics`, `show-metrics`), `cleanup`, `notify`, `setup`, `offload`.
+(`record-metrics`, `show-metrics`), `check-updates` (the session-start staleness nudge),
+`cleanup`, `notify`, `setup`, `offload`.
 
 ## Architecture
 
@@ -217,8 +218,12 @@ See **`studio/docs/ARCHITECTURE.md`** for the full per-module reference.
 ### Configuration files
 
 Shipped defaults live in `config/` and `studio.manifest.json`; per-repo overrides
-live in `.studio/` and are shallow-merged over the defaults. `setup.cfg` holds the
-mutmut (mutation-testing) config. See `studio/docs/ARCHITECTURE.md` for the full
+live in `.studio/`. How an override combines with the default depends on the file:
+roles and personas shallow-merge over the shipped values, while `scopes.toml` and
+`implementation_loop.toml` are read *instead of* the shipped file — a key you leave
+out of those falls back to the built-in default, not to the shipped file's value.
+`setup.cfg` holds
+the mutmut (mutation-testing) config. See `studio/docs/ARCHITECTURE.md` for the full
 catalog and each file's schema.
 
 ### Artifact structure

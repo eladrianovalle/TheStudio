@@ -34,7 +34,7 @@ set of subagent prompt templates.
 | **Trigger** | Automatic — SessionStart hook injects the bootstrap every session (`hooks/session-start`, `hooks/hooks.json` matcher `startup\|clear\|compact`) | Explicit — the user types a slash command |
 | **How prose earns its place** | Measured. RED baseline → harvested excuses → minimal counter → re-run. Wording micro-tests with a no-guidance control, 5+ reps (`skills/writing-skills/SKILL.md:575-585`) | Argued. Reviewed by a contrarian, then judged by a human 1–5 rating on live runs |
 | **Adversarial signal** | A fresh subagent reviewing a diff it did not write, with a two-verdict contract | Fixed advocate/contrarian roles through a staged scoped debate |
-| **Enforcement** | Almost entirely prose. No CI workflows exist in the repo; `.pre-commit-config.yaml` lints only the gitignored `evals/` Python | Python. Gates, validators, 824 tests, ruff + pytest in CI |
+| **Enforcement** | Almost entirely prose. No CI workflows exist in the repo; `.pre-commit-config.yaml` lints only the gitignored `evals/` Python | Python. Gates, validators, 855 tests, ruff + pytest in CI |
 | **Reach** | 11 agent harnesses, one content tree, per-harness tool-name mapping files | One harness (Claude Code), on purpose |
 
 ## What they do better
@@ -45,7 +45,7 @@ set of subagent prompt templates.
   `skills/writing-skills/SKILL.md:575-585` adds the cheap inner loop — one fresh-context sample per
   call, a mandatory no-guidance control ("If the control doesn't exhibit the failure, there is
   nothing to fix — stop, don't author the guidance"), 5+ reps, every regex hit read by hand, and
-  variance treated as its own metric. Studio has 824 tests and none of them can tell whether a
+  variance treated as its own metric. Studio has 855 tests and none of them can tell whether a
   prompt edit made debates better or worse.
 - **They have a theory of prompt *form*; we have none.** `skills/writing-skills/SKILL.md:459-474`
   classifies the baseline failure first, then picks the form from a table: discipline slips get a
@@ -325,7 +325,7 @@ only when the feature is prompt-shaped — i.e. its behavior lives in an agent p
 be the pass criterion. It states the pass criterion as an iff, names the baseline that must reproduce
 first, and names the sibling results file. Adopt `specs/<slug>-eval-results.md` (`.studio/specs/` in
 consuming repos) with a `Spec:` back-link, created at approval time with headings plus `<fill>`, and
-a mandatory `## What this does not show`. Define the stop condition: a results file still at `<fill>`
+a mandatory `## What this does not show`. Define the stop condition: a results file still at `FILL_ME`
 blocks the claim that the feature works.
 
 **Size.** A few hours. Template prose plus one convention.
@@ -359,8 +359,8 @@ exercise were a rejection and a reshaping; the same is true here.
 | **A fixed `## Global Constraints` section in every spec, stamped into every prompt by Python** | Rejected on the mechanism, kept as a known gap. The pitch's whole claim is that Studio is a generator so nobody has to remember anything — but no Studio run knows a spec exists. `prepare` has no `--spec`, `run.json` records no spec field, and the only existing link runs the wrong way (spec frontmatter records `studio_run`). Every way out is bad: a `--spec` flag reintroduces the remembering; auto-globbing `specs/` would assert five unrelated features' constraints as binding on every run. It also defines the section as *project-wide* but puts it in a *per-feature* document, which makes every new spec carry a copy with no owner — a stale-constraint generator in a repo that maintains `/unstale`. Project-wide values already reach every agent through the sentinel-marked CLAUDE.md block the installer maintains. **The real gap it points at is genuine and stays on the list:** `/forge` never reads the approved spec, so the architecture reaches the build only if a human pastes it. The minimal shape — a `--spec <path>` pointer plus one line each in `writerPrompt` and `editorPrompt` — is a separate, speculative future item, not part of this proposal. |
 | **Scan for spec-vs-principles conflicts and escalate plan-mandated findings** | The third path already exists and is load-bearing: the writer lists `load_bearing` items with reasons, the editor must escalate rather than remove one, and a real critique it cannot act on becomes a Reviewer Concern. The batched pre-flight half duplicates `/spec` itself, where the contrarian already carries the cut mandate, the run pauses on P0s, and unresolved concerns are written into the spec's own "Risks & Open Questions" before a human approves. The candidate's slogan — "the spec's authorship does not grade its own work" — is factually wrong about Studio: the spec is adversarially graded at authorship and gated on human approval. And the claimed P0 machinery is not reachable from the loop; forge.md tells the assistant not to poll a backgrounded workflow, so a mid-loop human pause is not available. **What survives:** one line in `writerPrompt` telling the writer to list spec-mandated choices in `load_bearing` with the mandate as the reason. |
 | **Verify that a claimed fix removed the defect, scoped to the fix diff** | Contradicts a decision the spec made deliberately: "there is **no re-run loop**: the writer runs once, the editor runs once, the unit is delivered," and it records cutting `max_unit_iterations` as "configurability for a loop the design forbids." The trigger also does not exist — concerns are terminal, have no ID, no open/resolved state and no base SHA, and `runDir` is keyed by `unit_id` so a repeat overwrites the handoff. The claimed reuse is false too: `findings.json` is only ever populated from `contrarian*.md` in a debate run, and the forge loop never writes it, so a `resolution` field would land on the wrong record. The debate half is already covered by `rerun.py` plus the iterate-to-APPROVED contrarian loop. **What survives:** one line in `editorPrompt` adopting the standard — "'Attempted' is not addressed: the specific defect must no longer exist" — so when a writer touches a previously flagged problem the editor judges removal rather than effort. |
-| **Prove a fresh install fires, and assert what must never be in it** | The import-closure half already exists and is stronger: `test_installed_snapshot_imports` installs into a temp dir and runs `python -c "import run_phase"` as a subprocess, which exercises the real transitive closure — an AST scan would be a regression. The forbidden-path walk is vacuous against this installer: `_collect_source_files` iterates an explicit allowlist plus two narrow globs, there is no `copytree`, so `tests/`, `.private/` and `.scratch/` cannot enter. Two of the six named forbidden paths are worse than vacuous: install *deliberately* creates `.studio/output/` and `.studio/knowledge/`, asserted by an existing test. And the bug the candidate promises to catch mechanically is invisible to its mechanism — the /forge install gap was a missing `.js` in `WORKFLOW_FILES`, which no Python import scan can see. **What survives, and it is the right guard:** nothing asserts that every file on disk in `.claude/commands/` and `.claude/workflows/` is a member of `SLASH_COMMANDS`/`WORKFLOW_FILES`. That is exactly the class of the shipped bug, and it is about six lines in the both-ways idiom `test_doc_parity.py` already uses. |
-| **A behavioral eval harness for prompt changes: RED baseline, control, N reps, pressure scenarios** | The most tempting item here, and the one I would not build yet. Three problems. **The install path breaks as specified:** `SOURCE_FILES` has no `tests/` entry, so shipping the workflow shell gives every consuming repo a runner pointing at a fixture directory that does not exist there; not shipping it still drags a dev-only `prompt-eval` subcommand into the installed CLI, and `test_doc_parity.py` asserts both ways against API.md's command table, forcing a command consumers cannot run into the installer-facing reference doc. **Construct validity:** in superpowers the skill under test *is* the whole instruction one agent receives, so the harness measures the real thing. In Studio, `CONTRARIAN_MANDATE` is injected at two points into a multi-page instructions.md and consumed inside a staged multi-agent debate alongside the persona, scope prompt, decision protocol, clarity and MVI. A one-shot subagent handed a scenario plus one fragment measures a configuration Studio never ships — it can read green while the real run degrades, or red while production is fine. **The cheap path already exists and is unused:** `implementation_loop.toml` already ships `mandate = "off"`, so the "never captured a no-editor baseline" gap is one config line and a day of runs away; a control arm on the contrarian mandate is one `if` at two injection sites plus two `prepare` calls. Several days of new machinery to enable something existing knobs already enable fails Simplicity First on its face. Worth noting: superpowers' own harness scores by grepping a JSON stream, not by an LLM judge — the "read the replies" upgrade would insert a second uncalibrated model into the scoring path, making variance in five reps indistinguishable from variance in the judge. **What we take for free:** the doctrine, folded into §10 — always run the scenario without the guidance first and keep that transcript; if the baseline does not exhibit the failure, do not author the guidance; treat five divergent readings across five reps as a wording defect to tighten rather than a signal to add words. **Re-entry condition:** if the doctrine plus the existing instruments still cannot tell us whether a prompt change helped after the baseline runs in Phase 0, revisit — as a repo-local `studio/evals/` tool that never enters the shipped CLI surface, with a validated arm and grep-based scoring. |
+| **Prove a fresh install fires, and assert what must never be in it** | The import-closure half already exists and is stronger: `test_installed_snapshot_imports` installs into a temp dir and runs `python -c "import run_phase"` as a subprocess, which exercises the real transitive closure — an AST scan would be a regression. The forbidden-path walk is vacuous against this installer: `_collect_source_files` iterates an explicit allowlist plus two narrow globs, there is no `copytree`, so `tests/`, `.private/` and `.scratch/` cannot enter. Two of the six named forbidden paths are worse than vacuous: install *deliberately* creates `.studio/output/` and `.studio/knowledge/`, asserted by an existing test. And the bug the candidate promises to catch mechanically is invisible to its mechanism — the /forge install gap was a missing `.js` in `WORKFLOW_FILES`, which no Python import scan can see. **What survives, and it is the right guard — now built (`test_install.py::TestShipListParity`, 2026-07-29):** nothing asserted that every file on disk in `.claude/commands/` and `.claude/workflows/` is a member of `SLASH_COMMANDS`/`WORKFLOW_FILES`. That is exactly the class of the shipped bug, and it took about six lines in the both-ways idiom `test_doc_parity.py` already uses. It caught a second instance on the way in: `/handoff` shipped 2026-07-29 without being added to `SLASH_COMMANDS`, so consuming repos would never have received it. |
+| **A behavioral eval harness for prompt changes: RED baseline, control, N reps, pressure scenarios** | The most tempting item here, and the one I would not build yet. Three problems. **The install path breaks as specified:** `SOURCE_FILES` has no `tests/` entry, so shipping the workflow shell gives every consuming repo a runner pointing at a fixture directory that does not exist there; not shipping it still drags a dev-only `prompt-eval` subcommand into the installed CLI, and `test_doc_parity.py` asserts both ways against API.md's command table, forcing a command consumers cannot run into the installer-facing reference doc. **Construct validity:** in superpowers the skill under test *is* the whole instruction one agent receives, so the harness measures the real thing. In Studio, `CONTRARIAN_MANDATE` is injected at two points into a multi-page instructions.md and consumed inside a staged multi-agent debate alongside the persona, scope prompt, decision protocol, clarity and MVI. A one-shot subagent handed a scenario plus one fragment measures a configuration Studio never ships — it can read green while the real run degrades, or red while production is fine. **The cheap path already exists and is unused:** `implementation_loop.toml` ships the `mandate` knob (at `"contrarian"`; `"off"` is the value that disables the editor pass), so the "never captured a no-editor baseline" gap is one config line and a day of runs away; a control arm on the contrarian mandate is one `if` at two injection sites plus two `prepare` calls. Several days of new machinery to enable something existing knobs already enable fails Simplicity First on its face. Worth noting: superpowers' own harness scores by grepping a JSON stream, not by an LLM judge — the "read the replies" upgrade would insert a second uncalibrated model into the scoring path, making variance in five reps indistinguishable from variance in the judge. **What we take for free:** the doctrine, folded into §10 — always run the scenario without the guidance first and keep that transcript; if the baseline does not exhibit the failure, do not author the guidance; treat five divergent readings across five reps as a wording defect to tighten rather than a signal to add words. **Re-entry condition:** if the doctrine plus the existing instruments still cannot tell us whether a prompt change helped after the baseline runs in Phase 0, revisit — as a repo-local `studio/evals/` tool that never enters the shipped CLI surface, with a validated arm and grep-based scoring. |
 
 ### Rejected before vetting
 
@@ -423,22 +423,22 @@ Sixteen mechanisms were ruled out before they entered adversarial vetting. Group
 
 Each phase is independently shippable and ends in something usable on its own.
 
-**Phase 0 — get a baseline before changing any prompt text.** No borrowing, no new code. Run the
+**Phase 0 — get a baseline before changing any prompt text. NOT STARTED as of 2026-07-29**, and still the blocker for item 5 and for every row below that names a before-number. No borrowing, no new code. Run the
 no-editor baseline that `IMPLEMENTATION_LOOP_SPEC.md` build phase 3 already specifies and quantifies,
-using the `mandate = "off"` knob that already ships, and record the current per-unit editor token
+by setting the shipped `mandate` knob to `"off"`, and record the current per-unit editor token
 cost and `editor_liveness` / `shrink_ratio` over the existing forge runs. **Usable output:** the
 cadence lab's missing data point, and a before-number for items 2 and 5. Without this, nothing else in
 this plan is measurable, which is exactly the failure the gstack scorecard is still living with.
 
-**Phase 1 — the prose that costs nothing and fixes something.** Proposal items 1, 2 and 4, plus the
+**Phase 1 — the prose that costs nothing and fixes something. NOT STARTED as of 2026-07-29**, except the ship-list parity test, which shipped that day. Proposal items 1, 2 and 4, plus the
 riders the rejections surfaced: hoist the R3 scar to one owner constant, fix the hand-mutation
 instruction to break production code rather than assertions, add "test output pristine — warnings are
 a finding" to the editor's checks, and add the six-line ship-list parity test for
-`SLASH_COMMANDS`/`WORKFLOW_FILES`. **Usable output:** §10 of CODING_PRINCIPLES ships to every
+`SLASH_COMMANDS`/`WORKFLOW_FILES` (**done**). **Usable output:** §10 of CODING_PRINCIPLES — which does not exist yet; the file still ends at §9 — ships to every
 installed repo; the contrarian's escape hatch now costs evidence; two shipped bugs-in-waiting closed.
 One commit each, one PR. Measured against Phase 0's `editor_liveness`.
 
-**Phase 2 — the writer's escalation channel.** Proposal item 3: the schema field, the relaxed
+**Phase 2 — the writer's escalation channel. DONE 2026-07-29** (PR #84; entry gate pinned in #87). Proposal item 3: the schema field, the relaxed
 required-fields, the prompt prose, the spec reconciliation, and one live /forge smoke. **Usable
 output:** a blocked writer can stop and say why without faking a commit. Ships alone; needs nothing
 from Phase 3.
@@ -449,7 +449,8 @@ handoff has yet reported being blocked by the read scope. Nothing here is blocke
 this phase never fed the others. See item 5 above for the full reasoning, and treat it as available to
 revisit once there is something to measure against.
 
-**Phase 4 — the verification convention. DONE 2026-07-28.** Proposal item 6, built to
+**Phase 4 — the verification convention. DONE 2026-07-28**, extended with a fourth rule 2026-07-29.
+Proposal item 6, built to
 `specs/prompt-feature-verification.md`: `## Verification` in the spec template, the
 `<slug>-eval-results.md` sibling with its `Spec:` back-link and mandatory "What this doesn't prove,"
 and the stop condition. **Usable output:** the next prompt-shaped feature cannot ship claiming it works
@@ -465,31 +466,34 @@ one left holding nothing but the guidance the skeleton printed. That last rule c
 the first three missed; what remains is filler like "N/A", which that spec's Risks record as
 undetectable in principle.
 
-**Later, if the numbers ask for it.** The eval harness, under the re-entry condition above. Teaching
-`/forge` to read its approved spec, as its own spec — it is a real gap on Studio's own list, and the
-`--spec` pointer is the minimal shape.
+**Later, if the numbers ask for it.** The eval harness, under the re-entry condition above. That is
+all that is left here: teaching `/forge` to read its approved spec **shipped 2026-07-29** as PR #85,
+built to `specs/unit-acceptance-criteria.md` — the `--spec <slug> --unit <id>` pointer was indeed the
+minimal shape.
 
 ## How we would know it worked
 
 Same constraint as the gstack pass, and the same honesty about it: run volume is low, so a single bad
 run swings any average, and Phases 1-4 are prose changes with no clean A/B. The difference this time
-is that Phase 0 exists — two of the six items get a genuine before-number rather than a rough
-pre-date baseline.
+was supposed to be that Phase 0 gives two of the six items a genuine before-number rather than a
+rough pre-date baseline. As of 2026-07-29 Phase 0 has still not been run, so no item has one, and
+every row below that names a baseline is unmeasured.
 
 | Item | Signal (instrument) | Helping looks like | Hurting looks like | Trigger to act |
 |---|---|---|---|---|
-| §10 prompt doctrine | Whether it gets cited when prompt text changes; no new nuance clauses land in `scopes.py` / `question_mode.py` | New prompt edits pick a form deliberately and say which | It is never referenced in any prompt-change PR | Two prompt-change PRs in a row that cite no form → the section is decoration; cut it |
+| §10 prompt doctrine *(not yet written — Phase 1; CODING_PRINCIPLES ends at §9, so this row cannot fire yet)* | Whether it gets cited when prompt text changes; no new nuance clauses land in `scopes.py` / `question_mode.py` | New prompt edits pick a form deliberately and say which | It is never referenced in any prompt-change PR | Two prompt-change PRs in a row that cite no form → the section is decoration; cut it |
 | Escape hatches earn their invocation | `editor_liveness` / `shrink_ratio` (`stats.py:151-158`, `session.py:108-130`), against the Phase 0 baseline | More forge units end with a real cut; "no edits" handoffs stop citing the mandate's own clauses | Liveness flat, or the editor starts compressing readable code (the regression the clauses exist to stop) | Liveness does not move after ~10 forge units → revert the text. Any review flagging over-compression → revert immediately |
 | Writer escalation channel | Count of handoffs carrying a non-empty `escalation`; count of green-but-wrong units caught later | A genuinely stuck writer stops instead of guessing, and says what it needs | Field never used across ~10 units (the hole was theoretical), or used to dodge tractable work | Never populated across ~10 units → the schema hole was real but the failure was not; keep the field, drop the prompt prose |
 | Rationale is a claim | Whether a contrarian finding survives an advocate's justification; whether the editor logs a concern it previously dropped | Findings get engaged with rather than withdrawn after a good explanation | Iteration burn: runs take more passes to reach APPROVED because rebuttals no longer resolve anything | Median iterations-to-verdict rises across ~10 runs → the wording is fighting the rejection-feedback loop; revert |
 | Breadth valve + cite-don't-narrate | Per-unit editor token cost vs Phase 0; count of named-risk checks reported in `edits`; concerns raised that touch non-importer consumers | Real cross-cutting problems surface, at a small cost delta | Editor tokens climb with no new findings, or `edits` fills with narration | Editor cost up >25% over baseline with no new concerns across ~10 units → revert the valve |
 | Verification section + eval sibling | Share of prompt-shaped specs that carry a pass criterion; share of results files still at `FILL_ME` when the feature shipped | The criterion is written before the build and filled after | Results files sit unfilled and readers learn to skim past them | Two shipped features with unfilled results files → the convention is decoration; either enforce the stop condition or delete the tier |
 
-**Three top-line questions**, same as the gstack scorecard, tracked forward from Phase 0:
+**Three top-line questions**, same as the gstack scorecard. None can be tracked until Phase 0 runs — as of 2026-07-29 no baseline exists:
 
 1. **Human rating trend** (`rate`, 1–5). The bottom line, unchanged.
 2. **Forge yield** (`editor_liveness`, cut-per-token). These borrowings mostly touch the
-   implementation loop, and that is where a before-number now exists.
+   implementation loop, which is where a before-number would matter most — and where Phase 0 would
+   have to produce one first.
 3. **Cost per unit of quality.** Items 3 and 5 add tokens by design. That is only worth it if the
    quality signal moves.
 

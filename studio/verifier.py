@@ -20,9 +20,10 @@ from __future__ import annotations
 
 from findings import Finding, load_findings_json, save_findings_json
 
-# Verdict -> resulting confidence band when the caller does not pass one
-# explicitly. 'uncertain' leaves the finding's own confidence untouched (it stays
-# Medium), so it maps to None here and the current confidence is carried through.
+# Verdict -> resulting confidence band. The verdict alone decides it; a caller
+# cannot override it (see apply_verdict). 'uncertain' leaves the finding's own
+# confidence untouched (it stays Medium), so it maps to None here and the current
+# confidence is carried through.
 _VERDICT_TO_CONFIDENCE: dict[str, str | None] = {
     "confirmed": "high",     # two voices agree -> promote
     "unconfirmed": "low",    # the second voice can't confirm the flaw -> demote

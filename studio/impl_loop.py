@@ -174,9 +174,11 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
 def runtime_knobs(config: LoopConfig) -> dict:
     """Project a resolved LoopConfig onto the runtime knobs the JS workflow needs.
 
-    This is the consume side of load_loop_config(): the /forge command
-    shells out to ``python -m impl_loop``, reads this dict, and merges it into the
-    workflow args. Only already-resolved config is exposed; no new fields.
+    This is the consume side of load_loop_config(): the /forge command runs this
+    module as a script (``python .studio/source/impl_loop.py``, or
+    ``python studio/impl_loop.py`` in the Studio source repo), reads this dict, and
+    merges it into the workflow args. Only already-resolved config is exposed; no
+    new fields.
     """
     return {
         "editor_enabled": config.editor_enabled,
