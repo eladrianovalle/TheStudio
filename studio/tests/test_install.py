@@ -516,7 +516,7 @@ class TestClaudeMdSync:
         content = claude_md.read_text(encoding="utf-8")
         start = content.index(_SENTINEL_BEGIN)
         end = content.index(_SENTINEL_END) + len(_SENTINEL_END)
-        drifted = content[start:end].replace("Talk to Humans", "OLD PRINCIPLE")
+        drifted = content[start:end].replace("Write for Humans", "OLD PRINCIPLE")
         claude_md.write_text(content[:start] + drifted + content[end:], encoding="utf-8")
 
     def test_fresh_install_block_not_stale(self, target_dir, studio_dir):
@@ -567,7 +567,7 @@ class TestClaudeMdSync:
         assert result.get("claude_md_refreshed") is True
 
         refreshed = claude_md.read_text(encoding="utf-8")
-        assert "Talk to Humans" in refreshed        # template restored
+        assert "Write for Humans" in refreshed      # template restored
         assert "OLD PRINCIPLE" not in refreshed      # drift gone
         assert "My project notes." in refreshed      # notes above kept
         assert "Keep me." in refreshed               # notes below kept
