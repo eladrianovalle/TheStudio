@@ -75,15 +75,16 @@ A new PR starts as a **draft**, not ready-for-review. Mark it ready only when th
 **Your docs, your code, and your updates are all read by a person. Write for that person.**
 
 **Docs, comments, docstrings, commit messages, PR descriptions.**
-- Use plain language, and cut the tells of machine-written prose: inflated phrasing, filler, hedging, and padding add length without adding meaning. If a term of art is unavoidable, define it the first time or pick a simpler word.
+- Use plain language. If a term of art is unavoidable, define it the first time or pick a simpler word.
+- Cut the tells of machine-written prose: inflated phrasing, filler, hedging, and padding add length without adding meaning.
 - Say what a thing does and why it matters, not just its name. "Refuses to overwrite your local edits" beats "enforces the clobber-guard precondition."
-- Match the voice already in the file instead of importing your own, and match the length of a file to what it actually has to say — no filler sections, no restating one point three ways. CLAUDE.md and architecture docs drift toward bloat because appending is easier than editing, so prefer editing a line over appending a section.
+- Match the voice already in the file instead of importing your own.
+- Match the length of a file to what it actually has to say — no filler sections, no restating one point three ways. CLAUDE.md and architecture docs drift toward bloat because appending is easier than editing, so prefer editing a line over appending a section.
 - The test: could a teammate who is new to the code read it once and understand it, without asking you to translate?
 
 **Code.** Its first reader is a person, not the compiler, so write code for humans. Simple and readable are not the same thing: simple code has few moving parts, readable code spells those parts out. Aim for both, and never trade readability away to save lines.
 - Name things in full, for what they are. `remaining_budget` over `rb`, `resolve_source_dir` over `rsd`. A good name is a comment you don't have to write.
 - Reach for the plain, conventional form a reader expects: explicit and a little verbose over compact and clever, one obvious thing per line rather than a dense expression to decode. Cleverness is a cost paid again by everyone who reads the code later.
-- Don't compress just to shorten. Saving three lines isn't worth making the next person stop and work out what they do.
 - The test: could a teammate seeing this file for the first time read it top to bottom and follow it, without you narrating over their shoulder?
 
 **Updates to a person: progress, questions, decisions.** They haven't opened the files you changed or the notes you kept, so nothing you name explains itself.
@@ -92,7 +93,8 @@ A new PR starts as a **draft**, not ready-for-review. Mark it ready only when th
 - When you flag a decision or a question, give enough context and a recommendation that they can answer without digging. Say what's at stake and which way you'd lean.
 - Don't narrate self-corrections. Fix the error, note it in one line only if it changes a decision the reader has to make, then move on.
 - End a long update with a `## TL;DR`: one to three sentences or bullets covering what changed, anything that needs their attention, and what's next. Skip it when the update is already short enough to read at a glance.
-- Plain and a little warm beats a dense status log. A person is reading this, not a build server. The test: could the reader act on your update — approve the call, answer the question, trust the "it's done" — without opening a single file or asking you to translate?
+- Plain and a little warm beats a dense status log. A person is reading this, not a build server.
+- The test: could the reader act on your update — approve the call, answer the question, trust the "it's done" — without opening a single file or asking you to translate?
 
 ### 7. Spec Before Build
 
