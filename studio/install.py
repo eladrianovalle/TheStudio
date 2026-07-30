@@ -85,6 +85,7 @@ SLASH_COMMANDS = [
     "forge.md",
     "smoke.md",
     "spec.md",
+    "handoff.md",
 ]
 
 # Claude Code Workflows to copy to {target}/.claude/workflows/ (verbatim, like commands)
@@ -847,6 +848,26 @@ def _claude_manifest_keys(studio_dir: Path) -> List[str]:
     return keys
 
 
+def _retired_claude_files(extra: List[str]) -> List[str]:
+    """The installed commands/workflows Studio has stopped shipping.
+
+    ``extra`` is every manifest key that no longer exists in the source. This
+    narrows it to the verbatim ``.claude/`` files, which are the ones ``update``
+    removes: a command that was renamed (``/studio-implement`` became ``/forge``)
+    otherwise lingers forever beside its replacement, so the project offers two
+    commands for one job and the stale one is the pre-rename behavior.
+
+    Being in the manifest is what makes removal safe: the manifest only records
+    files this installer wrote. A command the project author wrote by hand was
+    never in it, so it can never be deleted here.
+
+    Deliberately limited to ``.claude/``. Retired files under ``.studio/source/``
+    are left alone — that snapshot is Studio's own tree, a leftover module there
+    is inert, and removing files from it is a separate decision.
+    """
+    return sorted(key for key in extra if key.startswith(".claude/"))
+
+
 def _manifest_source_path(studio_dir: Path, key: str) -> Path:
     """Map a manifest key to its file in the live source tree."""
     if key.startswith(".claude/"):
@@ -1101,6 +1122,11 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None, fetch: bool = 
         changed: list[str]: files where upstream differs from what was installed (update available)
         missing: list[str]: files in source but not installed
         extra: list[str]: files installed but not in source
+        retired: list[str]: the subset of ``extra`` that `update` will DELETE —
+            installed .claude/ commands and workflows Studio no longer ships (see
+            ``_retired_claude_files``). Counts against ``up_to_date``, because an
+            orphaned command left behind is a real difference from the source, and
+            without it `update` would short-circuit and never clear it
         locally_modified: list[str]: installed files whose ON-DISK content has
             drifted from the checksum recorded at install, i.e. local edits that an
             `update` would OVERWRITE (the clobber set; spans both .studio/source/
@@ -1123,7 +1149,7 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None, fetch: bool = 
     manifest_path = dot_studio / "MANIFEST.json"
 
     if not version_path.exists():
-        return {"installed": False, "up_to_date": False, "changed": [], "missing": [], "extra": [], "locally_modified": [], "claude_md_stale": False, "source_note": None, "warning": None, "staleness": None}
+        return {"installed": False, "up_to_date": False, "changed": [], "missing": [], "extra": [], "retired": [], "locally_modified": [], "claude_md_stale": False, "source_note": None, "warning": None, "staleness": None}
 
     # When the source was auto-resolved (not handed in explicitly by a test or a
     # caller that already knows) and resolved cleanly, read it from the default
@@ -1185,9 +1211,12 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None, fetch: bool = 
         # so a new/changed principle upstream registers as an available update.
         claude_md_stale = _principles_block_stale(target, source_dir)
 
+    retired = _retired_claude_files(extra)
+
     up_to_date = (
         not changed
         and not missing
+        and not retired
         and not claude_md_stale
         and not (staleness and staleness.is_stale)
     )
@@ -1198,6 +1227,7 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None, fetch: bool = 
         "changed": changed,
         "missing": missing,
         "extra": extra,
+        "retired": retired,
         "locally_modified": locally_modified,
         "claude_md_stale": claude_md_stale,
         "source_note": source_note,
@@ -1215,10 +1245,16 @@ def update_studio(
     Preserves user customizations in .studio/ (roles/, scopes.toml, etc.)
     by only overwriting source/ and slash commands.
 
+    Also DELETES the installed ``.claude/`` commands and workflows Studio no longer
+    ships, so a renamed command doesn't linger beside its replacement (see
+    ``_retired_claude_files``). Only files the manifest records — ones a past
+    install wrote — are ever deleted; a hand-written command is left alone.
+
     PRECONDITION: if any installed source file has local edits (drifted from its
     recorded checksum), the update is BLOCKED, because re-installing would overwrite them.
     Returns ``{"blocked": True, "locally_modified": [...]}`` instead of updating.
-    Pass ``force=True`` to overwrite anyway.
+    Pass ``force=True`` to overwrite anyway. An edited file that is ALSO retired is
+    covered by the same guard: it blocks first, and ``force`` then deletes it.
 
     ``fetch`` controls whether the staleness check does a short network fetch of
     the source's remote before comparing (default True; ``--no-fetch`` on the CLI
@@ -1291,13 +1327,13 @@ def update_studio(
         status = check_studio(target, effective_dir)
 
         if status["up_to_date"] and not (staleness and staleness.is_stale):
-            return {"updated": 0, "added": 0, "removed": 0, "locally_modified": status["locally_modified"], "claude_md_refreshed": False, "source_note": source_note, "warning": warning, "staleness": asdict(staleness) if staleness else None, "source_pull": asdict(source_pull) if source_pull else None}
+            return {"updated": 0, "added": 0, "removed": 0, "retired": [], "locally_modified": status["locally_modified"], "claude_md_refreshed": False, "source_note": source_note, "warning": warning, "staleness": asdict(staleness) if staleness else None, "source_pull": asdict(source_pull) if source_pull else None}
 
         # Preview precondition: refuse to clobber locally-edited snapshot files unless forced.
         locally_modified = status.get("locally_modified", [])
         if locally_modified and not force:
             return {"blocked": True, "locally_modified": locally_modified,
-                    "updated": 0, "added": 0, "removed": 0, "claude_md_refreshed": False, "source_note": source_note, "warning": warning, "staleness": asdict(staleness) if staleness else None, "source_pull": asdict(source_pull) if source_pull else None}
+                    "updated": 0, "added": 0, "removed": 0, "retired": [], "claude_md_refreshed": False, "source_note": source_note, "warning": warning, "staleness": asdict(staleness) if staleness else None, "source_pull": asdict(source_pull) if source_pull else None}
 
         # Re-install (install_studio is idempotent and preserves user dirs). This
         # also re-injects the coding-principles block into CLAUDE.md, refreshing it
@@ -1309,10 +1345,20 @@ def update_studio(
         # on every path, so don't let the re-install touch it a second time.
         install_studio(target, effective_dir, source_path_override=override, install_hook=False)
 
+        # Delete the commands and workflows Studio has stopped shipping. Only files
+        # the manifest records — ones this installer wrote — so a command the project
+        # author added by hand is never touched. Done after the re-install because
+        # install_studio rebuilds the manifest from the current source, which is what
+        # drops these keys from it; the files themselves it leaves behind.
+        retired = status.get("retired", [])
+        for key in retired:
+            _manifest_installed_path(target, key).unlink(missing_ok=True)
+
         return {
             "updated": len(status["changed"]),
             "added": len(status["missing"]),
-            "removed": 0,  # We don't remove extra files
+            "removed": len(retired),
+            "retired": retired,
             "locally_modified": locally_modified,
             "claude_md_refreshed": status.get("claude_md_stale", False),
             "source_note": source_note,

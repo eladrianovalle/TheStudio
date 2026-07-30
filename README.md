@@ -60,6 +60,7 @@ Slash commands are the main way you use Studio day to day. `init` installs them 
 | `/detest` | Audit your test suite against AI-TDD methodology and fix the violations |
 | `/unstale` | Find and fix stale docs, wrong counts, and dead links (stack-agnostic) |
 | `/offload` | Slim a bloated CLAUDE.md by moving reference content into companion docs |
+| `/handoff` | Save the in-flight thread to a durable note so you can `/clear` safely — or resume one |
 
 **Maintain the install**
 | Command | What it does |
