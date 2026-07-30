@@ -26,11 +26,17 @@ VALID_MANDATES = {"contrarian", "off"}
 
 VALID_READ_SCOPES = {"touched", "touched+importers"}
 
-# The three ways a --work-dir can be unusable. /forge prints the one it hit, so a
+# The four ways a --work-dir can be unusable. /forge prints the one it hit, so a
 # refused run says what is actually wrong instead of just "bad path".
 WORK_DIR_MISSING = "missing"
 WORK_DIR_NOT_A_WORKTREE = "not-a-worktree"
 WORK_DIR_DIFFERENT_REPO = "different-repo"
+WORK_DIR_UNQUOTABLE = "unquotable"
+
+# Characters that break out of the `git -C "<path>"` quoting the prompts render.
+# The path is interpolated into instruction text an agent then runs, so a double
+# quote turns the rest of the path into a separate command.
+_UNQUOTABLE = ('"', '`', '$', '\n', '\r')
 
 
 class WorkDirError(ValueError):
@@ -213,7 +219,7 @@ def validate_work_dir(work_dir: str | Path, main_repo: Path | None = None) -> Pa
     """Check that ``work_dir`` is a git worktree of this repository.
 
     Returns the resolved absolute path, which is what /forge pins the rest of the run
-    to. Raises WorkDirError naming which of the three failures it hit (``missing``,
+    to. Raises WorkDirError naming which of the four failures it hit (``missing``,
     ``not-a-worktree``, ``different-repo``) and the path it tried.
 
     Validation has to live here in Python because the Workflow sandbox the loop runs
@@ -226,6 +232,16 @@ def validate_work_dir(work_dir: str | Path, main_repo: Path | None = None) -> Pa
             (defaults to this module's own checkout). Exposed for testing.
     """
     path = Path(work_dir).expanduser().resolve()
+    bad = sorted({c for c in _UNQUOTABLE if c in str(path)})
+    if bad:
+        # gitIn renders `git -C "<path>"` into prompt text the agent runs. A path
+        # carrying one of these ends the quoted string early, and whatever follows
+        # becomes a command of its own.
+        shown = ", ".join(repr(c) for c in bad)
+        raise WorkDirError(
+            f"work-dir {WORK_DIR_UNQUOTABLE}: {path} contains {shown}, which would "
+            f'break out of the git -C "..." quoting the loop renders'
+        )
     if not path.is_dir():
         raise WorkDirError(f"work-dir {WORK_DIR_MISSING}: no directory at {path}")
 

@@ -16,6 +16,7 @@ from impl_loop import (
     WORK_DIR_MISSING,
     WORK_DIR_NOT_A_WORKTREE,
     WorkDirError,
+    WORK_DIR_UNQUOTABLE,
     _cli,
     _git_common_dir,
     load_loop_config,
@@ -361,6 +362,24 @@ def test_validate_work_dir_accepts_a_worktree_of_this_repo(tmp_path):
     repo = _make_repo(tmp_path / "repo")
     worktree = _add_worktree(repo, tmp_path / "wt", "feature")
     assert validate_work_dir(worktree, main_repo=repo) == worktree.resolve()
+
+
+def test_validate_work_dir_rejects_a_path_that_would_break_the_quoting(tmp_path):
+    """A path carrying a quote gets out of `git -C "<path>"` and runs as its own command.
+
+    The loop renders that string into instruction text an agent then executes, so this
+    is the one validation failure that is not merely inconvenient. Checked before the
+    is_dir test on purpose: such a directory can genuinely exist.
+    """
+    hostile = tmp_path / 'wt"; echo pwned; #'
+    hostile.mkdir()
+
+    with pytest.raises(WorkDirError) as excinfo:
+        validate_work_dir(hostile)
+
+    assert WORK_DIR_UNQUOTABLE in str(excinfo.value)
+    # Names the offending character, so the reader knows what to rename.
+    assert repr('"') in str(excinfo.value)
 
 
 def test_validate_work_dir_rejects_a_path_that_does_not_exist(tmp_path):

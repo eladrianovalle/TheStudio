@@ -122,11 +122,14 @@ On success this prints the same knobs JSON Step 5 needs, plus a `work_dir` key h
 the JSON — Step 5 reuses it instead of running the command again.
 
 **If it exits non-zero, STOP. Do not run the loop.** It writes one line to stderr naming which of
-three reasons it hit, and the path it tried:
+four reasons it hit, and the path it tried:
 
 - **missing** — there is no directory at that path;
 - **not-a-worktree** — the directory exists but is not inside a git worktree;
-- **different-repo** — it is a worktree of some other repository, not this one.
+- **different-repo** — it is a worktree of some other repository, not this one;
+- **unquotable** — the path contains a character (`"`, a backtick, `$`, a newline) that would
+  break out of the `git -C "<path>"` quoting the loop renders into the agents' instructions,
+  turning the rest of the path into a command of its own. Rename the directory.
 
 Tell the user which reason it was and which path was tried. Continuing anyway would commit to
 whatever branch the shell's checkout happens to be on — the accident `--work-dir` exists to prevent.
