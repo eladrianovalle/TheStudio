@@ -1,6 +1,7 @@
 """Unit tests for run_phase.py core functions."""
 import argparse
 import json
+from pathlib import Path
 
 import pytest
 
@@ -197,8 +198,11 @@ def test_question_mode_omits_editor_mandate_and_preflight(studio_root):
 
 
 def test_output_root_defaults_to_origin_repo_when_running_outside_studio(tmp_path, monkeypatch):
-    studio_root = tmp_path / "studio"
-    studio_root.mkdir()
+    # studio_root sits one level down so the caller's repo is genuinely outside the
+    # Studio source repo (tmp_path / "studio_src"). A sibling of studio/ would count as
+    # part of the source repo and resolve there instead — see the source-repo branch.
+    studio_root = tmp_path / "studio_src" / "studio"
+    studio_root.mkdir(parents=True)
     project_root = tmp_path / "game_repo"
     project_root.mkdir()
 
@@ -231,12 +235,120 @@ def test_artifact_root_cli_override(tmp_path, monkeypatch):
     assert output_root == explicit_root / ".studio" / "output"
 
 
+def _make_source_repo(tmp_path, monkeypatch):
+    """Studio's own repo: <repo>/studio holding the running code, plus a bare .studio/.
+
+    Mirrors the real source repo, where .studio/ holds update.toml and usage.log but
+    deliberately has no VERSION file (VERSION marks an *installed* repo).
+    """
+    repo_root = tmp_path / "TheGameStudio"
+    studio_root = repo_root / "studio"
+    studio_root.mkdir(parents=True)
+    (repo_root / ".studio").mkdir()
+    (repo_root / ".studio" / "update.toml").write_text("[update]\n", encoding="utf-8")
+
+    monkeypatch.setenv("STUDIO_ROOT", str(studio_root))
+    monkeypatch.delenv("STUDIO_ARTIFACT_ROOT", raising=False)
+    monkeypatch.setattr(run_phase, "_artifact_root_override", None)
+    monkeypatch.setattr(run_phase, "_artifact_root_warned", False)
+    return repo_root, studio_root
+
+
+def test_artifact_root_is_studio_dir_when_run_from_source_repo_root(tmp_path, monkeypatch):
+    """Studio run from its own repo root files artifacts in studio/, not <repo>/.studio/."""
+    repo_root, studio_root = _make_source_repo(tmp_path, monkeypatch)
+    monkeypatch.chdir(repo_root)
+
+    # Guard against passing for the old reason: this must NOT be the cwd == studio_root
+    # branch, which already worked before the source-repo branch existed.
+    assert Path.cwd().resolve() != studio_root.resolve()
+
+    assert run_phase.get_artifact_root() == studio_root.resolve()
+    assert run_phase.get_output_root() == studio_root.resolve() / "output"
+
+
+def test_artifact_root_is_studio_dir_when_run_from_studio_dir(tmp_path, monkeypatch):
+    """The pre-existing cwd-inside-studio branch: same answer, different reason."""
+    _repo_root, studio_root = _make_source_repo(tmp_path, monkeypatch)
+    monkeypatch.chdir(studio_root)
+
+    assert Path.cwd().resolve() == studio_root.resolve()
+    assert run_phase.get_artifact_root() == studio_root.resolve()
+
+
+def test_artifact_root_is_consuming_repo_for_installed_snapshot(tmp_path, monkeypatch):
+    """An installed <repo>/.studio/source snapshot still resolves to the consuming repo."""
+    repo_root = tmp_path / "my_game"
+    studio_root = repo_root / ".studio" / "source"
+    studio_root.mkdir(parents=True)
+    (repo_root / ".studio" / "VERSION").write_text("1.0.0\n", encoding="utf-8")
+
+    monkeypatch.setenv("STUDIO_ROOT", str(studio_root))
+    monkeypatch.delenv("STUDIO_ARTIFACT_ROOT", raising=False)
+    monkeypatch.setattr(run_phase, "_artifact_root_override", None)
+    monkeypatch.setattr(run_phase, "_artifact_root_warned", False)
+
+    monkeypatch.chdir(repo_root)
+    assert run_phase.get_artifact_root() == repo_root.resolve()
+
+    # studio_root.parent is <repo>/.studio here, so the source-repo branch must stay out
+    # of the way: a snapshot is never its own source repo.
+    monkeypatch.chdir(repo_root / ".studio")
+    assert run_phase.get_artifact_root() == repo_root.resolve()
+
+
+def test_artifact_root_is_cwd_for_scaffolded_repo_with_bare_studio_dir(tmp_path, monkeypatch):
+    """A repo with .studio/ but no VERSION, unrelated to studio_root, still gets cwd."""
+    studio_root = tmp_path / "studio_src" / "studio"
+    studio_root.mkdir(parents=True)
+    game_repo = tmp_path / "my_game"
+    (game_repo / ".studio").mkdir(parents=True)
+
+    monkeypatch.setenv("STUDIO_ROOT", str(studio_root))
+    monkeypatch.delenv("STUDIO_ARTIFACT_ROOT", raising=False)
+    monkeypatch.setattr(run_phase, "_artifact_root_override", None)
+    monkeypatch.setattr(run_phase, "_artifact_root_warned", False)
+    monkeypatch.chdir(game_repo)
+
+    assert run_phase.get_artifact_root() == game_repo.resolve()
+
+
+def test_artifact_root_flag_and_env_still_win_in_source_repo(tmp_path, monkeypatch):
+    """The deliberate overrides outrank the source-repo branch."""
+    repo_root, _studio_root = _make_source_repo(tmp_path, monkeypatch)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(repo_root)
+
+    monkeypatch.setenv("STUDIO_ARTIFACT_ROOT", str(elsewhere))
+    assert run_phase.get_artifact_root() == elsewhere.resolve()
+
+    monkeypatch.setattr(run_phase, "_artifact_root_override", elsewhere)
+    assert run_phase.get_artifact_root() == elsewhere.resolve()
+
+
+def test_source_repo_prepare_writes_no_bridge_doc(tmp_path, monkeypatch):
+    """Studio does not scaffold itself a consuming-repo bridge doc."""
+    from conftest import _seed_studio_root
+
+    repo_root, studio_root = _make_source_repo(tmp_path, monkeypatch)
+    _seed_studio_root(studio_root)
+    (studio_root / "docs" / "STUDIO_BRIDGE_TEMPLATE.md").write_text("template", encoding="utf-8")
+    monkeypatch.chdir(repo_root)
+
+    run_id = run_phase.prepare_run(make_prepare_args(phase="tech", text="Source repo run"))
+
+    assert (studio_root / "output" / "tech" / run_id / "instructions.md").exists()
+    assert not (repo_root / "docs" / "studio-bridge.md").exists()
+    assert not (repo_root / ".studio" / "output").exists()
+
+
 def test_cross_repo_prepare_creates_artifacts_in_caller_repo(tmp_path, monkeypatch):
     """Full prepare from an external repo puts artifacts in that repo, not Studio."""
     from conftest import _seed_studio_root
 
-    studio_root = tmp_path / "studio"
-    studio_root.mkdir()
+    studio_root = tmp_path / "studio_src" / "studio"
+    studio_root.mkdir(parents=True)
     _seed_studio_root(studio_root)
 
     game_repo = tmp_path / "my_game"
@@ -269,8 +381,8 @@ def test_cross_repo_scaffold_creates_bridge_doc(tmp_path, monkeypatch):
     """First prepare from external repo creates .studio/ and bridge doc."""
     from conftest import _seed_studio_root
 
-    studio_root = tmp_path / "studio"
-    studio_root.mkdir()
+    studio_root = tmp_path / "studio_src" / "studio"
+    studio_root.mkdir(parents=True)
     _seed_studio_root(studio_root)
 
     # Also need the bridge template to exist
@@ -306,8 +418,8 @@ def test_cross_repo_scaffold_skips_existing_bridge(tmp_path, monkeypatch):
     """Scaffold does not overwrite an existing bridge doc."""
     from conftest import _seed_studio_root
 
-    studio_root = tmp_path / "studio"
-    studio_root.mkdir()
+    studio_root = tmp_path / "studio_src" / "studio"
+    studio_root.mkdir(parents=True)
     _seed_studio_root(studio_root)
     (studio_root / "docs").mkdir(exist_ok=True)
     (studio_root / "docs" / "STUDIO_BRIDGE_TEMPLATE.md").write_text("template", encoding="utf-8")
