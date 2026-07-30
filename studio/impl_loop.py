@@ -11,8 +11,10 @@ See studio/docs/IMPLEMENTATION_LOOP_SPEC.md §4 for the table shape.
 from __future__ import annotations
 
 from config_loading import tomllib
+import argparse
 import json
 import os
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List
@@ -23,6 +25,16 @@ STUDIO_ROOT = Path(__file__).resolve().parent
 VALID_MANDATES = {"contrarian", "off"}
 
 VALID_READ_SCOPES = {"touched", "touched+importers"}
+
+# The three ways a --work-dir can be unusable. /forge prints the one it hit, so a
+# refused run says what is actually wrong instead of just "bad path".
+WORK_DIR_MISSING = "missing"
+WORK_DIR_NOT_A_WORKTREE = "not-a-worktree"
+WORK_DIR_DIFFERENT_REPO = "different-repo"
+
+
+class WorkDirError(ValueError):
+    """A --work-dir the loop must refuse before any agent spawns."""
 
 
 @dataclass
@@ -171,6 +183,66 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
     )
 
 
+def _git_common_dir(directory: Path) -> str | None:
+    """The shared git directory of the repository ``directory`` belongs to.
+
+    Returns None when ``directory`` is not inside a git worktree at all, which is
+    how the caller tells "not a worktree" apart from "a worktree of some other repo".
+
+    Two details here are load-bearing, both verified against real git:
+
+    - ``--path-format=absolute``. Without it git answers with a path relative to
+      where it ran, so the main checkout reports a bare ``.git`` while a linked
+      worktree reports an absolute path, and the two never compare equal.
+    - ``--git-common-dir``, never ``--git-dir``. A linked worktree's own git dir is
+      ``<common>/worktrees/<name>``, so it differs from the main repo's by design.
+      The common dir is the one thing a worktree and its main repo share.
+    """
+    result = subprocess.run(
+        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        cwd=str(directory),
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    return os.path.realpath(result.stdout.strip())
+
+
+def validate_work_dir(work_dir: str | Path, main_repo: Path | None = None) -> str | None:
+    """Check that ``work_dir`` is a git worktree of this repository.
+
+    Returns None when the directory is usable, or a one-line message naming which of
+    the three failures it hit (``missing``, ``not-a-worktree``, ``different-repo``)
+    and the path it tried. Returning rather than raising keeps this usable as a plain
+    check; the CLI is what turns a message into a refused run.
+
+    Validation has to live here in Python because the Workflow sandbox the loop runs
+    in has no filesystem or process access — it can only spawn agents and build
+    strings, so it cannot stat a path or ask git anything.
+
+    Args:
+        work_dir: The directory the agents are being told to work in.
+        main_repo: A directory inside the repository ``work_dir`` must belong to
+            (defaults to this module's own checkout). Exposed for testing.
+    """
+    path = Path(work_dir).expanduser()
+    if not path.is_dir():
+        return f"work-dir {WORK_DIR_MISSING}: no directory at {path}"
+
+    work_dir_git = _git_common_dir(path)
+    if work_dir_git is None:
+        return f"work-dir {WORK_DIR_NOT_A_WORKTREE}: {path} is not inside a git worktree"
+
+    main_repo_git = _git_common_dir(main_repo if main_repo is not None else STUDIO_ROOT)
+    if work_dir_git != main_repo_git:
+        return (
+            f"work-dir {WORK_DIR_DIFFERENT_REPO}: {path} belongs to the repository at "
+            f"{work_dir_git}, not to this one ({main_repo_git})"
+        )
+    return None
+
+
 def runtime_knobs(config: LoopConfig) -> dict:
     """Project a resolved LoopConfig onto the runtime knobs the JS workflow needs.
 
@@ -194,15 +266,51 @@ def runtime_knobs(config: LoopConfig) -> dict:
 def _cli(argv: List[str]) -> str:
     """Return the runtime-knobs JSON for the CLI.
 
-    Optional ``argv[1]`` is an explicit config path for a non-standard location. With no
-    arg the normal resolution chain runs, which now finds the project override at the
-    consuming repo root (``<repo>/.studio/implementation_loop.toml``) on its own, so
-    callers no longer need to pass it explicitly just to honor an installed repo's override.
+    The optional positional argument is an explicit config path for a non-standard
+    location. With no arg the normal resolution chain runs, which now finds the project
+    override at the consuming repo root (``<repo>/.studio/implementation_loop.toml``) on
+    its own, so callers no longer need to pass it explicitly just to honor an installed
+    repo's override.
+
+    ``--work-dir`` is checked here, before /forge invokes the workflow, so a bad path
+    stops the run before any agent spawns. When it is good, the emitted JSON carries a
+    ``work_dir`` key holding the resolved absolute path — that is the path /forge pins
+    the rest of the run to.
+
+    Raises:
+        WorkDirError: If ``--work-dir`` is given and is not a worktree of this repo.
     """
-    path = Path(argv[1]) if len(argv) > 1 else None
-    return json.dumps(runtime_knobs(load_loop_config(path)))
+    parser = argparse.ArgumentParser(
+        prog="impl_loop.py",
+        description="Print the implementation loop's runtime knobs as JSON.",
+    )
+    parser.add_argument(
+        "config_path",
+        nargs="?",
+        help="Explicit path to a loop config .toml (default: the resolution chain).",
+    )
+    parser.add_argument(
+        "--work-dir",
+        help="Directory the loop's agents must work in; must be a git worktree of this repo.",
+    )
+    args = parser.parse_args(argv[1:])
+
+    path = Path(args.config_path) if args.config_path else None
+    knobs = runtime_knobs(load_loop_config(path))
+
+    if args.work_dir:
+        problem = validate_work_dir(args.work_dir)
+        if problem is not None:
+            raise WorkDirError(problem)
+        knobs["work_dir"] = str(Path(args.work_dir).expanduser().resolve())
+
+    return json.dumps(knobs)
 
 
 if __name__ == "__main__":
     import sys
-    print(_cli(sys.argv))
+    try:
+        print(_cli(sys.argv))
+    except WorkDirError as e:
+        print(e, file=sys.stderr)
+        sys.exit(1)

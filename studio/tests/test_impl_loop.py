@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for the implementation writer/editor loop config loader."""
 import json
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -8,11 +9,18 @@ import pytest
 
 from impl_loop import (
     LoopConfig,
+    STUDIO_ROOT,
     VALID_MANDATES,
     VALID_READ_SCOPES,
+    WORK_DIR_DIFFERENT_REPO,
+    WORK_DIR_MISSING,
+    WORK_DIR_NOT_A_WORKTREE,
+    WorkDirError,
     _cli,
+    _git_common_dir,
     load_loop_config,
     runtime_knobs,
+    validate_work_dir,
 )
 
 
@@ -320,3 +328,122 @@ def test_cli_explicit_missing_path_raises():
     """A typo'd explicit config path is loud, not silently defaulted."""
     with pytest.raises(FileNotFoundError):
         _cli(["impl_loop.py", "/nonexistent/implementation_loop.toml"])
+
+
+# --- --work-dir validation -------------------------------------------------
+#
+# These use real `git init` / `git worktree add` rather than mocked subprocess calls.
+# The whole point of the check is that git's plumbing answers the way we think it
+# does, and a mock would only prove we can repeat our own assumptions back to us.
+
+
+def _git(directory: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=str(directory), check=True, capture_output=True)
+
+
+def _make_repo(root: Path) -> Path:
+    """A git repository with one commit, so worktrees can be added to it."""
+    root.mkdir(parents=True)
+    _git(root, "init", "-q")
+    _git(root, "config", "user.email", "test@example.com")
+    _git(root, "config", "user.name", "Test")
+    _git(root, "commit", "-q", "--allow-empty", "-m", "init")
+    return root
+
+
+def _add_worktree(repo: Path, path: Path, branch: str) -> Path:
+    _git(repo, "worktree", "add", "-q", "-b", branch, str(path))
+    return path
+
+
+def test_validate_work_dir_accepts_a_worktree_of_this_repo(tmp_path):
+    """The happy path: a real worktree of the main repo is usable, no message."""
+    repo = _make_repo(tmp_path / "repo")
+    worktree = _add_worktree(repo, tmp_path / "wt", "feature")
+    assert validate_work_dir(worktree, main_repo=repo) is None
+
+
+def test_validate_work_dir_rejects_a_path_that_does_not_exist(tmp_path):
+    """Criterion 1: a path that isn't there names the 'missing' reason and the path."""
+    absent = tmp_path / "not-here"
+    problem = validate_work_dir(absent, main_repo=tmp_path)
+    assert problem is not None
+    assert WORK_DIR_MISSING in problem
+    assert str(absent) in problem
+
+
+def test_validate_work_dir_rejects_a_directory_that_is_not_a_worktree(tmp_path):
+    """Criterion 2: an ordinary directory names the 'not-a-worktree' reason."""
+    repo = _make_repo(tmp_path / "repo")
+    plain = tmp_path / "just-a-folder"
+    plain.mkdir()
+    problem = validate_work_dir(plain, main_repo=repo)
+    assert problem is not None
+    assert WORK_DIR_NOT_A_WORKTREE in problem
+    assert str(plain) in problem
+
+
+def test_validate_work_dir_rejects_a_worktree_of_another_repository(tmp_path):
+    """Criterion 3: a genuine worktree of some OTHER repo names 'different-repo'.
+
+    This is the case a bare `is this a worktree?` check would wave through, and it is
+    the one that quietly builds the unit in the wrong project.
+    """
+    ours = _make_repo(tmp_path / "ours")
+    theirs = _make_repo(tmp_path / "theirs")
+    stranger = _add_worktree(theirs, tmp_path / "their-wt", "feature")
+    problem = validate_work_dir(stranger, main_repo=ours)
+    assert problem is not None
+    assert WORK_DIR_DIFFERENT_REPO in problem
+    assert str(stranger) in problem
+
+
+def test_git_common_dir_uses_the_absolute_path_format(tmp_path):
+    """Criterion 4: the same-repo check only works because of --path-format=absolute.
+
+    Drop that flag and git answers the main checkout with a bare relative `.git`, which
+    resolves against whatever directory the caller happens to be sitting in — never the
+    repo it asked about. Verified by removing the flag: this test and the happy-path
+    test above both go red, and the reported path is the caller's own tree.
+    """
+    repo = _make_repo(tmp_path / "repo")
+    worktree = _add_worktree(repo, tmp_path / "wt", "feature")
+    shared_git_dir = str((repo / ".git").resolve())
+
+    from_main = _git_common_dir(repo)
+    from_worktree = _git_common_dir(worktree)
+
+    assert from_main == shared_git_dir
+    # A worktree and its main repo share one common dir. (--git-dir would differ here:
+    # the worktree's is <common>/worktrees/<name>.)
+    assert from_worktree == shared_git_dir
+
+
+def test_git_common_dir_is_none_outside_a_repository(tmp_path):
+    """Not-a-worktree is signalled by None, which is what separates reason 2 from 3."""
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    assert _git_common_dir(plain) is None
+
+
+def test_cli_work_dir_flag_reports_the_resolved_path():
+    """A good --work-dir flows into the knobs JSON as an absolute path.
+
+    That resolved path is what /forge pins scriptPath and its git commands to, so the
+    CLI hands back the resolved form rather than whatever the user typed. Studio's own
+    checkout stands in for the work dir here: the CLI compares against this repo, so
+    only a directory in this repo can pass.
+    """
+    knobs = json.loads(_cli(["impl_loop.py", "--work-dir", str(STUDIO_ROOT)]))
+    assert knobs["work_dir"] == str(STUDIO_ROOT)
+    assert knobs["editor_enabled"] is True
+
+
+def test_cli_bad_work_dir_raises_before_any_knobs_are_emitted(tmp_path):
+    """A bad --work-dir stops the run: the CLI raises instead of printing knobs.
+
+    /forge runs this before it invokes the workflow, so nothing spawns.
+    """
+    absent = tmp_path / "not-here"
+    with pytest.raises(WorkDirError, match=WORK_DIR_MISSING):
+        _cli(["impl_loop.py", "--work-dir", str(absent)])
