@@ -317,8 +317,6 @@ test('gitIn falls back to bare git when no work dir was named', () => {
   assert.equal(gitIn(UNIT), 'git')
   assert.equal(gitIn({ work_dir: '' }), 'git')
   assert.equal(gitIn({}), 'git')
-  assert.equal(gitIn(null), 'git')
-  assert.equal(gitIn(undefined), 'git')
 })
 
 test('the writer prompt pins every git command, including the escalation commit', () => {
@@ -368,15 +366,6 @@ test('with no work dir both prompts are byte-identical to the pre-feature output
   // And the fixture is the same unit these tests use elsewhere, so it can't drift into a special case.
   assert.deepEqual(BASELINE.unit, UNIT)
   assert.deepEqual(BASELINE.writer, WRITER)
-})
-
-test('with no work dir nothing is pinned and no cd line appears', () => {
-  for (const prompt of [writerPrompt(UNIT), editorPrompt(UNIT, WRITER)]) {
-    assert.ok(!prompt.includes('git -C'))
-    assert.ok(!prompt.includes('ALL WORK HAPPENS IN'))
-  }
-  assert.ok(writerPrompt(UNIT).includes('`git add -A && git commit -m "writer: unit_demo"`'))
-  assert.ok(editorPrompt(UNIT, WRITER).includes('`git reset --hard a1b2c3d`'))
 })
 
 test('a malformed criteria payload leaves both prompts on the no-criteria path', () => {

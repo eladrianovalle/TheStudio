@@ -53,7 +53,7 @@ const runDir = (u) => `.studio/output/impl_loop/${u.unit_id}`
 // unit names a work_dir, pin git to it. The path is quoted so a directory with spaces survives.
 // Keep this a ONE-LINER: the JS test loader extracts consts with a single-line regex, and a
 // multi-line definition would be invisible to it.
-const gitIn = (u) => (u && u.work_dir ? `git -C "${u.work_dir}"` : 'git')
+const gitIn = (u) => (u.work_dir ? `git -C "${u.work_dir}"` : 'git')
 
 // The `cd` is the actual mechanism; `gitIn` is only the backstop. The test command, the static
 // check and the mutation run are not git, so nothing about `git -C` reaches them — pinning git
@@ -61,7 +61,7 @@ const gitIn = (u) => (u && u.work_dir ? `git -C "${u.work_dir}"` : 'git')
 // then report green tests describing a different tree. One `cd` at the top covers all of them.
 // Returns no lines at all when there is no work_dir, which is what keeps the old prompts intact.
 function workDirPreamble(u) {
-  if (!u || !u.work_dir) return []
+  if (!u.work_dir) return []
   return [
     `ALL WORK HAPPENS IN ${u.work_dir} — cd there before you do anything else, and stay there.`,
     `Every command below (tests, static checks, git) must run in that directory, not wherever this`,
