@@ -35,8 +35,10 @@ WORK_DIR_UNQUOTABLE = "unquotable"
 
 # Characters that break out of the `git -C "<path>"` quoting the prompts render.
 # The path is interpolated into instruction text an agent then runs, so a double
-# quote turns the rest of the path into a separate command.
-_UNQUOTABLE = ('"', '`', '$', '\n', '\r')
+# quote turns the rest of the path into a separate command. Backslash is here for
+# the same reason one step removed: a trailing one escapes the closing quote, so
+# `.../wt\` renders as `git -C ".../wt\" add -A` and the boundary disappears.
+_UNQUOTABLE = ('"', '\\', '`', '$', '\n', '\r')
 
 
 class WorkDirError(ValueError):

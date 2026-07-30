@@ -382,6 +382,22 @@ def test_validate_work_dir_rejects_a_path_that_would_break_the_quoting(tmp_path)
     assert repr('"') in str(excinfo.value)
 
 
+def test_validate_work_dir_rejects_a_trailing_backslash(tmp_path):
+    """A trailing backslash escapes the closing quote rather than ending the path.
+
+    `.../wt\\` renders as `git -C ".../wt\\" add -A`, where the quote is escaped, so
+    the shell never sees the boundary. It is a legal POSIX directory name, which is
+    why it has to be refused by name rather than assumed away.
+    """
+    hostile = tmp_path / "wt\\"
+    hostile.mkdir()
+
+    with pytest.raises(WorkDirError) as excinfo:
+        validate_work_dir(hostile)
+
+    assert WORK_DIR_UNQUOTABLE in str(excinfo.value)
+
+
 def test_validate_work_dir_rejects_a_path_that_does_not_exist(tmp_path):
     """Criterion 1: a path that isn't there names the 'missing' reason and the path."""
     absent = tmp_path / "not-here"

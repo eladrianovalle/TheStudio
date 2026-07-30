@@ -127,7 +127,7 @@ four reasons it hit, and the path it tried:
 - **missing** — there is no directory at that path;
 - **not-a-worktree** — the directory exists but is not inside a git worktree;
 - **different-repo** — it is a worktree of some other repository, not this one;
-- **unquotable** — the path contains a character (`"`, a backtick, `$`, a newline) that would
+- **unquotable** — the path contains a character (`"`, `\`, a backtick, `$`, a newline) that would
   break out of the `git -C "<path>"` quoting the loop renders into the agents' instructions,
   turning the rest of the path into a command of its own. Rename the directory.
 
