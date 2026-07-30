@@ -238,14 +238,13 @@ def test_artifact_root_cli_override(tmp_path, monkeypatch):
 def _make_source_repo(tmp_path, monkeypatch):
     """Studio's own repo: <repo>/studio holding the running code, plus a bare .studio/.
 
-    Mirrors the real source repo, where .studio/ holds update.toml and usage.log but
-    deliberately has no VERSION file (VERSION marks an *installed* repo).
+    Mirrors the real source repo, whose .studio/ deliberately has no VERSION file —
+    VERSION is what marks an *installed* repo.
     """
     repo_root = tmp_path / "TheGameStudio"
     studio_root = repo_root / "studio"
     studio_root.mkdir(parents=True)
     (repo_root / ".studio").mkdir()
-    (repo_root / ".studio" / "update.toml").write_text("[update]\n", encoding="utf-8")
 
     monkeypatch.setenv("STUDIO_ROOT", str(studio_root))
     monkeypatch.delenv("STUDIO_ARTIFACT_ROOT", raising=False)
