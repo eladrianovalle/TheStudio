@@ -3,7 +3,7 @@ feature: Writer Escalation Channel
 slug: writer-escalation-channel
 ticket: none
 status: approved
-studio_run: .studio/output/tech/run_tech_20260728_155545
+studio_run: (run directory no longer on disk; removed by retention cleanup)
 ---
 
 # Writer Escalation Channel — Architecture Spec

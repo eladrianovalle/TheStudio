@@ -3,7 +3,7 @@ feature: Doc-parity tests (Studio roadmap R2, reframed)
 slug: doc-parity-tests
 ticket: none (roadmap item R2 — see studio/docs/GSTACK_COMPARISON.md)
 status: approved
-studio_run: .studio/output/tech/run_tech_20260716_181851
+studio_run: studio/output/tech/run_tech_20260716_181851
 ---
 
 # Doc-Parity Tests — Architecture Spec

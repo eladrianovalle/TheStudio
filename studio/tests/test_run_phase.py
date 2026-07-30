@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 import run_phase
+from integrations.slack_digest import load_integrations_config
 from conftest import make_prepare_args, make_finalize_args
 
 
@@ -264,6 +265,42 @@ def test_artifact_root_is_studio_dir_when_run_from_source_repo_root(tmp_path, mo
 
     assert run_phase.get_artifact_root() == studio_root.resolve()
     assert run_phase.get_output_root() == studio_root.resolve() / "output"
+
+
+def test_source_repo_resolves_integrations_config_inside_studio(tmp_path, monkeypatch):
+    """Where a source-repo run looks for its webhook config, pinned.
+
+    Moving the artifact root moved this too, and it is the one consequence that is
+    invisible until it fires: a config sitting at the NEW path is suddenly live, so a
+    finalize can start posting digests as a side effect of a path fix. Pin the path so
+    that stops being a surprise.
+    """
+    repo_root, studio_root = _make_source_repo(tmp_path, monkeypatch)
+    monkeypatch.chdir(repo_root)
+
+    resolved = run_phase.get_artifact_root() / ".studio" / run_phase.INTEGRATIONS_FILENAME
+
+    assert resolved == studio_root.resolve() / ".studio" / run_phase.INTEGRATIONS_FILENAME
+    # Not the repo root's .studio/, which is where it resolved before the detection fix.
+    assert resolved != repo_root.resolve() / ".studio" / run_phase.INTEGRATIONS_FILENAME
+
+
+def test_no_integrations_config_means_no_webhook_post(tmp_path, monkeypatch):
+    """A fresh clone has no integrations.toml, and must post nothing.
+
+    `studio/.studio/` is gitignored, so nobody who clones this repo has that file at
+    all. The absent case is therefore the common one, and it must resolve to "no
+    enabled target" rather than an error or a default-on.
+    """
+    repo_root, studio_root = _make_source_repo(tmp_path, monkeypatch)
+    monkeypatch.chdir(repo_root)
+    assert not (studio_root / ".studio" / run_phase.INTEGRATIONS_FILENAME).exists()
+
+    config = load_integrations_config(run_phase.get_artifact_root())
+
+    assert config == {}
+    # This is the exact condition _maybe_notify gates on before posting anything.
+    assert not any(config.get(target, {}).get("enabled") for target in ("slack", "n8n"))
 
 
 def test_artifact_root_is_studio_dir_when_run_from_studio_dir(tmp_path, monkeypatch):
