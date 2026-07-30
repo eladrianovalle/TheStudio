@@ -21,6 +21,13 @@ function loadFunction(relSource, name, deps = []) {
   return new Function(m[1], `${preamble}\n${m[2]}`)
 }
 
+// A top-level one-line `const name = ...` (e.g. gitIn), rebuilt and returned as a value. The
+// single-line extraction is the reason those consts have to stay one-liners.
+function loadConst(relSource, name) {
+  const src = readFileSync(new URL(relSource, import.meta.url), 'utf8')
+  return new Function(`${declarationSource(src, name, relSource)}\nreturn ${name}`)()
+}
+
 // The source text of a top-level `function name(...) {...}` or a one-line `const name = ...`.
 function declarationSource(src, name, relSource) {
   const asFunction = src.match(new RegExp(`function ${name}\\([^)]*\\)\\s*\\{[\\s\\S]*?\\n\\}`))
@@ -63,8 +70,8 @@ test('collectReviewerConcerns defaults safely on a non-array field (never crashe
 // and the editor grades each one. A spec-less run carries none and must behave exactly as before.
 // ---------------------------------------------------------------------------
 const unitCriteria = loadFunction('../implementation-loop.js', 'unitCriteria')
-const writerPrompt = loadFunction('../implementation-loop.js', 'writerPrompt', ['unitCriteria', 'runDir'])
-const editorPrompt = loadFunction('../implementation-loop.js', 'editorPrompt', ['unitCriteria', 'runDir'])
+const writerPrompt = loadFunction('../implementation-loop.js', 'writerPrompt', ['unitCriteria', 'runDir', 'gitIn', 'workDirPreamble'])
+const editorPrompt = loadFunction('../implementation-loop.js', 'editorPrompt', ['unitCriteria', 'runDir', 'gitIn', 'workDirPreamble'])
 
 // A unit with no acceptance_criteria key at all — the shape every run had before this feature.
 const UNIT = {
@@ -285,6 +292,94 @@ test('static_ok shuts the entry gate only when it is explicitly false', () => {
   assert.equal(passesEntryGate({ ...GREEN_WRITER, static_ok: false }, true), false)
   // The short-circuit: the same failed check is waived when the unit configured no static checks.
   assert.equal(passesEntryGate({ ...GREEN_WRITER, static_ok: false }, false), true)
+})
+
+// ---------------------------------------------------------------------------
+// implementation-loop.js — work_dir. The loop can be told which directory to build in (a git
+// worktree), instead of trusting wherever the agent's shell happens to be sitting.
+//
+// Honest limit, worth remembering while reading these: every one of these is prompt TEXT. A test
+// can prove the prompt says `cd` and pins git; only a live run shows the agent obeyed.
+// ---------------------------------------------------------------------------
+const gitIn = loadConst('../implementation-loop.js', 'gitIn')
+const WORK_DIR = '/Users/x/Repos/my repo-wt/wd'  // a space, on purpose: paths like this exist
+const PINNED = `git -C "${WORK_DIR}"`
+const occurrences = (haystack, needle) => haystack.split(needle).length - 1
+
+test('gitIn pins git to the work dir, and quotes the path', () => {
+  assert.equal(gitIn({ work_dir: WORK_DIR }), PINNED)
+  // Unquoted, a path with a space would split into two arguments and git would take the wrong one.
+  assert.equal(gitIn({ work_dir: '/tmp/wt' }), 'git -C "/tmp/wt"')
+})
+
+test('gitIn falls back to bare git when no work dir was named', () => {
+  // The compatibility path: every run before --work-dir existed carries no work_dir at all.
+  assert.equal(gitIn(UNIT), 'git')
+  assert.equal(gitIn({ work_dir: '' }), 'git')
+  assert.equal(gitIn({}), 'git')
+})
+
+test('the writer prompt pins every git command, including the escalation commit', () => {
+  const prompt = writerPrompt({ ...UNIT, work_dir: WORK_DIR })
+  assert.ok(prompt.includes(`${PINNED} add -A && ${PINNED} commit -m "writer: unit_demo"`))
+  // The --allow-empty stuck commit is the easiest of the three commit shapes to miss.
+  assert.ok(prompt.includes(`${PINNED} add -A && ${PINNED} commit --allow-empty -m "writer(stuck): unit_demo"`))
+  // Two commands, two git tokens each: a count, so a fourth command added later can't slip past
+  // unpinned without failing here.
+  assert.equal(occurrences(prompt, PINNED), 4)
+})
+
+test('the editor prompt pins its diff, its revert, and its commit', () => {
+  const prompt = editorPrompt({ ...UNIT, work_dir: WORK_DIR }, WRITER)
+  assert.ok(prompt.includes(`${PINNED} diff ${WRITER.writer_sha}..`))
+  assert.ok(prompt.includes(`${PINNED} reset --hard ${WRITER.writer_sha}`))
+  assert.ok(prompt.includes(`${PINNED} commit -am "editor: unit_demo"`))
+  assert.equal(occurrences(prompt, PINNED), 3)
+})
+
+test('no prompt leaves a bare git command outside the preamble', () => {
+  // The two counts above prove the git commands we already know about are pinned. They cannot
+  // notice a NEW bare `git` added to a prompt later: the pinned count is unchanged, so the suite
+  // stays green while the loop half-targets the worktree. This catches that instead.
+  //
+  // The preamble is stripped first because it legitimately quotes a bare `git` — the rule telling
+  // the agent never to retry a failed pinned command as one.
+  for (const prompt of [writerPrompt({ ...UNIT, work_dir: WORK_DIR }), editorPrompt({ ...UNIT, work_dir: WORK_DIR }, WRITER)]) {
+    const body = prompt.slice(prompt.indexOf('\n\n') + 2)
+    const bare = [...body.matchAll(/`git (?!-C)/g)].map((m) => body.slice(m.index, m.index + 44))
+    assert.deepEqual(bare, [], `unpinned git command found in a prompt: ${JSON.stringify(bare)}`)
+  }
+})
+
+test('both prompts open by telling the agent to cd into the work dir', () => {
+  // First line, before the role: the `cd` is what covers the test command, the static check and
+  // the mutation run — none of which git could ever be pinned for.
+  for (const prompt of [writerPrompt({ ...UNIT, work_dir: WORK_DIR }), editorPrompt({ ...UNIT, work_dir: WORK_DIR }, WRITER)]) {
+    assert.equal(prompt.split('\n')[0], `ALL WORK HAPPENS IN ${WORK_DIR} — cd there before you do anything else, and stay there.`)
+    assert.match(prompt, /Every command below \(tests, static checks, git\) must run in that directory/)
+  }
+})
+
+test('both prompts say to stop rather than fall back to bare git', () => {
+  // Validation happens once, at the start, while the agents run for an hour. A silent fallback to
+  // bare `git` after a failed pinned command is how the main checkout gets moved anyway.
+  for (const prompt of [writerPrompt({ ...UNIT, work_dir: WORK_DIR }), editorPrompt({ ...UNIT, work_dir: WORK_DIR }, WRITER)]) {
+    assert.match(prompt, /if a pinned command fails,\nSTOP and report the failure\. Never retry it as a bare `git`/)
+  }
+})
+
+// The compatibility bar, and it is exact: every existing run has no work_dir. The fixture holds the
+// prompts as they rendered before --work-dir landed, captured from the shipped code. Regenerate it
+// only when a change to the unpinned prompts is intended — a diff here otherwise means every run
+// that never asked for a work dir just changed.
+const BASELINE = JSON.parse(readFileSync(new URL('./fixtures/prompts-no-work-dir.json', import.meta.url), 'utf8'))
+
+test('with no work dir both prompts are byte-identical to the pre-feature output', () => {
+  assert.equal(writerPrompt(BASELINE.unit), BASELINE.writer_prompt)
+  assert.equal(editorPrompt(BASELINE.unit, BASELINE.writer), BASELINE.editor_prompt)
+  // And the fixture is the same unit these tests use elsewhere, so it can't drift into a special case.
+  assert.deepEqual(BASELINE.unit, UNIT)
+  assert.deepEqual(BASELINE.writer, WRITER)
 })
 
 test('a malformed criteria payload leaves both prompts on the no-criteria path', () => {
