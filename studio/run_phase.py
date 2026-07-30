@@ -310,13 +310,21 @@ def get_artifact_root() -> Path:
 
     studio_root = get_studio_root().resolve()
     cwd = Path.cwd().resolve()
+    installed_root = _installed_repo_root(studio_root)
 
     if cwd == studio_root or _is_within(cwd, studio_root):
         # Running from the source tree (or from inside an installed snapshot).
         # In the source repo the artifact root IS the studio dir; in an installed
         # snapshot it's the consuming repo root, never the snapshot itself.
-        installed_root = _installed_repo_root(studio_root)
         return installed_root if installed_root is not None else studio_root
+
+    # Running from Studio's own repo root, or a subdir of it other than studio/ itself.
+    # A studio_root that is not a snapshot, with cwd under its parent, is the source repo
+    # and nothing else. This has to come before the consumer heuristics below: the source
+    # repo keeps its own bare .studio/ for update.toml and usage.log, which those
+    # heuristics would otherwise read as a scaffolded consuming repo.
+    if installed_root is None and _is_within(cwd, studio_root.parent):
+        return studio_root
 
     # The next two branches are distinct on purpose: an init'd repo is marked by
     # .studio/VERSION (walk UP for it, which handles monorepo subdirs), whereas a merely
