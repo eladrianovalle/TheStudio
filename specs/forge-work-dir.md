@@ -110,8 +110,8 @@ must be a one-liner, exactly as `runDir` already is, and it must be added to the
 
 `forge.md:108-122` does branch selection and a dirty-tree check **in the current directory**. Against
 a worktree already sitting on `impl/<unit_id>`, that either hard-fails or moves the main checkout off
-`main` — precisely the accident this feature exists to make less likely. This was verified as essential, not
-scope creep.
+`main` — precisely the accident this feature exists to make less likely. This was verified as
+essential, not scope creep.
 
 Likewise `forge.md:183` hardcodes `scriptPath` to the main repo. With a work dir set it must point
 into that directory, or a unit that edits the loop silently builds against main's copy.

@@ -23,9 +23,9 @@ treat that as an invocation of this command.
 - Optional `--branch <name>`: branch to run on (default: derive `impl/<unit_id>`).
 - Optional `--work-dir <path>`: the directory the loop's agents build in. Must be a git worktree
   of this repository; it is validated in Step 3 and a bad path stops the run before any agent
-  spawns. Without it, the agents work wherever their shell starts, as they always have. It reduces
-  the blast radius of a run pointed at the wrong directory rather than ruling that out — every one
-  of these git commands is prompt text an agent may ignore.
+  spawns. Without it, the agents work wherever their shell starts, as they always have. The flag
+  reduces the blast radius of a run pointed at the wrong directory rather than ruling that out:
+  every git command the loop renders is prompt text an agent may ignore.
 - Optional `--test "<cmd>"`: override the inferred test command.
 - Optional `--plan`: echo the parsed plan and STOP (dry run); do not run the loop.
 
