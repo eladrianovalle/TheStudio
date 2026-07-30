@@ -34,7 +34,7 @@ set of subagent prompt templates.
 | **Trigger** | Automatic — SessionStart hook injects the bootstrap every session (`hooks/session-start`, `hooks/hooks.json` matcher `startup\|clear\|compact`) | Explicit — the user types a slash command |
 | **How prose earns its place** | Measured. RED baseline → harvested excuses → minimal counter → re-run. Wording micro-tests with a no-guidance control, 5+ reps (`skills/writing-skills/SKILL.md:575-585`) | Argued. Reviewed by a contrarian, then judged by a human 1–5 rating on live runs |
 | **Adversarial signal** | A fresh subagent reviewing a diff it did not write, with a two-verdict contract | Fixed advocate/contrarian roles through a staged scoped debate |
-| **Enforcement** | Almost entirely prose. No CI workflows exist in the repo; `.pre-commit-config.yaml` lints only the gitignored `evals/` Python | Python. Gates, validators, 855 tests, ruff + pytest in CI |
+| **Enforcement** | Almost entirely prose. No CI workflows exist in the repo; `.pre-commit-config.yaml` lints only the gitignored `evals/` Python | Python. Gates, validators, 861 tests, ruff + pytest in CI |
 | **Reach** | 11 agent harnesses, one content tree, per-harness tool-name mapping files | One harness (Claude Code), on purpose |
 
 ## What they do better
@@ -45,7 +45,7 @@ set of subagent prompt templates.
   `skills/writing-skills/SKILL.md:575-585` adds the cheap inner loop — one fresh-context sample per
   call, a mandatory no-guidance control ("If the control doesn't exhibit the failure, there is
   nothing to fix — stop, don't author the guidance"), 5+ reps, every regex hit read by hand, and
-  variance treated as its own metric. Studio has 855 tests and none of them can tell whether a
+  variance treated as its own metric. Studio has 861 tests and none of them can tell whether a
   prompt edit made debates better or worse.
 - **They have a theory of prompt *form*; we have none.** `skills/writing-skills/SKILL.md:459-474`
   classifies the baseline failure first, then picks the form from a table: discipline slips get a

@@ -434,45 +434,6 @@ class TestSlashCommandsUseDirectPaths:
         assert ".studio/source/run_phase.py" in content
 
 
-class TestShipListParity:
-    """Every command and workflow on disk must be on the installer's ship list.
-
-    Writing a new `.claude/commands/*.md` file makes the command work *here* and
-    nowhere else: consuming repos only get the files named in `SLASH_COMMANDS`.
-    Nothing used to notice the difference, so `/handoff` shipped to this repo and
-    stayed here. These two assertions are the whole fix — add a command file and
-    forget the list, and this reddens instead of a consumer quietly missing it.
-    """
-
-    def test_every_command_file_is_shipped(self, studio_dir):
-        commands_dir = studio_dir.parent / ".claude" / "commands"
-        on_disk = {path.name for path in commands_dir.glob("*.md")}
-        unshipped = on_disk - set(install.SLASH_COMMANDS)
-        assert not unshipped, (
-            "slash commands exist in .claude/commands/ but are missing from "
-            f"install.SLASH_COMMANDS, so consuming repos never receive them: "
-            f"{sorted(unshipped)}"
-        )
-
-    def test_ship_list_has_no_phantoms(self, studio_dir):
-        commands_dir = studio_dir.parent / ".claude" / "commands"
-        on_disk = {path.name for path in commands_dir.glob("*.md")}
-        missing = set(install.SLASH_COMMANDS) - on_disk
-        assert not missing, (
-            "install.SLASH_COMMANDS names files that no longer exist in "
-            f".claude/commands/: {sorted(missing)}"
-        )
-
-    def test_every_workflow_file_is_shipped(self, studio_dir):
-        workflows_dir = studio_dir.parent / ".claude" / "workflows"
-        on_disk = {path.name for path in workflows_dir.glob("*.js")}
-        unshipped = on_disk - set(install.WORKFLOW_FILES)
-        assert not unshipped, (
-            "workflows exist in .claude/workflows/ but are missing from "
-            f"install.WORKFLOW_FILES: {sorted(unshipped)}"
-        )
-
-
 class TestClaudeMdInjection:
     """Tests for coding principles injection into target CLAUDE.md."""
 
@@ -1019,3 +980,150 @@ class TestUpdateStudioStaleness:
         out = capsys.readouterr().out
         assert "origin/main" in out
         assert "git -C" in out and "pull" in out
+
+
+class TestCommandRegistration:
+    """Every command and workflow in the source repo must be registered with the
+    installer.
+
+    The installer copies from hand-maintained lists (SLASH_COMMANDS,
+    WORKFLOW_FILES), not from whatever is on disk. Add a command to
+    `.claude/commands/` and forget the list, and it reaches NO project — and
+    nothing reports it, because "missing" is measured against the list too. That
+    is how `/handoff` shipped and stayed uninstalled everywhere. Sibling of
+    `test_installed_snapshot_imports`, which guards the same drift for source
+    modules.
+    """
+
+    def test_every_source_command_is_registered(self, studio_dir):
+        """A command file the installer doesn't know about would never install."""
+        on_disk = {p.name for p in (studio_dir.parent / ".claude" / "commands").glob("*.md")}
+        unregistered = sorted(on_disk - set(install.SLASH_COMMANDS))
+        assert not unregistered, (
+            f"these commands exist but the installer would never copy them: {unregistered}. "
+            "Add them to SLASH_COMMANDS in install.py."
+        )
+
+    def test_every_registered_command_exists(self, studio_dir):
+        """A registered name with no file is skipped silently, so catch the typo here."""
+        commands_dir = studio_dir.parent / ".claude" / "commands"
+        absent = sorted(n for n in install.SLASH_COMMANDS if not (commands_dir / n).is_file())
+        assert not absent, f"SLASH_COMMANDS names files that don't exist: {absent}"
+
+    def test_every_source_workflow_is_registered(self, studio_dir):
+        """Same drift, same consequence, for the Claude Code workflows."""
+        on_disk = {p.name for p in (studio_dir.parent / ".claude" / "workflows").glob("*.js")}
+        unregistered = sorted(on_disk - set(install.WORKFLOW_FILES))
+        assert not unregistered, (
+            f"these workflows exist but the installer would never copy them: {unregistered}. "
+            "Add them to WORKFLOW_FILES in install.py."
+        )
+
+    def test_every_registered_workflow_exists(self, studio_dir):
+        workflows_dir = studio_dir.parent / ".claude" / "workflows"
+        absent = sorted(n for n in install.WORKFLOW_FILES if not (workflows_dir / n).is_file())
+        assert not absent, f"WORKFLOW_FILES names files that don't exist: {absent}"
+
+
+class TestRetiredCommandRemoval:
+    """Update deletes the commands Studio has stopped shipping.
+
+    A command that gets renamed upstream (`/studio-implement` became `/forge`)
+    used to linger in every installed project forever, beside its replacement:
+    two commands for one job, the stale one holding the pre-rename behavior.
+
+    Each test simulates a retirement by dropping a name from SLASH_COMMANDS
+    AFTER the install, which is exactly the shape a rename leaves behind — the
+    project's manifest records a file the source no longer ships.
+    """
+
+    RETIRED_KEY = ".claude/commands/smoke.md"
+
+    def _retire_smoke(self, monkeypatch):
+        monkeypatch.setattr(
+            install,
+            "SLASH_COMMANDS",
+            [name for name in install.SLASH_COMMANDS if name != "smoke.md"],
+        )
+
+    def test_check_reports_retired_and_refuses_up_to_date(
+        self, target_dir, studio_dir, monkeypatch
+    ):
+        """A leftover command is a real difference from the source. If check called
+        it 'up to date', update would short-circuit and never clear it."""
+        install_studio(target_dir, studio_dir)
+        self._retire_smoke(monkeypatch)
+
+        status = check_studio(target_dir, studio_dir)
+
+        assert self.RETIRED_KEY in status["retired"]
+        assert status["up_to_date"] is False
+
+    def test_update_deletes_retired_command(self, target_dir, studio_dir, monkeypatch):
+        """The file is gone from disk, and the report says so."""
+        install_studio(target_dir, studio_dir)
+        command = target_dir / ".claude" / "commands" / "smoke.md"
+        assert command.is_file()
+        self._retire_smoke(monkeypatch)
+
+        result = update_studio(target_dir, studio_dir)
+
+        assert not command.exists()
+        assert result["removed"] == 1
+        assert result["retired"] == [self.RETIRED_KEY]
+
+    def test_update_keeps_hand_written_command(self, target_dir, studio_dir, monkeypatch):
+        """A command the project author wrote was never in the manifest, so the
+        prune can't reach it — even on a run that does delete something."""
+        install_studio(target_dir, studio_dir)
+        mine = target_dir / ".claude" / "commands" / "my-own-command.md"
+        mine.write_text("# my own command\n", encoding="utf-8")
+        self._retire_smoke(monkeypatch)
+
+        result = update_studio(target_dir, studio_dir)
+
+        assert result["removed"] == 1  # the prune really ran
+        assert mine.is_file()
+        assert mine.read_text(encoding="utf-8") == "# my own command\n"
+
+    def test_edited_retired_command_blocks_then_force_deletes(
+        self, target_dir, studio_dir, monkeypatch
+    ):
+        """A retired command the user edited goes through the existing clobber
+        guard: blocked first, deleted only when they pass --force."""
+        install_studio(target_dir, studio_dir)
+        command = target_dir / ".claude" / "commands" / "smoke.md"
+        command.write_text("# my own edits\n", encoding="utf-8")
+        self._retire_smoke(monkeypatch)
+
+        blocked = update_studio(target_dir, studio_dir)
+
+        assert blocked.get("blocked") is True
+        assert self.RETIRED_KEY in blocked["locally_modified"]
+        assert command.is_file()
+
+        forced = update_studio(target_dir, studio_dir, force=True)
+
+        assert not command.exists()
+        assert forced["removed"] == 1
+
+    def test_update_reports_removal_to_the_user(
+        self, target_dir, studio_dir, monkeypatch, capsys
+    ):
+        """A run that only deletes must not print 'already up to date'."""
+        import argparse
+        import run_phase
+
+        install_studio(target_dir, studio_dir)
+        self._retire_smoke(monkeypatch)
+        monkeypatch.setattr(install, "_get_studio_root", lambda: studio_dir)
+
+        args = argparse.Namespace(
+            target=target_dir, force=False, no_fetch=True, no_hook=True, pull_source=False
+        )
+        run_phase._do_update(args)
+
+        out = capsys.readouterr().out
+        assert "already up to date" not in out
+        assert "Removed: 1 file(s)" in out
+        assert "smoke.md" in out
