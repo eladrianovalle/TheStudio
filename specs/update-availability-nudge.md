@@ -3,7 +3,7 @@ feature: Proactive Update-Availability Nudge for Consuming Repos
 slug: update-availability-nudge
 ticket: none
 status: approved
-studio_run: .studio/output/tech/run_tech_20260708_164348
+studio_run: studio/output/tech/run_tech_20260708_164348
 ---
 
 # Proactive Update-Availability Nudge — Architecture Spec
