@@ -203,7 +203,7 @@ truly has no structure worth drawing, it probably didn't need a spec.
 
 Present the spec to the user for approval. Summarize in plain words what the architecture landed on,
 the decisions that shaped it, and anything still open — enough that they can approve without opening
-the file (Coding Principles §8). Then:
+the file (the Coding Principles section "Write for Humans"). Then:
 
 - **On approval:** set `status: approved` in the frontmatter, save the file, and confirm the path.
   If a `--ticket` was given, remind the user to link/attach the spec on that ticket so the tracker
@@ -303,4 +303,4 @@ python ".studio/source/run_phase.py" rate --run-dir {run_dir} --score {1-5} --no
   `/forge --spec` judges the built unit against them one by one. Vague criteria there become a vague
   verdict downstream.
 - **A spec precedes the build.** Once approved, this is what `/forge` and the feature
-  work build against. (See Coding Principle 9, "Spec Before Build.")
+  work build against. (See the Coding Principles section "Spec Before Build.")

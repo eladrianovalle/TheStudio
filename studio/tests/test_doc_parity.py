@@ -112,3 +112,52 @@ class TestLoopConfigParity:
             "LoopConfig fields not defined in the TOML config block of "
             f"IMPLEMENTATION_LOOP_SPEC.md: {sorted(missing)}"
         )
+
+
+def _principle_lines(text: str) -> list[str]:
+    """The numbered coding principles in a doc, as `N. Title` plus their content.
+
+    Works on both copies: CODING_PRINCIPLES.md heads each principle with `## N.`,
+    this repo's own CLAUDE.md with `### N.`. Blank lines are dropped so the
+    comparison is about wording, not spacing.
+    """
+    lines: list[str] = []
+    inside_a_principle = False
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        heading = re.match(r"^#{2,3} (\d+\. .+)$", line)
+        if heading:
+            inside_a_principle = True
+            lines.append(heading.group(1))
+            continue
+        if line.startswith("#") or line.startswith("---"):
+            inside_a_principle = False  # left the principles for another section
+        elif inside_a_principle and line:
+            lines.append(line)
+    return lines
+
+
+class TestCodingPrinciplesMirror:
+    """The principles live in two hand-maintained copies and must not drift.
+
+    `studio/docs/CODING_PRINCIPLES.md` ships to every installed repo; this repo's
+    own `CLAUDE.md` carries the same text inline. Edit one and forget the other,
+    and Studio starts telling other repos something it doesn't tell itself.
+    """
+
+    def test_claude_md_matches_the_shipped_principles(self):
+        shipped = _principle_lines(
+            (_DOCS / "CODING_PRINCIPLES.md").read_text(encoding="utf-8")
+        )
+        own = _principle_lines(
+            (_DOCS.parent.parent / "CLAUDE.md").read_text(encoding="utf-8")
+        )
+        assert shipped, "no numbered principles found in CODING_PRINCIPLES.md"
+
+        only_in_claude_md = [line for line in own if line not in shipped]
+        only_in_shipped = [line for line in shipped if line not in own]
+        assert own == shipped, (
+            "CLAUDE.md and docs/CODING_PRINCIPLES.md disagree.\n"
+            f"Only in CLAUDE.md: {only_in_claude_md}\n"
+            f"Only in CODING_PRINCIPLES.md: {only_in_shipped}"
+        )

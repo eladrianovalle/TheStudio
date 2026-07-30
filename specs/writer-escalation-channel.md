@@ -146,7 +146,7 @@ if (writer.stuck) {
 ```
 
 A standalone `if`, not an interpolation into the existing gate-fail log. The interpolation would need
-a ternary nested in a template literal (against Coding Principles §7) and would miss the advisory
+a ternary nested in a template literal (against the "Write for Humans" coding principle) and would miss the advisory
 case on a green unit. This version touches no existing line.
 
 ### The entry gate, extracted
