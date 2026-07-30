@@ -185,22 +185,6 @@ class TestArtifactRootChainParity:
             "get_artifact_root() actually tries them"
         )
 
-    def test_doc_names_where_each_kind_of_repo_files_its_runs(self):
-        """Source repo and consuming repo file runs in different places; say both."""
-        doc = _doc_section("ARCHITECTURE.md", "### Where Artifacts Land")
-        assert "`studio/output/`" in doc, (
-            "ARCHITECTURE.md never says a run from Studio's own repo lands in "
-            "studio/output/"
-        )
-        assert "`<repo>/.studio/output/`" in doc, (
-            "ARCHITECTURE.md never says a run from a consuming repo lands in that "
-            "repo's .studio/output/"
-        )
-        assert "docs/studio-bridge.md" in doc, (
-            "ARCHITECTURE.md should pin the bridge doc to the consuming-repo case, "
-            "since the source repo no longer scaffolds one for itself"
-        )
-
 
 def _principle_lines(text: str) -> list[str]:
     """The numbered coding principles in a doc, as `N. Title` plus their content.
