@@ -1,6 +1,6 @@
 # TICKET: Expand stats — trends, drill-down, persisted report
 
-**Type:** Feature · **Component:** `studio/run_phase.py` (`stats`) · **Priority:** P2
+**Type:** Feature · **Component:** `studio/stats.py` (`stats`) · **Priority:** P2
 **Status:** Open · **Author:** Adriano Valle · **Date:** 2026-06-25
 **Follows:** Stats + ratings feature (shipped) · **Gated by:** `TICKET-stats-progress-check` (go/no-go)
 
@@ -53,6 +53,6 @@ is independently shippable; do the high-leverage ones first, don't build all of 
 
 ## References
 
-- `aggregate_stats()` / `format_stats()` / `_parse_usage_log()` in `studio/run_phase.py`.
+- `aggregate_stats()` / `format_stats()` / `_parse_usage_log()` in `studio/stats.py`.
 - `write_index()` as the model for a persisted-report writer.
 - Related: `TICKET-stats-progress-check`, `TICKET-stats-calibration`, `project_agent_metrics`.

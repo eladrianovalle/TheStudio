@@ -4,8 +4,9 @@ Cross-repo Studio installer.
 Copies Studio source, slash commands, workflows, config, and manifest into a
 target project so that all slash commands (`/run-phase`, `/run-studio-phase`,
 `/forge`, `/spec`, `/smoke`, `/unstale`, `/detest`, `/offload`,
-`/studio-update`, `/studio-setup`) work natively, including the pause-and-ask
-collaboration protocol and the implementation-loop and finding-verifier workflows.
+`/studio-update`, `/studio-setup`, `/handoff`) work natively, including the
+pause-and-ask collaboration protocol and the implementation-loop and
+finding-verifier workflows.
 
 Also injects coding principles (from docs/CODING_PRINCIPLES.md) into the
 target project's CLAUDE.md using sentinel markers for idempotent updates.
@@ -85,6 +86,7 @@ SLASH_COMMANDS = [
     "forge.md",
     "smoke.md",
     "spec.md",
+    "handoff.md",
 ]
 
 # Claude Code Workflows to copy to {target}/.claude/workflows/ (verbatim, like commands)

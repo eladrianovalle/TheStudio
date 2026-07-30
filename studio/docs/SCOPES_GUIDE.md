@@ -55,7 +55,7 @@ debate_mode = "all_roles"
 | `focus` | Yes | Guidance included in agent prompts for this scope |
 | `max_iterations` | Yes | Advocate/contrarian rounds before moving on (min 1) |
 | `output_budget` | No | Word cap per agent output (omit for no cap) |
-| `debate_mode` | No | `"all_roles"` (parallel) or `"per_role"` (sequential). Default: `"all_roles"` |
+| `debate_mode` | No | `"all_roles"` (parallel) or `"per_role"` (sequential). Default: `"per_role"` |
 
 ### File Naming
 

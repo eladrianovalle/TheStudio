@@ -1,6 +1,6 @@
 # TICKET: Check in on stats/ratings — is the feedback loop working?
 
-**Type:** Task (ops + verification) · **Component:** `studio/run_phase.py` (`stats`, `rate`) · **Priority:** P3
+**Type:** Task (ops + verification) · **Component:** `studio/stats.py` (`stats` aggregation) + `studio/run_phase.py` (`rate`) · **Priority:** P3
 **Status:** Open · **Author:** Adriano Valle · **Date:** 2026-06-25
 **Follows:** Stats + ratings feature (shipped — `rate`/`stats` CLI, `rating.json`)
 
@@ -56,6 +56,6 @@ expansion + calibration.
 ## References
 
 - `studio/docs/CLAUDE_CODE_USAGE.md` → "Quality Ratings & Cross-Run Stats".
-- `aggregate_stats()` / `format_stats()` in `studio/run_phase.py`.
+- `aggregate_stats()` / `format_stats()` in `studio/stats.py`.
 - Related: `feedback_collaboration_protocol` (pause-and-ask intent), `TICKET-stats-expansion`,
   `TICKET-stats-calibration`.

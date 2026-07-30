@@ -434,6 +434,45 @@ class TestSlashCommandsUseDirectPaths:
         assert ".studio/source/run_phase.py" in content
 
 
+class TestShipListParity:
+    """Every command and workflow on disk must be on the installer's ship list.
+
+    Writing a new `.claude/commands/*.md` file makes the command work *here* and
+    nowhere else: consuming repos only get the files named in `SLASH_COMMANDS`.
+    Nothing used to notice the difference, so `/handoff` shipped to this repo and
+    stayed here. These two assertions are the whole fix — add a command file and
+    forget the list, and this reddens instead of a consumer quietly missing it.
+    """
+
+    def test_every_command_file_is_shipped(self, studio_dir):
+        commands_dir = studio_dir.parent / ".claude" / "commands"
+        on_disk = {path.name for path in commands_dir.glob("*.md")}
+        unshipped = on_disk - set(install.SLASH_COMMANDS)
+        assert not unshipped, (
+            "slash commands exist in .claude/commands/ but are missing from "
+            f"install.SLASH_COMMANDS, so consuming repos never receive them: "
+            f"{sorted(unshipped)}"
+        )
+
+    def test_ship_list_has_no_phantoms(self, studio_dir):
+        commands_dir = studio_dir.parent / ".claude" / "commands"
+        on_disk = {path.name for path in commands_dir.glob("*.md")}
+        missing = set(install.SLASH_COMMANDS) - on_disk
+        assert not missing, (
+            "install.SLASH_COMMANDS names files that no longer exist in "
+            f".claude/commands/: {sorted(missing)}"
+        )
+
+    def test_every_workflow_file_is_shipped(self, studio_dir):
+        workflows_dir = studio_dir.parent / ".claude" / "workflows"
+        on_disk = {path.name for path in workflows_dir.glob("*.js")}
+        unshipped = on_disk - set(install.WORKFLOW_FILES)
+        assert not unshipped, (
+            "workflows exist in .claude/workflows/ but are missing from "
+            f"install.WORKFLOW_FILES: {sorted(unshipped)}"
+        )
+
+
 class TestClaudeMdInjection:
     """Tests for coding principles injection into target CLAUDE.md."""
 
