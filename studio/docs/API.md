@@ -36,7 +36,7 @@ Supported commands:
 | `check-updates` | The lightweight check the SessionStart hook runs (you rarely call it by hand). Compares the commit your Studio was installed from against the source's current `origin/main` HEAD; if they differ, it prints a one-line "an update is available" nudge, otherwise it's silent. Network is a bounded, best-effort `git fetch` at most once per 24h (cached in `.studio/update-check.json`), so it's near-instant on repeat sessions and safe offline. It nudges once per new upstream commit, never changes files, and always exits 0 (a session-start hook must never fail your session). Opt out durably by creating an empty `.studio/update-check.off` file. Only works on the machine that ran `studio init` (the one with the Studio source); a teammate who merely cloned the repo gets a silent no-op. |
 | `check-install` | Checks whether the installed Studio is up to date, and shows any files you've edited locally that an `update` would overwrite: both the Studio source and the installed slash commands and workflows. Also guards against a stale *source*: it does a quick, best-effort `git fetch` of the Studio source and, if the source's own checkout is behind its remote (`origin/main`), refuses to report "up to date" (exits non-zero) and compares against `origin/main` instead — so "up to date" can't silently mean "up to date with an out-of-date source." Pass `--no-fetch` to skip the network and compare against already-fetched refs. |
 | `update` | Updates the installed Studio from source. If you've edited any installed file locally, it stops instead of overwriting your work; pass `--force` to overwrite anyway. This covers the Studio source as well as the installed slash commands and workflows. If the Studio *source* is behind its own remote, `update` won't falsely no-op: it reinstalls from `origin/main` and reminds you to run `git -C <source> pull` to catch your source up. By default it never pulls your source for you — but you can opt in: pass `--pull-source` (or set `[update] auto_pull_source = true` in the *source* repo's `.studio/update.toml`, once, to cover every consumer on that machine) and `update` will fast-forward your source checkout itself when it's cleanly behind, so the nag stops recurring. The pull is strictly safe — fast-forward only, and only when the source is clean, on its default branch, and simply behind (never a merge, force, or a dirty/diverged/feature-branch checkout; any of those falls back to the reinstall-from-origin + manual-pull hint). `--no-fetch` skips that source-staleness network check. It also refreshes the SessionStart update-check hook (pass `--no-hook` to remove it instead). |
-| `setup` | Configure Studio for a project: role pack selection, role + phase-persona customization (`.studio/personas.toml`), unstale audit config (`.studio/unstale.toml`), scope tuning, cleanup settings. Supports `--status`, `--defaults`, `--answers`, `--role-pack`. |
+| `setup` | Configure Studio for a project: role pack selection, role + phase-persona customization (`.studio/personas.toml`), unstale audit config (`.studio/unstale.toml`), smoke profile (`.studio/smoke.toml`), scope tuning, cleanup settings. Supports `--target`, `--status`, `--defaults`, `--answers`, `--role-pack`, `--roles`. |
 | `notify` | Posts a run digest to enabled Slack/n8n webhooks (config in `.studio/integrations.toml`). Auto-fires on `finalize` when a target is enabled (soft-fail). Supports `--run-dir`, `--dry-run`, `--artifact-root`. |
 
 ---
@@ -57,6 +57,7 @@ Supported commands:
 | `--mode` | ❌ | `deliverables` | Output mode: `deliverables` (default) produces specs; `questions` surfaces open questions. |
 | `--artifact-root` | ❌ | None | Override where artifacts are written. Defaults to cwd (external repo) or Studio root. |
 | `--cleanup-dry-run` | ❌ | `False` | Preview cleanup candidates without deleting files. |
+| `--json` | ❌ | `False` | Emit a machine-readable `{run_id, run_dir, instructions, phase, ...}` object as the final line of stdout, instead of the prose summary and tips. |
 
 **Output files (under the active output root):**
 - Studio-local execution: `<studio>/output/<phase>/run_<phase>_<timestamp>/`
@@ -77,7 +78,7 @@ Inside each run directory:
 
 | Flag | Required | Default | Description |
 | --- | --- | --- | --- |
-| `--phase {market,design,tech,studio}` | ✅ | - | Phase associated with the run. |
+| `--phase {market,design,tech,studio}` | ❌ | derived from `--run-id` | Phase associated with the run. Redundant with `--run-id`, which already encodes it, so it's optional. |
 | `--run-id run_<phase>_<timestamp>` | ✅ | - | Identifier printed by `prepare`. |
 | `--status STATUS` | ❌ | `COMPLETED` | Free-form label (“completed”, “abandoned”, etc.). |
 | `--verdict VERDICT` | ❌ | - | `APPROVED`, `REJECTED`, `N/A`, or any label you prefer. |
@@ -86,6 +87,7 @@ Inside each run directory:
 | `--cost FLOAT` | ❌ | `None` | Monetary cost in USD (typically `0`). |
 | `--summary PATH` | ❌ | auto-detected | Provide a custom summary path if you store it elsewhere. |
 | `--no-rate-prompt` | ❌ | `false` | Suppress the end-of-run quality-rating prompt/nudge (the slash commands pass this and ask conversationally instead). |
+| `--artifact-root` | ❌ | None | Override where artifacts are written. Defaults to cwd (external repo) or Studio root. |
 
 `finalize` enforces the artifact checklist (see Section 3). Missing files raise a `FileNotFoundError` describing the gaps. On a `COMPLETED` run it closes with a rating prompt (interactive at a TTY, otherwise a copy-paste `rate` nudge) unless `--no-rate-prompt` is given.
 
@@ -213,7 +215,7 @@ No API keys or third-party credentials are required.
 | --- | --- |
 | `market`, `design` | `advocate_<n>.md`, `contrarian_<n>.md`, `summary.md` |
 | `tech` | `advocate_<n>.md`, `contrarian_<n>.md`, `summary.md`, `implementation.md` (with tests) |
-| `studio` | `advocate--<role>--<n>.md`, `contrarian--<role>--<n>.md`, `integrator.md` (with duel sections), `summary.md` |
+| `studio` | `integrator.md` (with duel sections), `summary.md`, plus per-role agent files. In the default scoped mode those are `advocate--<role>--S1-<nn>.md` / `S2-` / `S3-` (alignment / depth / polish) and the matching `contrarian--` files; with `--no-scopes` they are `advocate--<role>--<n>.md` and `contrarian--<role>--<n>.md`. |
 
 `finalize` ensures these files exist inside the run directory. You can add extra context (screenshots, spreadsheets, etc.) so long as they live in the same folder.
 

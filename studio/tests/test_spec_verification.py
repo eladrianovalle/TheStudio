@@ -128,6 +128,22 @@ def _printed_lines(skeleton_lines: list[str]) -> frozenset[str]:
     return frozenset(printed)
 
 
+def _preamble_rules(skeleton_lines: list[str]) -> str:
+    """The paragraph stating the rules, from the top matter above the first section.
+
+    Everything above the first `## ` is preamble; its last paragraph is the one that tells
+    the reader what filling this file in requires. Taken structurally rather than by its
+    opening words, so a reword still lands in the same place.
+    """
+    preamble: list[str] = []
+    for line in skeleton_lines[1:]:
+        if line.startswith("## "):
+            break
+        preamble.append(line)
+    paragraphs = "\n".join(preamble).strip().split("\n\n")
+    return paragraphs[-1].strip() if paragraphs else ""
+
+
 def _section_body(results_text: str, heading: str) -> str | None:
     """Everything under `heading` up to the next heading, or None if the heading isn't there."""
     lines = results_text.splitlines()
@@ -153,6 +169,7 @@ def _own_words(body: str, printed: frozenset[str]) -> bool:
 
 _SKELETON_LINES = _skeleton_block(SPEC_COMMAND.read_text(encoding="utf-8"))
 _PRINTED_LINES = _printed_lines(_SKELETON_LINES)
+_PREAMBLE_RULES = _preamble_rules(_SKELETON_LINES)
 
 
 def _violations(
@@ -351,6 +368,44 @@ class TestRealSpecs:
             "the skeleton prints no guidance under \"What this doesn't prove\", so the "
             "unanswered-section case below has nothing to be unanswered with."
         )
+
+    def test_every_copy_of_the_skeleton_preamble_matches_the_live_one(self):
+        """The preamble lives by hand in more than one file, and nothing synced them.
+
+        `.claude/commands/spec.md` is the one the tests read and the one `/spec` prints, so it
+        is the source. Every evidence file quotes the same paragraph, and the spec that defines
+        the convention transcribes the whole skeleton. Reword the source and those copies go on
+        stating a rule that no longer exists, with the suite green — which is how the spec's own
+        transcription came to describe the honour system rule 4 replaced with a test.
+        """
+        assert _PREAMBLE_RULES, (
+            f"no rules paragraph found above the first section of the skeleton in "
+            f"{SPEC_COMMAND.name}; the copies below cannot be checked against anything."
+        )
+        assert "status: shipped" in _PREAMBLE_RULES, (
+            f"the skeleton's rules paragraph in {SPEC_COMMAND.name} no longer mentions "
+            "`status: shipped`, so it has stopped naming when these rules bite. Either the "
+            "wording drifted or the preamble's last paragraph is no longer the rules."
+        )
+
+        transcribers = [
+            path
+            for path in sorted(SPECS_DIR.glob("*.md"))
+            if _SKELETON_TITLE in path.read_text(encoding="utf-8")
+        ]
+        for path in transcribers:
+            assert _PREAMBLE_RULES in path.read_text(encoding="utf-8"), (
+                f"specs/{path.name} transcribes the evidence skeleton but its rules paragraph "
+                f"no longer matches {SPEC_COMMAND.name}. Update the copy, or stop copying it."
+            )
+
+        for results in sorted(SPECS_DIR.glob(f"*{_RESULTS_SUFFIX}")):
+            assert _PREAMBLE_RULES in results.read_text(encoding="utf-8"), (
+                f"specs/{results.name} states different rules than the skeleton in "
+                f"{SPEC_COMMAND.name} prints. An evidence file that quotes a rule the skeleton "
+                "no longer states tells its reporter the wrong thing about what filling it in "
+                "requires."
+            )
 
     def test_the_skeleton_prints_exactly_the_required_headings(self):
         """The heading list, agreed both ways — two documents that must match.

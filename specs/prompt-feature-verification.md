@@ -128,9 +128,9 @@ gain.
 anything was measured. Don't edit it to match what happened — if it turned out to be the wrong
 criterion, say so under "What this doesn't prove."
 
-Every `FILL_ME` marks data that does not exist yet. Replacing one is the act of reporting. Deleting
-one without replacing it — dropping a row or a section — is the failure these pre-written headings
-exist to catch.
+Every placeholder below marks data that does not exist yet. Replacing one is the act of reporting.
+Dropping a whole section, or clearing a placeholder and writing nothing under its heading, fails the
+suite once this spec says `status: shipped` — every heading here needs an answer you wrote yourself.
 
 ## Pass criterion (written before the build)
 > _Copy the iff from the spec's Verification section, word for word._
@@ -526,7 +526,8 @@ this spec. Wording is preserved; only the structure changed.
 2. **`verification_tests` — the claim costs evidence.** `studio/tests/test_spec_verification.py`.
    Usable alone: flipping a spec to `shipped` with unfilled evidence fails CI.
    - **Acceptance criteria:**
-     - [ ] The three rules are green against every real spec in `specs/`, with no rule firing on a
+     - [ ] The three rules as of this unit (a fourth was added later) are green against every real
+           spec in `specs/`, with no rule firing on a
            spec that legitimately has no `## Verification` section.
      - [ ] Six synthetic cases prove each rule fires **and** does not over-fire, as "The enforcing
            test" lists them: shipped-with-`FILL_ME` fails, approved-with-missing-sibling fails,

@@ -102,7 +102,7 @@ From `$ARGUMENTS`, construct the workflow `args`:
   - Node (`package.json`): `npm test` or the project's test script.
   - Rust (`Cargo.toml`): `cargo test`.
   - Unity / other: ask if you cannot infer a runnable command.
-  - If you cannot infer one, fall back to the config knob `test_command` from `python -m impl_loop` (Step 5).
+  - If you cannot infer one, fall back to the config knob `test_command` from the knobs JSON (Step 5).
 - `static_check`: `ruff check <path>` for Python; the project linter otherwise; omit if none.
 
 ### Step 3: Pick the target branch (safety)

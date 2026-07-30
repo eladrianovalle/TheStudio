@@ -10,6 +10,20 @@ sixth pass that synthesized them._
 > while being used across the maintainer's projects. This repo is deliberately
 > **not** where the game projects live. See the follow-up thread appended at the
 > end of this document.
+>
+> **What shipped since (as of 2026-07-29):** recommendations 2, 3, 4, 6 and 7 are
+> closed, mostly via PR #46 — ruff now runs as a CI gate, `/offload` was run on
+> this CLAUDE.md, the mutation gate has real tooling behind it (`mutmut` pinned in
+> `studio/pyproject.toml`, plus a `mutation.yml` workflow), the decision format has
+> a single owner in `decision_points.py`, and Windsurf was retired in favor of
+> Claude Code. Recommendation 5 is partly done: `config_loading.py` and `stats.py`
+> were extracted, and the rest of the `run_phase.py` split is tracked in
+> `studio/docs/RUN_PHASE_SPLIT_PLAN.md`. Recommendation 1 was reframed rather than
+> implemented as written, and is answered by the outcomes ledger and the automatic
+> per-run session records. Everything below is the review **as written on
+> 2026-07-01**, including its counts (624 tests, ~19 modules) and its
+> dogfooding-gap findings — those three gaps in particular are now closed, so read
+> them as history, not as current state.
 
 ---
 

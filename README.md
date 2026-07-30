@@ -76,7 +76,7 @@ Every command works from any project once you've run `init`. See [CLAUDE_CODE_US
 
 Studio isn't only a debate runner. It's a way to hold AI agents to a standard. Install it and these travel with your project:
 
-- **Coding principles**: seven rules that counter common LLM failure modes, from "think before coding" and "make surgical changes" to writing both docs and code for a human reader. `init` injects them into your project's CLAUDE.md. See [CLAUDE.md](./CLAUDE.md#coding-principles).
+- **Coding principles**: nine rules that counter common LLM failure modes, from "think before coding" and "make surgical changes" to writing docs, code, and progress updates for a human reader, and getting a feature's architecture approved before building it. `init` injects them into your project's CLAUDE.md. See [CLAUDE.md](./CLAUDE.md#coding-principles).
 - **MVI (Minimum Viable Interaction)**: every increment ends in something usable. "Build a skateboard, not a wheel." The Product, Engineering, and Design contrarians enforce it. See [MVI_METHODOLOGY.md](./studio/docs/MVI_METHODOLOGY.md).
 - **AI-TDD**: scenario-first tests, humans own the assertions, and mutation verification proves the tests actually bite. The Test Engineer role enforces it. See [AI_TDD_METHODOLOGY.md](./studio/docs/AI_TDD_METHODOLOGY.md).
 
@@ -296,7 +296,7 @@ Keep installed copies current: `python studio/run_phase.py check-install --targe
 | `status` / `verdict` | `COMPLETED` + `APPROVED`/`REJECTED` after finalize |
 | `studio_roles` | `{pack, overrides, invited, completed, missing}` |
 | `quality` | Finalize-time quality checks: `{checks_run, warnings, errors}` |
-| `scope_stats` | Per-scope output stats: `{files, total_chars, avg_words}` |
+| `scope_stats` | Per-scope output stats: `{files, total_chars, total_words, avg_words}` |
 | `metrics` | Agent token usage: `{agents, total_tokens, total_duration_ms, by_scope, by_role}` |
 
 ---
@@ -378,7 +378,7 @@ studio/
   cleanup.py                # TTL + budget-based artifact cleanup + loose file removal
   rerun.py                  # Rejection context injection for iterate-on-failure
   verdict.py                # APPROVED/REJECTED extraction
-  impl_loop.py              # Implementation writer/editor loop config (LoopConfig + python -m impl_loop)
+  impl_loop.py              # Implementation writer/editor loop config (LoopConfig; run as a script for knobs)
   integrations/             # Outbound run-digest webhooks (slack_digest.py → Slack/n8n)
   validators/               # DocumentValidator + CodeValidator
   studio.manifest.json      # Role definitions (14 disciplines)
@@ -387,7 +387,7 @@ studio/
   config/studio_settings.toml # Cleanup settings
   config/implementation_loop.toml # Implementation writer/editor loop defaults
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 851 tests (pytest)
+  tests/                    # 861 tests (pytest)
 ```
 
 ---
@@ -398,7 +398,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-851 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, contrarian FINDING-block parsing and the independent finding verifier, the design-phase critique guide (AI-slop blacklist + Goodwill Reservoir) gating, delta-based stats trend alerts, doc-parity (CLI/config docs vs source), the spec-verification convention (a prompt-shaped spec may not be called shipped while its evidence file is unfilled, or has one of its headings dropped or left unanswered), clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, agent metrics tracking, quality ratings and cross-run stats, run outcome capture and cross-repo outcome export/import, session-health records and ledger auto-append, CLAUDE.md offload analysis, unstale audit configuration, smoke test configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
+861 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, contrarian FINDING-block parsing and the independent finding verifier, the design-phase critique guide (AI-slop blacklist + Goodwill Reservoir) gating, delta-based stats trend alerts, doc-parity (CLI/config docs vs source), installer ship-list parity (every slash command and workflow on disk is one the installer actually copies, so a new command can't work here and nowhere else), the spec-verification convention (a prompt-shaped spec may not be called shipped while its evidence file is unfilled, or has one of its headings dropped or left unanswered, and every hand-copy of the evidence skeleton's rules must still match the live one), clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, agent metrics tracking, quality ratings and cross-run stats, run outcome capture and cross-repo outcome export/import, session-health records and ledger auto-append, CLAUDE.md offload analysis, unstale audit configuration, smoke test configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 

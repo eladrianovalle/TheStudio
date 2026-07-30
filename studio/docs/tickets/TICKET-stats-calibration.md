@@ -1,6 +1,6 @@
 # TICKET: Calibration — correlate ratings × config, recommend knob changes
 
-**Type:** Feature (Tier 3) · **Component:** `studio/run_phase.py` (new `calibrate` view) · **Priority:** P2
+**Type:** Feature (Tier 3) · **Component:** `studio/stats.py` (new `calibrate` view) · **Priority:** P2
 **Status:** Open · **Author:** Adriano Valle · **Date:** 2026-06-25
 **Follows:** `TICKET-stats-expansion` (needs per-role/per-scope rating breakdowns)
 **Gated by:** sufficient rated-run history (see Open question below)

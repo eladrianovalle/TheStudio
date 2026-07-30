@@ -1,7 +1,7 @@
 export const meta = {
   name: 'implementation-loop',
   description: 'Writer/editor implementation loop — one agent builds an MVI unit, a fresh editor cuts/refines it, gated on tests-green. See studio/docs/IMPLEMENTATION_LOOP_SPEC.md',
-  whenToUse: 'Build a single MVI unit with a structurally-guaranteed contrarian-editor pass. Pass the unit via args; defaults to building studio/impl_loop.py (the spec\'s own Phase 2).',
+  whenToUse: 'Build a single MVI unit with a structurally-guaranteed contrarian-editor pass. Always pass the unit via args — /forge does this for you. The built-in fallback unit is a historical example that has already shipped, so a no-args run would rebuild existing code.',
   phases: [
     { title: 'Writer', detail: 'build one complete MVI unit; commit passing state; declare done' },
     { title: 'Edit', detail: 'fresh editor cuts/refines against writer_sha; revert if it breaks green' },
@@ -9,8 +9,10 @@ export const meta = {
 }
 
 // ---------------------------------------------------------------------------
-// Default target unit = Phase 2 of the spec: the config loader, dogfooded.
-// Override by passing `args` (same shape) to the Workflow tool.
+// Fallback unit, kept as the worked example of the args shape. It describes Phase 2 of the
+// spec — the config loader — which SHIPPED on 2026-06-28, so running the loop without `args`
+// would set a writer to rebuild studio/impl_loop.py. Always pass `args` (same shape); /forge
+// always does.
 // ---------------------------------------------------------------------------
 const DEFAULT_UNIT = {
   unit_id: 'unit_impl_loop_config',
@@ -27,7 +29,7 @@ const DEFAULT_UNIT = {
     'Build studio/impl_loop.py mirroring the ScopeConfig / load_scopes_config() pattern in studio/scopes.py:',
     '  - a `LoopConfig` dataclass for the [loop]/[gate]/[editor] tables documented in',
     '    studio/docs/IMPLEMENTATION_LOOP_SPEC.md §4 (deliver_on_gate_fail, test_command, static_checks,',
-    '    require_mutation_check, mandate, read_scope, output_budget).',
+    '    require_mutation_check, mutation_command, mandate, read_scope, output_budget).',
     '  - `load_loop_config(path)` using the tomllib/tomli fallback already used in scopes.py / cleanup.py.',
     '  - resolution chain: explicit path -> .studio/implementation_loop.toml -> config/implementation_loop.toml -> defaults.',
     'Ship config/implementation_loop.toml as the shipped default (copy the §4 example from the spec).',
@@ -327,8 +329,10 @@ if (unit.editor_enabled === false) {
 phase('Edit')
 const editor = await agent(editorPrompt(unit, writer), { schema: EDITOR_HANDOFF, label: `editor:${unit.unit_id}`, phase: 'Edit', model: unit.model })
 
-// Exit gate — edit must hold (tests green), authoritative MVI verdict, AND every acceptance
-// criterion the unit carried confirmed by a matching pass.
+// Exit gate — tests green, authoritative MVI verdict, AND every acceptance criterion the unit
+// carried confirmed by a matching pass. A revert does not fail the gate: writer_sha still holds a
+// green, usable unit, so the reverted case ships the writer's version rather than flagging it.
+// `editHeld` below only decides which version gets reported as final; it is not a gate input.
 const editHeld = !!(editor && editor.tests && editor.tests.passed && !editor.reverted)
 
 // One grade per acceptance criterion the unit carried — empty on a spec-less run, and empty rather

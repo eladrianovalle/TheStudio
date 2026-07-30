@@ -10,7 +10,7 @@ mkdir -p .claude/commands
 cp "$STUDIO_ROOT/docs/BRIDGE_COMMANDS_TEMPLATE.md" .  # This reference doc
 ```
 
-Then create the two command files below.
+Then create the two command files below. Note these two are only the phase runners: `init` installs the full set of slash commands (see `install.SLASH_COMMANDS`), and running it is the supported path. Hand-authoring is for repos that want just the debate commands.
 
 ## `.claude/commands/run-phase.md`
 

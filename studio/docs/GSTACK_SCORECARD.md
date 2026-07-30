@@ -81,6 +81,13 @@ rationale are in the comparison doc.
 
 This is the part the comparison doc doesn't cover, and the honest hard part.
 
+> **Status 2026-07-29: no review has been run, and there is nothing yet to review with.** Thirteen
+> days on from the 2026-07-16 landing, `rate` has recorded zero ratings (no `rating.json` exists
+> anywhere) and the verifier has never produced a `findings.json`. Every row below therefore has no
+> data, and the first review is already overdue against the monthly clause at the bottom of this
+> section. The instruments are built and wired; what's missing is runs that use them. Read the tables
+> below as the plan they still are, not as measurements taken.
+
 ### The constraint we're measuring under
 
 Everything landed the same day, so there's **no clean before/after A/B** — we can't hold one
