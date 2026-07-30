@@ -207,7 +207,10 @@ source-repo run resolves to.
      - [ ] `ruff check .` is clean and the full suite is green.
    - **Out of scope:** moving any existing file; anything about `integrations.toml`.
 
-2. **`artifact_history_migration` — the 16 historical runs are visible in `stats` again from one location.**
+2. **`artifact_history_migration` — the 18 stranded run directories are visible in `stats` again from one location.**
+   Eighteen is 5 tech runs plus 13 `impl_loop` unit dirs — two different kinds of run directory, not
+   two counts of the same thing. They sit in two places: 11 of the `impl_loop` dirs and all 5 tech
+   runs under `.studio/output/`, the other 2 `impl_loop` dirs under `studio/.studio/output/`.
    A one-time move of `.studio/output/*` and `studio/.studio/output/*` into `studio/output/`, and
    `.studio/knowledge/run_log.md` into `studio/knowledge/`, merging the two `usage.log` files in
    timestamp order. Update the four specs' `studio_run:` frontmatter. Regenerate the index.
@@ -232,11 +235,12 @@ source-repo run resolves to.
    - **Out of scope:** any change to the webhook code itself, to `INTEGRATIONS.md`'s schema, or to whether Slack is enabled in any *consuming* repo.
 
 4. **`docs_and_invocation` — the documented invocation is the one that works.**
-   Update `CLAUDE.md` / `README.md` / `API.md` where they describe artifact locations, and record
-   the resolution chain's source-repo case in `ARCHITECTURE.md`.
+   Update `CLAUDE.md`, `README.md`, and `studio/docs/API.md` where they describe artifact
+   locations, and record the resolution chain's source-repo case in
+   `studio/docs/ARCHITECTURE.md`.
    - **Acceptance criteria:**
      - [ ] Every doc stating where source-repo artifacts land says `studio/output/`.
-     - [ ] `ARCHITECTURE.md` describes all four branches of the chain in order, including the new one.
+     - [ ] `studio/docs/ARCHITECTURE.md` describes all four branches of the chain in order, including the new one.
      - [ ] No doc still implies the source repo scaffolds itself a bridge doc.
      - [ ] The doc-parity suite passes.
    - **Out of scope:** the `/unstale` pass already on PR #93.
