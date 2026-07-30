@@ -21,6 +21,9 @@ treat that as an invocation of this command.
 - Optional `--unit <unit_id>`: which unit of that spec's Build Plan to build. Only meaningful with
   `--spec`, and optional when the Build Plan has exactly one unit.
 - Optional `--branch <name>`: branch to run on (default: derive `impl/<unit_id>`).
+- Optional `--work-dir <path>`: the directory the loop's agents build in. Must be a git worktree
+  of this repository; it is validated in Step 3 and a bad path stops the run before any agent
+  spawns. Without it, the agents work wherever their shell starts, as they always have.
 - Optional `--test "<cmd>"`: override the inferred test command.
 - Optional `--plan`: echo the parsed plan and STOP (dry run); do not run the loop.
 
@@ -105,21 +108,48 @@ From `$ARGUMENTS`, construct the workflow `args`:
   - If you cannot infer one, fall back to the config knob `test_command` from the knobs JSON (Step 5).
 - `static_check`: `ruff check <path>` for Python; the project linter otherwise; omit if none.
 
-### Step 3: Pick the target branch (safety)
+### Step 3: Validate the work directory, then pick the target branch (safety)
 
-The loop edits files in place and makes a real `git commit`, and the writer + editor stages must
-share one working tree. So:
+**If `--work-dir <path>` was given, validate it before running any other command.** Locate
+`impl_loop.py` with the same Studio-path rule as Step 5, then:
 
 ```bash
-git rev-parse --abbrev-ref HEAD
+python .studio/source/impl_loop.py --work-dir "<path>"
 ```
 
-- If `--branch` was given, check it out (create if missing).
-- Else if on `main`/`master`, create and switch to `impl/<unit_id>`.
-- Else use the current branch (it's already a feature branch).
+On success this prints the same knobs JSON Step 5 needs, plus a `work_dir` key holding the
+**resolved absolute path**. That resolved path is `<work_dir>` for the rest of this command. Keep
+the JSON — Step 5 reuses it instead of running the command again.
 
-If the working tree is dirty, stop and tell the user to commit/stash first; the loop's revert
-relies on a clean base.
+**If it exits non-zero, STOP. Do not run the loop.** It writes one line to stderr naming which of
+four reasons it hit, and the path it tried:
+
+- **missing** — there is no directory at that path;
+- **not-a-worktree** — the directory exists but is not inside a git worktree;
+- **different-repo** — it is a worktree of some other repository, not this one;
+- **unquotable** — the path contains a character (`"`, `\`, a backtick, `$`, a newline) that would
+  break out of the `git -C "<path>"` quoting the loop renders into the agents' instructions,
+  turning the rest of the path into a command of its own. Rename the directory.
+
+Tell the user which reason it was and which path was tried. Continuing anyway would commit to
+whatever branch the shell's checkout happens to be on — the accident `--work-dir` exists to prevent.
+
+**Then pick the branch.** The loop edits files in place and makes a real `git commit`, and the
+writer + editor stages must share one working tree. With a `--work-dir`, that tree is the work
+directory — **not** the directory you are standing in — so every git command in this step is pinned
+with `git -C "<work_dir>"`. With no `--work-dir`, run them bare (`git rev-parse …`), as before:
+
+```bash
+git -C "<work_dir>" rev-parse --abbrev-ref HEAD
+git -C "<work_dir>" status --porcelain
+```
+
+- If `--branch` was given, check it out in the work directory (create if missing).
+- Else if the work directory is on `main`/`master`, create and switch to `impl/<unit_id>` there.
+- Else use the branch the work directory is already on (it's already a feature branch).
+
+If that working tree is dirty — the `status --porcelain` above printed anything — stop and tell the
+user to commit or stash **in the work directory**; the loop's revert relies on a clean base.
 
 ### Step 4: Echo the plan
 
@@ -130,6 +160,7 @@ Print a short block, then proceed (unless `--plan`):
   unit_id:  <slug>
   title:    <MVI outcome>
   branch:   <branch>
+  work dir: <resolved work_dir>   (omit this line when no --work-dir was given)
   tests:    <test_command>
   builds:   <1-line of what files/behavior>
   spec:     specs/<slug>.md (status: approved) — unit <unit_id>
@@ -168,6 +199,9 @@ python .studio/source/impl_loop.py
 # prints knobs JSON, e.g. {"editor_enabled": true, "read_scope": "touched+importers", "output_budget": 400, ...}
 ```
 
+If `--work-dir` was given you already ran this in Step 3 (with the flag) and it produced the same
+JSON. Reuse that output; don't run it a second time.
+
 **If you resolved criteria in Step 1 and `editor_enabled` is `false`, STOP here — do not run the
 loop.** The editor is the only thing that grades criteria, so this pair asks for a graded run and
 supplies nobody to grade it. Say so plainly, and give the two ways forward: turn the editor mandate on
@@ -176,18 +210,30 @@ loop also flags this combination if it is reached another way, but a contradicti
 agent runs should cost nothing to discover — the same reason a mistyped `--spec` stops in Step 1
 instead of quietly downgrading to an ungraded run.
 
-Then call the **Workflow** tool **by `scriptPath`** (NOT `name`; see Gotchas), pointing at this
-repo's copy of the workflow and merging the config knobs into the unit args:
+Then call the **Workflow** tool **by `scriptPath`** (NOT `name`; see Gotchas), pointing at the
+workflow copy that belongs to the tree being built, and merging the config knobs into the unit args:
+
+- **With `--work-dir`:** `scriptPath` is `<work_dir>/.claude/workflows/implementation-loop.js`.
+  Resolve it inside the work directory, never the directory you are standing in — a unit that edits
+  the loop itself would otherwise build against the main checkout's copy while its commits land in
+  the work directory.
+- **Without `--work-dir`:** `scriptPath` is `<repo>/.claude/workflows/implementation-loop.js`, as
+  before.
 
 ```
-Workflow({ scriptPath: "<repo>/.claude/workflows/implementation-loop.js", args: {
+Workflow({ scriptPath: "<work_dir or repo>/.claude/workflows/implementation-loop.js", args: {
   unit_id, title, instructions, static_check,
   acceptance_criteria,     // verbatim from the spec (Step 1); omit or [] without --spec
+  work_dir,                // the resolved path from Step 3; omit entirely without --work-dir
   test_command,            // per-unit inferred; if none, use the knob test_command
   editor_enabled, read_scope, output_budget,           // from impl_loop.py
   static_checks, require_mutation_check, mutation_command  // from impl_loop.py
 }})
 ```
+
+`work_dir` is what tells both agent prompts to change into that directory before doing anything and
+pins their git commands to it. Leave the key off entirely when there is no `--work-dir`, so those
+runs render exactly as they always have.
 
 How the workflow consumes each knob: `editor_enabled=false` → skip the editor pass;
 `read_scope`/`output_budget` → shape the editor prompt; `require_mutation_check=false` → writer
