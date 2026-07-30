@@ -3,7 +3,7 @@ feature: Pre-committed Verification for Prompt-Shaped Features
 slug: prompt-feature-verification
 ticket: none
 status: approved
-studio_run: .studio/output/tech/run_tech_20260728_192832
+studio_run: (run directory no longer on disk; removed by retention cleanup)
 ---
 
 # Pre-committed Verification for Prompt-Shaped Features — Architecture Spec

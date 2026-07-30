@@ -3,7 +3,7 @@ feature: Source-Staleness Detection for /studio-update
 slug: update-staleness-detection
 ticket: none
 status: approved
-studio_run: .studio/output/tech/run_tech_20260706_193131
+studio_run: (run directory no longer on disk; removed by retention cleanup)
 ---
 
 # Source-Staleness Detection for `/studio-update` — Architecture Spec
