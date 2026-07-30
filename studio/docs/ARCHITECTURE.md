@@ -69,6 +69,37 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 
 No other services, runtimes, or APIs exist.
 
+### Where Artifacts Land
+
+`get_artifact_root()` in `run_phase.py` answers one question — *is this Studio's own repo, or a
+project that installed Studio?* — and the run folder, the knowledge log, the outcomes ledger, and
+the project-local `.studio/*.toml` config all hang off the answer. An explicit `--artifact-root`
+or the `STUDIO_ARTIFACT_ROOT` environment variable beats every case below. With neither set, these
+four are tried in order:
+
+1. **cwd is inside `studio/` itself** — either the source tree or an installed snapshot at
+   `<repo>/.studio/source`. A snapshot resolves to the consuming repo root, never to the snapshot
+   directory; the source tree resolves to `studio/`.
+2. **cwd is elsewhere in the source repo** — `studio/` is not a snapshot and cwd sits somewhere
+   under its parent, which only Studio's own repo can satisfy. The artifact root is `studio/`, so
+   a run from the repo root files its work in `studio/output/`. This case has to come before the
+   two consumer checks below: the source repo keeps its own bare `.studio/` for `update.toml` and
+   `usage.log`, and those checks would otherwise read it as somebody else's project.
+3. **A `.studio/VERSION` above cwd** — the marker `init` leaves in a repo it installed into. The
+   search walks *up*, so a call from a monorepo subdirectory still lands on the real repo root.
+4. **A bare `.studio/` in cwd** — a repo that was scaffolded but never `init`'d, so it has no
+   `VERSION`. This one checks cwd only.
+
+The last two look mergeable and are not. An installed repo is found by walking up for `VERSION`;
+a merely scaffolded one is found only by looking at cwd. Collapse them and a scaffolded parent
+directory would start capturing runs from every child.
+
+If nothing matches, Studio falls back to cwd and warns once — a genuine first run in a fresh repo.
+Downstream, everything keys off whether the artifact root *is* `studio/`. When it is, runs land in
+`studio/output/` and no bridge doc is written, because a bridge doc exists to point a separate
+project back at Studio. Otherwise runs land in `<repo>/.studio/output/` and the first run
+scaffolds that repo's `.studio/` and its `docs/studio-bridge.md`.
+
 ---
 
 ## 3. Prepare Command Path

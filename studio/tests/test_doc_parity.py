@@ -10,11 +10,12 @@ made automatic and free.
 """
 import argparse
 import dataclasses
+import inspect
 import re
 from pathlib import Path
 
 from impl_loop import LoopConfig
-from run_phase import build_parser
+from run_phase import build_parser, get_artifact_root
 from scopes import ScopeConfig
 
 _DOCS = Path(__file__).resolve().parent.parent / "docs"
@@ -111,6 +112,93 @@ class TestLoopConfigParity:
         assert not missing, (
             "LoopConfig fields not defined in the TOML config block of "
             f"IMPLEMENTATION_LOOP_SPEC.md: {sorted(missing)}"
+        )
+
+
+def _doc_section(doc_name: str, heading: str) -> str:
+    """The text of one markdown section: its heading down to the next heading."""
+    lines = (_DOCS / doc_name).read_text(encoding="utf-8").splitlines()
+    section: list[str] = []
+    for line in lines:
+        if section and line.startswith("#"):
+            break
+        if section or line.strip() == heading:
+            section.append(line)
+    return "\n".join(section)
+
+
+# Each artifact-root branch as (a line of get_artifact_root, the phrase the doc uses
+# for it). Both lists must stay in the same order: the doc explains the chain as an
+# ordered walk, so a reordered branch in the code silently makes the doc wrong.
+_ARTIFACT_ROOT_BRANCHES = [
+    (
+        "if cwd == studio_root or _is_within(cwd, studio_root):",
+        "**cwd is inside `studio/` itself**",
+    ),
+    (
+        "if installed_root is None and _is_within(cwd, studio_root.parent):",
+        "**cwd is elsewhere in the source repo**",
+    ),
+    (
+        "found = _find_installed_root_upwards(cwd)",
+        "**A `.studio/VERSION` above cwd**",
+    ),
+    (
+        'if (cwd / ".studio").is_dir():',
+        "**A bare `.studio/` in cwd**",
+    ),
+]
+
+
+class TestArtifactRootChainParity:
+    """ARCHITECTURE.md must describe the branches `get_artifact_root()` really walks.
+
+    Where the artifacts of a run land is the one thing every other path hangs off,
+    and it is invisible from the outside — so the doc is the only place a reader
+    can learn it. Add or reorder a branch and this test fails until the doc agrees.
+    """
+
+    def test_doc_lists_every_branch_in_code_order(self):
+        code = inspect.getsource(get_artifact_root)
+        doc = _doc_section("ARCHITECTURE.md", "### Where Artifacts Land")
+        assert doc, "no 'Where Artifacts Land' section found in ARCHITECTURE.md"
+
+        code_positions = []
+        doc_positions = []
+        for code_line, doc_phrase in _ARTIFACT_ROOT_BRANCHES:
+            assert code_line in code, (
+                f"get_artifact_root() no longer contains this branch: {code_line}"
+            )
+            assert doc_phrase in doc, (
+                "ARCHITECTURE.md's artifact-root section never describes the branch "
+                f"{doc_phrase}"
+            )
+            code_positions.append(code.index(code_line))
+            doc_positions.append(doc.index(doc_phrase))
+
+        assert code_positions == sorted(code_positions), (
+            "get_artifact_root() runs its branches in a different order than this "
+            "test lists them; fix the list, then the doc"
+        )
+        assert doc_positions == sorted(doc_positions), (
+            "ARCHITECTURE.md describes the artifact-root branches out of the order "
+            "get_artifact_root() actually tries them"
+        )
+
+    def test_doc_names_where_each_kind_of_repo_files_its_runs(self):
+        """Source repo and consuming repo file runs in different places; say both."""
+        doc = _doc_section("ARCHITECTURE.md", "### Where Artifacts Land")
+        assert "`studio/output/`" in doc, (
+            "ARCHITECTURE.md never says a run from Studio's own repo lands in "
+            "studio/output/"
+        )
+        assert "`<repo>/.studio/output/`" in doc, (
+            "ARCHITECTURE.md never says a run from a consuming repo lands in that "
+            "repo's .studio/output/"
+        )
+        assert "docs/studio-bridge.md" in doc, (
+            "ARCHITECTURE.md should pin the bridge doc to the consuming-repo case, "
+            "since the source repo no longer scaffolds one for itself"
         )
 
 
