@@ -424,7 +424,7 @@ Sixteen mechanisms were ruled out before they entered adversarial vetting. Group
 
 Each phase is independently shippable and ends in something usable on its own.
 
-**Phase 0 — get a baseline before changing any prompt text. NOT STARTED as of 2026-07-29**, and still the blocker for item 5 and for every row below that names a before-number. No borrowing, no new code. Run the
+**Phase 0 — get a baseline before changing any prompt text. RUN 2026-07-30; see [PHASE_0_BASELINE.md](./PHASE_0_BASELINE.md). It was not executable as written**, which is why it sat undone: the metrics it names never measured the forge editor, and per-unit editor token cost is instrumented nowhere. The forge editor's liveness *was* recoverable from the handoffs on disk — **9 of 12 runs produced real cuts (75%)**, so the cut mandate is alive. What remains unmeasurable is cost, which blocks item 5 and every row below naming a token before-number. No borrowing, no new code. Run the
 no-editor baseline that `IMPLEMENTATION_LOOP_SPEC.md` build phase 3 already specifies and quantifies,
 by setting the shipped `mandate` knob to `"off"`, and record the current per-unit editor token
 cost and `editor_liveness` / `shrink_ratio` over the existing forge runs. **Usable output:** the
@@ -437,7 +437,8 @@ instruction to break production code rather than assertions, add "test output pr
 a finding" to the editor's checks, and add the six-line ship-list parity test for
 `SLASH_COMMANDS`/`WORKFLOW_FILES` (**done**). **Usable output:** a prompt-doctrine section of CODING_PRINCIPLES — which does not exist yet; the file ends at §7 — ships to every
 installed repo; the contrarian's escape hatch now costs evidence; two shipped bugs-in-waiting closed.
-One commit each, one PR. Measured against Phase 0's `editor_liveness`.
+One commit each, one PR. Measured against the 75% forge cut rate in PHASE_0_BASELINE.md, not
+`editor_liveness`, which never measured this loop.
 
 **Phase 2 — the writer's escalation channel. DONE 2026-07-29** (PR #84; entry gate pinned in #87). Proposal item 3: the schema field, the relaxed
 required-fields, the prompt prose, the spec reconciliation, and one live /forge smoke. **Usable
@@ -483,7 +484,7 @@ every row below that names a baseline is unmeasured.
 | Item | Signal (instrument) | Helping looks like | Hurting looks like | Trigger to act |
 |---|---|---|---|---|
 | Prompt doctrine *(not yet written — Phase 1; CODING_PRINCIPLES ends at §7, so this row cannot fire yet)* | Whether it gets cited when prompt text changes; no new nuance clauses land in `scopes.py` / `question_mode.py` | New prompt edits pick a form deliberately and say which | It is never referenced in any prompt-change PR | Two prompt-change PRs in a row that cite no form → the section is decoration; cut it |
-| Escape hatches earn their invocation | `editor_liveness` / `shrink_ratio` (`stats.py:151-158`, `session.py:108-130`), against the Phase 0 baseline | More forge units end with a real cut; "no edits" handoffs stop citing the mandate's own clauses | Liveness flat, or the editor starts compressing readable code (the regression the clauses exist to stop) | Liveness does not move after ~10 forge units → revert the text. Any review flagging over-compression → revert immediately |
+| Escape hatches earn their invocation | ~~`editor_liveness` / `shrink_ratio`~~ — **wrong instrument, corrected 2026-07-30**: those read *advocate-document* word counts from debate runs and have never measured the forge editor. Use the forge handoffs' cut rate instead, against the 75% baseline in PHASE_0_BASELINE.md | More forge units end with a real cut; "no edits" handoffs stop citing the mandate's own clauses | Liveness flat, or the editor starts compressing readable code (the regression the clauses exist to stop) | Liveness does not move after ~10 forge units → revert the text. Any review flagging over-compression → revert immediately |
 | Writer escalation channel | Count of handoffs carrying a non-empty `escalation`; count of green-but-wrong units caught later | A genuinely stuck writer stops instead of guessing, and says what it needs | Field never used across ~10 units (the hole was theoretical), or used to dodge tractable work | Never populated across ~10 units → the schema hole was real but the failure was not; keep the field, drop the prompt prose |
 | Rationale is a claim | Whether a contrarian finding survives an advocate's justification; whether the editor logs a concern it previously dropped | Findings get engaged with rather than withdrawn after a good explanation | Iteration burn: runs take more passes to reach APPROVED because rebuttals no longer resolve anything | Median iterations-to-verdict rises across ~10 runs → the wording is fighting the rejection-feedback loop; revert |
 | Breadth valve + cite-don't-narrate | Per-unit editor token cost vs Phase 0; count of named-risk checks reported in `edits`; concerns raised that touch non-importer consumers | Real cross-cutting problems surface, at a small cost delta | Editor tokens climb with no new findings, or `edits` fills with narration | Editor cost up >25% over baseline with no new concerns across ~10 units → revert the valve |
@@ -492,9 +493,9 @@ every row below that names a baseline is unmeasured.
 **Three top-line questions**, same as the gstack scorecard. None can be tracked until Phase 0 runs — as of 2026-07-29 no baseline exists:
 
 1. **Human rating trend** (`rate`, 1–5). The bottom line, unchanged.
-2. **Forge yield** (`editor_liveness`, cut-per-token). These borrowings mostly touch the
-   implementation loop, which is where a before-number would matter most — and where Phase 0 would
-   have to produce one first.
+2. **Forge yield** (cut rate from the forge handoffs; baseline 75%). Not `editor_liveness` — that
+   measures the debate contrarian's effect on advocate docs, not this. Cut-per-*token* remains
+   unavailable: the loop emits no token data at all.
 3. **Cost per unit of quality.** Items 3 and 5 add tokens by design. That is only worth it if the
    quality signal moves.
 
