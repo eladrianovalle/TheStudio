@@ -301,6 +301,56 @@ class TestAcceptanceCriteriaWiring:
         assert "function unconfirmedCriteria(" in src
 
 
+class TestWorkDirPinning:
+    """Pin that the loop's git commands target the unit's ``work_dir``.
+
+    The JS tests cover the writer and editor prompts. These guard what lives outside any
+    testable function: the two fallback agents the loop spawns near the end, each with its own
+    prompt string, and the ``reset --hard`` calls specifically — the one command that can move
+    the main checkout's HEAD from the wrong directory, which is the accident this feature exists
+    to make less likely.
+
+    Note the scan is for ``reset --hard``, NOT ``git reset --hard``. A correct implementation
+    renders ``${gitIn(u)} reset --hard``, so the full literal matches nothing and the assertion
+    would pass over an empty set forever. That trap was nearly shipped; the count check below is
+    the second lock on it.
+    """
+
+    def _loop_source(self):
+        return (_WORKFLOW_DIR / "implementation-loop.js").read_text()
+
+    def test_every_reset_hard_is_pinned_to_the_work_dir(self):
+        src = self._loop_source()
+        prefixes = re.findall(r"(.{0,24})reset --hard", src)
+        assert len(prefixes) == 2, (
+            f"expected the editor's revert and the fallback revert, found {len(prefixes)} "
+            "`reset --hard` occurrence(s) — a new one needs pinning too, and a vanished one "
+            "means this guard is now scanning for nothing"
+        )
+        unpinned = [p for p in prefixes if not re.search(r"\$\{gitIn\((?:u|unit)\)\}\s$", p)]
+        assert not unpinned, (
+            f"unpinned `reset --hard` in implementation-loop.js: {unpinned} — from the wrong "
+            "directory this moves the main checkout, because worktrees share one object store"
+        )
+
+    def test_both_fallback_agents_pin_git(self):
+        """The safety-net agents are separate spawns with their own prompts.
+
+        Miss these and the loop half-targets the worktree: the editor's own revert lands in the
+        right place, then the forced revert that fires when the editor left red code lands in
+        whatever directory the agent's shell is in.
+        """
+        src = self._loop_source()
+        revert = src[src.index("Editor left red code without reverting"):src.index("label: `revert:")]
+        commit = src[src.index("Editor kept edits but did not commit"):src.index("label: `commit:")]
+        for name, block in (("revert", revert), ("commit", commit)):
+            assert "${gitIn(unit)}" in block, f"the fallback {name} agent runs bare git"
+            # It also re-runs / relies on commands git -C could never reach, so it needs the cd too.
+            assert "workDirPreamble(unit)" in block, (
+                f"the fallback {name} agent is not told to cd into the work dir"
+            )
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 def test_js_shell_unit_tests():
     """Run the node:test suite exercising the shells' pure helpers.
