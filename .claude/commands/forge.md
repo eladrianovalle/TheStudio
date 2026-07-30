@@ -128,9 +128,8 @@ three reasons it hit, and the path it tried:
 - **not-a-worktree** — the directory exists but is not inside a git worktree;
 - **different-repo** — it is a worktree of some other repository, not this one.
 
-Tell the user which reason it was and which path was tried. Never continue without the work
-directory: an unpinned run commits to whatever branch the shell's checkout happens to be on, which
-is the accident `--work-dir` exists to prevent.
+Tell the user which reason it was and which path was tried. Continuing anyway would commit to
+whatever branch the shell's checkout happens to be on — the accident `--work-dir` exists to prevent.
 
 **Then pick the branch.** The loop edits files in place and makes a real `git commit`, and the
 writer + editor stages must share one working tree. With a `--work-dir`, that tree is the work
@@ -147,9 +146,7 @@ git -C "<work_dir>" status --porcelain
 - Else use the branch the work directory is already on (it's already a feature branch).
 
 If that working tree is dirty — the `status --porcelain` above printed anything — stop and tell the
-user to commit or stash **in the work directory**; the loop's revert relies on a clean base. Name
-the directory you checked when you report either the branch or a dirty tree, so there is no
-question which tree you mean.
+user to commit or stash **in the work directory**; the loop's revert relies on a clean base.
 
 ### Step 4: Echo the plan
 

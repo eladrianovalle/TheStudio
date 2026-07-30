@@ -357,19 +357,19 @@ def _add_worktree(repo: Path, path: Path, branch: str) -> Path:
 
 
 def test_validate_work_dir_accepts_a_worktree_of_this_repo(tmp_path):
-    """The happy path: a real worktree of the main repo is usable, no message."""
+    """The happy path: a real worktree of the main repo hands back its resolved path."""
     repo = _make_repo(tmp_path / "repo")
     worktree = _add_worktree(repo, tmp_path / "wt", "feature")
-    assert validate_work_dir(worktree, main_repo=repo) is None
+    assert validate_work_dir(worktree, main_repo=repo) == worktree.resolve()
 
 
 def test_validate_work_dir_rejects_a_path_that_does_not_exist(tmp_path):
     """Criterion 1: a path that isn't there names the 'missing' reason and the path."""
     absent = tmp_path / "not-here"
-    problem = validate_work_dir(absent, main_repo=tmp_path)
-    assert problem is not None
-    assert WORK_DIR_MISSING in problem
-    assert str(absent) in problem
+    with pytest.raises(WorkDirError) as refused:
+        validate_work_dir(absent, main_repo=tmp_path)
+    assert WORK_DIR_MISSING in str(refused.value)
+    assert str(absent.resolve()) in str(refused.value)
 
 
 def test_validate_work_dir_rejects_a_directory_that_is_not_a_worktree(tmp_path):
@@ -377,10 +377,10 @@ def test_validate_work_dir_rejects_a_directory_that_is_not_a_worktree(tmp_path):
     repo = _make_repo(tmp_path / "repo")
     plain = tmp_path / "just-a-folder"
     plain.mkdir()
-    problem = validate_work_dir(plain, main_repo=repo)
-    assert problem is not None
-    assert WORK_DIR_NOT_A_WORKTREE in problem
-    assert str(plain) in problem
+    with pytest.raises(WorkDirError) as refused:
+        validate_work_dir(plain, main_repo=repo)
+    assert WORK_DIR_NOT_A_WORKTREE in str(refused.value)
+    assert str(plain.resolve()) in str(refused.value)
 
 
 def test_validate_work_dir_rejects_a_worktree_of_another_repository(tmp_path):
@@ -392,10 +392,10 @@ def test_validate_work_dir_rejects_a_worktree_of_another_repository(tmp_path):
     ours = _make_repo(tmp_path / "ours")
     theirs = _make_repo(tmp_path / "theirs")
     stranger = _add_worktree(theirs, tmp_path / "their-wt", "feature")
-    problem = validate_work_dir(stranger, main_repo=ours)
-    assert problem is not None
-    assert WORK_DIR_DIFFERENT_REPO in problem
-    assert str(stranger) in problem
+    with pytest.raises(WorkDirError) as refused:
+        validate_work_dir(stranger, main_repo=ours)
+    assert WORK_DIR_DIFFERENT_REPO in str(refused.value)
+    assert str(stranger.resolve()) in str(refused.value)
 
 
 def test_git_common_dir_uses_the_absolute_path_format(tmp_path):

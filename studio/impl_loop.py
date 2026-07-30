@@ -209,13 +209,12 @@ def _git_common_dir(directory: Path) -> str | None:
     return os.path.realpath(result.stdout.strip())
 
 
-def validate_work_dir(work_dir: str | Path, main_repo: Path | None = None) -> str | None:
+def validate_work_dir(work_dir: str | Path, main_repo: Path | None = None) -> Path:
     """Check that ``work_dir`` is a git worktree of this repository.
 
-    Returns None when the directory is usable, or a one-line message naming which of
-    the three failures it hit (``missing``, ``not-a-worktree``, ``different-repo``)
-    and the path it tried. Returning rather than raising keeps this usable as a plain
-    check; the CLI is what turns a message into a refused run.
+    Returns the resolved absolute path, which is what /forge pins the rest of the run
+    to. Raises WorkDirError naming which of the three failures it hit (``missing``,
+    ``not-a-worktree``, ``different-repo``) and the path it tried.
 
     Validation has to live here in Python because the Workflow sandbox the loop runs
     in has no filesystem or process access — it can only spawn agents and build
@@ -226,21 +225,23 @@ def validate_work_dir(work_dir: str | Path, main_repo: Path | None = None) -> st
         main_repo: A directory inside the repository ``work_dir`` must belong to
             (defaults to this module's own checkout). Exposed for testing.
     """
-    path = Path(work_dir).expanduser()
+    path = Path(work_dir).expanduser().resolve()
     if not path.is_dir():
-        return f"work-dir {WORK_DIR_MISSING}: no directory at {path}"
+        raise WorkDirError(f"work-dir {WORK_DIR_MISSING}: no directory at {path}")
 
     work_dir_git = _git_common_dir(path)
     if work_dir_git is None:
-        return f"work-dir {WORK_DIR_NOT_A_WORKTREE}: {path} is not inside a git worktree"
+        raise WorkDirError(
+            f"work-dir {WORK_DIR_NOT_A_WORKTREE}: {path} is not inside a git worktree"
+        )
 
     main_repo_git = _git_common_dir(main_repo if main_repo is not None else STUDIO_ROOT)
     if work_dir_git != main_repo_git:
-        return (
+        raise WorkDirError(
             f"work-dir {WORK_DIR_DIFFERENT_REPO}: {path} belongs to the repository at "
             f"{work_dir_git}, not to this one ({main_repo_git})"
         )
-    return None
+    return path
 
 
 def runtime_knobs(config: LoopConfig) -> dict:
@@ -299,10 +300,7 @@ def _cli(argv: List[str]) -> str:
     knobs = runtime_knobs(load_loop_config(path))
 
     if args.work_dir:
-        problem = validate_work_dir(args.work_dir)
-        if problem is not None:
-            raise WorkDirError(problem)
-        knobs["work_dir"] = str(Path(args.work_dir).expanduser().resolve())
+        knobs["work_dir"] = str(validate_work_dir(args.work_dir))
 
     return json.dumps(knobs)
 
