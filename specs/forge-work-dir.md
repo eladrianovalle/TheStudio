@@ -2,7 +2,7 @@
 feature: /forge can build in a git worktree
 slug: forge-work-dir
 ticket: forge-worktree
-status: draft
+status: approved
 studio_run: studio/output/tech/run_tech_20260730_152947
 ---
 
