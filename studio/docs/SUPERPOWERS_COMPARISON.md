@@ -171,9 +171,9 @@ off disk.
 three-site table program (mandate + forge prompt + three CLAUDE.md principles); both lenses cut it
 to one site. The forge site was dropped outright: "the writer said this was deliberate" would
 contradict the shipped `load_bearing` escalation contract, and "the fix was small" is already
-prevented by a mechanical gate plus a forced revert. The CLAUDE.md site was dropped because §2, §3
-and §9 already end in challenge-shaped self-gates and there is no instrument to tell whether a
-second layer helped. Then the two lenses split on the escape hatches themselves: one read the
+prevented by a mechanical gate plus a forced revert. The CLAUDE.md site was dropped because Simplicity First,
+Surgical Changes and Spec Before Build already end in challenge-shaped self-gates and there is no
+instrument to tell whether a second layer helped. Then the two lenses split on the escape hatches themselves: one read the
 harvest and concluded the clauses are how the mandate dies; the other warned that rebutting tuned
 guardrails would push the editor toward compressing readable code — the exact regression they exist
 to stop. Both are right, which is why the shape above rebuts nothing and only adds an evidence bar.
