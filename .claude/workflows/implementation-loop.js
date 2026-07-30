@@ -20,6 +20,10 @@ const DEFAULT_UNIT = {
   // 'opus'). Passed straight to agent()'s `model` opt; undefined inherits the
   // session model (the prior behavior), so this is a no-op unless callers set it.
   model: undefined,
+  // Absolute path to the directory the agents should work in — a git worktree of this repo,
+  // validated by /forge before the loop starts. Undefined means "wherever the agent's shell is",
+  // which is what every run did before --work-dir existed.
+  work_dir: undefined,
   title: 'Studio can load implementation_loop.toml into a LoopConfig (with project-local override)',
   // Run from repo root; tests live under studio/.
   test_command: 'cd studio && python -m pytest tests/test_impl_loop.py -q',
@@ -44,6 +48,29 @@ const DEFAULT_UNIT = {
 }
 
 const runDir = (u) => `.studio/output/impl_loop/${u.unit_id}`
+
+// Every git command in this file is text an agent runs wherever its shell happens to be. When the
+// unit names a work_dir, pin git to it. The path is quoted so a directory with spaces survives.
+// Keep this a ONE-LINER: the JS test loader extracts consts with a single-line regex, and a
+// multi-line definition would be invisible to it.
+const gitIn = (u) => (u && u.work_dir ? `git -C "${u.work_dir}"` : 'git')
+
+// The `cd` is the actual mechanism; `gitIn` is only the backstop. The test command, the static
+// check and the mutation run are not git, so nothing about `git -C` reaches them — pinning git
+// while those still run in the main checkout would let an agent commit to the right branch and
+// then report green tests describing a different tree. One `cd` at the top covers all of them.
+// Returns no lines at all when there is no work_dir, which is what keeps the old prompts intact.
+function workDirPreamble(u) {
+  if (!u || !u.work_dir) return []
+  return [
+    `ALL WORK HAPPENS IN ${u.work_dir} — cd there before you do anything else, and stay there.`,
+    `Every command below (tests, static checks, git) must run in that directory, not wherever this`,
+    `shell started. The git commands are pinned to it with \`git -C\`; if a pinned command fails,`,
+    `STOP and report the failure. Never retry it as a bare \`git\` — that runs against whatever`,
+    `checkout your shell is sitting in, which is how the wrong branch gets moved.`,
+    ``,
+  ]
+}
 
 // The one place acceptance criteria are read, so both prompts see the same list and a malformed
 // `args` payload degrades to "no criteria" instead of injecting junk into a prompt.
@@ -156,6 +183,7 @@ const EDITOR_HANDOFF = {
 function writerPrompt(u) {
   const criteria = unitCriteria(u)
   return [
+    ...workDirPreamble(u),
     `You are the WRITER in an implementation writer/editor loop. Build ONE complete MVI unit, then declare done.`,
     ``,
     `UNIT: ${u.title}`,
@@ -174,7 +202,7 @@ function writerPrompt(u) {
     `- Hold AI-TDD: write the tests and run them.${u.require_mutation_check === false ? ' (Mutation check disabled by config: require_mutation_check=false.)' : ` Then run the configured mutation check on the code you touched: \`${u.mutation_command}\` (scope + runner live in studio/setup.cfg), and report the outcome in mutation_check. If mutmut isn't installed, fall back to hand-mutating — break 2-3 critical assertions, confirm the tests FAIL, then restore.`}`,
     `- Run the unit tests: \`${u.test_command}\`${(Array.isArray(u.static_checks) && u.static_checks.length === 0) ? ' (static check skipped — config static_checks=[]).' : `  and the static check: \`${u.static_check}\`.`}`,
     `- When (and only when) tests pass, COMMIT the passing state on the current branch (one exception: escalation, below).`,
-    `  (\`git add -A && git commit -m "writer: ${u.unit_id}"\`) and capture the short SHA — that is writer_sha.`,
+    `  (\`${gitIn(u)} add -A && ${gitIn(u)} commit -m "writer: ${u.unit_id}"\`) and capture the short SHA — that is writer_sha.`,
     `- Persist your handoff: \`mkdir -p ${runDir(u)}\` then write it to ${runDir(u)}/impl--${u.unit_id}--writer.json.`,
     `- Set mvi_claimed=true ONLY if you believe the unit is a complete, usable thought. This is a trigger you`,
     `  pull, not a verdict — the editor renders the authoritative MVI verdict next.`,
@@ -186,7 +214,7 @@ function writerPrompt(u) {
     `  without getting closer to a change you can actually make; you cannot make the tests pass without`,
     `  changing what the unit is supposed to mean; a dependency, interface, or file this unit needs does not`,
     `  exist or contradicts the instructions; you are about to weaken, skip, or delete a test to get to green.`,
-    `- To escalate: commit what you have with \`git add -A && git commit --allow-empty -m "writer(stuck): ${u.unit_id}"\``,
+    `- To escalate: commit what you have with \`${gitIn(u)} add -A && ${gitIn(u)} commit --allow-empty -m "writer(stuck): ${u.unit_id}"\``,
     `  and report that short SHA as writer_sha. If you never got as far as running the tests, run \`${u.test_command}\``,
     `  once so \`tests\` holds a real result. Report \`tests\` as what actually happened — the real exit code, and`,
     `  \`passed\` matching it, even when a suite you never got to influence comes back green. Do NOT report a red`,
@@ -200,13 +228,14 @@ function writerPrompt(u) {
 function editorPrompt(u, writer) {
   const criteria = unitCriteria(u)
   return [
+    ...workDirPreamble(u),
     `You are the EDITOR in an implementation writer/editor loop — a fresh agent reviewing the writer's unit.`,
     ``,
     `Your mandate IS the CONTRARIAN_MANDATE defined in scopes.py — read it at \`.studio/source/scopes.py\``,
     `(installed repos) or \`studio/scopes.py\` (the Studio source repo), and adopt it: applied to code,`,
     `default to deletion, name the specific cut, collapse don't accumulate, guard the essence.`,
     ``,
-    `Scope of review: \`git diff ${writer.writer_sha}..\` — these are the writer's changes. Read the touched`,
+    `Scope of review: \`${gitIn(u)} diff ${writer.writer_sha}..\` — these are the writer's changes. Read the touched`,
     `files (${(writer.files_touched || []).join(', ') || 'see the diff'})${u.read_scope === 'touched' ? '' : ' and their direct importers'}.`,
     `Do not wander beyond that read scope.`,
     ``,
@@ -214,7 +243,7 @@ function editorPrompt(u, writer) {
     `- BEHAVIOR PRESERVATION: you may restructure and delete freely ONLY as long as the unit's tests stay green.`,
     `  After editing, re-run: \`${u.test_command}\`.`,
     `- Do NOT remove a load_bearing item (${JSON.stringify(writer.load_bearing || [])}) without escalating.`,
-    `- If an edit breaks tests, or you must touch a load_bearing item, REVERT: \`git reset --hard ${writer.writer_sha}\``,
+    `- If an edit breaks tests, or you must touch a load_bearing item, REVERT: \`${gitIn(u)} reset --hard ${writer.writer_sha}\``,
     `  and set reverted=true. Never deliver red code from an edit.`,
     ``,
     `Reviewer Concerns — the third path. When you spot a REAL problem you cannot safely fix in this pass —`,
@@ -247,7 +276,7 @@ function editorPrompt(u, writer) {
     ]),
     ``,
     `Keep your edits rationale under ${u.output_budget || 400} words.`,
-    `Deliver: if you KEPT your edits (tests green, not reverted), commit them — \`git commit -am "editor: ${u.unit_id}"\``,
+    `Deliver: if you KEPT your edits (tests green, not reverted), commit them — \`${gitIn(u)} commit -am "editor: ${u.unit_id}"\``,
     `— and set committed=true. If you reverted, do NOT commit (writer_sha already holds the delivered state); set committed=false.`,
     `Persist your handoff to ${runDir(u)}/impl--${u.unit_id}--editor.json, and return the editor handoff object.`,
   ].join('\n')
@@ -367,8 +396,13 @@ const exitGate = passesExitGate(editor, unconfirmed)
 // Safety net: if the editor broke green but did not revert itself, force the revert.
 if (editor && editor.tests && editor.tests.passed === false && !editor.reverted) {
   log(`Editor left red code without reverting — forcing reset to ${writer.writer_sha}.`)
+  // The preamble rides along because this agent also re-runs the test command, which `git -C`
+  // could never have reached — without the `cd` it would confirm green against the wrong tree.
   await agent(
-    `Run \`git reset --hard ${writer.writer_sha}\` to restore the writer's passing state for ${unit.unit_id}, then confirm \`${unit.test_command}\` passes. Return a one-line confirmation.`,
+    [
+      ...workDirPreamble(unit),
+      `Run \`${gitIn(unit)} reset --hard ${writer.writer_sha}\` to restore the writer's passing state for ${unit.unit_id}, then confirm \`${unit.test_command}\` passes. Return a one-line confirmation.`,
+    ].join('\n'),
     { label: `revert:${unit.unit_id}`, phase: 'Edit' },
   )
   // The tree is now back at writer_sha; reflect that in the payload so the log/return don't misreport.
@@ -382,7 +416,10 @@ if (editor && editor.tests && editor.tests.passed === false && !editor.reverted)
 if (editHeld && editor && !editor.committed) {
   log(`Editor kept edits but did not commit — committing now.`)
   await agent(
-    `Run \`git commit -am "editor: ${unit.unit_id}"\` to commit the editor's kept changes for ${unit.unit_id}. If git reports nothing to commit, say so. Return a one-line confirmation.`,
+    [
+      ...workDirPreamble(unit),
+      `Run \`${gitIn(unit)} commit -am "editor: ${unit.unit_id}"\` to commit the editor's kept changes for ${unit.unit_id}. If git reports nothing to commit, say so. Return a one-line confirmation.`,
+    ].join('\n'),
     { label: `commit:${unit.unit_id}`, phase: 'Edit' },
   )
   // Reflect the safety-net commit in the payload.
