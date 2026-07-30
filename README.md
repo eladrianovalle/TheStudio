@@ -251,7 +251,7 @@ python $STUDIO_ROOT/run_phase.py prepare --phase tech --text "Build lobby system
 # Artifacts land in ./my-game-project/.studio/output/tech/run_tech_<timestamp>/
 ```
 
-First run auto-scaffolds `.studio/` and creates a bridge doc. Override with `--artifact-root` or `STUDIO_ARTIFACT_ROOT` env var. Priority: flag > env > cwd detection.
+The first run in that project auto-scaffolds its `.studio/` and creates a bridge doc there. Override with `--artifact-root` or `STUDIO_ARTIFACT_ROOT` env var. Priority: flag > env > cwd detection.
 
 Keep installed copies current: `python studio/run_phase.py check-install --target <path>` and `update --target <path>`. `init`/`update` also install a per-user SessionStart hook that quietly nudges you to run `/studio-update` when your installed Studio falls behind upstream — once per update, silent otherwise, offline-safe, and never able to break a session. Opt out with `--no-hook` or an empty `.studio/update-check.off`. See [CLAUDE_CODE_USAGE.md](./studio/docs/CLAUDE_CODE_USAGE.md#staying-up-to-date-automatic-nudge). If you develop Studio and consume it elsewhere, set `[update] auto_pull_source = true` in your source repo's `.studio/update.toml` (or pass `update --pull-source`) and `update` will safely fast-forward your source checkout when it's cleanly behind — so it stops nagging you to `git pull` it by hand.
 
@@ -259,8 +259,11 @@ Keep installed copies current: `python studio/run_phase.py check-install --targe
 
 ## Run Directory Anatomy
 
+Runs land under the active output root: `studio/output/` when you run from this repo, and
+`<your-project>/.studio/output/` when you run from a project that installed Studio.
+
 ```
-.studio/output/
+<output root>/
   market/
     run_market_20260314_034202/
       instructions.md          # Generated prompts and personas
