@@ -337,6 +337,20 @@ test('the editor prompt pins its diff, its revert, and its commit', () => {
   assert.equal(occurrences(prompt, PINNED), 3)
 })
 
+test('no prompt leaves a bare git command outside the preamble', () => {
+  // The two counts above prove the git commands we already know about are pinned. They cannot
+  // notice a NEW bare `git` added to a prompt later: the pinned count is unchanged, so the suite
+  // stays green while the loop half-targets the worktree. This catches that instead.
+  //
+  // The preamble is stripped first because it legitimately quotes a bare `git` — the rule telling
+  // the agent never to retry a failed pinned command as one.
+  for (const prompt of [writerPrompt({ ...UNIT, work_dir: WORK_DIR }), editorPrompt({ ...UNIT, work_dir: WORK_DIR }, WRITER)]) {
+    const body = prompt.slice(prompt.indexOf('\n\n') + 2)
+    const bare = [...body.matchAll(/`git (?!-C)/g)].map((m) => body.slice(m.index, m.index + 44))
+    assert.deepEqual(bare, [], `unpinned git command found in a prompt: ${JSON.stringify(bare)}`)
+  }
+})
+
 test('both prompts open by telling the agent to cd into the work dir', () => {
   // First line, before the role: the `cd` is what covers the test command, the static check and
   // the mutation run — none of which git could ever be pinned for.
