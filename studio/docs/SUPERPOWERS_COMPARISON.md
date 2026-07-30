@@ -121,7 +121,8 @@ exemption clauses don't scope. Plus two rules from their micro-test protocol at 
 lines 575-585: always include a no-guidance control, and treat variance across reps as a metric.
 
 **How it lands.** About 25 lines as §10 "Writing for Agents" in
-`studio/docs/CODING_PRINCIPLES.md` — sibling to §6 (docs), §7 (code) and §8 (conversation), which
+`studio/docs/CODING_PRINCIPLES.md` — sibling to §6 "Write for Humans", which now covers docs,
+code and conversation in one section, and which
 already partition writing by reader and leave agents as the obvious gap. That file already ships
 cross-repo (`install.py`) and is injected into a consuming repo's CLAUDE.md between sentinels, so it
 needs no new plumbing, no INDEX/README churn, and no `/spec` wiring. The section must say plainly
@@ -434,7 +435,7 @@ this plan is measurable, which is exactly the failure the gstack scorecard is st
 riders the rejections surfaced: hoist the R3 scar to one owner constant, fix the hand-mutation
 instruction to break production code rather than assertions, add "test output pristine — warnings are
 a finding" to the editor's checks, and add the six-line ship-list parity test for
-`SLASH_COMMANDS`/`WORKFLOW_FILES` (**done**). **Usable output:** §10 of CODING_PRINCIPLES — which does not exist yet; the file still ends at §9 — ships to every
+`SLASH_COMMANDS`/`WORKFLOW_FILES` (**done**). **Usable output:** a prompt-doctrine section of CODING_PRINCIPLES — which does not exist yet; the file ends at §7 — ships to every
 installed repo; the contrarian's escape hatch now costs evidence; two shipped bugs-in-waiting closed.
 One commit each, one PR. Measured against Phase 0's `editor_liveness`.
 
@@ -481,7 +482,7 @@ every row below that names a baseline is unmeasured.
 
 | Item | Signal (instrument) | Helping looks like | Hurting looks like | Trigger to act |
 |---|---|---|---|---|
-| §10 prompt doctrine *(not yet written — Phase 1; CODING_PRINCIPLES ends at §9, so this row cannot fire yet)* | Whether it gets cited when prompt text changes; no new nuance clauses land in `scopes.py` / `question_mode.py` | New prompt edits pick a form deliberately and say which | It is never referenced in any prompt-change PR | Two prompt-change PRs in a row that cite no form → the section is decoration; cut it |
+| Prompt doctrine *(not yet written — Phase 1; CODING_PRINCIPLES ends at §7, so this row cannot fire yet)* | Whether it gets cited when prompt text changes; no new nuance clauses land in `scopes.py` / `question_mode.py` | New prompt edits pick a form deliberately and say which | It is never referenced in any prompt-change PR | Two prompt-change PRs in a row that cite no form → the section is decoration; cut it |
 | Escape hatches earn their invocation | `editor_liveness` / `shrink_ratio` (`stats.py:151-158`, `session.py:108-130`), against the Phase 0 baseline | More forge units end with a real cut; "no edits" handoffs stop citing the mandate's own clauses | Liveness flat, or the editor starts compressing readable code (the regression the clauses exist to stop) | Liveness does not move after ~10 forge units → revert the text. Any review flagging over-compression → revert immediately |
 | Writer escalation channel | Count of handoffs carrying a non-empty `escalation`; count of green-but-wrong units caught later | A genuinely stuck writer stops instead of guessing, and says what it needs | Field never used across ~10 units (the hole was theoretical), or used to dodge tractable work | Never populated across ~10 units → the schema hole was real but the failure was not; keep the field, drop the prompt prose |
 | Rationale is a claim | Whether a contrarian finding survives an advocate's justification; whether the editor logs a concern it previously dropped | Findings get engaged with rather than withdrawn after a good explanation | Iteration burn: runs take more passes to reach APPROVED because rebuttals no longer resolve anything | Median iterations-to-verdict rises across ~10 runs → the wording is fighting the rejection-feedback loop; revert |
