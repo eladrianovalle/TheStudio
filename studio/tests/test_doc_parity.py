@@ -175,7 +175,18 @@ class TestWorkDirIsDocumentedHonestly:
                     f"{doc_name} does not name the `{reason}` refusal reason"
                 )
 
-    def test_no_doc_claims_more_than_the_feature_delivers(self):
+    def test_no_doc_repeats_a_known_overclaim(self):
+        """A blacklist of five phrases, four of which were deleted to make this pass.
+
+        Read the name literally: this catches the specific wordings we already found
+        and removed, so they cannot come back. It cannot catch a NEW overclaim in
+        different words — "guarantees commits land on the right branch" sails through
+        untouched. Lengthening the list would only add more guesses.
+
+        `test_every_doc_states_the_limit` below is the durable guard: it requires every
+        describing doc to say what the feature does NOT do, which a new overclaim has to
+        contradict in the same file to be worth worrying about.
+        """
         for rel_path in _WORK_DIR_DOCS:
             text = (_REPO_ROOT / rel_path).read_text(encoding="utf-8").lower()
             for claim in _WORK_DIR_OVERCLAIMS:
