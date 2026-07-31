@@ -23,7 +23,9 @@ treat that as an invocation of this command.
 - Optional `--branch <name>`: branch to run on (default: derive `impl/<unit_id>`).
 - Optional `--work-dir <path>`: the directory the loop's agents build in. Must be a git worktree
   of this repository; it is validated in Step 3 and a bad path stops the run before any agent
-  spawns. Without it, the agents work wherever their shell starts, as they always have.
+  spawns. Without it, the agents work wherever their shell starts, as they always have. The flag
+  reduces the blast radius of a run pointed at the wrong directory rather than ruling that out:
+  every git command the loop renders is prompt text an agent may ignore.
 - Optional `--test "<cmd>"`: override the inferred test command.
 - Optional `--plan`: echo the parsed plan and STOP (dry run); do not run the loop.
 
@@ -132,7 +134,8 @@ four reasons it hit, and the path it tried:
   turning the rest of the path into a command of its own. Rename the directory.
 
 Tell the user which reason it was and which path was tried. Continuing anyway would commit to
-whatever branch the shell's checkout happens to be on — the accident `--work-dir` exists to prevent.
+whatever branch the shell's checkout happens to be on — the accident `--work-dir` exists to make
+less likely.
 
 **Then pick the branch.** The loop edits files in place and makes a real `git commit`, and the
 writer + editor stages must share one working tree. With a `--work-dir`, that tree is the work

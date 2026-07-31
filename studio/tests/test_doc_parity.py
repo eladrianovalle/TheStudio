@@ -115,6 +115,103 @@ class TestLoopConfigParity:
         )
 
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# The files that describe `/forge --work-dir` to a reader. The spec itself
+# (`specs/forge-work-dir.md`) is deliberately absent: it is where the don't-oversell
+# rule is written down, so it quotes the banned wording on purpose.
+_WORK_DIR_DOCS = (
+    "CHANGELOG.md",
+    ".claude/commands/forge.md",
+    "studio/docs/IMPLEMENTATION_LOOP_SPEC.md",
+    "studio/docs/CLAUDE_CODE_USAGE.md",
+)
+
+# Claims the feature cannot back up. Every git command it renders is prompt text an
+# agent may ignore, and the path check runs once, before the agents start.
+_WORK_DIR_OVERCLAIMS = (
+    "worktree-safe",
+    "worktree safe",
+    "prevents the accident",
+    "exists to prevent",
+    "cannot move main",
+)
+
+# Files a person reads to learn how to run the loop. `pin_loop_to_worktree.py` was the
+# hand-rolled workaround `--work-dir` replaced; none of these may still tell you to run it.
+_HOW_TO_RUN_DOCS = (
+    *_WORK_DIR_DOCS,
+    "README.md",
+    "CLAUDE.md",
+    ".claude/workflows/implementation-loop.js",
+)
+
+
+class TestWorkDirIsDocumentedHonestly:
+    """`--work-dir` is a safety feature, which is exactly why its docs must not oversell it.
+
+    Two failures are possible here and only one is obvious. The obvious one is
+    leaving the flag undocumented. The other is documenting it as protection it
+    can't provide: the loop's git commands are text in an agent's prompt, so a
+    reader who believes the loop is now safe stops checking, and the first agent
+    that ignores its instructions moves the wrong branch again.
+    """
+
+    def test_reference_docs_document_the_flag_and_its_up_front_validation(self):
+        """Both reference docs name the flag, and say the check runs before the loop.
+
+        Up-front validation is the property that makes the flag worth using — a bad
+        path costs nothing rather than failing after both agents have run — so it is
+        not an optional detail of the write-up.
+        """
+        for doc_name in ("IMPLEMENTATION_LOOP_SPEC.md", "CLAUDE_CODE_USAGE.md"):
+            text = (_DOCS / doc_name).read_text(encoding="utf-8")
+            assert "--work-dir" in text, f"{doc_name} does not document --work-dir"
+            assert "validated before the loop starts" in text, (
+                f"{doc_name} does not say the work dir is validated before the loop starts"
+            )
+            for reason in ("missing", "not-a-worktree", "different-repo", "unquotable"):
+                assert f"`{reason}`" in text, (
+                    f"{doc_name} does not name the `{reason}` refusal reason"
+                )
+
+    def test_no_doc_repeats_a_known_overclaim(self):
+        """A blacklist of five phrases, four of which were deleted to make this pass.
+
+        Read the name literally: this catches the specific wordings we already found
+        and removed, so they cannot come back. It cannot catch a NEW overclaim in
+        different words — "guarantees commits land on the right branch" sails through
+        untouched. Lengthening the list would only add more guesses.
+
+        `test_every_doc_states_the_limit` below is the durable guard: it requires every
+        describing doc to say what the feature does NOT do, which a new overclaim has to
+        contradict in the same file to be worth worrying about.
+        """
+        for rel_path in _WORK_DIR_DOCS:
+            text = (_REPO_ROOT / rel_path).read_text(encoding="utf-8").lower()
+            for claim in _WORK_DIR_OVERCLAIMS:
+                assert claim not in text, (
+                    f"{rel_path} claims {claim!r}; --work-dir reduces the blast radius "
+                    "of a run in the wrong directory, it cannot make one impossible"
+                )
+
+    def test_every_doc_states_the_limit(self):
+        for rel_path in _WORK_DIR_DOCS:
+            text = (_REPO_ROOT / rel_path).read_text(encoding="utf-8")
+            assert "blast radius" in text, (
+                f"{rel_path} describes --work-dir without stating what it does not do"
+            )
+
+    def test_no_doc_still_tells_you_to_run_the_retired_pin_script(self):
+        runs_the_script = re.compile(r"(python|\./|bash)\s*\S*pin_loop_to_worktree")
+        for rel_path in _HOW_TO_RUN_DOCS:
+            text = (_REPO_ROOT / rel_path).read_text(encoding="utf-8")
+            assert not runs_the_script.search(text), (
+                f"{rel_path} still instructs the reader to run pin_loop_to_worktree.py, "
+                "which was deleted when --work-dir replaced it"
+            )
+
+
 def _doc_section(doc_name: str, heading: str) -> str:
     """The text of one markdown section: its heading down to the next heading."""
     lines = (_DOCS / doc_name).read_text(encoding="utf-8").splitlines()

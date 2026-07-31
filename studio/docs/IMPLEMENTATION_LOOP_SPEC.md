@@ -299,6 +299,36 @@ another runtime (LangGraph, Google ADK, OpenAI Agents SDK) rewrites only the ~40
 orchestration shell; those frameworks all express the same "sequential stages + conditional
 branch + shared state" shape.
 
+### Building in a git worktree (`--work-dir`)
+
+Every git command the loop runs is a line of text inside an agent's prompt, so it executes wherever
+that agent's shell is standing — by default, the checkout you invoked `/forge` from, on whatever
+branch that checkout has open. `/forge --work-dir <path>` puts a `work_dir` on the unit, and the
+workflow does two things with it: both agent prompts open with an instruction to `cd` into that
+directory and keep everything there, and every git command inside them renders as `git -C "<path>"`.
+
+**The `cd` is the mechanism; the pinned git is only a backstop.** The test command, the static check
+and the mutation run are not git commands, so `git -C` never reaches them. Pinning git alone would
+have been worse than doing nothing: the agent would commit to the correct branch and then report
+green tests describing a different tree. One `cd` at the top covers all of them, including whatever
+gets added later.
+
+**The path is validated before the loop starts.** `/forge` resolves and checks it in Step 3, before
+a single agent spawns, and stops the run naming which of four reasons it hit: `missing` (nothing at
+that path), `not-a-worktree` (a directory that exists but isn't inside a git worktree),
+`different-repo` (a worktree of some other repository), or `unquotable` (a path holding a character
+that would break out of the `git -C "<path>"` quoting the prompts render). Checking first is what
+makes the flag worth reaching for — a typo'd path costs nothing, instead of failing an hour in with
+both agents already run.
+
+**What it does not do.** It reduces the blast radius of a run pointed at the wrong directory; it
+cannot make that impossible. Every one of these instructions is prompt text an agent may ignore, and
+the validation is one shot at the start while the agents work for an hour. A test can prove the
+prompt *says* `cd`; only watching a live run tells you the agent did it.
+
+With no `--work-dir` the key is absent, the `cd` lines aren't rendered, and git stays bare — every
+run that doesn't ask for this is unchanged.
+
 ## Success / kill metric
 
 The cadence lab needs a terminating verdict, or it runs forever and the feature has no measurable
