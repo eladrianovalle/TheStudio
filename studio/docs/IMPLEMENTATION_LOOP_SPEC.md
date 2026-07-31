@@ -317,7 +317,10 @@ gets added later.
 a single agent spawns, and stops the run naming which of four reasons it hit: `missing` (nothing at
 that path), `not-a-worktree` (a directory that exists but isn't inside a git worktree),
 `different-repo` (a worktree of some other repository), or `unquotable` (a path holding a character
-that would break out of the `git -C "<path>"` quoting the prompts render). Checking first is what
+outside the set the prompts can safely render into `git -C "<path>"`). The accepted set is the rule:
+letters, digits, and `/ . _ - ~` or a space, so a character nobody anticipated is refused rather than
+waved through — at the price of refusing legitimate paths with a `+`, a `(` or an accent in them.
+Checking first is what
 makes the flag worth reaching for — a typo'd path costs nothing, instead of failing an hour in with
 both agents already run.
 
