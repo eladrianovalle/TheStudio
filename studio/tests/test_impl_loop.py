@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for the implementation writer/editor loop config loader."""
 import json
+import string
 import subprocess
 import tempfile
 from pathlib import Path
@@ -17,8 +18,12 @@ from impl_loop import (
     WORK_DIR_NOT_A_WORKTREE,
     WorkDirError,
     WORK_DIR_UNQUOTABLE,
+    _ALLOWED,
+    _ALLOWED_SUMMARY,
+    _KNOWN_BAD,
     _cli,
     _git_common_dir,
+    explain_unquotable_path,
     load_loop_config,
     runtime_knobs,
     validate_work_dir,
@@ -377,9 +382,11 @@ def test_validate_work_dir_rejects_a_path_that_would_break_the_quoting(tmp_path)
     with pytest.raises(WorkDirError) as excinfo:
         validate_work_dir(hostile)
 
-    assert WORK_DIR_UNQUOTABLE in str(excinfo.value)
-    # Names the offending character, so the reader knows what to rename.
-    assert repr('"') in str(excinfo.value)
+    message = str(excinfo.value)
+    assert WORK_DIR_UNQUOTABLE in message
+    # Explains the character it knows about, so the reader knows what to rename.
+    reason = _KNOWN_BAD['"']
+    assert "'\"' " + reason in message
 
 
 def test_validate_work_dir_rejects_a_trailing_backslash(tmp_path):
@@ -395,7 +402,77 @@ def test_validate_work_dir_rejects_a_trailing_backslash(tmp_path):
     with pytest.raises(WorkDirError) as excinfo:
         validate_work_dir(hostile)
 
+    message = str(excinfo.value)
+    assert WORK_DIR_UNQUOTABLE in message
+    # Shown as the one character the user typed. repr() would print '\\' here, which
+    # reads as two backslashes and matches nothing they can find in their own path.
+    assert "'\\' " in message
+    assert "'\\\\'" not in message
+
+
+def test_validate_work_dir_rejects_a_character_no_one_wrote_down(tmp_path):
+    """The point of an allowlist: refuse what nobody thought to ban.
+
+    A semicolon separates commands just as effectively as a quote does, and it was
+    never on the old banned list. Nothing explains it, because nothing has to — being
+    outside the accepted set is the whole reason.
+    """
+    hostile = tmp_path / "wt;echo pwned"
+    hostile.mkdir()
+
+    with pytest.raises(WorkDirError) as excinfo:
+        validate_work_dir(hostile)
+
     assert WORK_DIR_UNQUOTABLE in str(excinfo.value)
+    assert ";" not in _KNOWN_BAD
+
+
+def test_explain_unquotable_path_accepts_an_ordinary_path():
+    """An everyday worktree path, spaces and a tilde included, raises nothing."""
+    assert explain_unquotable_path("/Users/me/Repos/my project-1/.wt~") is None
+
+
+def test_explain_unquotable_path_points_a_caret_at_each_offender():
+    """The carets line up under the characters that have to go, and only those.
+
+    Compared as whole lines rather than substrings: a caret sitting one column too
+    far right still contains "spaces then a caret", so a loose check would pass on
+    a message pointing at the wrong character.
+    """
+    lines = explain_unquotable_path("/a/b+c&d").splitlines()
+    path_line = lines.index("    /a/b+c&d")
+
+    assert lines[path_line + 1] == "        ^ ^"
+
+
+def test_explain_unquotable_path_states_the_accepted_set_and_the_fix():
+    """A refusal that doesn't say what is allowed leaves the reader guessing."""
+    message = explain_unquotable_path("/a/b&c")
+
+    assert _ALLOWED_SUMMARY in message
+    assert "Rename the directory" in message
+
+
+def test_known_bad_characters_are_already_refused_by_the_allowlist():
+    """_KNOWN_BAD explains a refusal; it must never be the thing deciding one.
+
+    If a key ever drifted into _ALLOWED, that character would be accepted while the
+    code still carried a note about why it is dangerous.
+    """
+    assert not (set(_KNOWN_BAD) & _ALLOWED)
+
+
+def test_the_accepted_set_prose_matches_the_allowlist():
+    """The sentence users are shown is hand-written, so pin it to the real set.
+
+    _ALLOWED_SUMMARY says "letters, digits, and any of / . _ - ~ or a space".
+    """
+    punctuation = _ALLOWED - set(string.ascii_letters + string.digits)
+    assert punctuation == set("/._- ~")
+    for character in punctuation - {" "}:
+        assert character in _ALLOWED_SUMMARY
+    assert "a space" in _ALLOWED_SUMMARY
+    assert set(string.ascii_letters + string.digits) <= _ALLOWED
 
 
 def test_validate_work_dir_rejects_a_path_that_does_not_exist(tmp_path):

@@ -123,15 +123,20 @@ On success this prints the same knobs JSON Step 5 needs, plus a `work_dir` key h
 **resolved absolute path**. That resolved path is `<work_dir>` for the rest of this command. Keep
 the JSON — Step 5 reuses it instead of running the command again.
 
-**If it exits non-zero, STOP. Do not run the loop.** It writes one line to stderr naming which of
-four reasons it hit, and the path it tried:
+**If it exits non-zero, STOP. Do not run the loop.** It writes to stderr naming which of four
+reasons it hit, and the path it tried:
 
 - **missing** — there is no directory at that path;
 - **not-a-worktree** — the directory exists but is not inside a git worktree;
 - **different-repo** — it is a worktree of some other repository, not this one;
-- **unquotable** — the path contains a character (`"`, `\`, a backtick, `$`, a newline) that would
-  break out of the `git -C "<path>"` quoting the loop renders into the agents' instructions,
-  turning the rest of the path into a command of its own. Rename the directory.
+- **unquotable** — the path contains a character outside the accepted set: letters, digits, and
+  `/ . _ - ~` or a space. The loop renders the path into `git -C "<path>"` inside the agents'
+  instructions, where a character like `"` or a backtick turns the rest of the path into a command
+  of its own. The check accepts a known-good set instead of banning a known-bad one, so a character
+  nobody anticipated is refused rather than waved through; the cost is that a legitimate path
+  holding a `+`, a `(` or an accent is refused too. This is the one reason that answers over several
+  lines — it points a caret at each offending character and explains the ones it recognises. Pass
+  the whole thing on. Rename the directory.
 
 Tell the user which reason it was and which path was tried. Continuing anyway would commit to
 whatever branch the shell's checkout happens to be on — the accident `--work-dir` exists to make

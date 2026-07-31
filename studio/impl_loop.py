@@ -14,6 +14,7 @@ from config_loading import tomllib
 import argparse
 import json
 import os
+import string
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,12 +34,30 @@ WORK_DIR_NOT_A_WORKTREE = "not-a-worktree"
 WORK_DIR_DIFFERENT_REPO = "different-repo"
 WORK_DIR_UNQUOTABLE = "unquotable"
 
-# Characters that break out of the `git -C "<path>"` quoting the prompts render.
-# The path is interpolated into instruction text an agent then runs, so a double
-# quote turns the rest of the path into a separate command. Backslash is here for
-# the same reason one step removed: a trailing one escapes the closing quote, so
-# `.../wt\` renders as `git -C ".../wt\" add -A` and the boundary disappears.
-_UNQUOTABLE = ('"', '\\', '`', '$', '\n', '\r')
+# The characters a --work-dir is allowed to contain. The path is interpolated into
+# `git -C "<path>"` inside instruction text an agent then runs, so anything that
+# survives into that string can change what runs. Listing what is accepted rather
+# than what is banned means a character nobody thought of is refused by default
+# instead of waved through.
+_ALLOWED = set(string.ascii_letters + string.digits + "/._- ~")
+
+# Why a particular character is dangerous. This only ever explains a refusal —
+# _ALLOWED alone decides one, and it already excludes every key here. Two lists
+# that could each refuse a path would be two lists that could drift apart.
+_KNOWN_BAD = {
+    '"': "ends the quoted string early",
+    "\\": "a trailing one escapes the closing quote",
+    "`": "runs as a command substitution",
+    "$": "expands as a variable",
+}
+
+# Characters with no printable form, so the message can still point at where they are.
+_INVISIBLE = {"\n": "\\n", "\r": "\\r", "\t": "\\t"}
+
+# Spelled out rather than derived from _ALLOWED: a space has nothing to print, and a
+# joined list of punctuation reads as line noise. test_impl_loop.py checks that this
+# sentence and _ALLOWED still describe the same set.
+_ALLOWED_SUMMARY = "letters, digits, and any of / . _ - ~ or a space"
 
 
 class WorkDirError(ValueError):
@@ -217,12 +236,62 @@ def _git_common_dir(directory: Path) -> str | None:
     return os.path.realpath(result.stdout.strip())
 
 
+def _show(character: str) -> str:
+    """The character as the user typed it, with the invisible ones spelled out.
+
+    ``repr()`` is no good here: it renders a backslash as ``'\\\\'`` and a newline as
+    ``'\\n'``, so a reader comparing the message against their own directory name sees
+    two characters where they typed one.
+    """
+    return _INVISIBLE.get(character, character)
+
+
+def explain_unquotable_path(path_text: str) -> str | None:
+    """Say which characters of ``path_text`` are not accepted, or None if all are.
+
+    The message points at each offending character with a caret under the path,
+    then gives a reason for the ones ``_KNOWN_BAD`` can explain.
+    """
+    if all(character in _ALLOWED for character in path_text):
+        return None
+
+    shown_path = ""
+    carets = ""
+    for character in path_text:
+        shown = _show(character)
+        shown_path += shown
+        carets += ("^" if character not in _ALLOWED else " ") * len(shown)
+
+    lines = [
+        f"work-dir {WORK_DIR_UNQUOTABLE}: this path holds characters the loop "
+        "cannot safely quote:",
+        "",
+        f"    {shown_path}",
+        f"    {carets.rstrip()}",
+    ]
+
+    # First-appearance order, so the reasons read in the same order as the carets.
+    reported: list[str] = []
+    for character in path_text:
+        if character in _KNOWN_BAD and character not in reported:
+            reported.append(character)
+            lines.append(f"    '{_show(character)}' {_KNOWN_BAD[character]}")
+
+    lines += [
+        "",
+        'The loop renders this path into `git -C "<path>"` inside instruction text '
+        "an agent then runs, so anything outside the accepted set could change what "
+        f"that agent runs. Accepted: {_ALLOWED_SUMMARY}. Rename the directory.",
+    ]
+    return "\n".join(lines)
+
+
 def validate_work_dir(work_dir: str | Path, main_repo: Path | None = None) -> Path:
     """Check that ``work_dir`` is a git worktree of this repository.
 
     Returns the resolved absolute path, which is what /forge pins the rest of the run
     to. Raises WorkDirError naming which of the four failures it hit (``missing``,
-    ``not-a-worktree``, ``different-repo``) and the path it tried.
+    ``not-a-worktree``, ``different-repo``, ``unquotable``) and the path it tried.
 
     Validation has to live here in Python because the Workflow sandbox the loop runs
     in has no filesystem or process access — it can only spawn agents and build
@@ -234,16 +303,11 @@ def validate_work_dir(work_dir: str | Path, main_repo: Path | None = None) -> Pa
             (defaults to this module's own checkout). Exposed for testing.
     """
     path = Path(work_dir).expanduser().resolve()
-    bad = sorted({c for c in _UNQUOTABLE if c in str(path)})
-    if bad:
-        # gitIn renders `git -C "<path>"` into prompt text the agent runs. A path
-        # carrying one of these ends the quoted string early, and whatever follows
-        # becomes a command of its own.
-        shown = ", ".join(repr(c) for c in bad)
-        raise WorkDirError(
-            f"work-dir {WORK_DIR_UNQUOTABLE}: {path} contains {shown}, which would "
-            f'break out of the git -C "..." quoting the loop renders'
-        )
+    # Checked before is_dir on purpose: a directory with a hostile name can genuinely
+    # exist, and the point is to refuse it rather than confirm it is there.
+    unquotable = explain_unquotable_path(str(path))
+    if unquotable is not None:
+        raise WorkDirError(unquotable)
     if not path.is_dir():
         raise WorkDirError(f"work-dir {WORK_DIR_MISSING}: no directory at {path}")
 
