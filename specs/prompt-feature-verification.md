@@ -2,7 +2,7 @@
 feature: Pre-committed Verification for Prompt-Shaped Features
 slug: prompt-feature-verification
 ticket: none
-status: approved
+status: shipped
 studio_run: (run directory no longer on disk; removed by retention cleanup)
 ---
 
