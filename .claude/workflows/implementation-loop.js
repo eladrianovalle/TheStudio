@@ -108,7 +108,9 @@ const WRITER_HANDOFF = {
       additionalProperties: false,
       properties: {
         performed: { type: 'boolean' },
-        assertions_broken: { type: 'integer' },
+        // Counts changes made to the PRODUCTION code, not to assertions. Breaking an
+        // assertion fails its test by construction, so counting those measured nothing.
+        mutations_introduced: { type: 'integer', description: 'how many production-code changes were made to check the tests notice' },
         caught: { type: 'boolean' },
       },
     },
@@ -199,7 +201,7 @@ function writerPrompt(u) {
     ``,
     `Discipline:`,
     `- Build a usable interaction, not a partial component (MVI). No speculative scope beyond the unit.`,
-    `- Hold AI-TDD: write the tests and run them.${u.require_mutation_check === false ? ' (Mutation check disabled by config: require_mutation_check=false.)' : ` Then run the configured mutation check on the code you touched: \`${u.mutation_command}\` (scope + runner live in studio/setup.cfg), and report the outcome in mutation_check. If mutmut isn't installed, fall back to hand-mutating — break 2-3 critical assertions, confirm the tests FAIL, then restore.`}`,
+    `- Hold AI-TDD: write the tests and run them.${u.require_mutation_check === false ? ' (Mutation check disabled by config: require_mutation_check=false.)' : ` Then run the configured mutation check on the code you touched: \`${u.mutation_command}\` (scope + runner live in studio/setup.cfg), and report the outcome in mutation_check. If mutmut isn't installed, fall back to hand-mutating — change 2-3 things in the PRODUCTION code the tests cover (flip a comparison, drop a guard clause, return a constant), confirm the tests FAIL, then restore. Mutate the code, never the assertions: breaking an assertion fails its test by construction and tells you nothing about whether that test would catch a real bug.`}`,
     `- Run the unit tests: \`${u.test_command}\`${(Array.isArray(u.static_checks) && u.static_checks.length === 0) ? ' (static check skipped — config static_checks=[]).' : `  and the static check: \`${u.static_check}\`.`}`,
     `- When (and only when) tests pass, COMMIT the passing state on the current branch (one exception: escalation, below).`,
     `  (\`${gitIn(u)} add -A && ${gitIn(u)} commit -m "writer: ${u.unit_id}"\`) and capture the short SHA — that is writer_sha.`,
@@ -242,6 +244,9 @@ function editorPrompt(u, writer) {
     `Hard bounds:`,
     `- BEHAVIOR PRESERVATION: you may restructure and delete freely ONLY as long as the unit's tests stay green.`,
     `  After editing, re-run: \`${u.test_command}\`.`,
+    `- TEST OUTPUT PRISTINE: green is not enough. A suite that passes while emitting new warnings,`,
+    `  deprecation notices or stray output is a finding. If the writer's diff introduced any, fix it in`,
+    `  this pass, or record it as a Reviewer Concern below. Do not report a noisy suite as clean.`,
     `- Do NOT remove a load_bearing item (${JSON.stringify(writer.load_bearing || [])}) without escalating.`,
     `- If an edit breaks tests, or you must touch a load_bearing item, REVERT: \`${gitIn(u)} reset --hard ${writer.writer_sha}\``,
     `  and set reverted=true. Never deliver red code from an edit.`,

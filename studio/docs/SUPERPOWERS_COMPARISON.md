@@ -435,13 +435,17 @@ counts from *debate* runs — they have never measured the forge editor and stru
 **Remaining follow-up:** instrument per-unit editor cost in the loop. That is a build, not a
 measurement, and it is the only thing still standing between item 5 and a real trade-off.
 
-**Phase 1 — the prose that costs nothing and fixes something. NOT STARTED as of 2026-07-29**, except the ship-list parity test, which shipped that day. Proposal items 1, 2 and 4, plus the
-riders the rejections surfaced: hoist the R3 scar to one owner constant, fix the hand-mutation
-instruction to break production code rather than assertions, add "test output pristine — warnings are
-a finding" to the editor's checks, and add the six-line ship-list parity test for
-`SLASH_COMMANDS`/`WORKFLOW_FILES` (**done**). **Usable output:** a prompt-doctrine section of CODING_PRINCIPLES — which does not exist yet; the file ends at §7 — ships to every
-installed repo; the contrarian's escape hatch now costs evidence; two shipped bugs-in-waiting closed.
-One commit each, one PR. Measured against the 75% forge cut rate in PHASE_0_BASELINE.md, not
+**Phase 1 — the prose that costs nothing and fixes something. PARTLY DONE.** The two bugs-in-waiting
+are closed (2026-08-02): the hand-mutation instruction now breaks production code rather than
+assertions, with the `assertions_broken` handoff field renamed `mutations_introduced` because a field
+name is an instruction too, and "test output pristine — warnings are a finding" is in the editor's
+hard bounds, routed to Reviewer Concerns when the editor cannot fix it in the pass. The six-line
+ship-list parity test shipped 2026-07-29.
+
+**Still open here:** proposal items 1, 2 and 4 — the prompt-doctrine section of CODING_PRINCIPLES,
+which still does not exist; the file ends at §7 — and hoisting the R3 scar to one owner constant.
+**Usable output when they land:** the doctrine ships to every installed repo and the contrarian's
+escape hatch costs evidence. Measured against the 75% forge cut rate in PHASE_0_BASELINE.md, not
 `editor_liveness`, which never measured this loop.
 
 **Phase 2 — the writer's escalation channel. DONE 2026-07-29** (PR #84; entry gate pinned in #87). Proposal item 3: the schema field, the relaxed
