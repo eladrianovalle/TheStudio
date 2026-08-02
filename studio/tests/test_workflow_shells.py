@@ -351,6 +351,53 @@ class TestWorkDirPinning:
             )
 
 
+class TestMutationGateTeeth:
+    """Pin the wording that decides whether the mutation check measures anything.
+
+    All three are prompt or schema text with no runtime behind them — an agent reads
+    them and acts. A test can only prove the instruction says the right thing, which
+    is precisely the failure that went unnoticed here: the fallback told the writer to
+    break assertions for months, and nothing was watching the words.
+    """
+
+    def _loop_source(self):
+        return (_WORKFLOW_DIR / "implementation-loop.js").read_text()
+
+    def test_hand_mutation_targets_production_code_not_assertions(self):
+        """A broken assertion fails its own test by construction, so it proves nothing.
+
+        The fallback used to say "break 2-3 critical assertions", which made the
+        no-mutmut arm of the gate close to tautological.
+        """
+        src = self._loop_source()
+        fallback = src[src.index("If mutmut isn't installed"):]
+        fallback = fallback[: fallback.index("\n")]
+
+        assert "PRODUCTION code" in fallback, "the fallback does not say what to mutate"
+        assert "never the assertions" in fallback, (
+            "the fallback does not rule out the thing it used to ask for"
+        )
+        assert "break 2-3 critical assertions" not in src
+
+    def test_mutation_check_counts_production_changes(self):
+        """The schema field name is itself an instruction, and the likeliest one obeyed."""
+        src = self._loop_source()
+        block = src[src.index("mutation_check: {") : src.index("load_bearing:")]
+
+        assert "mutations_introduced" in block
+        assert "assertions_broken" not in src, "the old field name still teaches the wrong check"
+
+    def test_editor_must_not_report_a_noisy_suite_as_clean(self):
+        """Green with new warnings is a finding, not a pass."""
+        src = self._loop_source()
+        editor = src[src.index("function editorPrompt") : src.index("// Orchestration")]
+
+        assert "TEST OUTPUT PRISTINE" in editor
+        assert "warnings" in editor
+        # Routed to the channel that already survives a revert, not left to evaporate.
+        assert "Reviewer Concern" in editor
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 def test_js_shell_unit_tests():
     """Run the node:test suite exercising the shells' pure helpers.

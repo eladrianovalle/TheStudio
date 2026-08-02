@@ -77,7 +77,7 @@ persisted to the run directory.
     "exit_code": 0
   },
   "mvi_claimed": true,              // writer's DECLARATION that the unit is a complete thought — the handoff trigger
-  "mutation_check": { "performed": true, "assertions_broken": 2, "caught": true },  // attested
+  "mutation_check": { "performed": true, "mutations_introduced": 2, "caught": true },  // attested; counts PRODUCTION-code changes, never broken assertions
   "load_bearing": ["the retry in save_profile guards a real race; do not cut"],
   "stuck": "…",       // present ONLY when the writer stopped deliberately: the blocker, quoted. Absent normally
   "stage": "writer"   // "writer" | "editor"
@@ -173,8 +173,9 @@ not the writer about its own work):**
 | Component | Criterion | Source |
 | --- | --- | --- |
 | MVI complete | Editor's exit-gate `mvi_verdict`: *"If we stopped here, could someone use what we've built?"* — judged against the unit's `title`, or, when the unit carries acceptance criteria, `true` only if the unit is usable as a complete interaction **and** every criterion passes. Overturns the writer's `mvi_claimed`. | `MVI_METHODOLOGY.md` |
-| Mutation verified | Run the configured `mutation_command` (mutmut; scope in `setup.cfg`) on the touched code; survivors → strengthen tests and redo. Falls back to hand-mutating 2-3 assertions if mutmut is absent. | `AI_TDD_METHODOLOGY.md` |
+| Mutation verified | Run the configured `mutation_command` (mutmut; scope in `setup.cfg`) on the touched code; survivors → strengthen tests and redo. Falls back to hand-mutating 2-3 places in the production code if mutmut is absent — never the assertions, which fail by construction and prove nothing. | `AI_TDD_METHODOLOGY.md` |
 | No anti-patterns | No self-mocking tests, hallucinated assertions, green-checkmark traps. | `AI_TDD_METHODOLOGY.md` |
+| Test output pristine | Green is not enough: a suite passing while it emits new warnings, deprecation notices or stray output is a finding. The editor fixes it in the pass or records it as a Reviewer Concern. | `AI_TDD_METHODOLOGY.md` |
 
 What's genuinely reused from `CodeValidator`: its subprocess runner and `ruff`/`pytest`
 invocation. The gate still needs **net-new glue** to aggregate `List[CheckResult]` → bool, run the
