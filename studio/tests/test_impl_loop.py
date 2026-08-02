@@ -174,6 +174,41 @@ def test_load_loop_config_invalid_toml():
         config_path.unlink()
 
 
+@pytest.mark.parametrize("table", ["loop", "gate", "editor"])
+def test_load_loop_config_non_table_value_names_the_table(table):
+    """A scalar where a table belongs (`gate = "ruff"`) errors and names that table.
+
+    Without the name the message points at the file and leaves you to work out which
+    of the three sections is the wrong one.
+    """
+    config_path = _write_toml(f'{table} = "not a table"\n')
+    try:
+        with pytest.raises(ValueError, match=f"'{table}' must be a table/dict"):
+            load_loop_config(config_path)
+    finally:
+        config_path.unlink()
+
+
+def test_load_loop_config_plain_source_dir_is_not_an_installed_snapshot(tmp_path):
+    """Only the full `<repo>/.studio/source` shape climbs to the repo root.
+
+    A directory that merely happens to be named `source` reads its own `.studio/`, so
+    an unrelated `.studio/` two levels up can never hijack the config.
+    """
+    source = tmp_path / "checkout" / "source"
+    (source / ".studio").mkdir(parents=True)
+    (source / ".studio" / "implementation_loop.toml").write_text(
+        "[editor]\noutput_budget = 111\n"
+    )
+    # Decoy at the grandparent — where the installed-layout rule would have looked.
+    (tmp_path / ".studio").mkdir()
+    (tmp_path / ".studio" / "implementation_loop.toml").write_text(
+        "[editor]\noutput_budget = 222\n"
+    )
+
+    assert load_loop_config(studio_root=source).output_budget == 111
+
+
 def test_load_loop_config_studio_override_beats_shipped_default():
     """.studio/implementation_loop.toml wins over config/implementation_loop.toml."""
     with tempfile.TemporaryDirectory() as tmp:
