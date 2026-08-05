@@ -2,7 +2,7 @@
 feature: Unit Acceptance Criteria from the Approved Spec
 slug: unit-acceptance-criteria
 ticket: none
-status: approved
+status: shipped
 studio_run: (run directory no longer on disk; removed by retention cleanup)
 ---
 

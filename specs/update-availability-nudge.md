@@ -2,7 +2,7 @@
 feature: Proactive Update-Availability Nudge for Consuming Repos
 slug: update-availability-nudge
 ticket: none
-status: approved
+status: shipped
 studio_run: studio/output/tech/run_tech_20260708_164348
 ---
 

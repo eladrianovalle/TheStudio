@@ -2,7 +2,7 @@
 feature: Studio recognizes its own source repo
 slug: source-repo-detection
 ticket: bridge-detection
-status: approved
+status: shipped
 studio_run: studio/output/tech/run_tech_20260730_134434
 ---
 
