@@ -2,7 +2,7 @@
 feature: Opt-in Source Fast-Forward for /studio-update
 slug: pull-source-opt-in
 ticket: none
-status: approved
+status: shipped
 studio_run: studio/output/tech/run_tech_20260708_223215
 ---
 

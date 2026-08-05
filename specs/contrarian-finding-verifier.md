@@ -2,7 +2,7 @@
 feature: Independent Verifier for Contrarian Findings (Studio roadmap R1)
 slug: contrarian-finding-verifier
 ticket: none (roadmap item R1 — see studio/docs/GSTACK_COMPARISON.md)
-status: approved
+status: shipped
 studio_run: studio/output/tech/run_tech_20260716_163522
 ---
 

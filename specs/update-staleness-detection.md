@@ -2,7 +2,7 @@
 feature: Source-Staleness Detection for /studio-update
 slug: update-staleness-detection
 ticket: none
-status: approved
+status: shipped
 studio_run: (run directory no longer on disk; removed by retention cleanup)
 ---
 

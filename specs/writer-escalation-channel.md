@@ -2,7 +2,7 @@
 feature: Writer Escalation Channel
 slug: writer-escalation-channel
 ticket: none
-status: approved
+status: shipped
 studio_run: (run directory no longer on disk; removed by retention cleanup)
 ---
 
