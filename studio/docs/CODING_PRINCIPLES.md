@@ -6,13 +6,13 @@ Behavioral guidelines to reduce common LLM coding mistakes. These apply to ALL w
 
 ## 1. Think Before Coding
 
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
+**Don't assume silently. Don't hide confusion. Surface tradeoffs.**
 
 Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them. Don't pick silently.
+- State your assumptions explicitly, then keep going. Naming an assumption is not a reason to stop.
+- If two readings would produce genuinely different work, ask. If one is clearly likelier, take it and say which you took.
 - If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
+- Stop and ask only when proceeding would be unsafe, or would waste the work if the guess turns out wrong. Otherwise: pick, say what you picked, and finish the task.
 
 ## 2. Simplicity First
 
