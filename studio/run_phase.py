@@ -3261,6 +3261,13 @@ def _do_update(args: argparse.Namespace) -> None:
             )
             print(f"Catch your source up:  git -C {source_dir} pull")
 
+    if result.get("skipped_no_source"):
+        print("Update SKIPPED — nothing was changed, and nothing was deleted.")
+        print("Studio couldn't find the live source to update from, and the copy installed")
+        print("here can't stand in for it: updating from it would delete every installed")
+        print("command. Point VERSION's source_path at your Studio checkout (the warning")
+        print("above says what went wrong), then run this again.")
+        return
     if result.get("blocked"):
         mods = result["locally_modified"]
         print(f"Update BLOCKED: {len(mods)} installed file(s) have local edits that would be overwritten:")
