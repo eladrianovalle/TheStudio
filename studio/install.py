@@ -1298,6 +1298,30 @@ def update_studio(
     source_dir, warning = _resolve_source_dir(target, studio_dir)
     enabled = auto_resolved and warning is None
 
+    # A source we could not resolve is not a source we can update FROM. When
+    # _resolve_source_dir gives up it hands back the installed snapshot, and the
+    # snapshot has no .claude/ directory in it — the commands and workflows live at
+    # the source repo's root, above studio/. So every installed command looks like
+    # something Studio has stopped shipping: the re-install below would rebuild
+    # MANIFEST.json without them and the prune would then delete all of them off
+    # disk (#113). Stop before either can happen and let the caller print the
+    # warning. Refusing to update is always recoverable; deleting someone's
+    # commands is not.
+    if warning is not None:
+        return {
+            "skipped_no_source": True,
+            "updated": 0,
+            "added": 0,
+            "removed": 0,
+            "retired": [],
+            "locally_modified": [],
+            "claude_md_refreshed": False,
+            "source_note": None,
+            "warning": warning,
+            "staleness": None,
+            "source_pull": None,
+        }
+
     # Is the resolved source itself behind its own remote? Compute this HERE, in
     # update's own scope — NOT via the delegated check_studio below, which is
     # called with an explicit dir, so staleness detection is off inside it. When

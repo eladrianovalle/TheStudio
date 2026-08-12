@@ -414,6 +414,86 @@ class TestSnapshotStaleDetection:
         assert Path(version["source_path"]).resolve() != snapshot.resolve()
 
 
+class TestUnresolvableSourceIsNonDestructive:
+    """Regression tests for #113: when update can't resolve the live source it
+    falls back to the installed snapshot, which contains no .claude/ directory.
+    Every installed command then looks retired, and update used to delete the
+    lot. It must now refuse to update at all."""
+
+    def _install_with_dead_source_pointer(self, target_dir, studio_dir, monkeypatch):
+        """Install normally, then break VERSION.source_path and pretend we're
+        running from the snapshot — the exact shape of a consuming repo whose
+        Studio checkout was moved or deleted."""
+        import install
+
+        install_studio(target_dir, studio_dir)
+        version_path = target_dir / ".studio" / "VERSION"
+        version = json.loads(version_path.read_text())
+        version["source_path"] = str(target_dir / "gone")
+        version_path.write_text(json.dumps(version), encoding="utf-8")
+
+        snapshot = target_dir / ".studio" / "source"
+        monkeypatch.setattr(install, "_get_studio_root", lambda: snapshot)
+
+    def test_update_deletes_no_claude_files(self, target_dir, studio_dir, monkeypatch):
+        """The commands and workflows on disk all survive."""
+        self._install_with_dead_source_pointer(target_dir, studio_dir, monkeypatch)
+        claude_dir = target_dir / ".claude"
+        before = sorted(
+            p.relative_to(claude_dir) for p in claude_dir.rglob("*") if p.is_file()
+        )
+        assert before, "fixture should install at least one .claude/ file"
+
+        result = update_studio(target_dir)
+
+        after = sorted(
+            p.relative_to(claude_dir) for p in claude_dir.rglob("*") if p.is_file()
+        )
+        assert after == before
+        assert result["retired"] == []
+        assert result["removed"] == 0
+
+    def test_update_leaves_claude_keys_in_the_manifest(
+        self, target_dir, studio_dir, monkeypatch
+    ):
+        """Guarding only the prune would still let the re-install rebuild the
+        manifest from the snapshot, dropping the .claude/ keys and turning the
+        surviving files into orphans no future prune can see (#95)."""
+        self._install_with_dead_source_pointer(target_dir, studio_dir, monkeypatch)
+        manifest_path = target_dir / ".studio" / "MANIFEST.json"
+        before = {
+            k for k in json.loads(manifest_path.read_text()) if k.startswith(".claude/")
+        }
+        assert before, "fixture should record at least one .claude/ key"
+
+        update_studio(target_dir)
+
+        after = {
+            k for k in json.loads(manifest_path.read_text()) if k.startswith(".claude/")
+        }
+        assert after == before
+
+    def test_update_reports_why_it_did_nothing(
+        self, target_dir, studio_dir, monkeypatch
+    ):
+        """A silent no-op would read as 'already up to date'. Say what happened."""
+        self._install_with_dead_source_pointer(target_dir, studio_dir, monkeypatch)
+
+        result = update_studio(target_dir)
+
+        assert result["skipped_no_source"] is True
+        assert result["warning"] is not None
+
+    def test_explicit_source_still_updates(self, target_dir, studio_dir, monkeypatch):
+        """The guard keys off an unresolvable source, so passing a real one
+        explicitly must be unaffected."""
+        self._install_with_dead_source_pointer(target_dir, studio_dir, monkeypatch)
+
+        result = update_studio(target_dir, studio_dir)
+
+        assert not result.get("skipped_no_source")
+
+
 class TestSlashCommandsUseDirectPaths:
     """Verify slash commands use .studio/source/ paths directly (no rewriting needed)."""
 
