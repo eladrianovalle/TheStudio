@@ -43,6 +43,7 @@ To keep this tracked copy as the live one rather than letting the two drift, poi
 at it:
 
 ```bash
+mkdir -p ~/.claude/hooks
 ln -sf "$PWD/.claude/hooks/finish-check.py" ~/.claude/hooks/finish-check.py
 ```
 
