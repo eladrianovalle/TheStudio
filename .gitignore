@@ -9,10 +9,14 @@ studio/output/
 .studio/
 studio/.studio/
 
-# Claude Code local config/memory (keep slash commands + workflows tracked)
+# Claude Code local config/memory (keep slash commands, workflows + hooks tracked)
 .claude/*
 !.claude/commands/
 !.claude/workflows/
+!.claude/hooks/
+# ...but a hook run from here writes its log and per-session markers next to itself.
+.claude/hooks/state/
+.claude/hooks/*.log
 
 # Studio input files (may contain sensitive analysis)
 studio/input/
