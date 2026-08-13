@@ -62,9 +62,11 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## 5. Git & PR Etiquette
 
-**Open pull requests as drafts first.**
+**Draft means the work is still moving — not "I haven't said it's done yet."**
 
-A new PR starts as a **draft**, not ready-for-review. Mark it ready only when the work is complete, tests pass, and you actually want a human to review and merge it. Opening as a draft prevents two failure modes: accidental early merges (a not-yet-finished PR getting merged by mistake) and reviewer churn (reviewers spending attention on a still-moving target). Flip to ready when it's genuinely ready for eyes.
+Open a PR as a **draft** when you intend to keep pushing to it. That guards two real failure modes: a half-finished branch getting merged by mistake, and a reviewer spending attention on a target that's still changing. When the unit is complete and its tests pass, open it **ready for review** — or flip it the moment it gets there. A finished PR sitting in draft buys nothing and costs the reviewer a round trip.
+
+Draft is a signal about the state of the work, not a ceremony every PR passes through. Re-check the call on every push: if you thought a branch was finished and then pushed to it again, it goes back to draft.
 
 ## 6. Write for Humans
 
