@@ -65,7 +65,7 @@ Slash commands are the main way you use Studio day to day. `init` installs them 
 **Maintain the install**
 | Command | What it does |
 |---------|--------------|
-| `/studio-setup` | Configure roles, personas, scopes, and cleanup after install |
+| `/studio-setup` | Configure roles, personas, and cleanup after install |
 | `/studio-update` | Pull the latest Studio source and commands into an installed project |
 
 Every command works from any project once you've run `init`. See [CLAUDE_CODE_USAGE.md](./studio/docs/CLAUDE_CODE_USAGE.md) for full arguments.
@@ -214,7 +214,7 @@ python studio/run_phase.py update --target /path/to/project          # add --for
 python studio/run_phase.py cleanup --dry-run
 python studio/run_phase.py cleanup
 
-# Setup wizard (configure roles, scopes, cleanup after install)
+# Setup wizard (configure roles, personas, cleanup after install)
 python studio/run_phase.py setup --target . --status
 python studio/run_phase.py setup --target . --defaults
 
@@ -370,7 +370,7 @@ studio/
   clarity.py                # Per-topic Clarity Score tracking and question density control
   question_mode.py          # Pre-flight question surfacing (--mode questions)
   install.py                # Cross-repo installer (init/check/update)
-  setup.py                  # Setup wizard: project config after install (roles, scopes, cleanup)
+  setup.py                  # Setup wizard: project config after install (roles, personas, cleanup)
   offload.py                # CLAUDE.md analyzer: section classification, pointer scoring, canary tokens
   cleanup.py                # TTL + budget-based artifact cleanup + loose file removal
   rerun.py                  # Rejection context injection for iterate-on-failure

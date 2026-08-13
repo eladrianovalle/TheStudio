@@ -275,62 +275,51 @@ class TestApplyRoleCustomization:
 
 
 # ---------------------------------------------------------------------------
-# Apply: scopes
+# The wizard no longer writes .studio/scopes.toml
 # ---------------------------------------------------------------------------
 
 
-class TestApplyScopes:
-    def test_writes_scopes_toml(self, project: Path) -> None:
-        setup.apply_scopes(project)
-        toml_path = project / ".studio" / "scopes.toml"
-        assert toml_path.exists()
-        content = toml_path.read_text(encoding="utf-8")
-        assert "[scopes.alignment]" in content
-        assert "[scopes.depth]" in content
-        assert "[scopes.polish]" in content
+class TestScopesNoLongerGenerated:
+    """The wizard stopped generating scope config; hand-written files still stand."""
 
-    def test_custom_values(self, project: Path) -> None:
-        custom = {
-            "alignment": {
-                "focus": "Quick alignment pass.",
-                "max_iterations": 1,
-                "debate_mode": "all_roles",
-            },
-            "depth": {
-                "focus": "Deep analysis.",
-                "max_iterations": 5,
-                "debate_mode": "per_role",
-            },
-        }
-        setup.apply_scopes(project, custom)
-        content = (project / ".studio" / "scopes.toml").read_text(encoding="utf-8")
-        assert "max_iterations = 5" in content
-        assert "max_iterations = 1" in content
+    def test_apply_scopes_is_gone(self) -> None:
+        with pytest.raises(ImportError):
+            from setup import apply_scopes  # noqa: F401
 
-        state = setup.load_setup_state(project)
-        assert state["choices"]["scopes"]["depth"]["max_iterations"] == 5
+    def test_scopes_is_not_a_setup_step(self) -> None:
+        assert "scopes" not in [step["name"] for step in setup.SETUP_STEPS]
 
-    def test_roundtrip_with_scopes_loader(self, project: Path) -> None:
-        """Written TOML should be loadable by scopes.load_scopes_config."""
-        from scopes import load_scopes_config
+    def test_defaults_write_no_scopes_toml(self, project: Path) -> None:
+        setup.apply_defaults(project)
+        assert not (project / ".studio" / "scopes.toml").exists()
 
-        setup.apply_scopes(project)
-        toml_path = project / ".studio" / "scopes.toml"
-        config = load_scopes_config(toml_path)
-        assert len(config.scopes) == 3
-        names = [s.name for s in config.scopes]
-        assert "alignment" in names
+    def test_answers_write_no_scopes_toml(self, project: Path) -> None:
+        """A leftover `scopes` key in an answers payload writes nothing."""
+        setup.apply_from_answers(project, {"scopes": "defaults"})
+        assert not (project / ".studio" / "scopes.toml").exists()
 
-    def test_escapes_quotes_in_focus(self, project: Path) -> None:
-        custom = {
-            "test": {
-                "focus": 'Focus with "quotes" inside.',
-                "max_iterations": 1,
-            },
-        }
-        setup.apply_scopes(project, custom)
-        content = (project / ".studio" / "scopes.toml").read_text(encoding="utf-8")
-        assert '\\"quotes\\"' in content
+    def test_hand_written_scopes_toml_survives_defaults(self, project: Path) -> None:
+        """A scopes file someone wrote by hand is the only kind that should exist."""
+        scopes_path = project / ".studio" / "scopes.toml"
+        original = '[scopes.alignment]\nfocus = "Hand-tuned."\nmax_iterations = 9\n'
+        scopes_path.write_text(original, encoding="utf-8")
+
+        setup.apply_defaults(project)
+
+        assert scopes_path.read_text(encoding="utf-8") == original
+
+    def test_stale_scopes_step_in_saved_state_is_inert(self, project: Path) -> None:
+        """A SETUP.json from before the step was retired reports nothing pending."""
+        setup.apply_defaults(project)
+        setup_path = project / ".studio" / setup.SETUP_FILE
+        state = json.loads(setup_path.read_text(encoding="utf-8"))
+        state["completed_steps"]["scopes"] = 1
+        state["choices"]["scopes"] = {"alignment": {"max_iterations": 2}}
+        setup_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+        reloaded = setup.load_setup_state(project)
+        assert setup.pending_steps(reloaded) == []
+        assert "Scopes" not in setup.show_status(project)
 
 
 # ---------------------------------------------------------------------------
@@ -371,7 +360,6 @@ class TestApplyDefaults:
 
     def test_generates_config_files(self, project: Path) -> None:
         setup.apply_defaults(project)
-        assert (project / ".studio" / "scopes.toml").exists()
         assert (project / ".studio" / "config" / "studio_settings.toml").exists()
         assert (project / ".studio" / setup.SETUP_FILE).exists()
 
@@ -420,7 +408,6 @@ class TestApplyFromAnswers:
             "role_pack": "studio_core",
             "role_overrides": ["+ml"],
             "role_customizations": {},
-            "scopes": "defaults",
             "cleanup": {"ttl_days": 14, "size_limit_mb": 500},
         }
         state = setup.apply_from_answers(project, answers)
@@ -435,7 +422,7 @@ class TestApplyFromAnswers:
         # Other steps not completed
         pend = setup.pending_steps(state)
         pending_names = [s["name"] for s in pend]
-        assert "scopes" in pending_names
+        assert "cleanup" in pending_names
 
     def test_persona_customizations_in_answers(self, project: Path) -> None:
         import persona_overrides
@@ -477,21 +464,6 @@ class TestApplyFromAnswers:
         assert "[smoke]" in content
         assert 'launch = "npm run dev"' in content
         assert "golden_path" in content
-
-    def test_custom_scopes_in_answers(self, project: Path) -> None:
-        answers = {
-            "scopes": {
-                "fast": {
-                    "focus": "Quick pass.",
-                    "max_iterations": 1,
-                    "debate_mode": "all_roles",
-                },
-            },
-        }
-        state = setup.apply_from_answers(project, answers)
-        assert state["choices"]["scopes"]["fast"]["max_iterations"] == 1
-        content = (project / ".studio" / "scopes.toml").read_text(encoding="utf-8")
-        assert "[scopes.fast]" in content
 
 
 # ---------------------------------------------------------------------------
@@ -558,30 +530,6 @@ class TestShowStatus:
 # ---------------------------------------------------------------------------
 # TOML formatting
 # ---------------------------------------------------------------------------
-
-
-class TestFormatScopesToml:
-    def test_basic_format(self) -> None:
-        scopes = {
-            "test": {
-                "focus": "Test scope.",
-                "max_iterations": 2,
-                "output_budget": 400,
-                "debate_mode": "all_roles",
-            }
-        }
-        result = setup._format_scopes_toml(scopes)
-        assert "[scopes.test]" in result
-        assert 'focus = "Test scope."' in result
-        assert "max_iterations = 2" in result
-        assert "output_budget = 400" in result
-        assert 'debate_mode = "all_roles"' in result
-
-    def test_omits_optional_fields(self) -> None:
-        scopes = {"test": {"focus": "Minimal.", "max_iterations": 1}}
-        result = setup._format_scopes_toml(scopes)
-        assert "output_budget" not in result
-        assert "debate_mode" not in result
 
 
 class TestFormatPersonasToml:

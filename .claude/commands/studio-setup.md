@@ -1,6 +1,6 @@
 # Studio Setup Wizard
 
-Configure this project's Studio installation: role packs, role/phase-persona customization, scope tuning, cleanup settings.
+Configure this project's Studio installation: role packs, role/phase-persona customization, unstale and smoke profiles, cleanup settings.
 
 ## Arguments
 
@@ -178,33 +178,7 @@ Present the suggested profile. Let the user edit any of: `kind` (`web`/`game`/`s
 python ".studio/source/run_phase.py" setup --target . --answers '<json with smoke_config>'
 ```
 
-### Step 7: Scope Tuning
-
-Show the default scope configuration:
-
-```
-Default scopes (three-tier debate):
-  alignment: 2 iterations, 500-word cap, all roles in parallel
-  depth:     3 iterations, no word cap, roles debate sequentially
-  polish:    1 iteration,  300-word cap, all roles in parallel
-```
-
-Ask: **"Want to adjust iteration counts or word budgets? The defaults work well for most projects. (yes/no)"**
-
-If no, apply defaults:
-
-```bash
-python ".studio/source/run_phase.py" setup --target . --answers '{"scopes": "defaults"}'
-```
-
-If yes, walk through each scope asking about:
-- `max_iterations`: how many advocate/contrarian rounds
-- `output_budget`: word cap per agent output (optional)
-- `debate_mode`: "all_roles" (parallel) or "per_role" (sequential)
-
-Build the scopes config and apply via answers JSON.
-
-### Step 8: Cleanup Settings
+### Step 7: Cleanup Settings
 
 Show the defaults:
 
@@ -224,7 +198,7 @@ python ".studio/source/run_phase.py" setup --target . --answers '{"cleanup": {"t
 
 If yes, ask for TTL (days) and size limit (MB), then apply.
 
-### Step 9: Summary
+### Step 8: Summary
 
 Show the final configuration:
 

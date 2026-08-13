@@ -3164,7 +3164,9 @@ def _do_setup(args: argparse.Namespace) -> None:
     elif args.defaults:
         state = _setup.apply_defaults(target)
         pend = _setup.pending_steps(state)
-        print(f"Applied default configuration ({len(state['completed_steps'])} steps).")
+        # Count the steps the wizard has, not the keys in the saved state: a
+        # SETUP.json written before a step was retired still lists it.
+        print(f"Applied default configuration ({len(_setup.SETUP_STEPS)} steps).")
         if pend:
             print(f"  Pending: {', '.join(s['label'] for s in pend)}")
     elif args.answers:

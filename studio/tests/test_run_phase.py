@@ -1366,3 +1366,26 @@ def test_extract_decisions_json_emits_count(studio_root, capsys):
     )
     payload = json.loads(capsys.readouterr().out)
     assert payload == {"count": 0, "decisions": []}
+
+
+def test_setup_defaults_step_count_ignores_retired_steps(tmp_path, capsys):
+    """A SETUP.json still listing the retired `scopes` step doesn't inflate the count."""
+    import setup
+
+    (tmp_path / ".studio").mkdir()
+    setup.apply_defaults(tmp_path)
+    setup_path = tmp_path / ".studio" / setup.SETUP_FILE
+    state = json.loads(setup_path.read_text(encoding="utf-8"))
+    state["completed_steps"]["scopes"] = 1
+    setup_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+    capsys.readouterr()
+    run_phase._do_setup(
+        argparse.Namespace(
+            target=tmp_path, status=False, defaults=True, answers=None,
+            role_pack=None, roles=None,
+        )
+    )
+    out = capsys.readouterr().out
+    assert f"({len(setup.SETUP_STEPS)} steps)" in out
+    assert "Pending:" not in out
