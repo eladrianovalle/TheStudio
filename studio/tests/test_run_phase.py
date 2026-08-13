@@ -948,7 +948,7 @@ def _session_health_lines(out):
     block = out.split("Session health (auto-measured at finalize):")[1]
     lines = []
     for line in block.splitlines()[1:]:
-        if not line.startswith("  ") or line.startswith("=" * 3):
+        if not line.startswith("  "):
             break
         lines.append(line.strip())
     return lines

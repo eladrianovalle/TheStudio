@@ -24,12 +24,12 @@ section) is built, via the `/forge` writer/editor loop:
 
 **Since retired (see `specs/retire-volunteer-metrics.md`):** the cost and editor
 blocks, and with them tokens-per-settled-decision, scope spend distribution and
-editor liveness. All three were fed by the per-agent token ledger, which an
-agent had to write by hand after every agent in every run — and across roughly
-150 runs in ten repos, not one ever did. The `outcome` field went with them: it was the one field
-a human was meant to edit later, and outcome capture now lives in a shipped
-spec's frontmatter. What survives is what finalize can count off disk on its own:
-convergence, decisions, clarity.
+editor liveness. All three were fed by the per-agent token ledger, which an agent
+had to write by hand after every agent in every run — and across roughly 150 runs
+in ten repos, not one ever did. The `outcome` field went with them: it was the
+one field a human was meant to edit later, and the same spec moves outcome
+capture into a shipped spec's frontmatter. What survives is what finalize can
+count off disk on its own: convergence, decisions, clarity.
 
 **Still deferred:** the `studio outcome` command and session→implementation
 linking (Part 4, `--from-run`), plus richer session records in the ledger and any
@@ -46,9 +46,8 @@ the runs you bothered to rate.
 
 The reframe: you can't measure plan *quality* at finalize, but you can measure
 session *health*: did the debate converge, surface and settle the right
-questions, reduce uncertainty. All of that is derivable
-automatically from data a run already produces. None of it needs a rating or a
-wait for implementation.
+questions, reduce uncertainty. All of that is derivable automatically from data
+a run already produces. None of it needs a rating or a wait for implementation.
 
 ## Part 1: `session.json`, auto-written at finalize
 
@@ -90,12 +89,6 @@ Tier 1, data already in hand at finalize, zero new plumbing:
    before computing the new one. Record `mean_before`, `mean_after`, topics
    touched. This is the de-risking signal.
 
-Two more were built here and have since been retired: cost per settled decision
-and scope spend distribution, both fed by the per-agent token ledger nobody ever
-filled in. A tier-2 editor-liveness proxy (advocate-doc word counts, first draft
-vs final) went the same way — it measured debate documents, never the forge
-editor it was cited for.
-
 Skip: semantic measures of cut quality, per-role "intensity," any LLM-judge at
 finalize. Effort-heavy and gameable.
 
@@ -112,10 +105,6 @@ it to the few that mean something:
   toward 1-iteration-0-rejection (rubber-stamping) as much as toward churn.
 - **Clarity gain per session**: mean delta. Zero on a new project means sessions
   aren't de-risking.
-
-Two more shipped here and were retired: tokens per settled decision and editor
-liveness. Both looked like honest numbers and were computed from data nobody
-supplied, so both printed a confident answer over nothing.
 
 Vanity metrics to refuse: total runs, total tokens, and approval-rate-as-a-target
 (100% approval means the contrarian died).

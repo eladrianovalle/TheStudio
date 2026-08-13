@@ -240,8 +240,6 @@ You can safely parse this JSON for dashboards, scripts, or audits.
 | `decisions` | object | `{ "surfaced": {"P0": int, "P1": int, "P2": int}, "answered_by_user": int, "answered_by_assumption": int, "unanswered": int, "p0_assumed": int }`. `p0_assumed` is the key signal: blocking questions the session guessed on rather than asking. |
 | `clarity` | object | `{ "mean_before": float or null, "mean_after": float or null, "topics_touched": int }`: the de-risking delta. |
 
-Every field is counted from a file the run already produced. Nothing here waits for a person or an agent to supply a number, which is why the record is complete the moment finalize writes it.
-
 See `docs/SESSION_ANALYTICS_PLAN.md` for the design and the three health signals `stats` derives from these records.
 
 ---

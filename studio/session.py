@@ -91,10 +91,6 @@ def build_session_record(
     this returns the record dict per ``docs/SESSION_ANALYTICS_PLAN.md``. Every
     input is optional and tolerated: missing decisions or clarity yield sensible
     zeros and nulls rather than an error.
-
-    Every field is counted from a file the run already produced, so the record
-    is complete the moment finalize writes it and nobody is asked to fill
-    anything in later.
     """
     decisions = decisions or []
     decision_summary = _summarize_decisions(decisions)
