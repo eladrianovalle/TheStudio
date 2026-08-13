@@ -26,14 +26,14 @@ def test_prepare_and_finalize_creates_index_and_log(studio_root):
 
     meta = run_phase.load_json(run_dir / "run.json")
     assert meta["iterations_run"] == 1
-    assert meta["hours"] == 1.0
+    assert "hours" not in meta and "cost" not in meta
 
     index_contents = (studio_root / "output/index.md").read_text(encoding="utf-8")
     assert run_id in index_contents
 
     log_contents = (studio_root / "knowledge/run_log.md").read_text(encoding="utf-8")
     assert run_id in log_contents
-    assert "Hours: 1.0" in log_contents
+    assert "Hours:" not in log_contents and "Cost:" not in log_contents
 
 
 def test_finalize_requires_required_artifacts(studio_root):
@@ -49,8 +49,6 @@ def test_finalize_requires_required_artifacts(studio_root):
                 phase="design",
                 run_id=run_id,
                 verdict="REJECTED",
-                hours=None,
-                cost=None,
             )
         )
 
@@ -615,23 +613,23 @@ def test_aggregate_stats_empty():
 
 
 def test_aggregate_stats_full():
-    """aggregate_stats rolls up phases, verdicts, ratings, tokens, decisions."""
+    """aggregate_stats rolls up phases, verdicts, ratings, decisions."""
     runs = [
         {
             "run_id": "run_market_1", "phase": "market", "status": "COMPLETED",
-            "verdict": "APPROVED", "metrics": {"total_tokens": 10000}, "cost": 1.5,
+            "verdict": "APPROVED",
             "_rating": {"score": 4, "note": "good"},
             "_decisions": [_DP("P0", answer="yes"), _DP("P2")],
         },
         {
             "run_id": "run_market_2", "phase": "market", "status": "COMPLETED",
-            "verdict": "REJECTED", "metrics": {"total_tokens": 20000},
+            "verdict": "REJECTED",
             "_rating": {"score": 2, "note": "thin"},
             "_decisions": [_DP("P1")],
         },
         {
             "run_id": "run_tech_1", "phase": "tech", "status": "PENDING",
-            "verdict": "UNKNOWN", "metrics": {},
+            "verdict": "UNKNOWN",
             "_rating": None, "_decisions": [],
         },
     ]
@@ -647,11 +645,6 @@ def test_aggregate_stats_full():
     assert agg["ratings"]["avg"] == 3.0
     assert agg["ratings"]["by_phase_avg"]["market"] == 3.0
     assert agg["ratings"]["lowest"][0]["score"] == 2  # lowest first
-
-    assert agg["tokens"]["total"] == 30000
-    assert agg["tokens"]["runs"] == 2  # tech run had no tokens
-    assert agg["tokens"]["avg"] == 15000
-    assert agg["cost"]["total"] == 1.5
 
     assert agg["decisions"]["total"] == 3
     assert agg["decisions"]["by_priority"] == {"P0": 1, "P1": 1, "P2": 1}
@@ -678,8 +671,7 @@ def test_format_stats_smoke():
     """format_stats renders without error and surfaces a rating hint when unrated."""
     agg = run_phase.aggregate_stats([
         {"run_id": "r1", "phase": "market", "status": "COMPLETED",
-         "verdict": "APPROVED", "metrics": {"total_tokens": 5000},
-         "_rating": None, "_decisions": []},
+         "verdict": "APPROVED", "_rating": None, "_decisions": []},
     ])
     out = run_phase.format_stats(agg)
     assert "Studio Cross-Run Stats" in out
@@ -749,14 +741,14 @@ def test_outcome_record_from_run_includes_unrated():
     rec = run_phase._outcome_record_from_run(
         {
             "run_id": "run_studio_1", "phase": "studio", "verdict": "APPROVED",
-            "status": "completed", "metrics": {"total_tokens": 900},
+            "status": "completed", "metrics": {"total_tokens": 900},  # legacy key, must be ignored
             "_rating": {"score": 5, "outcome": {"shipped": "yes", "impact": "minor"}},
         },
         "pictorly",
     )
     assert rec["repo"] == "pictorly"
     assert rec["shipped"] == "yes"
-    assert rec["total_tokens"] == 900
+    assert "total_tokens" not in rec
     assert rec["changed"] is None
 
 
@@ -959,8 +951,7 @@ def test_format_stats_renders_session_health():
     from stats import summarize_session_health
     agg = run_phase.aggregate_stats([
         {"run_id": "r1", "phase": "market", "status": "COMPLETED",
-         "verdict": "APPROVED", "metrics": {"total_tokens": 5000},
-         "_rating": None, "_decisions": []},
+         "verdict": "APPROVED", "_rating": None, "_decisions": []},
     ])
     health = summarize_session_health([
         _session(p0_surfaced=2, p0_assumed=1, mean_before=0.3, mean_after=0.6,
@@ -1009,190 +1000,6 @@ def test_format_stats_omits_session_health_when_empty():
     ])
     out = run_phase.format_stats(agg, session_health=summarize_session_health([]))
     assert "Session health" not in out
-
-
-# --- Trend alerts (delta-based, 2+-consecutive-run persistence) ---
-
-def _trend_run(created_iso, *, score=None, tokens=None, cost=None, run_id=None):
-    """Build a minimal enriched run dict for detect_trend_alerts tests.
-
-    created_iso orders the runs; score/tokens/cost each become a per-run point in
-    that metric's series (left off when None, mirroring an unrated or unmetered
-    run).
-    """
-    run = {"run_id": run_id or f"run_{created_iso}", "created_iso": created_iso}
-    if score is not None:
-        run["_rating"] = {"score": score}
-    if tokens is not None:
-        run["metrics"] = {"total_tokens": tokens}
-    if cost is not None:
-        run["cost"] = cost
-    return run
-
-
-def test_detect_trend_alerts_empty():
-    """No runs yields no alerts and does not crash."""
-    from stats import detect_trend_alerts
-    assert detect_trend_alerts([]) == []
-
-
-def test_detect_trend_alerts_single_dip_is_a_blip():
-    """One worsening step (a single-run dip) must NOT alert."""
-    from stats import detect_trend_alerts
-    runs = [
-        _trend_run("2026-01-01", score=5),
-        _trend_run("2026-01-02", score=4),  # one dip only
-    ]
-    assert detect_trend_alerts(runs) == []
-
-
-def test_detect_trend_alerts_two_consecutive_regressions_fire():
-    """A rating falling across 2+ consecutive runs alerts with the slide window."""
-    from stats import detect_trend_alerts
-    runs = [
-        _trend_run("2026-01-01", score=5),
-        _trend_run("2026-01-02", score=4),
-        _trend_run("2026-01-03", score=3),
-    ]
-    alerts = detect_trend_alerts(runs)
-    assert len(alerts) == 1
-    alert = alerts[0]
-    assert alert["metric"] == "rating"
-    assert alert["direction"] == "down"
-    assert alert["consecutive"] == 2
-    assert alert["from_value"] == 5
-    assert alert["to_value"] == 3
-    assert alert["pct_change"] == pytest.approx(-0.4)
-    assert alert["runs"] == ["run_2026-01-01", "run_2026-01-02", "run_2026-01-03"]
-
-
-def test_detect_trend_alerts_improving_never_fires():
-    """A metric moving the good way (rating up, tokens down) raises no alert."""
-    from stats import detect_trend_alerts
-    runs = [
-        _trend_run("2026-01-01", score=3, tokens=30000),
-        _trend_run("2026-01-02", score=4, tokens=20000),
-        _trend_run("2026-01-03", score=5, tokens=10000),
-    ]
-    assert detect_trend_alerts(runs) == []
-
-
-def test_detect_trend_alerts_recovery_breaks_the_streak():
-    """A dip that recovers on the newest run is not a persistent regression."""
-    from stats import detect_trend_alerts
-    runs = [
-        _trend_run("2026-01-01", score=5),
-        _trend_run("2026-01-02", score=3),  # dipped
-        _trend_run("2026-01-03", score=4),  # recovered — streak broken at the tail
-    ]
-    assert detect_trend_alerts(runs) == []
-
-
-def test_detect_trend_alerts_not_enough_history():
-    """A single rated run cannot form a run-over-run trend; no alert, no crash."""
-    from stats import detect_trend_alerts
-    assert detect_trend_alerts([_trend_run("2026-01-01", score=2)]) == []
-
-
-def test_detect_trend_alerts_tokens_rising_fire():
-    """Tokens climbing across 2+ consecutive runs alerts with direction up."""
-    from stats import detect_trend_alerts
-    runs = [
-        _trend_run("2026-01-01", tokens=10000),
-        _trend_run("2026-01-02", tokens=12000),
-        _trend_run("2026-01-03", tokens=15000),
-    ]
-    alerts = detect_trend_alerts(runs)
-    assert len(alerts) == 1
-    assert alerts[0]["metric"] == "tokens"
-    assert alerts[0]["direction"] == "up"
-    assert alerts[0]["from_value"] == 10000
-    assert alerts[0]["to_value"] == 15000
-
-
-def test_detect_trend_alerts_ignores_sub_threshold_noise():
-    """Moves below the relative-change floor are noise, not a regression."""
-    from stats import detect_trend_alerts
-    runs = [
-        _trend_run("2026-01-01", tokens=10000),
-        _trend_run("2026-01-02", tokens=10100),  # +1%
-        _trend_run("2026-01-03", tokens=10200),  # +1%
-    ]
-    assert detect_trend_alerts(runs) == []
-
-
-def test_detect_trend_alerts_cost_rising_fire():
-    """Cost climbing across 2+ consecutive runs alerts on the third tracked metric."""
-    from stats import detect_trend_alerts
-    runs = [
-        _trend_run("2026-01-01", cost=1.00),
-        _trend_run("2026-01-02", cost=1.50),
-        _trend_run("2026-01-03", cost=2.50),
-    ]
-    alerts = detect_trend_alerts(runs)
-    assert len(alerts) == 1
-    assert alerts[0]["metric"] == "cost"
-    assert alerts[0]["direction"] == "up"
-    assert alerts[0]["from_value"] == 1.00
-    assert alerts[0]["to_value"] == 2.50
-
-
-def test_detect_trend_alerts_zero_baseline_does_not_divide():
-    """A zero value as a baseline breaks the streak instead of dividing by zero.
-
-    tokens 0 -> 10000 -> 20000: the step off the zero baseline has no meaningful
-    relative change, so it ends the streak. Only the one real worsening step
-    remains (below the 2-consecutive threshold), so there's no alert — and,
-    load-bearingly, no ZeroDivisionError.
-    """
-    from stats import detect_trend_alerts
-    runs = [
-        _trend_run("2026-01-01", tokens=0),
-        _trend_run("2026-01-02", tokens=10000),
-        _trend_run("2026-01-03", tokens=20000),
-    ]
-    assert detect_trend_alerts(runs) == []
-
-
-def test_detect_trend_alerts_orders_by_created_iso():
-    """Out-of-order input is sorted chronologically before the trend is read."""
-    from stats import detect_trend_alerts
-    runs = [
-        _trend_run("2026-01-03", score=3),
-        _trend_run("2026-01-01", score=5),
-        _trend_run("2026-01-02", score=4),
-    ]
-    alerts = detect_trend_alerts(runs)
-    assert len(alerts) == 1
-    assert alerts[0]["from_value"] == 5
-    assert alerts[0]["to_value"] == 3
-
-
-def test_format_stats_renders_trend_alerts():
-    """format_stats shows the Trend Alerts block when alerts are present."""
-    from stats import detect_trend_alerts
-    agg = run_phase.aggregate_stats([
-        {"run_id": "r1", "phase": "market", "status": "COMPLETED",
-         "verdict": "APPROVED", "metrics": {}, "_rating": None, "_decisions": []},
-    ])
-    alerts = detect_trend_alerts([
-        _trend_run("2026-01-01", score=5),
-        _trend_run("2026-01-02", score=4),
-        _trend_run("2026-01-03", score=3),
-    ])
-    out = run_phase.format_stats(agg, trend_alerts=alerts)
-    assert "Trend Alerts" in out
-    assert "Human rating falling" in out
-
-
-def test_format_stats_omits_trend_alerts_when_empty():
-    """No alerts means no Trend Alerts block."""
-    agg = run_phase.aggregate_stats([
-        {"run_id": "r1", "phase": "market", "status": "COMPLETED",
-         "verdict": "APPROVED", "metrics": {}, "_rating": None, "_decisions": []},
-    ])
-    out = run_phase.format_stats(agg, trend_alerts=[])
-    assert "Trend Alerts" not in out
 
 
 class _FakeStdin:

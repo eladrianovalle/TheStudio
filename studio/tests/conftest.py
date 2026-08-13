@@ -153,8 +153,6 @@ def make_finalize_args(**overrides) -> SimpleNamespace:
         "summary": None,
         "verdict": "APPROVED",
         "iterations_run": None,
-        "hours": 1.0,
-        "cost": 0.0,
     }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)

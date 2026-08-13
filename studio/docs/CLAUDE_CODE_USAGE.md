@@ -247,9 +247,6 @@ Outcomes (did it ship / what changed):
   Recent changes:
     [pictorly] run_studio_20260620_090000 — cut lobby scope from 6 screens to 2
 
-Efficiency:
-  Tokens: 612,000 across 11 runs (avg 55,636/run)
-
 Decision points:
   41 total — P0=6 P1=18 P2=17
   Answered: 33/41 (80%)

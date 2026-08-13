@@ -64,7 +64,7 @@ python $STUDIO_ROOT/run_phase.py \
 python $STUDIO_ROOT/run_phase.py \
   finalize --phase <phase> \
   --run-id <run_id> \
-  --status completed --verdict APPROVED --hours 0.8 --cost 0
+  --status completed --verdict APPROVED
 ```
 If `STUDIO_ROOT` is set, the helper script reads it automatically; otherwise adjust the absolute path in these snippets.
 

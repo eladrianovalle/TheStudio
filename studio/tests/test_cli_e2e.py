@@ -114,8 +114,6 @@ class TestCLIFinalize:
             "--run-id", run_id,
             "--status", "completed",
             "--verdict", "APPROVED",
-            "--hours", "1.0",
-            "--cost", "0",
             studio_root=cli_studio_root,
         )
         assert fin.returncode == 0, fin.stderr
@@ -263,3 +261,83 @@ class TestRetiredMetricsCommands:
         """Guards the test above: the CLI itself is fine, these two names are not."""
         result = _run_cli("show-clarity", "--help", studio_root=cli_studio_root)
         assert result.returncode == 0, result.stderr
+
+
+class TestRetiredEfficiencyMetrics:
+    """Nothing on the dashboard reports a number a human had to type in.
+
+    ``--hours`` and ``--cost`` were the only way tokens, cost, and hours ever
+    reached ``run.json``, and nobody ever passed them. The flags, the numbers they
+    fed, and the two dashboard blocks that read them are all gone together.
+    """
+
+    def _finalize_a_run(self, root: Path) -> str:
+        """Prepare and finalize one real run, returning its run id."""
+        prep = _run_cli(
+            "prepare", "--phase", "tech", "--text", "Build API", "--no-scopes",
+            studio_root=root,
+        )
+        assert prep.returncode == 0, prep.stderr
+        run_id = next(
+            word.strip(".")
+            for line in prep.stdout.splitlines()
+            for word in line.split()
+            if word.startswith("run_tech_")
+        )
+        run_dir = root / "output" / "tech" / run_id
+        (run_dir / "advocate_1.md").write_text("# Advocate\nProposal")
+        (run_dir / "contrarian_1.md").write_text("# Contrarian\nVERDICT: APPROVED")
+        (run_dir / "summary.md").write_text("# Summary\nDone")
+        fin = _run_cli(
+            "finalize", "--phase", "tech", "--run-id", run_id,
+            "--status", "completed", "--verdict", "APPROVED",
+            studio_root=root,
+        )
+        assert fin.returncode == 0, fin.stderr
+        return run_id
+
+    def test_finalize_rejects_the_retired_flags(self, cli_studio_root):
+        run_id = self._finalize_a_run(cli_studio_root)
+        result = _run_cli(
+            "finalize", "--phase", "tech", "--run-id", run_id,
+            "--cost", "5", "--hours", "2",
+            studio_root=cli_studio_root,
+        )
+        assert result.returncode != 0
+        assert "unrecognized arguments" in result.stderr
+
+    def test_finalize_writes_no_hours_or_cost(self, cli_studio_root):
+        run_id = self._finalize_a_run(cli_studio_root)
+
+        meta = json.loads(
+            (cli_studio_root / "output" / "tech" / run_id / "run.json").read_text()
+        )
+        assert "hours" not in meta and "cost" not in meta
+
+        run_log = (cli_studio_root / "knowledge" / "run_log.md").read_text()
+        assert run_id in run_log, "the run never reached the log, so it proves nothing"
+        assert "Hours:" not in run_log and "Cost:" not in run_log
+
+    def test_dashboard_has_no_efficiency_or_trend_block(self, cli_studio_root):
+        self._finalize_a_run(cli_studio_root)
+
+        dashboard = _run_cli("stats", studio_root=cli_studio_root)
+        assert dashboard.returncode == 0, dashboard.stderr
+        assert "Total runs: 1" in dashboard.stdout, "no finalized run reached stats"
+        assert "Efficiency" not in dashboard.stdout
+        assert "Trend Alerts" not in dashboard.stdout
+
+    def test_json_dashboard_drops_the_retired_keys(self, cli_studio_root):
+        self._finalize_a_run(cli_studio_root)
+
+        result = _run_cli("stats", "--json", studio_root=cli_studio_root)
+        assert result.returncode == 0, result.stderr
+        payload = json.loads(result.stdout)
+        assert payload["total_runs"] == 1
+        for key in ("tokens", "cost", "hours", "trend_alerts"):
+            assert key not in payload
+
+    def test_trend_alerts_is_gone_from_stats(self):
+        """The whole feature, not just its inputs: importing it must fail."""
+        with pytest.raises(ImportError):
+            from stats import detect_trend_alerts  # noqa: F401

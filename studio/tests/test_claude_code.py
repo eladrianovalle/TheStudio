@@ -136,7 +136,7 @@ class TestMarketPhaseE2E:
         run_phase.finalize_run(
             make_finalize_args(
                 phase="market", run_id=run_id,
-                verdict="APPROVED", hours=0.5,
+                verdict="APPROVED",
             )
         )
 
@@ -195,7 +195,7 @@ class TestTechPhaseE2E:
         run_phase.finalize_run(
             make_finalize_args(
                 phase="tech", run_id=run_id,
-                verdict="APPROVED", hours=0.3,
+                verdict="APPROVED",
             )
         )
 
@@ -394,7 +394,7 @@ class TestStudioPhaseE2E:
         run_phase.finalize_run(
             make_finalize_args(
                 phase="studio", run_id=run_id,
-                verdict="APPROVED", hours=1.5,
+                verdict="APPROVED",
             )
         )
 

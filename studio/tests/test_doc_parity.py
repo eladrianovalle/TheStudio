@@ -84,6 +84,52 @@ class TestCliCommandParity:
         )
 
 
+def _finalize_parser_flags() -> set[str]:
+    """The long flags `finalize` really accepts, straight from argparse."""
+    parser = build_parser()
+    subparsers = next(
+        action
+        for action in parser._actions
+        if isinstance(action, argparse._SubParsersAction)
+    )
+    flags = set()
+    for action in subparsers.choices["finalize"]._actions:
+        flags.update(option for option in action.option_strings if option.startswith("--"))
+    return flags - {"--help"}
+
+
+def _documented_finalize_flags() -> set[str]:
+    """The long flags API.md's finalize table has a row for.
+
+    Each row's first column is the flag plus its metavar (`--status STATUS`), so
+    the flag is the first word of the backticked cell.
+    """
+    section = _doc_section("API.md", "### 1.2 `finalize` arguments")
+    cells = re.findall(r"(?m)^\|\s*`(--[^`]+)`\s*\|", section)
+    return {cell.split()[0] for cell in cells}
+
+
+class TestFinalizeFlagParity:
+    """API.md's finalize table must match the flags finalize really takes.
+
+    The command-table test above only guards subcommand *names*, so a retired
+    flag can sit in the docs telling people to pass an argument that now aborts
+    the run. This closes that hole for the one command every run ends with.
+    """
+
+    def test_flags_and_api_md_table_match(self):
+        code = _finalize_parser_flags()
+        docs = _documented_finalize_flags()
+        assert docs, "no finalize argument table found under API.md section 1.2"
+        assert not code - docs, (
+            f"finalize flags missing from API.md's table: {sorted(code - docs)}"
+        )
+        assert not docs - code, (
+            "API.md documents finalize flags that no longer exist: "
+            f"{sorted(docs - code)}"
+        )
+
+
 class TestScopeConfigParity:
     """Every ScopeConfig knob must be documented in SCOPES_GUIDE.md."""
 
