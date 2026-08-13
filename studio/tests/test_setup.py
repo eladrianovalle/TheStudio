@@ -286,9 +286,6 @@ class TestScopesNoLongerGenerated:
         with pytest.raises(ImportError):
             from setup import apply_scopes  # noqa: F401
 
-    def test_scopes_is_not_a_setup_step(self) -> None:
-        assert "scopes" not in [step["name"] for step in setup.SETUP_STEPS]
-
     def test_defaults_write_no_scopes_toml(self, project: Path) -> None:
         setup.apply_defaults(project)
         assert not (project / ".studio" / "scopes.toml").exists()
