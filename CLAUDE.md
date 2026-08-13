@@ -199,7 +199,7 @@ See **`studio/docs/ARCHITECTURE.md`** for the full per-module reference.
 
 - **Debate / flow:** `scopes.py` (+ `CONTRARIAN_MANDATE`), `question_mode.py`, `decision_points.py` (owns the canonical decision-point emit/parse format), `findings.py` (the parseable `FINDING` block → `findings.json`), `verifier.py` (independent finding verifier, behind `finding-verifier.js`), `clarity.py`, `verdict.py`, `rerun.py`
 - **Roles / personas:** `run_phase_roles.py`, `role_overrides.py`, `persona_overrides.py`, `design_mandate.py` (design-phase-only AI-slop blacklist + Goodwill Reservoir critique guide) (+ `studio.manifest.json`, `role_packs/`)
-- **Diagnostics:** `stats.py` (pure cross-run aggregation, ratings, the outcome summary that `rate`/`export-outcomes`/`import-outcomes` feed, and `detect_trend_alerts` — run-over-run regressions that persist 2+ consecutive runs), `session.py` (pure; builds the automatic `session.json` health record finalize writes for each run)
+- **Diagnostics:** `stats.py` (pure cross-run aggregation, ratings, and the outcome summary that `rate`/`export-outcomes`/`import-outcomes` feed), `session.py` (pure; builds the automatic `session.json` health record finalize writes for each run)
 - **Workflows / loops:** `impl_loop.py` (config for `.claude/workflows/implementation-loop.js`, the `/forge` writer/editor loop — see `studio/docs/IMPLEMENTATION_LOOP_SPEC.md`) and `.claude/workflows/finding-verifier.js` (the independent finding verifier; core in `verifier.py`)
 - **Cross-repo + hygiene:** `install.py`, `setup.py`, `offload.py`, `cleanup.py`
 - **Shared:** `config_loading.py` (the single TOML loader), `validators/`, `integrations/slack_digest.py`

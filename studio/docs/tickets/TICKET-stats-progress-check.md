@@ -29,14 +29,13 @@ Do this once there are ~10+ finalized runs and a handful of ratings.
 4. Spot-check approval rate vs. your gut — does the agent verdict track your ratings, or is the
    contrarian rubber-stamping (high APPROVED, low human scores)? A gap there is a *finding*, not
    a bug — it tells you the verdict isn't a reliable quality proxy and ratings matter more.
-5. Check token/cost averages for outliers — any run dominating the average?
-6. Decision answer-rate: a low rate means runs are assuming rather than pausing — cross-check
+5. Decision answer-rate: a low rate means runs are assuming rather than pausing — cross-check
    against the collaboration-protocol intent (Studio should pause and ask).
 
 ### C. Is the loop closing?
-7. Pick the lowest-rated run. Can you trace *why* from its artifacts? If not, that's a signal
+6. Pick the lowest-rated run. Can you trace *why* from its artifacts? If not, that's a signal
    the dashboard needs more per-run drill-down (feed into `TICKET-stats-expansion`).
-8. After adjusting any knob (persona/scope/clarity) in response to a low score, did a later
+7. After adjusting any knob (persona/scope/clarity) in response to a low score, did a later
    run on similar input rate higher? That's the loop working — note it.
 
 ## Output

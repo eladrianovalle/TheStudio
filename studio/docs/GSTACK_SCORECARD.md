@@ -59,7 +59,7 @@ rationale are in the comparison doc.
 | **Independent finding verifier** (R1) | Our contrarian checked its own work. Now a fresh agent re-judges each medium-confidence finding from *only* the quoted `file:line` and the demote rules — never the original reasoning — so agreement is real, not anchored. | `findings.py`, `verifier.py`, `finding-verifier.js` |
 | **Reviewer Concerns** | The `/forge` editor's best insight could evaporate on a revert. Now a real critique it can't act on this pass is written to `reviewer-concerns.md` instead of lost. | `implementation-loop.js`, `forge.md` |
 | **Named-scar prompt anchors** (R3) | Past regressions lived only in memory. Now they're encoded in the prompt where they'd fire (e.g. the all-decisions-pause scar in the decision protocol). | decision protocol in `scopes.py` |
-| **Delta-trend alerts** (R4) | `stats` reported absolutes; a slow slide was invisible. Now it alerts on run-over-run *changes* that persist 2+ checks. | `detect_trend_alerts` in `stats.py` |
+| **Delta-trend alerts** (R4) — *retired* | `stats` reported absolutes; a slow slide was invisible, so this alerted on run-over-run *changes* that persist 2+ checks. Removed later: every metric it watched (rating, tokens, cost) was a number someone had to type in, and nobody ever did. | was `detect_trend_alerts` in `stats.py` |
 | **Lone-critical override** (R5) | The integrator's synthesis could smooth over one serious concern. Now a single critical finding survives synthesis. | integrator duel in `scopes.py` |
 | **Design AI-slop blacklist** (R6) | The design phase had no concrete rejection list. Now there's an 11-item, games-adapted blacklist plus a "would a designer be embarrassed?" self-gate. | `design_mandate.py` (design phase only) |
 | **Goodwill Reservoir UX score** (R7) | "Taste" was unarguable. Now it's a number (start at 70, dock/credit) reported *with its ledger*, so it's debuggable. | `design_mandate.py` |
@@ -102,10 +102,7 @@ We don't need to build measurement — Studio ships it:
 
 - **`rate`** — a human 1–5 score per run, plus outcome capture (shipped yes/no, impact
   major/minor, what it changed). This is the ground truth signal.
-- **`stats`** — the cross-run dashboard: verdicts, ratings, token/cost, decision counts, session
-  health.
-- **`detect_trend_alerts`** (itself one of the borrowings, R4) — flags run-over-run regressions
-  that persist. It's the degradation alarm for everything else.
+- **`stats`** — the cross-run dashboard: verdicts, ratings, decision counts, session health.
 - **`findings.json` + verifier verdicts** (R1) — structured, so the verifier's behavior is
   directly countable: confirm/unconfirm/uncertain rates, net confidence shift.
 - **`reviewer-concerns.md`** — the artifact trail from the forge editor.
@@ -122,7 +119,7 @@ like, and the trigger that makes us tune or revert it.
 | Independent verifier (R1) | Confirm/unconfirm/uncertain split; net confidence change; added tokens (`stats`) | Verifier catches contrarian overreach *and* promotes real ones; cost is a small % of run | Rubber-stamps everything (adds cost, changes nothing) or fights everything (noise) | Confirm rate near 100% or near 0% across ~10 runs → the verifier isn't independent; re-check the quote-only firewall |
 | Reviewer Concerns | Count of non-empty `reviewer-concerns.md`; how many concerns humans later act on | Concerns are real and get picked up in follow-up work | The file is mostly noise nobody acts on | Acted-on rate near zero over ~10 forge runs → tighten what qualifies as a concern |
 | Named-scar anchors (R3) | Recurrence of the specific scarred regression | The scarred mistake stops recurring | The regression happens again anyway | Any recurrence of an anchored scar → the anchor isn't landing; move or sharpen it |
-| Delta-trend alerts (R4) | Alert fire rate vs. real regressions | Alerts fire when quality actually slips, and are quiet otherwise | Alert fatigue (fires on noise) or silence during a real slide | False-positive alerts 2 runs running → widen the persistence window or threshold |
+| Delta-trend alerts (R4, retired) | Alert fire rate vs. real regressions | Alerts fire when quality actually slips, and are quiet otherwise | Alert fatigue (fires on noise) or silence during a real slide | False-positive alerts 2 runs running → widen the persistence window or threshold |
 | Lone-critical override (R5) | How often it fires; whether the surfaced concern was real | Rescues a real serious concern the synthesis would've buried | Fires on non-critical findings and clutters the verdict | Human marks a lone-critical surfaced item as "not actually critical" repeatedly → tighten the critical bar |
 | Design slop-blacklist (R6) | Blacklist-hit count in design runs; human rating of design output | Design outputs read less generic; fewer blacklist phrases over time | Real, useful phrasing gets rejected as "slop" (false positives) | Human overrides a blacklist rejection as wrong → prune that entry |
 | Goodwill Reservoir (R7) | Score distribution; correlation of low scores with human dislike | Low scores land on outputs humans also dislike; the ledger explains why | Score is theater — uncorrelated with human judgment | Score and human rating diverge across ~10 design runs → the heuristic is mis-calibrated |

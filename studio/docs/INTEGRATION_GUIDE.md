@@ -105,8 +105,7 @@ Use the prompt stub in your bridge doc. Remind the assistant to:
 python $STUDIO_ROOT/run_phase.py \
   finalize --phase <phase> \
   --run-id run_<phase>_<timestamp> \
-  --status completed --verdict APPROVED \
-  --hours 0.5 --cost 0
+  --status completed --verdict APPROVED
 ```
 
 Finalize will fail with a checklist if required files are missing (see README). For Studio phase it also reports which roles never produced both advocate and contrarian files; close those loops or note a follow-up before calling the run complete. Once finalize passes, the active artifact root gets refreshed indexes/logs (`<active_output_root>/index.md`, `<active_knowledge_root>/run_log.md`).
@@ -143,9 +142,7 @@ python "$STUDIO_ROOT/run_phase.py" \
   --phase "${1:?phase required}" \
   --run-id "${2:?run_id required}" \
   --status "${3:-completed}" \
-  --verdict "${4:-APPROVED}" \
-  --hours "${5:-0.5}" \
-  --cost "${6:-0}"
+  --verdict "${4:-APPROVED}"
 ```
 
 Commit these helpers to dependent repos if you want reproducible ergonomics; otherwise ask your assistant to run the commands directly.

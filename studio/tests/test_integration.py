@@ -87,7 +87,7 @@ def test_finalize_updates_index(temp_studio_root):
     (run_dir / "contrarian_1.md").write_text("# Contrarian\n\nVERDICT: APPROVED")
     (run_dir / "summary.md").write_text("# Summary\n\nCompleted successfully")
 
-    run_phase.finalize_run(make_finalize_args(phase="design", run_id=run_id, hours=1.5))
+    run_phase.finalize_run(make_finalize_args(phase="design", run_id=run_id))
 
     index_content = (temp_studio_root / "output" / "index.md").read_text()
     assert run_id in index_content
@@ -140,12 +140,11 @@ def test_full_workflow_prepare_finalize(temp_studio_root):
     (run_dir / "contrarian_1.md").write_text("# Contrarian\n\nVERDICT: APPROVED")
     (run_dir / "summary.md").write_text("# Summary\n\nAPI design approved")
 
-    run_phase.finalize_run(make_finalize_args(phase="tech", run_id=run_id, hours=2.0, iterations_run=1))
+    run_phase.finalize_run(make_finalize_args(phase="tech", run_id=run_id, iterations_run=1))
 
     with open(run_dir / "run.json") as f:
         run_data = json.load(f)
 
     assert run_data["status"] == "COMPLETED"
     assert run_data["verdict"] == "APPROVED"
-    assert run_data["hours"] == 2.0
     assert run_data["iterations_run"] == 1

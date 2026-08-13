@@ -89,7 +89,6 @@ from stats import (
     VALID_SHIPPED,
     _parse_usage_log,
     aggregate_stats,
-    detect_trend_alerts,
     format_stats,
     summarize_outcomes,
     summarize_session_health,
@@ -744,7 +743,6 @@ def _append_run_log(meta: Dict) -> None:
         f"- Created: {meta.get('created_display', meta.get('created_iso', ''))}",
         f"- Verdict: {meta.get('verdict', 'N/A')}",
         f"- Iterations: {meta.get('iterations_run', 'N/A')}",
-        f"- Hours: {meta.get('hours', 'N/A')} | Cost: {meta.get('cost', 'N/A')}",
         f"- Summary: {summary_cell}",
         "",
     ]
@@ -1553,10 +1551,6 @@ def finalize_run(args: argparse.Namespace) -> None:
         studio_meta = meta.setdefault("studio_roles", {})
         studio_meta["completed"] = completed_roles
         studio_meta["missing"] = missing_roles
-    if args.hours is not None:
-        meta["hours"] = args.hours
-    if args.cost is not None:
-        meta["cost"] = args.cost
     meta["updated_iso"] = utc_now().isoformat(timespec="seconds")
 
     write_json(meta_path, meta)
@@ -1856,16 +1850,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--iterations-run",
         type=int,
         help="Number of iterations executed.",
-    )
-    finalize_parser.add_argument(
-        "--hours",
-        type=float,
-        help="Optional hours spent on this run.",
-    )
-    finalize_parser.add_argument(
-        "--cost",
-        type=float,
-        help="Optional cost (in USD) attributed to this run.",
     )
     finalize_parser.add_argument(
         "--no-rate-prompt",
@@ -2176,7 +2160,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_artifact_root_arg(import_outcomes_parser)
 
     stats_parser = subparsers.add_parser(
-        "stats", help="Cross-run diagnostics: outcomes, ratings, efficiency, decisions, usage."
+        "stats", help="Cross-run diagnostics: outcomes, ratings, decisions, usage."
     )
     stats_parser.add_argument(
         "--phase", default=None, choices=sorted(PHASE_DETAILS.keys()),
@@ -2606,7 +2590,7 @@ def _outcome_record_from_run(run: Dict, repo: str) -> Dict:
     Every run yields a record, including unrated ones; an unrated run is still a
     session the ledger and stats should see. A rating, when present, fills in
     score/shipped/impact/changed/rated_iso; without one those stay null while
-    repo, run_id, phase, verdict, status, and token cost are still recorded.
+    repo, run_id, phase, verdict, and status are still recorded.
     """
     rating = run.get("_rating") or {}
     outcome = rating.get("outcome") or {}
@@ -2620,7 +2604,6 @@ def _outcome_record_from_run(run: Dict, repo: str) -> Dict:
         "shipped": outcome.get("shipped"),
         "impact": outcome.get("impact"),
         "changed": outcome.get("changed"),
-        "total_tokens": (run.get("metrics") or {}).get("total_tokens"),
         "rated_iso": rating.get("rated_iso"),
     }
 
@@ -2723,7 +2706,7 @@ def import_outcomes(args: argparse.Namespace) -> None:
 
 
 def show_stats(args: argparse.Namespace) -> None:
-    """Display cross-run diagnostics: outcomes, ratings, efficiency, decisions, usage."""
+    """Display cross-run diagnostics: outcomes, ratings, decisions, usage."""
     root = Path(args.artifact_root).resolve() if getattr(args, "artifact_root", None) else get_artifact_root()
     runs = collect_runs(get_output_root())
 
@@ -2741,11 +2724,6 @@ def show_stats(args: argparse.Namespace) -> None:
             run["_decisions"] = []
 
     agg = aggregate_stats(runs)
-
-    # Trend alerts: run-over-run regressions that persist across 2+ consecutive
-    # runs (rating falling, tokens/cost climbing). detect_trend_alerts orders by
-    # created_iso itself, so the raw run list is fine to hand over.
-    trend_alerts = detect_trend_alerts(runs)
 
     # Session health: the automatic finalize records, oldest first so the
     # recent-vs-earlier trend split is chronological. The --phase filter above
@@ -2765,7 +2743,7 @@ def show_stats(args: argparse.Namespace) -> None:
 
     if getattr(args, "json", False):
         print(json.dumps(
-            {**agg, "outcomes": outcomes, "session_health": session_health, "trend_alerts": trend_alerts},
+            {**agg, "outcomes": outcomes, "session_health": session_health},
             indent=2,
         ))
         return
@@ -2785,7 +2763,7 @@ def show_stats(args: argparse.Namespace) -> None:
 
     print(format_stats(
         agg, usage=usage, clarity_note=clarity_note, outcomes=outcomes,
-        session_health=session_health, trend_alerts=trend_alerts,
+        session_health=session_health,
     ))
 
 

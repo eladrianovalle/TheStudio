@@ -26,7 +26,7 @@ Supported commands:
 | `set-clarity` | Overrides a topic's clarity score. |
 | `recompute-clarity` | Recomputes clarity from a run's decisions. |
 | `rate` | Records a human quality rating (1-5, optional note) plus an optional run outcome (did it ship, what changed) into `rating.json`. |
-| `stats` | Cross-run diagnostics dashboard: run outcomes (ship rate, impact, what changed), verdict/approval rate, avg + lowest human ratings, token/cost efficiency, decision priority mix + answer rate, and prepare-usage counts. Supports `--phase`, `--json`, `--artifact-root`. |
+| `stats` | Cross-run diagnostics dashboard: run outcomes (ship rate, impact, what changed), verdict/approval rate, avg + lowest human ratings, decision priority mix + answer rate, and prepare-usage counts. Supports `--phase`, `--json`, `--artifact-root`. |
 | `export-outcomes` | Exports this repo's rated runs as portable JSONL outcome records for another repo to import. |
 | `import-outcomes` | Merges a JSONL outcomes export into the central ledger, deduping by (repo, run_id), so `stats` here can see other repos' results. |
 | `offload` | Analyzes CLAUDE.md for content safe to offload to companion docs. Classifies sections, scores pointer strength, generates reports. |
@@ -81,8 +81,6 @@ Inside each run directory:
 | `--status STATUS` | ❌ | `COMPLETED` | Free-form label (“completed”, “abandoned”, etc.). |
 | `--verdict VERDICT` | ❌ | - | `APPROVED`, `REJECTED`, `N/A`, or any label you prefer. |
 | `--iterations-run N` | ❌ | auto-count | Override if the assistant ran extra loops or skipped iterations. |
-| `--hours FLOAT` | ❌ | `None` | Time spent; stored in `run.json` + `run_log.md`. |
-| `--cost FLOAT` | ❌ | `None` | Monetary cost in USD (typically `0`). |
 | `--summary PATH` | ❌ | auto-detected | Provide a custom summary path if you store it elsewhere. |
 | `--no-rate-prompt` | ❌ | `false` | Suppress the end-of-run quality-rating prompt/nudge (the slash commands pass this and ask conversationally instead). |
 | `--artifact-root` | ❌ | None | Override where artifacts are written. Defaults to cwd (external repo) or Studio root. |
@@ -121,13 +119,11 @@ The three `--shipped`/`--impact`/`--changed` flags are optional and record the r
 | `--json` | No | `false` | Emit the aggregated stats dict as JSON instead of the text dashboard. |
 | `--artifact-root PATH` | No | auto | Override artifact root (where `output/` and `.studio/usage.log` live). |
 
-Reads every run's `run.json`, `rating.json`, and `decisions.json` under the output root, plus `.studio/usage.log`, and aggregates: total/by-phase/by-status run counts, verdict distribution + approval rate, human-rating count/avg/by-phase + lowest-rated runs, token/cost/hours efficiency, decision priority mix + answer rate, and prepare-usage counts. Pure aggregation and formatting live in `stats.py` (`aggregate_stats()`, `format_stats()`, `summarize_outcomes()`).
+Reads every run's `run.json`, `rating.json`, and `decisions.json` under the output root, plus `.studio/usage.log`, and aggregates: total/by-phase/by-status run counts, verdict distribution + approval rate, human-rating count/avg/by-phase + lowest-rated runs, decision priority mix + answer rate, and prepare-usage counts. Pure aggregation and formatting live in `stats.py` (`aggregate_stats()`, `format_stats()`, `summarize_outcomes()`).
 
 The dashboard opens with an **"Outcomes (did it ship / what changed)"** section: ship rate, impact mix, and recent "what changed" notes. It folds two sources together: this repo's rated runs plus any cross-repo ledger records pulled in via `import-outcomes` (local records win on conflict). With `--json`, the emitted dict gains an `outcomes` key holding that same summary (record/repo counts, `shipped`/`impact` tallies, `ship_rate`, and recent `changed` notes).
 
 The dashboard also renders a **"Session health"** block, computed from each run's `session.json` (see Section 4.1) by `stats.summarize_session_health`. It reports three auto-measured signals over the finalized sessions on record: assumed-P0 rate (P0s guessed instead of asked), convergence (median iterations + rejection rate), and clarity gain per session. With enough sessions it splits earlier vs. recent to show the trend. With `--json`, the emitted dict gains a `session_health` key holding this summary.
-
-Near the top the dashboard surfaces a **"Trend Alerts"** block when a metric is regressing, computed by `stats.detect_trend_alerts`. It applies a delta-based rule: a metric — human rating (falling), tokens/run or cost/run (rising) — is flagged only when it has worsened by ≥5% relative across **2+ consecutive runs**, so a single-run blip never fires. The block is omitted entirely when nothing is regressing. With `--json`, the emitted dict gains a `trend_alerts` key holding the list of alerts (metric, direction, consecutive-run count, from/to values, pct change).
 
 ---
 
@@ -139,7 +135,7 @@ Near the top the dashboard surfaces a **"Trend Alerts"** block when a metric is 
 | `--repo NAME` | No | repo dir name | Project name to tag each record with. |
 | `--artifact-root PATH` | No | auto | Override artifact root (where `output/` lives). |
 
-Collects this repo's rated runs into portable JSONL outcome records (one JSON object per line). Each carries `repo`, `run_id`, `phase`, `verdict`, `status`, `score`, the `shipped`/`impact`/`changed` outcome fields, `total_tokens`, and `rated_iso`. Only rated runs are exported; a rating is what makes a run an outcome worth learning from. Feed the file to `import-outcomes` in another repo so its `stats` can see these results.
+Collects this repo's rated runs into portable JSONL outcome records (one JSON object per line). Each carries `repo`, `run_id`, `phase`, `verdict`, `status`, `score`, the `shipped`/`impact`/`changed` outcome fields, and `rated_iso`. Only rated runs are exported; a rating is what makes a run an outcome worth learning from. Feed the file to `import-outcomes` in another repo so its `stats` can see these results.
 
 ---
 
@@ -210,8 +206,6 @@ Every run directory contains a `run.json` created by `prepare` and updated by `f
 | `summary_path` | string | Absolute path to `summary.md`. Auto-filled if blank. |
 | `verdict` | string | Populated during finalize. |
 | `iterations_run` | int or null | Auto-counted from artifacts unless overridden. |
-| `hours` | float or null | Optional metadata set by finalize. |
-| `cost` | float or null | Optional metadata set by finalize. |
 | `output_type` | string | `"deliverables"` or `"questions"` (from `--mode`). |
 | `studio_roles` | object or null | Studio-only metadata: `{ "pack": str, "overrides": list[str], "invited": list[str], "completed": list[str], "missing": list[str] }`. |
 | `scopes` | object or null | Scope config snapshot: `{ "config_path": str, "scopes": [...], "total_iterations": int }`. |
@@ -290,7 +284,6 @@ Append-only markdown log created by finalize. Each entry looks like:
 - Created: 2025-12-23 17:00
 - Verdict: APPROVED
 - Iterations: 2
-- Hours: 0.8 | Cost: 0
 - Summary: [summary](/absolute/path/to/summary.md)
 ```
 
@@ -329,8 +322,6 @@ module.finalize_run(module.SimpleNamespace(
     summary=None,
     verdict="APPROVED",
     iterations_run=None,
-    hours=0.5,
-    cost=0,
 ))
 ```
 
