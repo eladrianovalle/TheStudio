@@ -85,7 +85,7 @@ python studio/run_phase.py prepare --phase studio --text "..." --scopes /path/to
 
 ### Per-project override
 
-Place a `.studio/scopes.toml` in your project root. Studio auto-loads it when present.
+Copy `config/scopes.toml` to `.studio/scopes.toml` in your project root and edit it. Studio auto-loads it when present, in place of the shipped defaults.
 
 ## Customization
 

@@ -65,7 +65,7 @@ Slash commands are the main way you use Studio day to day. `init` installs them 
 **Maintain the install**
 | Command | What it does |
 |---------|--------------|
-| `/studio-setup` | Configure roles, personas, scopes, and cleanup after install |
+| `/studio-setup` | Configure roles, personas, and cleanup after install |
 | `/studio-update` | Pull the latest Studio source and commands into an installed project |
 
 Every command works from any project once you've run `init`. See [CLAUDE_CODE_USAGE.md](./studio/docs/CLAUDE_CODE_USAGE.md) for full arguments.
@@ -214,7 +214,7 @@ python studio/run_phase.py update --target /path/to/project          # add --for
 python studio/run_phase.py cleanup --dry-run
 python studio/run_phase.py cleanup
 
-# Setup wizard (configure roles, scopes, cleanup after install)
+# Setup wizard (configure roles, personas, cleanup after install)
 python studio/run_phase.py setup --target . --status
 python studio/run_phase.py setup --target . --defaults
 
@@ -370,7 +370,7 @@ studio/
   clarity.py                # Per-topic Clarity Score tracking and question density control
   question_mode.py          # Pre-flight question surfacing (--mode questions)
   install.py                # Cross-repo installer (init/check/update)
-  setup.py                  # Setup wizard: project config after install (roles, scopes, cleanup)
+  setup.py                  # Setup wizard: project config after install (roles, personas, cleanup)
   offload.py                # CLAUDE.md analyzer: section classification, pointer scoring, canary tokens
   cleanup.py                # TTL + budget-based artifact cleanup + loose file removal
   rerun.py                  # Rejection context injection for iterate-on-failure
@@ -384,7 +384,7 @@ studio/
   config/studio_settings.toml # Cleanup settings
   config/implementation_loop.toml # Implementation writer/editor loop defaults
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 896 tests (pytest)
+  tests/                    # 895 tests (pytest)
 ```
 
 ---
@@ -395,7 +395,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-896 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, contrarian FINDING-block parsing and the independent finding verifier, the design-phase critique guide (AI-slop blacklist + Goodwill Reservoir) gating, doc-parity (CLI/config docs vs source), installer ship-list parity (every slash command and workflow on disk is one the installer actually copies, so a new command can't work here and nowhere else), the spec-verification convention (a prompt-shaped spec may not be called shipped while its evidence file is unfilled, or has one of its headings dropped or left unanswered, and every hand-copy of the evidence skeleton's rules must still match the live one), clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, quality ratings and cross-run stats, run outcome capture and cross-repo outcome export/import, session-health records and ledger auto-append, CLAUDE.md offload analysis, unstale audit configuration, smoke test configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
+895 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, contrarian FINDING-block parsing and the independent finding verifier, the design-phase critique guide (AI-slop blacklist + Goodwill Reservoir) gating, doc-parity (CLI/config docs vs source), installer ship-list parity (every slash command and workflow on disk is one the installer actually copies, so a new command can't work here and nowhere else), the spec-verification convention (a prompt-shaped spec may not be called shipped while its evidence file is unfilled, or has one of its headings dropped or left unanswered, and every hand-copy of the evidence skeleton's rules must still match the live one), clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, quality ratings and cross-run stats, run outcome capture and cross-repo outcome export/import, session-health records and ledger auto-append, CLAUDE.md offload analysis, unstale audit configuration, smoke test configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 
