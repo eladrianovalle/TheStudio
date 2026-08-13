@@ -93,7 +93,7 @@ The `[outcomes] ledger_path` key that used to make `finalize` append an outcome 
 
 | Flag | Required | Default | Description |
 | --- | --- | --- | --- |
-| `--phase {market,design,tech,studio}` | No | `None` | Filter the dashboard to a single phase. |
+| `--phase {market,design,tech,studio}` | No | `None` | Filter the run-derived blocks to a single phase. Shipped features are not narrowed: a spec belongs to the repo, not to a phase. |
 | `--json` | No | `false` | Emit the aggregated stats dict as JSON instead of the text dashboard. |
 | `--artifact-root PATH` | No | auto | Override artifact root (where `output/` and `.studio/usage.log` live). |
 
