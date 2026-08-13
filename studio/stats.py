@@ -26,10 +26,10 @@ def parse_frontmatter(text: str) -> Dict[str, str]:
     one. Anything in that block that isn't ``key: value`` is skipped, and values come
     back stripped.
 
-    This is the one reader of spec frontmatter: the verification test and the stats
-    dashboard both call it, so they can never disagree about what a spec says. It lives
-    here rather than beside either caller because this module does no I/O, and reading
-    a string keeps that true — opening the file stays with the caller.
+    This is the one reader of spec frontmatter. ``tests/test_spec_verification.py``
+    calls it today and the dashboard below is next, so the two can never disagree about
+    what a spec says. It takes a string rather than a path to keep this module free of
+    I/O — opening the file stays with the caller.
     """
     block = re.match(r"---\n(.*?)\n---", text, re.DOTALL)
     if not block:

@@ -173,10 +173,7 @@ def _violations(
     tolerance is what leaves a spec with no prose-shaped behavior alone. Rule 5 has no
     such tolerance; see its comment.
 
-    The frontmatter is read by ``stats.parse_frontmatter``, the same function the stats
-    dashboard uses, so this test and the dashboard cannot disagree about what a spec
-    says. It reads only the leading ``---`` block, so a spec discussing a status in its
-    prose does not accidentally declare one.
+    Frontmatter comes from ``stats.parse_frontmatter``, the one reader of it.
     """
     problems: list[str] = []
     frontmatter = parse_frontmatter(spec_text)
@@ -243,13 +240,12 @@ def _violations(
     # feature that shipped changed something, prompt-shaped or not, and this line is the
     # only record of what. It is also the whole reason `stats` has anything to show.
     if status == "shipped":
-        impact = frontmatter.get("shipped_impact", "").strip()
-        changed = frontmatter.get("shipped_changed", "").strip()
+        # Already stripped by the reader, so a whitespace-only value arrives here as "".
+        impact = frontmatter.get("shipped_impact", "")
+        changed = frontmatter.get("shipped_changed", "")
         if not impact or not changed:
-            missing = " and ".join(
-                name for name, value in
-                (("shipped_impact", impact), ("shipped_changed", changed)) if not value
-            )
+            fields = (("shipped_impact", impact), ("shipped_changed", changed))
+            missing = " and ".join(name for name, value in fields if not value)
             problems.append(
                 f"specs/{spec_name} is marked `status: shipped`, but its frontmatter has no "
                 f"{missing}. Shipping is the claim that this feature landed; those two lines "
