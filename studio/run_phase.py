@@ -2361,8 +2361,9 @@ def _shipped_spec_records() -> List[Dict]:
 
     Reads the specs directory directly — no index, no cache — because the
     frontmatter of a file already on disk is the whole data source. Eval-results
-    files are skipped: they sit beside a spec and carry their own headings, not a
-    spec's status. Frontmatter is parsed by ``stats.parse_frontmatter``, the same
+    files are skipped by name, belt-and-braces: they carry no frontmatter of their
+    own, so they would fall out on the status check regardless. Frontmatter is parsed
+    by ``stats.parse_frontmatter``, the same
     reader ``tests/test_spec_verification.py`` uses, so the gate that demands
     these two lines and the dashboard that prints them can never disagree.
 
@@ -2375,6 +2376,11 @@ def _shipped_spec_records() -> List[Dict]:
 
     records: List[Dict] = []
     for spec_path in sorted(specs_dir.glob("*.md")):
+        # Evidence files carry no frontmatter today — the skeleton says so on purpose,
+        # since a second `status:` beside the spec's is one more thing to drift — so
+        # they would fall out on the status check below anyway. Skipping them by name
+        # is belt and braces: it keeps a spec's evidence from ever being counted as a
+        # second shipped feature if someone does give one a header later.
         if spec_path.name.endswith("-eval-results.md"):
             continue
         try:
