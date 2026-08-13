@@ -86,7 +86,7 @@ scope pacing and the pieces this run needs, and you execute them in order:
 - **The advocate/contrarian scopes** (alignment → depth), within the `--max-iterations` budget
   (default 2). The advocate designs the architecture; the contrarian pressure-tests it (edge cases,
   simpler alternatives, scope to cut) and votes `APPROVED`/`REJECTED`. Surface every decision point
-  and pause on P0s exactly as `instructions.md` describes, recording metrics for each agent.
+  and pause on P0s exactly as `instructions.md` describes.
 
 Skip `instructions.md`'s implementation/deliverable step — the deliverable for `/spec` is the spec
 document in Step 3, not an implementation.
@@ -266,7 +266,7 @@ the file (the Coding Principles section "Write for Humans"). Then:
 
 ### Step 5: Finalize the debate record + rate
 
-Close out the underlying run so its decisions and metrics are captured in the cross-run dashboard:
+Close out the underlying run so its decisions are captured in the cross-run dashboard:
 
 ```bash
 python ".studio/source/run_phase.py" finalize --phase tech --run-id {run_id} \

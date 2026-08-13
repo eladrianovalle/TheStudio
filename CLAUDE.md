@@ -184,8 +184,8 @@ python studio/run_phase.py update --target /path/to/project
 
 Other subcommands are documented in `studio/docs/API.md`: decision management
 (`check-decisions`, `record-decisions`, `extract-decisions`, `inject-context`),
-clarity (`show-clarity`, `set-clarity`, `recompute-clarity`), metrics
-(`record-metrics`, `show-metrics`), `check-updates` (the session-start staleness nudge),
+clarity (`show-clarity`, `set-clarity`, `recompute-clarity`),
+`check-updates` (the session-start staleness nudge),
 `cleanup`, `notify`, `setup`, `offload`.
 
 ## Architecture

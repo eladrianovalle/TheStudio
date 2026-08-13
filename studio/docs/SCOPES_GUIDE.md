@@ -96,10 +96,9 @@ You can adjust the default config or create project-specific ones. The key lever
 - **Lower output_budget** for alignment if agents waste words on detail too early
 - **`per_role` debate_mode** for any scope where sequential role-by-role analysis matters
 
-## Interaction with Decision Points and Metrics
+## Interaction with Decision Points and Clarity
 
 - **Decision points** are extracted and surfaced after every agent in every scope
-- **Agent metrics** (token usage) are recorded per-agent, so you can see which scope consumes the most tokens via `show-metrics`
 - **Clarity scores** inform agent question density across scopes: settled topics get fewer questions
 
 ## See Also

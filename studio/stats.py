@@ -87,7 +87,7 @@ def _numeric(value) -> float:
 
 
 def _session_health_signals(records: List[Dict]) -> Dict:
-    """Compute the five session-health signals over a list of session records.
+    """Compute the three session-health signals over a list of session records.
 
     Split out from :func:`summarize_session_health` so the same math can run over
     the full history and over each half when we show a recent-vs-earlier trend.
@@ -131,32 +131,6 @@ def _session_health_signals(records: List[Dict]) -> Dict:
             clarity_gains.append(after - before)
     clarity_gain = (sum(clarity_gains) / len(clarity_gains)) if clarity_gains else None
 
-    # Tokens per settled decision: total spend over decisions actually answered
-    # (by the user or by an assumption). None when nothing settled.
-    total_tokens = 0
-    settled_decisions = 0
-    for record in records:
-        cost = record.get("cost") or {}
-        total_tokens += _numeric(cost.get("total_tokens"))
-        decisions = record.get("decisions") or {}
-        settled_decisions += (
-            _numeric(decisions.get("answered_by_user"))
-            + _numeric(decisions.get("answered_by_assumption"))
-        )
-    tokens_per_settled_decision = (
-        (total_tokens / settled_decisions) if settled_decisions else None
-    )
-
-    # Editor liveness: fraction of sessions whose final doc shrank vs the first
-    # draft (shrink_ratio > 0). 0% is the failure mode: a dead cut mandate.
-    sessions_that_shrank = 0
-    for record in records:
-        editor = record.get("editor") or {}
-        shrink_ratio = editor.get("shrink_ratio")
-        if _is_number(shrink_ratio) and shrink_ratio > 0:
-            sessions_that_shrank += 1
-    editor_liveness = (sessions_that_shrank / count) if count else None
-
     return {
         "records": count,
         "assumed_p0_rate": assumed_p0_rate,
@@ -165,18 +139,20 @@ def _session_health_signals(records: List[Dict]) -> Dict:
             "rejection_rate": rejection_rate,
         },
         "clarity_gain": clarity_gain,
-        "tokens_per_settled_decision": tokens_per_settled_decision,
-        "editor_liveness": editor_liveness,
     }
 
 
 def summarize_session_health(session_records: List[Dict]) -> Dict:
-    """Roll up ``session.json`` records into the five health signals over time.
+    """Roll up ``session.json`` records into the three health signals over time.
 
     Each input is a ``session.json`` dict written automatically at finalize (see
     docs/SESSION_ANALYTICS_PLAN.md). These measure a run's *health*: did the
-    debate converge, settle its blocking questions, and reduce uncertainty, at
-    what cost. They do not measure the quality of a plan not yet built.
+    debate converge, settle its blocking questions, and reduce uncertainty. They
+    do not measure the quality of a plan not yet built.
+
+    Records written before the volunteer-fed measurements were retired still
+    carry ``cost`` and ``editor`` blocks. Nothing here reads them, so old and new
+    records roll up side by side with no migration.
 
     Returns the all-time figures plus, once there are enough records (>= 6), a
     ``trend`` block that splits the list in half (caller passes them oldest
@@ -324,36 +300,6 @@ def detect_trend_alerts(runs: List[Dict]) -> List[Dict]:
             "pct_change": pct_change,
         })
     return alerts
-
-
-def _summarize_metrics(entries: List[Dict]) -> Dict:
-    """Aggregate metrics entries into a summary."""
-    total_tokens = sum(e.get("total_tokens", 0) for e in entries)
-    total_duration = sum(e.get("duration_ms", 0) for e in entries)
-    total_tool_uses = sum(e.get("tool_uses", 0) for e in entries)
-
-    by_scope: Dict[str, Dict] = {}
-    by_role: Dict[str, Dict] = {}
-
-    for e in entries:
-        scope = e.get("scope", "flat")
-        role = e.get("role", "unknown")
-
-        for group, key in [(by_scope, scope), (by_role, role)]:
-            if key not in group:
-                group[key] = {"agents": 0, "total_tokens": 0, "duration_ms": 0}
-            group[key]["agents"] += 1
-            group[key]["total_tokens"] += e.get("total_tokens", 0)
-            group[key]["duration_ms"] += e.get("duration_ms", 0)
-
-    return {
-        "agents": len(entries),
-        "total_tokens": total_tokens,
-        "total_duration_ms": total_duration,
-        "total_tool_uses": total_tool_uses,
-        "by_scope": by_scope,
-        "by_role": by_role,
-    }
 
 
 def _parse_usage_log(text: str) -> Dict:
@@ -523,7 +469,7 @@ def _fmt_signal(value: Optional[float], *, pct: bool) -> str:
 
 
 def _format_session_health(health: Dict) -> List[str]:
-    """Render the session-health block: five signals auto-measured at finalize.
+    """Render the session-health block: three signals auto-measured at finalize.
 
     Each line labels what the number means in a few words, because these are for
     a human reading the dashboard, not targets for an agent to chase.
@@ -553,21 +499,6 @@ def _format_session_health(health: Dict) -> List[str]:
         lines.append("  Clarity gain: n/a (no before/after snapshots)")
     else:
         lines.append(f"  Clarity gain: {gain:+.2f} mean per session (uncertainty reduced; higher is better)")
-
-    tokens = health["tokens_per_settled_decision"]
-    if tokens is None:
-        lines.append("  Tokens/settled decision: n/a (nothing settled)")
-    else:
-        lines.append(f"  Tokens/settled decision: {tokens:,.0f} (spend per question answered)")
-
-    liveness = health["editor_liveness"]
-    if liveness is None:
-        lines.append("  Editor liveness: n/a")
-    else:
-        lines.append(
-            f"  Editor liveness: {liveness*100:.0f}% "
-            "of sessions shrank the doc (0% means a dead cut mandate)"
-        )
 
     trend = health.get("trend")
     if trend:

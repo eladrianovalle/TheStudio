@@ -193,37 +193,6 @@ python studio/run_phase.py recompute-clarity --phase studio --run-id run_studio_
 - **S2 Depth** (medium-high clarity) → fewer, only genuine gaps
 - **S3 Polish** (high clarity) → rare, mostly confirmations
 
-### Agent Metrics (Token Tracking)
-
-Studio tracks per-agent token usage throughout each run. After every agent completes, the orchestrator records the `total_tokens`, `tool_uses`, and `duration_ms` from the Agent tool result into `{run_dir}/metrics.json`.
-
-**Viewing metrics mid-run or after:**
-```bash
-python studio/run_phase.py show-metrics --run-dir <path>
-```
-
-Example output:
-```
-Agent Metrics — run_studio_20260322_143000
-  Agents spawned:  6
-  Total tokens:    82,400
-  Total tool uses: 95
-  Total duration:  312s (5.2m)
-
-  By scope:
-    alignment     4 agents    20,700 tokens (25%)
-    depth         2 agents    61,700 tokens (75%)
-
-  By role:
-    engineering       2 agents    45,000 tokens (55%)
-    marketing         2 agents    18,700 tokens (23%)
-    product           2 agents    18,700 tokens (23%)
-```
-
-At finalize, metrics are aggregated into `run.json["metrics"]` for permanent record-keeping. This lets you compare token efficiency across runs: are alignment scopes catching issues cheaply? Are certain roles disproportionately expensive?
-
----
-
 ### Quality Ratings & Cross-Run Stats
 
 The agent **verdict** (APPROVED/REJECTED) tells you what the debate concluded. It doesn't tell you whether the run was actually *useful to you*. To gauge how well Studio is doing and improve it as you use it, record your own judgment and look across runs.
@@ -290,8 +259,6 @@ Session health (auto-measured at finalize):
   Assumed-P0 rate: 17% (blocking questions the session guessed on)
   Convergence: median 2 iterations, 42% of sessions hit a rejection (both extremes are smells)
   Clarity gain: +0.28 mean (before -> after)
-  Tokens/settled decision: 18,545
-  Editor liveness: 75% of sessions shrank the doc (0% means a dead cut mandate)
 
 Usage (prepare log):
   12 prepares — design=3, market=4, studio=4, tech=1

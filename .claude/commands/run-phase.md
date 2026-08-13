@@ -66,14 +66,8 @@ For each iteration (up to max_iterations):
 >
 > Write a thorough advocate proposal. Structure it with clear sections, concrete recommendations, and actionable details. Save your output to `{run_dir}/advocate_{N}.md`.
 
-**b. Record metrics and extract decision points: MANDATORY, DO NOT SKIP**
+**b. Extract decision points: MANDATORY, DO NOT SKIP**
 
-First, record the agent's token usage from the `<usage>` block in the Agent tool result:
-```bash
-python ".studio/source/run_phase.py" record-metrics --run-dir {run_dir} --agent advocate --total-tokens {N} --tool-uses {N} --duration-ms {N}
-```
-
-Then extract decision points:
 ```bash
 python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir} --json
 ```
@@ -123,11 +117,7 @@ This displays per-topic confidence scores so the user can see which areas are se
 >
 > Save your output to `{run_dir}/contrarian_{N}.md`.
 
-**d. Record contrarian metrics and extract decision points:** Record the contrarian's token usage:
-```bash
-python ".studio/source/run_phase.py" record-metrics --run-dir {run_dir} --agent contrarian --total-tokens {N} --tool-uses {N} --duration-ms {N}
-```
-Then run `python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir} --json` again. If `count > 0` (new decision points from the contrarian), present them to the user and record as in step (b).
+**d. Extract contrarian decision points:** Run `python ".studio/source/run_phase.py" extract-decisions --run-dir {run_dir} --json` again. If `count > 0` (new decision points from the contrarian), present them to the user and record as in step (b).
 
 **e. Check verdict:** Read the contrarian output. If `VERDICT: APPROVED`, proceed to Step 4. If `VERDICT: REJECTED` and iterations remain, loop back to (a) with the rejection feedback.
 

@@ -2,7 +2,7 @@
 feature: Retire the volunteer-fed metrics, read outcomes from shipped specs
 slug: retire-volunteer-metrics
 ticket: none
-status: draft
+status: approved
 studio_run: studio/output/tech/run_tech_20260812_202226
 ---
 

@@ -3,25 +3,25 @@
 A Studio run is a planning session, so rating its output at finalize is noise:
 the specs get built later, elsewhere. What you *can* measure the moment a run
 ends is session *health*: did the debate converge, did it surface and settle the
-right questions, did it reduce uncertainty, and at what cost. All of that is
-derivable from files the run already produced, with no human judgment.
+right questions, did it reduce uncertainty. All of that is derivable from files
+the run already produced, with no human judgment. Nothing here waits for a
+person or an agent to type a number in: a measurement that has to be volunteered
+never gets volunteered.
 
 This module is the pure core of that record. Like ``stats.py``, everything here
 is data-in / data-out: no filesystem, no argparse, no path resolution. The
 ``run_phase`` finalize handler does the reading (contrarian verdicts, decisions,
-clarity snapshots, metrics, advocate word counts) and hands the collected pieces
-to :func:`build_session_record`, which shapes them into the schema documented in
+clarity snapshots) and hands the collected pieces to
+:func:`build_session_record`, which shapes them into the schema documented in
 ``docs/SESSION_ANALYTICS_PLAN.md``.
 
-Every input is optional. A run with no decisions, no clarity snapshot, and no
-metrics still produces a valid record full of sensible zeros and nulls. This
-must never crash finalize.
+Every input is optional. A run with no decisions and no clarity snapshot still
+produces a valid record full of sensible zeros and nulls. This must never crash
+finalize.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Sequence
-
-from stats import _summarize_metrics
+from typing import Dict, Optional, Sequence
 
 
 def _summarize_decisions(decisions: Sequence) -> Dict:
@@ -69,68 +69,6 @@ def _summarize_decisions(decisions: Sequence) -> Dict:
     }
 
 
-def _summarize_cost(metrics_entries: List[Dict], settled_decisions: int) -> Dict:
-    """Roll up the cost block, reusing ``stats._summarize_metrics``.
-
-    ``tokens_per_settled_decision`` turns a raw token count into "what the spend
-    bought": total tokens divided by the number of decisions that ended up
-    answered. It is None when nothing was settled (dividing by zero buys
-    nothing). ``scope_pct`` reports each scope's share of the total tokens as a
-    whole-number percentage; a run that burned most of its budget in polish is a
-    misallocation worth seeing.
-    """
-    summary = _summarize_metrics(metrics_entries)
-    total_tokens = summary["total_tokens"]
-
-    scope_pct: Dict[str, int] = {}
-    if total_tokens:
-        for scope, data in summary["by_scope"].items():
-            scope_pct[scope] = round(100 * data["total_tokens"] / total_tokens)
-
-    if settled_decisions:
-        tokens_per_settled = round(total_tokens / settled_decisions)
-    else:
-        tokens_per_settled = None
-
-    return {
-        "total_tokens": total_tokens,
-        "duration_ms": summary["total_duration_ms"],
-        "agents": summary["agents"],
-        "tokens_per_settled_decision": tokens_per_settled,
-        "scope_pct": scope_pct,
-    }
-
-
-def _summarize_editor(advocate_word_counts: Sequence[int]) -> Dict:
-    """Roll up the editor-liveness block from advocate doc word counts.
-
-    ``advocate_word_counts`` is the word count of each advocate document in the
-    order it was written (first draft first, final last). ``shrink_ratio`` is
-    how much the doc shrank from first to final: 0.33 means a third was cut.
-    It is a crude liveness check, not a quality score. It catches the real
-    failure mode: a dead editor mandate where docs only ever grow.
-
-    Shrink is 0.0 when there is no first draft to measure against, which also
-    guards the divide-by-zero when the first draft is empty.
-    """
-    counts = list(advocate_word_counts)
-    if not counts:
-        return {"first_draft_words": 0, "final_words": 0, "shrink_ratio": 0.0}
-
-    first_draft_words = counts[0]
-    final_words = counts[-1]
-    if first_draft_words:
-        shrink_ratio = round(1 - (final_words / first_draft_words), 4)
-    else:
-        shrink_ratio = 0.0
-
-    return {
-        "first_draft_words": first_draft_words,
-        "final_words": final_words,
-        "shrink_ratio": shrink_ratio,
-    }
-
-
 def build_session_record(
     *,
     run_id: str,
@@ -146,28 +84,16 @@ def build_session_record(
     clarity_mean_before: Optional[float] = None,
     clarity_mean_after: Optional[float] = None,
     clarity_topics_touched: int = 0,
-    metrics_entries: Optional[List[Dict]] = None,
-    advocate_word_counts: Optional[Sequence[int]] = None,
 ) -> Dict:
     """Assemble the ``session.json`` record from already-gathered run data.
 
     Pure: no I/O. The caller reads the run directory and passes the pieces in;
     this returns the record dict per ``docs/SESSION_ANALYTICS_PLAN.md``. Every
-    input is optional and tolerated: missing decisions, clarity, or metrics
-    yield sensible zeros and nulls rather than an error.
-
-    ``outcome`` starts null and is the only field a human ever edits later (to
-    record whether the plan actually got built); the rest is judgment-free.
+    input is optional and tolerated: missing decisions or clarity yield sensible
+    zeros and nulls rather than an error.
     """
     decisions = decisions or []
-    metrics_entries = metrics_entries or []
-    advocate_word_counts = advocate_word_counts or []
-
     decision_summary = _summarize_decisions(decisions)
-    settled_decisions = (
-        decision_summary["answered_by_user"]
-        + decision_summary["answered_by_assumption"]
-    )
 
     return {
         "run_id": run_id,
@@ -187,7 +113,4 @@ def build_session_record(
             "mean_after": clarity_mean_after,
             "topics_touched": clarity_topics_touched,
         },
-        "cost": _summarize_cost(metrics_entries, settled_decisions),
-        "editor": _summarize_editor(advocate_word_counts),
-        "outcome": None,
     }

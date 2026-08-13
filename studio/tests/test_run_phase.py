@@ -556,99 +556,6 @@ def test_prepare_with_scopes_integration(studio_root):
 
 
 # ---------------------------------------------------------------------------
-# Agent metrics tracking
-# ---------------------------------------------------------------------------
-
-
-def test_record_and_load_metrics(tmp_path):
-    """record-metrics writes entries to metrics.json."""
-    run_dir = tmp_path / "run_test"
-    run_dir.mkdir()
-
-    args = argparse.Namespace(
-        run_dir=run_dir, agent="advocate", total_tokens=5000,
-        tool_uses=10, duration_ms=30000, role="marketing", scope="alignment",
-    )
-    run_phase.record_metrics(args)
-
-    entries = run_phase._load_metrics(run_dir)
-    assert len(entries) == 1
-    assert entries[0]["agent"] == "advocate"
-    assert entries[0]["total_tokens"] == 5000
-    assert entries[0]["role"] == "marketing"
-    assert entries[0]["scope"] == "alignment"
-
-    # Append a second entry
-    args2 = argparse.Namespace(
-        run_dir=run_dir, agent="contrarian", total_tokens=3000,
-        tool_uses=5, duration_ms=20000, role="marketing", scope="alignment",
-    )
-    run_phase.record_metrics(args2)
-    entries = run_phase._load_metrics(run_dir)
-    assert len(entries) == 2
-
-
-def test_summarize_metrics():
-    """_summarize_metrics aggregates by scope and role."""
-    entries = [
-        {"agent": "advocate", "total_tokens": 10000, "tool_uses": 15, "duration_ms": 40000, "role": "marketing", "scope": "alignment"},
-        {"agent": "contrarian", "total_tokens": 8000, "tool_uses": 10, "duration_ms": 30000, "role": "marketing", "scope": "alignment"},
-        {"agent": "advocate", "total_tokens": 30000, "tool_uses": 40, "duration_ms": 120000, "role": "engineering", "scope": "depth"},
-    ]
-    summary = run_phase._summarize_metrics(entries)
-
-    assert summary["agents"] == 3
-    assert summary["total_tokens"] == 48000
-    assert summary["total_tool_uses"] == 65
-    assert summary["total_duration_ms"] == 190000
-
-    assert "alignment" in summary["by_scope"]
-    assert summary["by_scope"]["alignment"]["agents"] == 2
-    assert summary["by_scope"]["alignment"]["total_tokens"] == 18000
-
-    assert "depth" in summary["by_scope"]
-    assert summary["by_scope"]["depth"]["agents"] == 1
-
-    assert "marketing" in summary["by_role"]
-    assert summary["by_role"]["marketing"]["total_tokens"] == 18000
-    assert "engineering" in summary["by_role"]
-
-
-def test_show_metrics_empty(tmp_path, capsys):
-    """show-metrics handles empty/missing metrics gracefully."""
-    run_dir = tmp_path / "run_empty"
-    run_dir.mkdir()
-
-    args = argparse.Namespace(run_dir=run_dir)
-    run_phase.show_metrics(args)
-    assert "No metrics recorded" in capsys.readouterr().out
-
-
-def test_finalize_aggregates_metrics(studio_root):
-    """Finalize includes metrics summary in run.json when metrics.json exists."""
-    run_id = run_phase.prepare_run(make_prepare_args())
-    run_dir = studio_root / "output" / "market" / run_id
-
-    # Simulate artifacts
-    (run_dir / "advocate_1.md").write_text("Advocate output", encoding="utf-8")
-    (run_dir / "contrarian_1.md").write_text("Contrarian output", encoding="utf-8")
-    (run_dir / "summary.md").write_text("Summary output", encoding="utf-8")
-
-    # Write metrics
-    run_phase._save_metrics(run_dir, [
-        {"agent": "advocate", "total_tokens": 12000, "tool_uses": 20, "duration_ms": 50000},
-        {"agent": "contrarian", "total_tokens": 9000, "tool_uses": 12, "duration_ms": 35000},
-    ])
-
-    run_phase.finalize_run(make_finalize_args(run_id=run_id))
-
-    meta = run_phase.load_json(run_dir / "run.json")
-    assert "metrics" in meta
-    assert meta["metrics"]["agents"] == 2
-    assert meta["metrics"]["total_tokens"] == 21000
-
-
-# ---------------------------------------------------------------------------
 # Human quality ratings & cross-run stats
 # ---------------------------------------------------------------------------
 
@@ -886,10 +793,8 @@ def _session(
     rejections=0,
     mean_before=None,
     mean_after=None,
-    total_tokens=0,
     answered_by_user=0,
     answered_by_assumption=0,
-    shrink_ratio=0.0,
     finalized_iso="2026-01-01",
 ):
     """Build a minimal session.json-shaped record for the health tests."""
@@ -903,9 +808,20 @@ def _session(
             "p0_assumed": p0_assumed,
         },
         "clarity": {"mean_before": mean_before, "mean_after": mean_after},
-        "cost": {"total_tokens": total_tokens},
-        "editor": {"shrink_ratio": shrink_ratio},
     }
+
+
+def _legacy_session(*, total_tokens=0, shrink_ratio=0.0, **kwargs):
+    """A session record from before the volunteer-fed measurements were retired.
+
+    Old files on disk still carry ``cost`` and ``editor`` blocks. There is no
+    migration, so the health signals have to keep reading these records exactly
+    as they read new ones and simply ignore the retired blocks.
+    """
+    record = _session(**kwargs)
+    record["cost"] = {"total_tokens": total_tokens, "tokens_per_settled_decision": 999}
+    record["editor"] = {"shrink_ratio": shrink_ratio}
+    return record
 
 
 def test_summarize_session_health_empty():
@@ -917,21 +833,28 @@ def test_summarize_session_health_empty():
     assert h["convergence"]["median_iterations"] is None
     assert h["convergence"]["rejection_rate"] is None
     assert h["clarity_gain"] is None
-    assert h["tokens_per_settled_decision"] is None
-    assert h["editor_liveness"] is None
     assert h["trend"] is None
 
 
+def test_summarize_session_health_reports_only_computed_signals():
+    """The retired volunteer-fed signals are gone from the roll-up entirely."""
+    from stats import summarize_session_health
+    h = summarize_session_health([_session(p0_surfaced=1, p0_assumed=1)])
+    assert set(h) == {
+        "records", "assumed_p0_rate", "convergence", "clarity_gain", "trend",
+    }
+
+
 def test_summarize_session_health_normal_set():
-    """A normal set of records rolls the five signals up correctly."""
+    """A normal set of records rolls the three signals up correctly."""
     from stats import summarize_session_health
     records = [
         _session(p0_surfaced=2, p0_assumed=1, iterations=3, rejections=2,
-                 mean_before=0.4, mean_after=0.7, total_tokens=6000,
-                 answered_by_user=2, answered_by_assumption=1, shrink_ratio=0.3),
+                 mean_before=0.4, mean_after=0.7,
+                 answered_by_user=2, answered_by_assumption=1),
         _session(p0_surfaced=2, p0_assumed=0, iterations=1, rejections=0,
-                 mean_before=0.5, mean_after=0.5, total_tokens=4000,
-                 answered_by_user=1, answered_by_assumption=0, shrink_ratio=0.0),
+                 mean_before=0.5, mean_after=0.5,
+                 answered_by_user=1, answered_by_assumption=0),
     ]
     h = summarize_session_health(records)
     assert h["records"] == 2
@@ -943,19 +866,47 @@ def test_summarize_session_health_normal_set():
     assert h["convergence"]["rejection_rate"] == 0.5
     # mean of (0.3, 0.0)
     assert h["clarity_gain"] == pytest.approx(0.15)
-    # 10000 tokens / 4 settled decisions
-    assert h["tokens_per_settled_decision"] == 2500
-    # 1 of 2 sessions shrank
-    assert h["editor_liveness"] == 0.5
     assert h["trend"] is None  # under 6 records
 
 
+def test_summarize_session_health_reads_records_written_before_the_cut():
+    """Old records still carrying cost/editor blocks compute exactly the same.
+
+    No migration was written, so a mixed history of old and new files has to
+    roll up as one set. The retired blocks are simply never read.
+    """
+    from stats import summarize_session_health
+    old = _legacy_session(
+        p0_surfaced=2, p0_assumed=1, iterations=3, rejections=2,
+        mean_before=0.4, mean_after=0.7, total_tokens=6000,
+        answered_by_user=2, answered_by_assumption=1, shrink_ratio=0.3,
+    )
+    new = _session(
+        p0_surfaced=2, p0_assumed=0, iterations=1, rejections=0,
+        mean_before=0.5, mean_after=0.5,
+        answered_by_user=1, answered_by_assumption=0,
+    )
+    assert "cost" in old and "editor" in old  # the fixture is genuinely old-shaped
+
+    mixed = summarize_session_health([old, new])
+    assert mixed["records"] == 2
+    assert mixed["assumed_p0_rate"] == 0.25
+    assert mixed["convergence"]["median_iterations"] == 2
+    assert mixed["convergence"]["rejection_rate"] == 0.5
+    assert mixed["clarity_gain"] == pytest.approx(0.15)
+
+    # An all-old history is indistinguishable from the same history with the
+    # retired blocks stripped out.
+    stripped = {k: v for k, v in old.items() if k not in ("cost", "editor")}
+    assert summarize_session_health([old]) == summarize_session_health([stripped])
+
+
 def test_summarize_session_health_tolerates_missing_fields():
-    """Missing clarity/decisions/editor blocks never raise; they drop out cleanly."""
+    """Missing clarity/decisions blocks never raise; they drop out cleanly."""
     from stats import summarize_session_health
     records = [
-        {"convergence": {"iterations": 2}},  # no decisions/clarity/cost/editor
-        {"decisions": {}, "clarity": {}, "cost": {}, "editor": {}},
+        {"convergence": {"iterations": 2}},  # no decisions, no clarity
+        {"decisions": {}, "clarity": {}},
         _session(mean_before=0.2, mean_after=0.6),  # only this has both clarity ends
     ]
     h = summarize_session_health(records)
@@ -963,10 +914,6 @@ def test_summarize_session_health_tolerates_missing_fields():
     assert h["assumed_p0_rate"] is None  # no P0 surfaced anywhere
     # clarity_gain averages only the one record with both ends present
     assert h["clarity_gain"] == pytest.approx(0.4)
-    # no settled decisions anywhere
-    assert h["tokens_per_settled_decision"] is None
-    # no shrink_ratio > 0 anywhere
-    assert h["editor_liveness"] == 0.0
 
 
 def test_summarize_session_health_assumed_p0_divide_by_zero():
@@ -978,28 +925,6 @@ def test_summarize_session_health_assumed_p0_divide_by_zero():
     # And a real ratio when P0s are surfaced.
     h2 = summarize_session_health([_session(p0_surfaced=4, p0_assumed=3)])
     assert h2["assumed_p0_rate"] == 0.75
-
-
-def test_summarize_session_health_editor_liveness_math():
-    """editor_liveness is the fraction of records whose doc shrank (ratio > 0)."""
-    from stats import summarize_session_health
-    records = [
-        _session(shrink_ratio=0.4),   # shrank
-        _session(shrink_ratio=0.0),   # flat
-        _session(shrink_ratio=-0.1),  # grew (negative) — not liveness
-        _session(shrink_ratio=0.2),   # shrank
-    ]
-    h = summarize_session_health(records)
-    assert h["editor_liveness"] == 0.5  # 2 of 4
-
-
-def test_summarize_session_health_tokens_per_settled_zero_guard():
-    """Tokens spent but nothing settled yields None, not a divide-by-zero."""
-    from stats import summarize_session_health
-    h = summarize_session_health([
-        _session(total_tokens=5000, answered_by_user=0, answered_by_assumption=0),
-    ])
-    assert h["tokens_per_settled_decision"] is None
 
 
 def test_summarize_session_health_trend_split():
@@ -1018,8 +943,19 @@ def test_summarize_session_health_trend_split():
     assert h["trend"]["recent"]["convergence"]["median_iterations"] == 1
 
 
+def _session_health_lines(out):
+    """The Session health block's own lines, header and blank line dropped."""
+    block = out.split("Session health (auto-measured at finalize):")[1]
+    lines = []
+    for line in block.splitlines()[1:]:
+        if not line.startswith("  "):
+            break
+        lines.append(line.strip())
+    return lines
+
+
 def test_format_stats_renders_session_health():
-    """format_stats shows the Session health block when records are present."""
+    """The block is the record count plus exactly the three computed signals."""
     from stats import summarize_session_health
     agg = run_phase.aggregate_stats([
         {"run_id": "r1", "phase": "market", "status": "COMPLETED",
@@ -1028,12 +964,40 @@ def test_format_stats_renders_session_health():
     ])
     health = summarize_session_health([
         _session(p0_surfaced=2, p0_assumed=1, mean_before=0.3, mean_after=0.6,
-                 total_tokens=4000, answered_by_user=2, shrink_ratio=0.25),
+                 answered_by_user=2),
     ])
     out = run_phase.format_stats(agg, session_health=health)
     assert "Session health" in out
     assert "Assumed-P0 rate: 50%" in out
-    assert "Editor liveness" in out
+
+    lines = _session_health_lines(out)
+    assert len(lines) == 4  # record count + three signals, nothing else
+    assert lines[0] == "1 finalized session(s) on record"
+    assert [line.split(":")[0] for line in lines[1:]] == [
+        "Assumed-P0 rate", "Convergence", "Clarity gain",
+    ]
+
+
+def test_format_stats_session_health_trend_needs_six_records():
+    """With 6+ records the block adds the earlier-vs-recent trend, and only then."""
+    from stats import summarize_session_health
+    agg = run_phase.aggregate_stats([
+        {"run_id": "r1", "phase": "market", "status": "COMPLETED",
+         "verdict": "APPROVED", "_rating": None, "_decisions": []},
+    ])
+    records = [_session(p0_surfaced=1, p0_assumed=1, iterations=3) for _ in range(3)]
+    records += [_session(p0_surfaced=1, p0_assumed=0, iterations=1) for _ in range(3)]
+
+    five = run_phase.format_stats(agg, session_health=summarize_session_health(records[:5]))
+    assert "Trend" not in five
+    assert len(_session_health_lines(five)) == 4
+
+    six = run_phase.format_stats(agg, session_health=summarize_session_health(records))
+    lines = _session_health_lines(six)
+    assert len(lines) == 7  # count + three signals + trend header + two trend rows
+    assert lines[4].startswith("Trend (recent 3 vs earlier 3)")
+    assert "Assumed-P0 rate: 100% -> 0%" in lines[5]
+    assert "Median iterations: 3 -> 1" in lines[6]
 
 
 def test_format_stats_omits_session_health_when_empty():
