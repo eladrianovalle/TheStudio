@@ -201,7 +201,6 @@ class TestCLIOutcomes:
         (run_dir / "run.json").write_text(json.dumps({
             "run_id": "run_studio_20260101_000000", "phase": "studio",
             "status": "completed", "verdict": "APPROVED",
-            "metrics": {"total_tokens": 4200},
         }))
         return run_dir
 
@@ -297,14 +296,18 @@ class TestRetiredEfficiencyMetrics:
         return run_id
 
     def test_finalize_rejects_the_retired_flags(self, cli_studio_root):
-        run_id = self._finalize_a_run(cli_studio_root)
+        """argparse refuses the flags before finalize runs, so no run is needed.
+
+        The stderr assertion is what carries this: it pins the failure to the
+        retired flags rather than to anything about the run itself.
+        """
         result = _run_cli(
-            "finalize", "--phase", "tech", "--run-id", run_id,
+            "finalize", "--phase", "tech", "--run-id", "run_tech_20260101_000000",
             "--cost", "5", "--hours", "2",
             studio_root=cli_studio_root,
         )
         assert result.returncode != 0
-        assert "unrecognized arguments" in result.stderr
+        assert "unrecognized arguments: --cost 5 --hours 2" in result.stderr
 
     def test_finalize_writes_no_hours_or_cost(self, cli_studio_root):
         run_id = self._finalize_a_run(cli_studio_root)

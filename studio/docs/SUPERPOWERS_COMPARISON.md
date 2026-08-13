@@ -85,7 +85,7 @@ set of subagent prompt templates.
   Studio puts real gates in Python — the /forge entry and exit gates, `verdict.py`, the validators,
   doc-parity tests, ruff and pytest in CI.
 - **Measurement of outcomes, not just of prose.** `rate`, `stats`, `session.json`, the outcomes
-  ledger, `detect_trend_alerts` and `findings.json` are a shipped instrument set. superpowers'
+  ledger and `findings.json` are a shipped instrument set. superpowers'
   actual eval harness is not even in the repo — `evals/` is gitignored and cloned from a separate
   private repo, so the verifier prompt and scenario schema are unauditable from their tree.
 - **Single-owner formats.** `decision_points.py` owns the decision format; `findings.py` owns the
