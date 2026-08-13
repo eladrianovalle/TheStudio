@@ -110,8 +110,14 @@ slug: <slug>
 ticket: <id-or-url, or "none">
 status: draft            # draft → approved (human approved it) → shipped (built AND verified)
 studio_run: <run_dir>    # the debate this spec came from
-shipped_impact:          # none | minor | major — how much it changed downstream
-shipped_changed:         # one line: what this actually changed
+# Leave the two below EMPTY until this spec flips to `shipped`, and keep their notes on
+# comment lines like these. An inline `# ...` after the colon is read as the VALUE, and
+# `shipped_changed` has no vocabulary check to catch it — so a spec could otherwise
+# satisfy the gate having edited nothing.
+# shipped_impact: one of none | minor | major — how much it changed downstream
+# shipped_changed: one line, in plain words, on what this actually changed
+shipped_impact:
+shipped_changed:
 ---
 
 # <Feature> — Architecture Spec
