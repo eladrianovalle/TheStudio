@@ -4,6 +4,8 @@ slug: update-availability-nudge
 ticket: none
 status: shipped
 studio_run: studio/output/tech/run_tech_20260708_164348
+shipped_impact: none
+shipped_changed: The check-updates command shipped and works, but the session hook that was meant to call it installs in none of the ten consuming repos, so nothing has ever nudged anyone — see issue #120.
 ---
 
 # Proactive Update-Availability Nudge — Architecture Spec

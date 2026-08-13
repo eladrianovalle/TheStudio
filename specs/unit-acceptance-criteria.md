@@ -4,6 +4,8 @@ slug: unit-acceptance-criteria
 ticket: none
 status: shipped
 studio_run: (run directory no longer on disk; removed by retention cleanup)
+shipped_impact: major
+shipped_changed: A /forge unit can carry acceptance criteria copied verbatim from an approved spec, and the editor grades each one instead of judging the unit by its title.
 ---
 
 # Unit Acceptance Criteria from the Approved Spec — Architecture Spec

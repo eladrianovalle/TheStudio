@@ -4,6 +4,8 @@ slug: prompt-feature-verification
 ticket: none
 status: shipped
 studio_run: (run directory no longer on disk; removed by retention cleanup)
+shipped_impact: major
+shipped_changed: A prompt-shaped feature's spec now says up front how you would know it works, and the suite goes red if it claims shipped while its evidence file is blank.
 ---
 
 # Pre-committed Verification for Prompt-Shaped Features — Architecture Spec

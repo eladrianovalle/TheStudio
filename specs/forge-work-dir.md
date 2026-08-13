@@ -4,6 +4,8 @@ slug: forge-work-dir
 ticket: forge-worktree
 status: shipped
 studio_run: studio/output/tech/run_tech_20260730_152947
+shipped_impact: major
+shipped_changed: /forge builds in a git worktree when you pass --work-dir, retiring the private script that rewrote the loop before every run.
 ---
 
 # /forge Can Build in a Git Worktree — Architecture Spec

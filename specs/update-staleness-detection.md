@@ -4,6 +4,8 @@ slug: update-staleness-detection
 ticket: none
 status: shipped
 studio_run: (run directory no longer on disk; removed by retention cleanup)
+shipped_impact: major
+shipped_changed: /studio-update can no longer report up to date over a Studio source that is itself behind its own remote.
 ---
 
 # Source-Staleness Detection for `/studio-update` — Architecture Spec

@@ -19,10 +19,11 @@ not that verification happened. The only trigger is a human typing ``shipped``.
 """
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pytest
+
+from stats import VALID_IMPACT, parse_frontmatter
 
 # CI runs pytest with `working-directory: studio`, so relative paths are out.
 # parents[2] is the repo root — the same idiom test_claude_code.py uses.
@@ -54,19 +55,6 @@ def _spec_files(specs_dir: Path) -> list[Path]:
     return sorted(
         path for path in specs_dir.glob("*.md") if not path.name.endswith(_RESULTS_SUFFIX)
     )
-
-
-def _frontmatter_status(spec_text: str) -> str:
-    """The ``status:`` value from the spec's frontmatter, or ``""`` if there isn't one.
-
-    Only the leading ``---`` block counts, so a spec that discusses statuses in its
-    prose doesn't accidentally declare one.
-    """
-    match = re.match(r"---\n(.*?)\n---", spec_text, re.DOTALL)
-    if not match:
-        return ""
-    status = re.search(r"(?m)^status:\s*(\S+)", match.group(1))
-    return status.group(1) if status else ""
 
 
 def _has_verification_section(spec_text: str) -> bool:
@@ -180,12 +168,16 @@ def _violations(
 ) -> list[str]:
     """Every way this spec breaks the convention, in plain sentences.
 
-    ``results_text`` is ``None`` when the results file does not exist. Four rules, and
+    ``results_text`` is ``None`` when the results file does not exist. Five rules, and
     rules 2 to 4 stay quiet unless the spec actually has a Verification section — that
-    tolerance is what leaves a spec with no prose-shaped behavior alone.
+    tolerance is what leaves a spec with no prose-shaped behavior alone. Rule 5 has no
+    such tolerance; see its comment.
+
+    Frontmatter comes from ``stats.parse_frontmatter``, the one reader of it.
     """
     problems: list[str] = []
-    status = _frontmatter_status(spec_text)
+    frontmatter = parse_frontmatter(spec_text)
+    status = frontmatter.get("status", "")
     promised_evidence = _has_verification_section(spec_text)
 
     # Rule 1: known status. A typo (`Shipped`, `ship`, `done`) would otherwise switch
@@ -244,15 +236,55 @@ def _violations(
                     "`status: approved`."
                 )
 
+    # Rule 5: a shipped claim costs an outcome. Not gated on `promised_evidence`: every
+    # feature that shipped changed something, prompt-shaped or not, and this line is the
+    # only record of what. It is also the whole reason `stats` has anything to show.
+    if status == "shipped":
+        # Already stripped by the reader, so a whitespace-only value arrives here as "".
+        impact = frontmatter.get("shipped_impact", "")
+        changed = frontmatter.get("shipped_changed", "")
+        if not impact or not changed:
+            fields = (("shipped_impact", impact), ("shipped_changed", changed))
+            missing = " and ".join(name for name, value in fields if not value)
+            problems.append(
+                f"specs/{spec_name} is marked `status: shipped`, but its frontmatter has no "
+                f"{missing}. Shipping is the claim that this feature landed; those two lines "
+                "are the only record of what landing bought, and they are what `stats` reads. "
+                "Fill them in — impact is one of none, minor, major, and changed is one line "
+                "on what actually changed — or set this spec back to `status: approved`."
+            )
+        elif impact not in VALID_IMPACT:
+            problems.append(
+                f"specs/{spec_name} has `shipped_impact: {impact}`, which is not one of "
+                f"{', '.join(VALID_IMPACT)}. An unrecognized value is counted by nothing and "
+                "read by no one, so pick the bucket that fits."
+            )
+
     return problems
 
 
-def _synthetic_spec(status: str, *, verification: bool, heading: str = "## Verification") -> str:
+def _synthetic_spec(
+    status: str,
+    *,
+    verification: bool,
+    heading: str = "## Verification",
+    impact: str | None = "minor",
+    changed: str | None = "The synthetic feature started doing the synthetic thing.",
+) -> str:
     """A minimal spec body for the synthetic cases below.
 
     `heading` exists so one case can widen it and prove the prefix match is doing real work.
+
+    `impact` and `changed` carry values by default so that every `shipped` case here keeps
+    proving what its name says instead of tripping over rule 5. Pass `None` to leave the
+    line out of the frontmatter entirely — that is how the missing-field cases are built.
     """
-    lines = ["---", "feature: Synthetic", "slug: synthetic", f"status: {status}", "---", ""]
+    lines = ["---", "feature: Synthetic", "slug: synthetic", f"status: {status}"]
+    if impact is not None:
+        lines.append(f"shipped_impact: {impact}")
+    if changed is not None:
+        lines.append(f"shipped_changed: {changed}")
+    lines += ["---", ""]
     lines += ["# Synthetic — Architecture Spec", ""]
     if verification:
         lines += [
@@ -315,6 +347,44 @@ _HOLLOW = _FILLED.replace(_FILLED_LIMITS, _UNANSWERED)
 _MISSING_HEADING = _FILLED.replace(f"## What this doesn't prove\n\n{_FILLED_LIMITS}\n", "")
 _ANSWER_AS_BLOCKQUOTE = _FILLED.replace(_FILLED_LIMITS, f"> {_FILLED_LIMITS}")
 _CRITERION_AS_BLOCKQUOTE = _FILLED.replace(_FILLED_CRITERION, f"> {_FILLED_CRITERION}")
+
+
+class TestFrontmatterReader:
+    """`stats.parse_frontmatter` — the one thing that decides what a spec says.
+
+    Every case in this file leans on it, and each way it can go wrong is silent: a
+    reader that comes back empty switches every rule below off while the suite stays
+    green. So the edges are pinned here directly rather than only through the rules.
+    """
+
+    def test_reads_the_key_value_lines(self):
+        fields = parse_frontmatter("---\nslug: thing\nstatus: shipped\n---\n\n# Thing\n")
+        assert fields == {"slug": "thing", "status": "shipped"}
+
+    def test_a_document_with_no_frontmatter_reads_as_empty(self):
+        assert parse_frontmatter("# Thing\n\nstatus: shipped\n") == {}
+
+    def test_a_block_further_down_the_page_is_not_frontmatter(self):
+        """Specs quote each other's headers. Only a block at the very top declares anything."""
+        assert parse_frontmatter("# Thing\n\nA header looks like:\n\n---\nstatus: shipped\n---\n") == {}
+
+    def test_only_the_leading_block_counts(self):
+        """A spec explaining what `status: shipped` means must not thereby claim it."""
+        text = (
+            "---\nstatus: approved\n---\n\n"
+            "# Thing\n\nSet `status: shipped` once the evidence is in.\n\n"
+            "---\nstatus: shipped\n---\n"
+        )
+        assert parse_frontmatter(text)["status"] == "approved"
+
+    def test_values_are_stripped_and_may_hold_a_colon(self):
+        """`shipped_changed` is a line of freetext, so the first colon ends the key and
+        every colon after it belongs to the sentence."""
+        text = "---\nshipped_changed:   it stopped lying: about being current  \n---\n"
+        assert parse_frontmatter(text)["shipped_changed"] == "it stopped lying: about being current"
+
+    def test_lines_that_are_not_key_value_are_skipped(self):
+        assert parse_frontmatter("---\nstatus: draft\nnot a field\n\n---\n") == {"status": "draft"}
 
 
 class TestRealSpecs:
@@ -554,4 +624,60 @@ class TestSyntheticSpecs:
         assert _violations(
             "synthetic.md", _synthetic_spec("shipped", verification=True),
             "synthetic-eval-results.md", _CRITERION_AS_BLOCKQUOTE,
+        ) == []
+
+    @pytest.mark.parametrize(
+        "impact, changed, named",
+        [
+            (None, None, "shipped_impact and shipped_changed"),
+            (None, "It got faster.", "shipped_impact"),
+            ("minor", None, "shipped_changed"),
+        ],
+    )
+    def test_shipped_without_an_outcome_line_fails(self, impact, changed, named):
+        """Rule 5, the one rule that fires on every shipped spec rather than only the
+        prompt-shaped ones. The evidence file here is fully filled in, so rules 3 and 4
+        have nothing to say and the single complaint has to be this one."""
+        problems = _violations(
+            "synthetic.md",
+            _synthetic_spec("shipped", verification=True, impact=impact, changed=changed),
+            "synthetic-eval-results.md", _FILLED,
+        )
+        assert len(problems) == 1
+        assert f"has no {named}." in problems[0]
+        # The same two honest exits rules 3 and 4 offer.
+        assert "Fill them in" in problems[0]
+        assert "`status: approved`" in problems[0]
+
+    def test_shipped_with_an_impact_outside_the_vocabulary_fails(self):
+        """A bucket nothing counts is worse than a blank: the dashboard would drop it
+        silently while the spec looked complete."""
+        problems = _violations(
+            "synthetic.md", _synthetic_spec("shipped", verification=True, impact="huge"),
+            "synthetic-eval-results.md", _FILLED,
+        )
+        assert len(problems) == 1
+        assert "`shipped_impact: huge`" in problems[0]
+        assert "none, minor, major" in problems[0]
+
+    @pytest.mark.parametrize("status", ["draft", "approved"])
+    @pytest.mark.parametrize(
+        "impact, changed", [(None, None), ("huge", "It got faster.")],
+    )
+    def test_the_outcome_lines_are_not_demanded_before_shipped(self, status, impact, changed):
+        """You do not know what a feature changed until it has changed something.
+        Demanding the answer at `draft` is how you get an invented one."""
+        assert _violations(
+            "synthetic.md",
+            _synthetic_spec(status, verification=True, impact=impact, changed=changed),
+            "synthetic-eval-results.md", _SKELETON,
+        ) == []
+
+    def test_an_impact_of_none_is_a_legitimate_answer(self):
+        """A feature that shipped and changed nothing downstream is a real record, and
+        the field is checked for emptiness, not truthiness — `none` must not read as blank."""
+        assert _violations(
+            "synthetic.md",
+            _synthetic_spec("shipped", verification=True, impact="none"),
+            "synthetic-eval-results.md", _FILLED,
         ) == []

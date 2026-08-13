@@ -4,6 +4,8 @@ slug: source-repo-detection
 ticket: bridge-detection
 status: shipped
 studio_run: studio/output/tech/run_tech_20260730_134434
+shipped_impact: major
+shipped_changed: Runs from Studio's own repo stopped filing themselves as a guest project, so artifacts land in studio/output/ again and nineteen stranded runs moved back.
 ---
 
 # Studio Recognizes Its Own Source Repo — Architecture Spec
