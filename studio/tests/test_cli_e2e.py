@@ -192,58 +192,135 @@ class TestCLIValidate:
         assert result.returncode == 0
 
 
-class TestCLIOutcomes:
-    """The rate -> export-outcomes -> import-outcomes -> stats bridge."""
+class TestRetiredVolunteerCommands:
+    """Nothing left asks a person to type a number in."""
 
-    def _seed_rated_run(self, root: Path) -> Path:
-        run_dir = root / "output" / "studio" / "run_studio_20260101_000000"
-        run_dir.mkdir(parents=True)
-        (run_dir / "run.json").write_text(json.dumps({
-            "run_id": "run_studio_20260101_000000", "phase": "studio",
-            "status": "completed", "verdict": "APPROVED",
-        }))
-        return run_dir
+    @pytest.mark.parametrize("command", ["rate", "export-outcomes", "import-outcomes"])
+    def test_command_is_rejected_as_an_invalid_choice(self, cli_studio_root, command):
+        result = _run_cli(command, "--help", studio_root=cli_studio_root)
+        assert result.returncode != 0
+        assert "invalid choice" in result.stderr
+        assert command in result.stderr
 
-    def test_rate_records_outcome(self, cli_studio_root):
-        run_dir = self._seed_rated_run(cli_studio_root)
-        result = _run_cli(
-            "rate", "--run-dir", str(run_dir), "--score", "4",
-            "--shipped", "yes", "--impact", "major", "--changed", "cut lobby scope",
-            studio_root=cli_studio_root,
+
+class TestShippedFeaturesBlock:
+    """The dashboard's outcome data is read off spec frontmatter, not typed in.
+
+    ``cli_studio_root`` puts STUDIO_ROOT and STUDIO_ARTIFACT_ROOT on the same
+    directory, which is the source-repo shape: ``specs/`` then sits beside it,
+    one level up. The consuming-repo case gets its own artifact root below.
+    """
+
+    def _write_spec(self, specs_dir: Path, slug: str, *, status="shipped",
+                    impact="major", changed="cut the volunteer path") -> None:
+        specs_dir.mkdir(parents=True, exist_ok=True)
+        (specs_dir / f"{slug}.md").write_text(
+            "---\n"
+            f"feature: {slug}\n"
+            f"slug: {slug}\n"
+            f"status: {status}\n"
+            f"shipped_impact: {impact}\n"
+            f"shipped_changed: {changed}\n"
+            "---\n\n# Spec\n",
+            encoding="utf-8",
         )
+
+    def _finalize_a_run(self, root: Path) -> str:
+        prep = _run_cli(
+            "prepare", "--phase", "tech", "--text", "Build API", "--no-scopes",
+            studio_root=root,
+        )
+        assert prep.returncode == 0, prep.stderr
+        run_id = next(
+            word.strip(".")
+            for line in prep.stdout.splitlines()
+            for word in line.split()
+            if word.startswith("run_tech_")
+        )
+        run_dir = root / "output" / "tech" / run_id
+        (run_dir / "advocate_1.md").write_text("# Advocate\nProposal")
+        (run_dir / "contrarian_1.md").write_text("# Contrarian\nVERDICT: APPROVED")
+        (run_dir / "summary.md").write_text("# Summary\nDone")
+        fin = _run_cli(
+            "finalize", "--phase", "tech", "--run-id", run_id,
+            "--status", "completed", "--verdict", "APPROVED",
+            studio_root=root,
+        )
+        assert fin.returncode == 0, fin.stderr
+        return run_id
+
+    def test_shipped_specs_reach_the_dashboard(self, cli_studio_root):
+        self._finalize_a_run(cli_studio_root)
+        specs = cli_studio_root.parent / "specs"
+        self._write_spec(specs, "retire-volunteer-metrics")
+        self._write_spec(specs, "still-cooking", status="approved",
+                         changed="should not appear")
+
+        dashboard = _run_cli("stats", studio_root=cli_studio_root)
+
+        assert dashboard.returncode == 0, dashboard.stderr
+        assert "Shipped features (from specs/):" in dashboard.stdout
+        assert "1 spec(s) at status: shipped" in dashboard.stdout
+        assert "Impact:  none=0 minor=0 major=1" in dashboard.stdout
+        assert "[retire-volunteer-metrics] cut the volunteer path" in dashboard.stdout
+        assert "should not appear" not in dashboard.stdout
+
+    def test_empty_state_when_a_repo_has_no_specs_dir(self, cli_studio_root):
+        self._finalize_a_run(cli_studio_root)
+        assert not (cli_studio_root.parent / "specs").exists()
+
+        dashboard = _run_cli("stats", studio_root=cli_studio_root)
+
+        assert dashboard.returncode == 0, dashboard.stderr
+        assert "Total runs: 1" in dashboard.stdout, "no finalized run reached stats"
+        assert (
+            "No shipped features recorded yet — a spec gains a line here when its "
+            "frontmatter says status: shipped."
+        ) in dashboard.stdout
+
+    def test_empty_state_survives_a_repo_with_no_runs_at_all(self, cli_studio_root):
+        """The zero-runs early return is a second path through the block, not a hole."""
+        dashboard = _run_cli("stats", studio_root=cli_studio_root)
+
+        assert dashboard.returncode == 0, dashboard.stderr
+        assert "No local runs found yet" in dashboard.stdout
+        assert (
+            "No shipped features recorded yet — a spec gains a line here when its "
+            "frontmatter says status: shipped."
+        ) in dashboard.stdout
+
+    def test_a_consuming_repos_specs_are_found_under_dot_studio(self, cli_studio_root, tmp_path):
+        """The consuming-repo branch: artifact root elsewhere, specs in .studio/specs.
+
+        This repo has no runs either, so it doubles as the "features before any
+        run" case: specs reach the dashboard without a single finalized run.
+        """
+        consumer = tmp_path / "my_game"
+        (consumer / ".studio").mkdir(parents=True)
+        self._write_spec(
+            consumer / ".studio" / "specs", "lobby-rewrite",
+            impact="minor", changed="halved the lobby scope",
+        )
+
+        dashboard = _run_cli(
+            "stats", "--artifact-root", str(consumer), studio_root=cli_studio_root,
+        )
+
+        assert dashboard.returncode == 0, dashboard.stderr
+        assert "[lobby-rewrite] halved the lobby scope" in dashboard.stdout
+
+    def test_json_dashboard_carries_shipped_specs_and_no_volunteer_keys(self, cli_studio_root):
+        self._finalize_a_run(cli_studio_root)
+        self._write_spec(cli_studio_root.parent / "specs", "retire-volunteer-metrics")
+
+        result = _run_cli("stats", "--json", studio_root=cli_studio_root)
+
         assert result.returncode == 0, result.stderr
-        rating = json.loads((run_dir / "rating.json").read_text())
-        assert rating["outcome"] == {"shipped": "yes", "impact": "major", "changed": "cut lobby scope"}
-
-    def test_export_import_stats_roundtrip(self, cli_studio_root, tmp_path):
-        run_dir = self._seed_rated_run(cli_studio_root)
-        _run_cli(
-            "rate", "--run-dir", str(run_dir), "--score", "4",
-            "--shipped", "yes", "--impact", "major", "--changed", "cut lobby scope",
-            studio_root=cli_studio_root,
-        )
-        export_path = tmp_path / "export.jsonl"
-        exp = _run_cli(
-            "export-outcomes", "--repo", "pictorly", "--out", str(export_path),
-            studio_root=cli_studio_root,
-        )
-        assert exp.returncode == 0, exp.stderr
-        records = [json.loads(x) for x in export_path.read_text().splitlines() if x.strip()]
-        assert records and records[0]["repo"] == "pictorly"
-
-        imp = _run_cli("import-outcomes", "--from", str(export_path), studio_root=cli_studio_root)
-        assert imp.returncode == 0, imp.stderr
-        ledger = cli_studio_root / "knowledge" / "outcomes.jsonl"
-        assert ledger.is_file()
-
-        # Re-import must dedup, not duplicate.
-        _run_cli("import-outcomes", "--from", str(export_path), studio_root=cli_studio_root)
-        assert len([x for x in ledger.read_text().splitlines() if x.strip()]) == 1
-
-        stats = _run_cli("stats", studio_root=cli_studio_root)
-        assert stats.returncode == 0, stats.stderr
-        assert "Outcomes (did it ship" in stats.stdout
-        assert "cut lobby scope" in stats.stdout
+        payload = json.loads(result.stdout)
+        assert payload["shipped_specs"]["records"] == 1
+        assert payload["shipped_specs"]["impact"]["major"] == 1
+        for key in ("outcomes", "ratings"):
+            assert key not in payload
 
 
 class TestRetiredMetricsCommands:

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 import run_phase
-from integrations.slack_digest import load_integrations_config
+from integrations.slack_digest import INTEGRATIONS_FILENAME, load_integrations_config
 from conftest import make_prepare_args, make_finalize_args
 
 
@@ -276,11 +276,11 @@ def test_source_repo_resolves_integrations_config_inside_studio(tmp_path, monkey
     repo_root, studio_root = _make_source_repo(tmp_path, monkeypatch)
     monkeypatch.chdir(repo_root)
 
-    resolved = run_phase.get_artifact_root() / ".studio" / run_phase.INTEGRATIONS_FILENAME
+    resolved = run_phase.get_artifact_root() / ".studio" / INTEGRATIONS_FILENAME
 
-    assert resolved == studio_root.resolve() / ".studio" / run_phase.INTEGRATIONS_FILENAME
+    assert resolved == studio_root.resolve() / ".studio" / INTEGRATIONS_FILENAME
     # Not the repo root's .studio/, which is where it resolved before the detection fix.
-    assert resolved != repo_root.resolve() / ".studio" / run_phase.INTEGRATIONS_FILENAME
+    assert resolved != repo_root.resolve() / ".studio" / INTEGRATIONS_FILENAME
 
 
 def test_no_integrations_config_means_no_webhook_post(tmp_path, monkeypatch):
@@ -292,7 +292,7 @@ def test_no_integrations_config_means_no_webhook_post(tmp_path, monkeypatch):
     """
     repo_root, studio_root = _make_source_repo(tmp_path, monkeypatch)
     monkeypatch.chdir(repo_root)
-    assert not (studio_root / ".studio" / run_phase.INTEGRATIONS_FILENAME).exists()
+    assert not (studio_root / ".studio" / INTEGRATIONS_FILENAME).exists()
 
     config = load_integrations_config(run_phase.get_artifact_root())
 
@@ -554,46 +554,8 @@ def test_prepare_with_scopes_integration(studio_root):
 
 
 # ---------------------------------------------------------------------------
-# Human quality ratings & cross-run stats
+# Cross-run stats
 # ---------------------------------------------------------------------------
-
-
-def test_record_rating_writes_rating_json(tmp_path):
-    """rate writes score + note + timestamp to rating.json."""
-    run_dir = tmp_path / "run_market_001"
-    run_dir.mkdir()
-
-    run_phase.record_rating(argparse.Namespace(run_dir=run_dir, score=4, note="solid market read"))
-
-    rating = run_phase._load_rating(run_dir)
-    assert rating["score"] == 4
-    assert rating["note"] == "solid market read"
-    assert "rated_iso" in rating
-
-
-def test_record_rating_overwrites(tmp_path):
-    """Re-rating a run replaces the prior rating."""
-    run_dir = tmp_path / "run_market_001"
-    run_dir.mkdir()
-    run_phase.record_rating(argparse.Namespace(run_dir=run_dir, score=2, note=""))
-    run_phase.record_rating(argparse.Namespace(run_dir=run_dir, score=5, note="much better on rerun"))
-
-    rating = run_phase._load_rating(run_dir)
-    assert rating["score"] == 5
-    assert rating["note"] == "much better on rerun"
-
-
-def test_load_rating_absent(tmp_path):
-    """_load_rating returns None when no rating exists."""
-    run_dir = tmp_path / "run_market_001"
-    run_dir.mkdir()
-    assert run_phase._load_rating(run_dir) is None
-
-
-def test_record_rating_missing_dir(tmp_path):
-    """rate raises on a non-existent run directory."""
-    with pytest.raises(FileNotFoundError):
-        run_phase.record_rating(argparse.Namespace(run_dir=tmp_path / "nope", score=3, note=None))
 
 
 class _DP:
@@ -609,28 +571,26 @@ def test_aggregate_stats_empty():
     agg = run_phase.aggregate_stats([])
     assert agg["total_runs"] == 0
     assert agg["approval_rate"] is None
-    assert agg["ratings"]["count"] == 0
+    assert "ratings" not in agg
 
 
 def test_aggregate_stats_full():
-    """aggregate_stats rolls up phases, verdicts, ratings, decisions."""
+    """aggregate_stats rolls up phases, verdicts, decisions."""
     runs = [
         {
             "run_id": "run_market_1", "phase": "market", "status": "COMPLETED",
             "verdict": "APPROVED",
-            "_rating": {"score": 4, "note": "good"},
             "_decisions": [_DP("P0", answer="yes"), _DP("P2")],
         },
         {
             "run_id": "run_market_2", "phase": "market", "status": "COMPLETED",
             "verdict": "REJECTED",
-            "_rating": {"score": 2, "note": "thin"},
             "_decisions": [_DP("P1")],
         },
         {
             "run_id": "run_tech_1", "phase": "tech", "status": "PENDING",
             "verdict": "UNKNOWN",
-            "_rating": None, "_decisions": [],
+            "_decisions": [],
         },
     ]
     agg = run_phase.aggregate_stats(runs)
@@ -640,11 +600,6 @@ def test_aggregate_stats_full():
     assert agg["by_status"] == {"COMPLETED": 2, "PENDING": 1}
     assert agg["verdicts"] == {"APPROVED": 1, "REJECTED": 1, "UNKNOWN": 1}
     assert agg["approval_rate"] == 0.5  # 1 approved of 2 decided
-
-    assert agg["ratings"]["count"] == 2
-    assert agg["ratings"]["avg"] == 3.0
-    assert agg["ratings"]["by_phase_avg"]["market"] == 3.0
-    assert agg["ratings"]["lowest"][0]["score"] == 2  # lowest first
 
     assert agg["decisions"]["total"] == 3
     assert agg["decisions"]["by_priority"] == {"P0": 1, "P1": 1, "P2": 1}
@@ -668,111 +623,180 @@ def test_parse_usage_log():
 
 
 def test_format_stats_smoke():
-    """format_stats renders without error and surfaces a rating hint when unrated."""
+    """format_stats renders the dashboard shell without any optional block."""
     agg = run_phase.aggregate_stats([
         {"run_id": "r1", "phase": "market", "status": "COMPLETED",
-         "verdict": "APPROVED", "_rating": None, "_decisions": []},
+         "verdict": "APPROVED", "_decisions": []},
     ])
     out = run_phase.format_stats(agg)
     assert "Studio Cross-Run Stats" in out
-    assert "No runs rated yet" in out
+    assert "Total runs: 1" in out
 
 
-# --- Outcome capture (quantify + qualify run results) ---
+# --- Shipped features (read off spec frontmatter) ---
 
-def test_summarize_outcomes_empty():
-    """No records yields a zeroed outcome summary with no ship rate."""
-    from stats import summarize_outcomes
-    s = summarize_outcomes([])
-    assert s["records"] == 0
-    assert s["ship_rate"] is None
-    assert s["recent_changed"] == []
-
-
-def test_summarize_outcomes_counts_and_rate():
-    """summarize_outcomes tallies shipped/impact, computes ship rate, keeps notes."""
-    from stats import summarize_outcomes
-    records = [
-        {"repo": "a", "run_id": "r1", "shipped": "yes", "impact": "major", "changed": "shipped X"},
-        {"repo": "a", "run_id": "r2", "shipped": "no", "impact": "none"},
-        {"repo": "b", "run_id": "r3", "shipped": "partial", "impact": "minor", "changed": "half of Y"},
-        {"repo": "b", "run_id": "r4"},  # rated but no outcome fields
-    ]
-    s = summarize_outcomes(records)
-    assert s["records"] == 4
-    assert s["with_outcome"] == 3
-    assert s["by_repo"] == {"a": 2, "b": 2}
-    assert s["shipped"] == {"yes": 1, "no": 1, "partial": 1}
-    assert s["ship_rate"] == 1 / 3
-    assert s["impact"] == {"none": 1, "minor": 1, "major": 1}
-    assert [c["changed"] for c in s["recent_changed"]] == ["shipped X", "half of Y"]
-
-
-def test_write_rating_records_outcome_block(tmp_path):
-    """_write_rating stores shipped/impact/changed under an outcome block."""
-    rating = run_phase._write_rating(
-        tmp_path, 4, "solid", shipped="yes", impact="major", changed="  cut scope  "
+def _spec(status="shipped", *, slug="a-feature", impact="minor", changed="it changed a thing"):
+    """A spec file's text: frontmatter first, then prose that must not be parsed."""
+    return (
+        "---\n"
+        f"feature: A Feature\n"
+        f"slug: {slug}\n"
+        f"status: {status}\n"
+        f"shipped_impact: {impact}\n"
+        f"shipped_changed: {changed}\n"
+        "---\n\n"
+        "# A Feature\n\nProse that says status: shipped without meaning it.\n"
     )
-    assert rating["outcome"] == {"shipped": "yes", "impact": "major", "changed": "cut scope"}
-    on_disk = json.loads((tmp_path / "rating.json").read_text())
-    assert on_disk["outcome"]["changed"] == "cut scope"
 
 
-def test_write_rating_omits_empty_outcome(tmp_path):
-    """A rating with no outcome fields carries no outcome block."""
-    rating = run_phase._write_rating(tmp_path, 3, "")
-    assert "outcome" not in rating
+def test_summarize_shipped_specs_empty():
+    """No shipped specs yields a zeroed summary, not a missing key."""
+    from stats import summarize_shipped_specs
+    summary = summarize_shipped_specs([])
+    assert summary["records"] == 0
+    assert summary["impact"] == {"none": 0, "minor": 0, "major": 0}
+    assert summary["recent_changed"] == []
 
 
-def test_outcome_record_from_run_includes_unrated():
-    """Unrated runs still yield a record (null score/outcome); rated runs flatten it."""
-    unrated = run_phase._outcome_record_from_run(
-        {"run_id": "r", "phase": "market", "verdict": "APPROVED",
-         "status": "completed", "_rating": None},
-        "repo",
-    )
-    assert unrated["repo"] == "repo"
-    assert unrated["run_id"] == "r"
-    assert unrated["phase"] == "market"
-    assert unrated["verdict"] == "APPROVED"
-    assert unrated["score"] is None
-    assert unrated["shipped"] is None
-    assert unrated["rated_iso"] is None
-    rec = run_phase._outcome_record_from_run(
-        {
-            "run_id": "run_studio_1", "phase": "studio", "verdict": "APPROVED",
-            "status": "completed", "metrics": {"total_tokens": 900},  # legacy key, must be ignored
-            "_rating": {"score": 5, "outcome": {"shipped": "yes", "impact": "minor"}},
-        },
-        "pictorly",
-    )
-    assert rec["repo"] == "pictorly"
-    assert rec["shipped"] == "yes"
-    assert "total_tokens" not in rec
-    assert rec["changed"] is None
-
-
-def test_merge_outcomes_local_wins_on_dedup():
-    """_merge_outcomes dedups by (repo, run_id); local record overrides the ledger."""
-    ledger = [{"repo": "a", "run_id": "r1", "shipped": "no"}]
-    local = [{"repo": "a", "run_id": "r1", "shipped": "yes"}, {"repo": "a", "run_id": "r2"}]
-    merged = run_phase._merge_outcomes(ledger, local)
-    by_id = {r["run_id"]: r for r in merged}
-    assert len(merged) == 2
-    assert by_id["r1"]["shipped"] == "yes"  # local won
-
-
-def test_format_stats_renders_outcomes_section():
-    """format_stats includes the outcomes block when given a summary."""
-    from stats import summarize_outcomes
-    agg = run_phase.aggregate_stats([])
-    outcomes = summarize_outcomes([
-        {"repo": "pictorly", "run_id": "r1", "shipped": "yes", "impact": "major", "changed": "did a thing"},
+def test_summarize_shipped_specs_tallies_impact_and_keeps_change_lines():
+    """Each record counts once in its bucket and contributes its change line."""
+    from stats import summarize_shipped_specs
+    summary = summarize_shipped_specs([
+        {"slug": "one", "impact": "major", "changed": "cut lobby scope in half"},
+        {"slug": "two", "impact": "minor", "changed": "docs stopped lying"},
+        {"slug": "three", "impact": "major", "changed": ""},
+        {"slug": "four", "impact": "huge", "changed": "unrecognized bucket"},
     ])
-    out = run_phase.format_stats(agg, outcomes=outcomes)
-    assert "Outcomes (did it ship" in out
-    assert "ship rate 100%" in out
-    assert "did a thing" in out
+    assert summary["records"] == 4
+    assert summary["impact"] == {"none": 0, "minor": 1, "major": 2}
+    assert [item["slug"] for item in summary["recent_changed"]] == ["one", "two", "four"]
+
+
+def test_summarize_shipped_specs_keeps_only_the_last_eight_change_lines():
+    """The dashboard shows recent changes, not the whole history."""
+    from stats import summarize_shipped_specs
+    summary = summarize_shipped_specs([
+        {"slug": f"spec-{i}", "impact": "minor", "changed": f"change {i}"}
+        for i in range(12)
+    ])
+    assert summary["records"] == 12
+    assert [item["slug"] for item in summary["recent_changed"]] == [
+        f"spec-{i}" for i in range(4, 12)
+    ]
+
+
+def test_format_stats_renders_the_shipped_specs_block():
+    """The block names its source, counts the specs, tallies impact, lists changes."""
+    from stats import summarize_shipped_specs
+    agg = run_phase.aggregate_stats([
+        {"run_id": "r1", "phase": "tech", "status": "COMPLETED",
+         "verdict": "APPROVED", "_decisions": []},
+    ])
+    shipped = summarize_shipped_specs([
+        {"slug": "doc-parity-tests", "impact": "minor",
+         "changed": "a new CLI command can no longer ship undocumented"},
+    ])
+    out = run_phase.format_stats(agg, shipped_specs=shipped)
+    assert "Shipped features (from specs/):" in out
+    assert "1 spec(s) at status: shipped" in out
+    assert "Impact:  none=0 minor=1 major=0" in out
+    assert "[doc-parity-tests] a new CLI command can no longer ship undocumented" in out
+
+
+def test_format_stats_truncates_a_long_change_line():
+    """A rambling change line is cut to 80 characters so the block stays readable."""
+    from stats import summarize_shipped_specs
+    agg = run_phase.aggregate_stats([
+        {"run_id": "r1", "phase": "tech", "status": "COMPLETED",
+         "verdict": "APPROVED", "_decisions": []},
+    ])
+    shipped = summarize_shipped_specs([
+        {"slug": "long", "impact": "major", "changed": "x" * 200},
+    ])
+    out = run_phase.format_stats(agg, shipped_specs=shipped)
+    rendered = next(line for line in out.splitlines() if "[long]" in line)
+    assert rendered.strip() == f"[long] {'x' * 77}..."
+
+
+def test_format_stats_shipped_specs_empty_state_is_one_line():
+    """The empty state says how a line gets here, in a single line."""
+    from stats import summarize_shipped_specs
+    agg = run_phase.aggregate_stats([
+        {"run_id": "r1", "phase": "tech", "status": "COMPLETED",
+         "verdict": "APPROVED", "_decisions": []},
+    ])
+    out = run_phase.format_stats(agg, shipped_specs=summarize_shipped_specs([]))
+    empty_state = [line for line in out.splitlines() if "No shipped features recorded yet" in line]
+    assert empty_state == [
+        "  No shipped features recorded yet — a spec gains a line here when its "
+        "frontmatter says status: shipped."
+    ]
+
+
+def test_format_stats_shows_shipped_specs_with_no_runs_at_all():
+    """A repo can have shipped features before its first finalized run."""
+    from stats import summarize_shipped_specs
+    shipped = summarize_shipped_specs([
+        {"slug": "first-thing", "impact": "major", "changed": "the very first landing"},
+    ])
+    out = run_phase.format_stats(run_phase.aggregate_stats([]), shipped_specs=shipped)
+    assert "No local runs found yet" in out
+    assert "Shipped features (from specs/):" in out
+    assert "[first-thing] the very first landing" in out
+
+
+def test_get_specs_dir_climbs_out_of_studio_in_the_source_repo(tmp_path, monkeypatch):
+    """specs/ sits beside studio/, so the source-repo branch has to climb one level."""
+    studio_root = tmp_path / "TheGameStudio" / "studio"
+    studio_root.mkdir(parents=True)
+    monkeypatch.setenv("STUDIO_ROOT", str(studio_root))
+    monkeypatch.setenv("STUDIO_ARTIFACT_ROOT", str(studio_root))
+    monkeypatch.setattr(run_phase, "_artifact_root_override", None)
+
+    assert run_phase.get_specs_dir() == studio_root.parent / "specs"
+
+
+def test_get_specs_dir_is_studio_local_in_a_consuming_repo(tmp_path, monkeypatch):
+    """In a repo that installed Studio, /spec writes under .studio/specs."""
+    repo, snapshot = _installed(tmp_path, monkeypatch)
+    monkeypatch.setenv("STUDIO_ARTIFACT_ROOT", str(repo))
+
+    assert run_phase.get_specs_dir() == repo / ".studio" / "specs"
+    assert snapshot not in run_phase.get_specs_dir().parents
+
+
+def test_shipped_spec_records_reads_only_shipped_specs(tmp_path, monkeypatch):
+    """Frontmatter decides: draft and approved specs contribute nothing."""
+    studio_root = tmp_path / "TheGameStudio" / "studio"
+    studio_root.mkdir(parents=True)
+    specs = studio_root.parent / "specs"
+    specs.mkdir()
+    (specs / "shipped-one.md").write_text(
+        _spec(slug="shipped-one", impact="major", changed="cut the volunteer path"),
+        encoding="utf-8",
+    )
+    (specs / "still-approved.md").write_text(_spec("approved", slug="still-approved"), encoding="utf-8")
+    (specs / "shipped-one-eval-results.md").write_text(_spec(slug="eval"), encoding="utf-8")
+    monkeypatch.setenv("STUDIO_ROOT", str(studio_root))
+    monkeypatch.setenv("STUDIO_ARTIFACT_ROOT", str(studio_root))
+    monkeypatch.setattr(run_phase, "_artifact_root_override", None)
+
+    records = run_phase._shipped_spec_records()
+
+    assert records == [
+        {"slug": "shipped-one", "impact": "major", "changed": "cut the volunteer path"}
+    ]
+
+
+def test_shipped_spec_records_is_empty_without_a_specs_dir(tmp_path, monkeypatch):
+    """A repo that never ran /spec gets an empty list, not an exception."""
+    studio_root = tmp_path / "TheGameStudio" / "studio"
+    studio_root.mkdir(parents=True)
+    monkeypatch.setenv("STUDIO_ROOT", str(studio_root))
+    monkeypatch.setenv("STUDIO_ARTIFACT_ROOT", str(studio_root))
+    monkeypatch.setattr(run_phase, "_artifact_root_override", None)
+
+    assert run_phase._shipped_spec_records() == []
 
 
 # --- Session health (auto-measured trends from session.json) ---
@@ -1003,6 +1027,8 @@ def test_format_stats_omits_session_health_when_empty():
 
 
 class _FakeStdin:
+    """Stands in for sys.stdin so a test can claim to be (or not be) a terminal."""
+
     def __init__(self, tty):
         self._tty = tty
 
@@ -1010,58 +1036,16 @@ class _FakeStdin:
         return self._tty
 
 
-def test_prompt_for_rating_nudge_when_non_tty(tmp_path, monkeypatch, capsys):
-    """Non-interactive finalize prints a copy-paste nudge, never blocks, writes nothing."""
-    run_dir = tmp_path / "run_market_001"
-    run_dir.mkdir()
-    monkeypatch.setattr(run_phase.sys, "stdin", _FakeStdin(False))
+def test_finalize_asks_for_nothing_even_at_a_terminal(studio_root, monkeypatch, capsys):
+    """finalize never stops to ask for a score, and writes no rating.json.
 
-    run_phase._prompt_for_rating(run_dir)
-
-    out = capsys.readouterr().out
-    assert "rate --run-dir" in out
-    assert run_phase._load_rating(run_dir) is None
-
-
-def test_prompt_for_rating_interactive_records(tmp_path, monkeypatch):
-    """At a TTY, a valid score + note is recorded."""
-    run_dir = tmp_path / "run_market_001"
-    run_dir.mkdir()
+    The TTY is what carries this: the retired prompt was interactive at a
+    terminal and only printed a nudge otherwise, so a non-TTY test would pass
+    against the old code too.
+    """
     monkeypatch.setattr(run_phase.sys, "stdin", _FakeStdin(True))
-    answers = iter(["4", "solid positioning"])
-    monkeypatch.setattr("builtins.input", lambda *a: next(answers))
+    monkeypatch.setattr("builtins.input", lambda *a: pytest.fail("finalize asked for input"))
 
-    run_phase._prompt_for_rating(run_dir)
-
-    rating = run_phase._load_rating(run_dir)
-    assert rating["score"] == 4
-    assert rating["note"] == "solid positioning"
-
-
-def test_prompt_for_rating_skip_blank(tmp_path, monkeypatch):
-    """Pressing Enter at the prompt skips without writing a rating."""
-    run_dir = tmp_path / "run_market_001"
-    run_dir.mkdir()
-    monkeypatch.setattr(run_phase.sys, "stdin", _FakeStdin(True))
-    monkeypatch.setattr("builtins.input", lambda *a: "")
-
-    run_phase._prompt_for_rating(run_dir)
-    assert run_phase._load_rating(run_dir) is None
-
-
-def test_prompt_for_rating_out_of_range_skips(tmp_path, monkeypatch):
-    """An out-of-range score is rejected, not clamped."""
-    run_dir = tmp_path / "run_market_001"
-    run_dir.mkdir()
-    monkeypatch.setattr(run_phase.sys, "stdin", _FakeStdin(True))
-    monkeypatch.setattr("builtins.input", lambda *a: "9")
-
-    run_phase._prompt_for_rating(run_dir)
-    assert run_phase._load_rating(run_dir) is None
-
-
-def test_finalize_prints_rate_nudge_by_default(studio_root, capsys):
-    """finalize closes with a rating nudge unless suppressed."""
     run_id = run_phase.prepare_run(make_prepare_args())
     run_dir = studio_root / "output" / "market" / run_id
     (run_dir / "advocate_1.md").write_text("a", encoding="utf-8")
@@ -1069,21 +1053,12 @@ def test_finalize_prints_rate_nudge_by_default(studio_root, capsys):
     (run_dir / "summary.md").write_text("s", encoding="utf-8")
 
     run_phase.finalize_run(make_finalize_args(run_id=run_id))
-    assert "Rate this run" in capsys.readouterr().out
 
-
-def test_finalize_no_rate_prompt_flag(studio_root, capsys):
-    """--no-rate-prompt suppresses the closing nudge (used by the slash commands)."""
-    run_id = run_phase.prepare_run(make_prepare_args())
-    run_dir = studio_root / "output" / "market" / run_id
-    (run_dir / "advocate_1.md").write_text("a", encoding="utf-8")
-    (run_dir / "contrarian_1.md").write_text("c", encoding="utf-8")
-    (run_dir / "summary.md").write_text("s", encoding="utf-8")
-
-    args = make_finalize_args(run_id=run_id)
-    args.no_rate_prompt = True
-    run_phase.finalize_run(args)
-    assert "Rate this run" not in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert f"Finalized {run_id}" in out, "finalize never ran, so it proves nothing"
+    assert "Rate this run" not in out
+    assert "rate --run-dir" not in out
+    assert not (run_dir / "rating.json").exists()
 
 
 # ---------------------------------------------------------------------------

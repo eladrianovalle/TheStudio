@@ -25,10 +25,7 @@ Supported commands:
 | `show-clarity` | Displays current project clarity scores. |
 | `set-clarity` | Overrides a topic's clarity score. |
 | `recompute-clarity` | Recomputes clarity from a run's decisions. |
-| `rate` | Records a human quality rating (1-5, optional note) plus an optional run outcome (did it ship, what changed) into `rating.json`. |
-| `stats` | Cross-run diagnostics dashboard: run outcomes (ship rate, impact, what changed), verdict/approval rate, avg + lowest human ratings, decision priority mix + answer rate, and prepare-usage counts. Supports `--phase`, `--json`, `--artifact-root`. |
-| `export-outcomes` | Exports this repo's rated runs as portable JSONL outcome records for another repo to import. |
-| `import-outcomes` | Merges a JSONL outcomes export into the central ledger, deduping by (repo, run_id), so `stats` here can see other repos' results. |
+| `stats` | Cross-run diagnostics dashboard: shipped features read from spec frontmatter, verdict/approval rate, decision priority mix + answer rate, session health, and prepare-usage counts. Supports `--phase`, `--json`, `--artifact-root`. |
 | `offload` | Analyzes CLAUDE.md for content safe to offload to companion docs. Classifies sections, scores pointer strength, generates reports. |
 | `init` | Installs Studio into a target project directory. Also installs a per-user SessionStart hook (in `.claude/settings.local.json`) that quietly checks, once per session, whether your installed Studio is behind upstream and nudges you to run `/studio-update`. Pass `--no-hook` to skip installing it. |
 | `check-updates` | The lightweight check the SessionStart hook runs (you rarely call it by hand). Compares the commit your Studio was installed from against the source's current `origin/main` HEAD; if they differ, it prints a one-line "an update is available" nudge, otherwise it's silent. Network is a bounded, best-effort `git fetch` at most once per 24h (cached in `.studio/update-check.json`), so it's near-instant on repeat sessions and safe offline. It nudges once per new upstream commit, never changes files, and always exits 0 (a session-start hook must never fail your session). Opt out durably by creating an empty `.studio/update-check.off` file. Only works on the machine that ran `studio init` (the one with the Studio source); a teammate who merely cloned the repo gets a silent no-op. |
@@ -82,71 +79,31 @@ Inside each run directory:
 | `--verdict VERDICT` | ❌ | - | `APPROVED`, `REJECTED`, `N/A`, or any label you prefer. |
 | `--iterations-run N` | ❌ | auto-count | Override if the assistant ran extra loops or skipped iterations. |
 | `--summary PATH` | ❌ | auto-detected | Provide a custom summary path if you store it elsewhere. |
-| `--no-rate-prompt` | ❌ | `false` | Suppress the end-of-run quality-rating prompt/nudge (the slash commands pass this and ask conversationally instead). |
 | `--artifact-root` | ❌ | None | Override where artifacts are written. Defaults to cwd (external repo) or Studio root. |
 
-`finalize` enforces the artifact checklist (see Section 3). Missing files raise a `FileNotFoundError` describing the gaps. On a `COMPLETED` run it closes with a rating prompt (interactive at a TTY, otherwise a copy-paste `rate` nudge) unless `--no-rate-prompt` is given.
+`finalize` enforces the artifact checklist (see Section 3). Missing files raise a `FileNotFoundError` describing the gaps. It asks you for nothing: there is no rating prompt and no nudge, at a terminal or anywhere else.
 
-`finalize` also has two additive side effects, both soft-fail (a failure prints a warning but never breaks finalize):
+`finalize` writes `session.json` into the run directory — the automatic, judgment-free session-health record (schema in Section 4.1) — soft-fail, so a failure there prints a warning but never breaks finalize.
 
-- Writes `session.json` into the run directory: the automatic, judgment-free session-health record (schema in Section 4.1).
-- **Ledger auto-append.** When `[outcomes] ledger_path = "<path>"` is set under an `[outcomes]` table in `.studio/integrations.toml` (the same file that holds the Slack/n8n webhook config), `finalize` appends this run's outcome record to that local JSONL file, deduped by `(repo, run_id)` so re-finalizing refreshes the record rather than duplicating it. The record is the same shape `export-outcomes` emits (see Section 1.5), and unrated runs are included. This is a single-machine simplification: the "central ledger" becomes a fixed local file, so `finalize` can append directly instead of making you run `export-outcomes` then `import-outcomes` by hand. When the key is absent or unreadable, nothing is appended.
-
----
-
-### 1.3 `rate` arguments
-
-| Flag | Required | Default | Description |
-| --- | --- | --- | --- |
-| `--run-dir PATH` | Yes | - | Path to the run directory. |
-| `--score {1,2,3,4,5}` | Yes | - | Human quality score: 1 (poor) to 5 (excellent). |
-| `--note TEXT` | No | `None` | Optional note on what was good or bad. |
-| `--shipped {yes,no,partial}` | No | `None` | Outcome: did this run's result actually ship? |
-| `--impact {none,minor,major}` | No | `None` | Outcome: how much did it change downstream? |
-| `--changed TEXT` | No | `None` | Outcome: one line on what this run actually changed. |
-
-Writes `{run_dir}/rating.json` (`{score, note, rated_iso}`), overwriting any prior rating. This human score is the counterpart to the agent-emitted `verdict` and is the primary signal `stats` uses to gauge quality.
-
-The three `--shipped`/`--impact`/`--changed` flags are optional and record the run's *outcome*: what it led to downstream, which the quality score and verdict can't capture on their own. Any you pass are stored under an `outcome` block inside `rating.json` (`{"outcome": {"shipped": ..., "impact": ..., "changed": ...}}`); omitted fields are left out. `stats`, `export-outcomes`, and `import-outcomes` all read this block.
+The `[outcomes] ledger_path` key that used to make `finalize` append an outcome record to a local JSONL ledger is **gone**, along with the `rate`, `export-outcomes`, and `import-outcomes` commands. Outcome data now comes from the `shipped_impact` / `shipped_changed` lines in a spec's frontmatter, which `stats` reads directly. A leftover `[outcomes]` table in `.studio/integrations.toml` is ignored; existing `rating.json` and `outcomes.jsonl` files are simply no longer read.
 
 ---
 
-### 1.4 `stats` arguments
+### 1.3 `stats` arguments
 
 | Flag | Required | Default | Description |
 | --- | --- | --- | --- |
-| `--phase {market,design,tech,studio}` | No | `None` | Filter the dashboard to a single phase. |
+| `--phase {market,design,tech,studio}` | No | `None` | Filter the run-derived blocks to a single phase. Shipped features are not narrowed: a spec belongs to the repo, not to a phase. |
 | `--json` | No | `false` | Emit the aggregated stats dict as JSON instead of the text dashboard. |
 | `--artifact-root PATH` | No | auto | Override artifact root (where `output/` and `.studio/usage.log` live). |
 
-Reads every run's `run.json`, `rating.json`, and `decisions.json` under the output root, plus `.studio/usage.log`, and aggregates: total/by-phase/by-status run counts, verdict distribution + approval rate, human-rating count/avg/by-phase + lowest-rated runs, decision priority mix + answer rate, and prepare-usage counts. Pure aggregation and formatting live in `stats.py` (`aggregate_stats()`, `format_stats()`, `summarize_outcomes()`).
+Reads every run's `run.json`, `session.json`, and `decisions.json` under the output root, plus `.studio/usage.log` and the specs directory, and aggregates: total/by-phase/by-status run counts, verdict distribution + approval rate, decision priority mix + answer rate, session health, and prepare-usage counts. Pure aggregation and formatting live in `stats.py` (`aggregate_stats()`, `format_stats()`, `summarize_shipped_specs()`).
 
-The dashboard opens with an **"Outcomes (did it ship / what changed)"** section: ship rate, impact mix, and recent "what changed" notes. It folds two sources together: this repo's rated runs plus any cross-repo ledger records pulled in via `import-outcomes` (local records win on conflict). With `--json`, the emitted dict gains an `outcomes` key holding that same summary (record/repo counts, `shipped`/`impact` tallies, `ship_rate`, and recent `changed` notes).
+The dashboard's **"Shipped features (from specs/)"** block counts the specs whose frontmatter says `status: shipped`, tallies their `shipped_impact` (`none`/`minor`/`major`), and lists the most recent eight `shipped_changed` lines. The specs directory is `specs/` in the Studio repo and `.studio/specs/` in a repo that installed Studio (`run_phase.get_specs_dir()`); `*-eval-results.md` files are skipped. Nothing here is typed into a command — a feature appears the moment someone flips its spec to `shipped`, which the spec-verification test refuses unless both lines are filled in.
+
+A repo with no spec at `shipped` prints the one-line empty state instead (`No shipped features recorded yet …`). With `--json`, the emitted dict gains a `shipped_specs` key holding the same summary (`records`, the `impact` tally, and `recent_changed`).
 
 The dashboard also renders a **"Session health"** block, computed from each run's `session.json` (see Section 4.1) by `stats.summarize_session_health`. It reports three auto-measured signals over the finalized sessions on record: assumed-P0 rate (P0s guessed instead of asked), convergence (median iterations + rejection rate), and clarity gain per session. With enough sessions it splits earlier vs. recent to show the trend. With `--json`, the emitted dict gains a `session_health` key holding this summary.
-
----
-
-### 1.5 `export-outcomes` arguments
-
-| Flag | Required | Default | Description |
-| --- | --- | --- | --- |
-| `--out PATH` | No | stdout | Write the JSONL export here. Parent directories are created. |
-| `--repo NAME` | No | repo dir name | Project name to tag each record with. |
-| `--artifact-root PATH` | No | auto | Override artifact root (where `output/` lives). |
-
-Collects this repo's rated runs into portable JSONL outcome records (one JSON object per line). Each carries `repo`, `run_id`, `phase`, `verdict`, `status`, `score`, the `shipped`/`impact`/`changed` outcome fields, and `rated_iso`. Only rated runs are exported; a rating is what makes a run an outcome worth learning from. Feed the file to `import-outcomes` in another repo so its `stats` can see these results.
-
----
-
-### 1.6 `import-outcomes` arguments
-
-| Flag | Required | Default | Description |
-| --- | --- | --- | --- |
-| `--from PATH` | Yes | - | Path to a JSONL outcomes export (from `export-outcomes`). |
-| `--artifact-root PATH` | No | auto | Override artifact root (where the ledger lives). |
-
-Merges the incoming records into the central outcomes ledger, deduping by (repo, run_id) so re-importing an updated export refreshes existing records instead of duplicating them. The ledger lives at `knowledge/outcomes.jsonl` (Studio-local) or `<repo>/.studio/knowledge/outcomes.jsonl` (external repo) and is gitignored. Once imported, those outcomes show up in the local `stats` Outcomes section.
 
 ---
 

@@ -281,20 +281,13 @@ the file (the Coding Principles section "Write for Humans"). Then:
 - **On changes requested:** revise the spec (and, if the change is architectural, offer another
   advocate/contrarian pass) and re-present. Don't mark it approved until they say so.
 
-### Step 5: Finalize the debate record + rate
+### Step 5: Finalize the debate record
 
 Close out the underlying run so its decisions are captured in the cross-run dashboard:
 
 ```bash
 python ".studio/source/run_phase.py" finalize --phase tech --run-id {run_id} \
-  --status completed --verdict {APPROVED|REJECTED} --no-rate-prompt
-```
-
-Then ask the user, in one short optional message, to rate the run 1–5 with a one-line note. If they
-give a score, record it; if they skip, don't nag:
-
-```bash
-python ".studio/source/run_phase.py" rate --run-dir {run_dir} --score {1-5} --note "{their note}"
+  --status completed --verdict {APPROVED|REJECTED}
 ```
 
 ## Key Rules

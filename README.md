@@ -65,7 +65,7 @@ Slash commands are the main way you use Studio day to day. `init` installs them 
 **Maintain the install**
 | Command | What it does |
 |---------|--------------|
-| `/studio-setup` | Configure roles, personas, and cleanup after install |
+| `/studio-setup` | Configure roles, personas, scopes, and cleanup after install |
 | `/studio-update` | Pull the latest Studio source and commands into an installed project |
 
 Every command works from any project once you've run `init`. See [CLAUDE_CODE_USAGE.md](./studio/docs/CLAUDE_CODE_USAGE.md) for full arguments.
@@ -194,16 +194,10 @@ python studio/run_phase.py set-clarity --topic core_loop_design --score 0.9
 python studio/run_phase.py set-clarity --topic core_loop_design --reset
 python studio/run_phase.py recompute-clarity --phase studio --run-id <run_id>
 
-# Quality ratings & cross-run stats (diagnostics + fine-tuning feedback loop)
-python studio/run_phase.py rate --run-dir <path> --score 4 --note "solid market read"  # human 1-5 quality score
-python studio/run_phase.py rate --run-dir <path> --score 5 --shipped yes --impact major --changed "shipped the lobby MVP"  # record the run's outcome
-python studio/run_phase.py stats                  # cross-run dashboard: outcomes, verdicts, ratings, tokens, decisions, usage
+# Cross-run stats (diagnostics + fine-tuning feedback loop)
+python studio/run_phase.py stats                  # dashboard: shipped features, verdicts, decisions, session health, usage
 python studio/run_phase.py stats --phase studio   # filter to one phase
-python studio/run_phase.py stats --json           # machine-readable aggregate (includes an outcomes key)
-
-# Cross-repo outcome sharing (feed other repos' results into this repo's stats)
-python studio/run_phase.py export-outcomes --out outcomes.jsonl  # export this repo's rated runs
-python studio/run_phase.py import-outcomes --from outcomes.jsonl # merge into the central ledger (dedup by repo+run_id)
+python studio/run_phase.py stats --json           # machine-readable aggregate (includes a shipped_specs key)
 
 # Cross-repo install
 python studio/run_phase.py init --target /path/to/project
@@ -214,7 +208,7 @@ python studio/run_phase.py update --target /path/to/project          # add --for
 python studio/run_phase.py cleanup --dry-run
 python studio/run_phase.py cleanup
 
-# Setup wizard (configure roles, personas, cleanup after install)
+# Setup wizard (configure roles, scopes, cleanup after install)
 python studio/run_phase.py setup --target . --status
 python studio/run_phase.py setup --target . --defaults
 
@@ -280,7 +274,6 @@ Runs land under the active output root: `studio/output/` when you run from this 
       decisions.json                   # Accumulated decision points + answers
       decisions.md                     # Human-readable settled decisions
       clarity.json                     # Per-topic clarity scores
-      rating.json                      # Human 1-5 quality score (written by `rate`)
       summary.md
       run.json
 ```
@@ -355,8 +348,8 @@ Configure in `config/studio_settings.toml`. Use `--skip-cleanup` to bypass.
 
 ```
 studio/
-  run_phase.py              # CLI entrypoint: prepare, finalize, validate, cleanup, decision, clarity, rate, stats, export/import-outcomes, install, setup, offload, notify
-  stats.py                  # Pure cross-run aggregation + formatting + outcome/session-health roll-up (backs `stats`)
+  run_phase.py              # CLI entrypoint: prepare, finalize, validate, cleanup, decision, clarity, stats, install, setup, offload, notify
+  stats.py                  # Pure cross-run aggregation + formatting + shipped-spec/session-health roll-up (backs `stats`)
   session.py                # Pure builder for the session.json health record finalize writes per run
   config_loading.py         # Shared TOML loader (tomllib/tomli fallback), used by every config reader
   run_phase_roles.py        # Role system: manifest, packs, dependencies, file naming
@@ -370,7 +363,7 @@ studio/
   clarity.py                # Per-topic Clarity Score tracking and question density control
   question_mode.py          # Pre-flight question surfacing (--mode questions)
   install.py                # Cross-repo installer (init/check/update)
-  setup.py                  # Setup wizard: project config after install (roles, personas, cleanup)
+  setup.py                  # Setup wizard: project config after install (roles, scopes, cleanup)
   offload.py                # CLAUDE.md analyzer: section classification, pointer scoring, canary tokens
   cleanup.py                # TTL + budget-based artifact cleanup + loose file removal
   rerun.py                  # Rejection context injection for iterate-on-failure
@@ -384,7 +377,7 @@ studio/
   config/studio_settings.toml # Cleanup settings
   config/implementation_loop.toml # Implementation writer/editor loop defaults
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 910 tests (pytest)
+  tests/                    # 900 tests (pytest)
 ```
 
 ---
@@ -395,7 +388,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-910 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, contrarian FINDING-block parsing and the independent finding verifier, the design-phase critique guide (AI-slop blacklist + Goodwill Reservoir) gating, doc-parity (CLI/config docs vs source), installer ship-list parity (every slash command and workflow on disk is one the installer actually copies, so a new command can't work here and nowhere else), the spec-verification convention (a prompt-shaped spec may not be called shipped while its evidence file is unfilled, or has one of its headings dropped or left unanswered, and every hand-copy of the evidence skeleton's rules must still match the live one), clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, quality ratings and cross-run stats, run outcome capture and cross-repo outcome export/import, session-health records and ledger auto-append, CLAUDE.md offload analysis, unstale audit configuration, smoke test configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
+900 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, contrarian FINDING-block parsing and the independent finding verifier, the design-phase critique guide (AI-slop blacklist + Goodwill Reservoir) gating, doc-parity (CLI/config docs vs source), installer ship-list parity (every slash command and workflow on disk is one the installer actually copies, so a new command can't work here and nowhere else), the spec-verification convention (a prompt-shaped spec may not be called shipped while its evidence file is unfilled, or has one of its headings dropped or left unanswered, and every hand-copy of the evidence skeleton's rules must still match the live one), clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, cross-run stats, the shipped-features block read off spec frontmatter, session-health records, CLAUDE.md offload analysis, unstale audit configuration, smoke test configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 

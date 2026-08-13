@@ -12,9 +12,8 @@ import re
 from statistics import median
 from typing import Dict, List, Optional
 
-# Outcome vocabularies, kept small on purpose. "Did it ship" and a coarse
-# impact bucket are the cheapest things to record that still let us count.
-VALID_SHIPPED = ("yes", "no", "partial")
+# How much a shipped feature changed downstream, in three coarse buckets. Kept
+# small on purpose: a bucket someone will actually pick beats a scale nobody fills.
 VALID_IMPACT = ("none", "minor", "major")
 
 
@@ -42,53 +41,33 @@ def parse_frontmatter(text: str) -> Dict[str, str]:
     return fields
 
 
-def summarize_outcomes(records: List[Dict]) -> Dict:
-    """Roll up outcome records into counts and a few recent qualitative notes.
+def summarize_shipped_specs(records: List[Dict]) -> Dict:
+    """Roll up shipped specs into an impact tally and the recent change lines.
 
-    An outcome record is a flat dict that may carry ``repo``, ``run_id``,
-    ``shipped`` (one of VALID_SHIPPED), ``impact`` (one of VALID_IMPACT), and
-    ``changed`` (freetext: what this run actually changed). Records come from two
-    places: this repo's rated runs and the cross-repo ledger. Any field may be
-    missing: a record with none of shipped/impact/changed still counts toward
-    its repo's tally but not the rates.
+    Each record is ``{"slug", "impact", "changed"}``, read from one spec's
+    frontmatter by ``run_phase._shipped_spec_records``. An unrecognized or blank
+    impact is counted by nothing — the spec-verification gate rejects those at the
+    moment a spec claims it shipped, so anything odd reaching here is old data,
+    not a case to invent a bucket for.
 
     Pure: data in, summary dict out.
     """
-    shipped = {k: 0 for k in VALID_SHIPPED}
     impact = {k: 0 for k in VALID_IMPACT}
-    by_repo: Dict[str, int] = {}
     recent_changed: List[Dict] = []
-    with_outcome = 0
 
-    for rec in records:
-        repo = rec.get("repo") or "?"
-        by_repo[repo] = by_repo.get(repo, 0) + 1
-
-        s = rec.get("shipped")
-        i = rec.get("impact")
-        c = (rec.get("changed") or "").strip()
-
-        if s in shipped:
-            shipped[s] += 1
-        if i in impact:
-            impact[i] += 1
-        if (s in shipped) or (i in impact) or c:
-            with_outcome += 1
-        if c:
+    for record in records:
+        bucket = record.get("impact")
+        if bucket in impact:
+            impact[bucket] += 1
+        changed = (record.get("changed") or "").strip()
+        if changed:
             recent_changed.append({
-                "repo": repo,
-                "run_id": rec.get("run_id", "?"),
-                "changed": c,
+                "slug": record.get("slug", "?"),
+                "changed": changed,
             })
 
-    ship_total = sum(shipped.values())
     return {
         "records": len(records),
-        "with_outcome": with_outcome,
-        "repos": len(by_repo),
-        "by_repo": by_repo,
-        "shipped": shipped,
-        "ship_rate": (shipped["yes"] / ship_total) if ship_total else None,
         "impact": impact,
         "recent_changed": recent_changed[-8:],
     }
@@ -232,16 +211,12 @@ def aggregate_stats(runs: List[Dict]) -> Dict:
     """Aggregate cross-run signals into a stats summary.
 
     Pure over a list of enriched run dicts. Each run is a run.json dict that may
-    additionally carry ``_rating`` (rating.json dict or None) and ``_decisions``
-    (list of DecisionPoint). Missing fields are tolerated.
+    additionally carry ``_decisions`` (list of DecisionPoint). Missing fields are
+    tolerated.
     """
     by_phase: Dict[str, int] = {}
     by_status: Dict[str, int] = {}
     verdicts = {"APPROVED": 0, "REJECTED": 0, "UNKNOWN": 0}
-
-    scores: List[int] = []
-    scores_by_phase: Dict[str, List[int]] = {}
-    rated: List[Dict] = []
 
     dec_priority = {"P0": 0, "P1": 0, "P2": 0}
     dec_total = 0
@@ -259,18 +234,6 @@ def aggregate_stats(runs: List[Dict]) -> Dict:
         elif verdict:
             verdicts["UNKNOWN"] += 1
 
-        rating = run.get("_rating")
-        if rating and isinstance(rating.get("score"), (int, float)):
-            sc = rating["score"]
-            scores.append(sc)
-            scores_by_phase.setdefault(phase, []).append(sc)
-            rated.append({
-                "run_id": run.get("run_id", run.get("run_dir", "?")),
-                "phase": phase,
-                "score": sc,
-                "note": rating.get("note", ""),
-            })
-
         for dp in run.get("_decisions", []):
             dec_total += 1
             pr = getattr(dp, "priority", "P2")
@@ -286,12 +249,6 @@ def aggregate_stats(runs: List[Dict]) -> Dict:
         "by_status": by_status,
         "verdicts": verdicts,
         "approval_rate": (verdicts["APPROVED"] / verdict_total) if verdict_total else None,
-        "ratings": {
-            "count": len(scores),
-            "avg": (sum(scores) / len(scores)) if scores else None,
-            "by_phase_avg": {p: sum(v) / len(v) for p, v in scores_by_phase.items()},
-            "lowest": sorted(rated, key=lambda r: r["score"])[:5],
-        },
         "decisions": {
             "total": dec_total,
             "by_priority": dec_priority,
@@ -301,36 +258,34 @@ def aggregate_stats(runs: List[Dict]) -> Dict:
     }
 
 
-def _format_outcomes(outcomes: Dict) -> List[str]:
-    """Render the outcomes block (did it ship / what changed) for the dashboard."""
-    lines = ["", "Outcomes (did it ship / what changed):"]
-    if outcomes["records"] == 0:
+def _format_shipped_specs(shipped_specs: Dict) -> List[str]:
+    """Render the shipped-features block: what actually landed, and what it changed.
+
+    Read honestly, this block is a Studio-source-repo feature: a consuming repo
+    sees the empty state until someone there flips a spec to ``status: shipped``.
+    """
+    lines = ["", "Shipped features (from specs/):"]
+    if shipped_specs["records"] == 0:
         lines.append(
-            "  No outcomes recorded yet. Add to a rating: "
-            "rate --run-dir <path> --score N --shipped yes --impact major --changed \"...\""
+            "  No shipped features recorded yet — a spec gains a line here when "
+            "its frontmatter says status: shipped."
         )
         return lines
 
-    repos = ", ".join(f"{k}={v}" for k, v in sorted(outcomes["by_repo"].items()))
-    lines.append(f"  {outcomes['records']} rated runs across {outcomes['repos']} repo(s): {repos}")
+    lines.append(f"  {shipped_specs['records']} spec(s) at status: shipped")
 
-    sh = outcomes["shipped"]
-    ship_line = f"  Shipped: yes={sh['yes']} no={sh['no']} partial={sh['partial']}"
-    if outcomes["ship_rate"] is not None:
-        ship_line += f" (ship rate {outcomes['ship_rate']*100:.0f}%)"
-    lines.append(ship_line)
+    impact = shipped_specs["impact"]
+    lines.append(
+        f"  Impact:  none={impact['none']} minor={impact['minor']} major={impact['major']}"
+    )
 
-    im = outcomes["impact"]
-    if any(im.values()):
-        lines.append(f"  Impact:  none={im['none']} minor={im['minor']} major={im['major']}")
-
-    if outcomes["recent_changed"]:
+    if shipped_specs["recent_changed"]:
         lines.append("  Recent changes:")
-        for item in reversed(outcomes["recent_changed"]):
+        for item in reversed(shipped_specs["recent_changed"]):
             changed = item["changed"]
             if len(changed) > 80:
                 changed = changed[:77] + "..."
-            lines.append(f"    [{item['repo']}] {item['run_id']} — {changed}")
+            lines.append(f"    [{item['slug']}] {changed}")
     return lines
 
 
@@ -397,7 +352,7 @@ def format_stats(
     agg: Dict,
     usage: Optional[Dict] = None,
     clarity_note: Optional[str] = None,
-    outcomes: Optional[Dict] = None,
+    shipped_specs: Optional[Dict] = None,
     session_health: Optional[Dict] = None,
 ) -> str:
     """Render an aggregate_stats() result as a terminal dashboard."""
@@ -406,10 +361,12 @@ def format_stats(
 
     if agg["total_runs"] == 0:
         lines.append("No local runs found yet. Run a phase first.")
-        # Cross-repo outcomes (imported into the ledger) can still be worth showing
-        # even when this repo has no runs of its own; that's the tool-repo case.
-        if outcomes is not None and outcomes["records"] > 0:
-            lines.extend(_format_outcomes(outcomes))
+        # A repo can have shipped features before it has finalized runs — the state
+        # right after /spec lands somewhere new — so the block renders here too,
+        # empty state included: "nothing shipped yet" answers the same question, and
+        # a reader who sees the line once knows where a feature would appear.
+        if shipped_specs is not None:
+            lines.extend(_format_shipped_specs(shipped_specs))
         lines.append(bar)
         return "\n".join(lines)
 
@@ -424,23 +381,8 @@ def format_stats(
     if agg["approval_rate"] is not None:
         lines.append(f"  Approval rate: {agg['approval_rate']*100:.0f}% (of decided runs)")
 
-    r = agg["ratings"]
-    lines.append("")
-    lines.append("Quality ratings (human):")
-    if r["count"] == 0:
-        lines.append("  No runs rated yet. Use: rate --run-dir <path> --score 1-5")
-    else:
-        lines.append(f"  Rated {r['count']}/{agg['total_runs']} runs — avg {r['avg']:.1f}/5")
-        if r["by_phase_avg"]:
-            lines.append("  By phase: " + ", ".join(f"{p}={s:.1f}" for p, s in sorted(r["by_phase_avg"].items())))
-        if r["lowest"]:
-            lines.append("  Lowest-rated (improvement targets):")
-            for item in r["lowest"]:
-                note = f" — {item['note']}" if item["note"] else ""
-                lines.append(f"    {item['score']}/5  {item['run_id']}{note}")
-
-    if outcomes is not None:
-        lines.extend(_format_outcomes(outcomes))
+    if shipped_specs is not None:
+        lines.extend(_format_shipped_specs(shipped_specs))
 
     d = agg["decisions"]
     lines.append("")

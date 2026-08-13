@@ -132,20 +132,8 @@ Write a summary of the entire run (inputs, iterations, verdict, key recommendati
 ### Step 6: Finalize
 
 ```bash
-python ".studio/source/run_phase.py" finalize --phase {phase} --run-id {run_id} --status completed --verdict {APPROVED|REJECTED} --no-rate-prompt
+python ".studio/source/run_phase.py" finalize --phase {phase} --run-id {run_id} --status completed --verdict {APPROVED|REJECTED}
 ```
-
-### Step 7: Rate this run (quality feedback loop)
-
-Ask the user, in one short message, to rate the run's quality 1-5 (1 = poor, 5 = excellent) with an optional one-line note on what was good or weak. Make clear it's optional. They can skip.
-
-If they give a score, record it (this is the human signal `stats` uses to gauge and tune Studio over time):
-
-```bash
-python ".studio/source/run_phase.py" rate --run-dir {run_dir} --score {1-5} --note "{their note}"
-```
-
-If they skip, do nothing. Don't nag. The agent verdict already captured the debate's conclusion; this captures *their* judgment, which is what calibration learns from.
 
 ## Key Rules
 

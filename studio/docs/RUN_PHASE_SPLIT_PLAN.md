@@ -14,7 +14,7 @@ before you start (they drift as the file changes).
 | imports + TOML fallback | now `config_loading.py` (done) |
 | cleanup glue | `get_storage_stats` |
 | constants | `PHASE_DETAILS`, `INDEX_HEADER`, env-var names, `SUBCOMMANDS` |
-| path / root resolution | `_resolve_env_path`, `_is_within`, `get_studio_root`, `_entrypoint`, `_phase_from_run_id`, `set_artifact_root` + `_artifact_root_override` state, `_installed_repo_root`, `_find_installed_root_upwards`, `get_artifact_root`, `get_output_root`, `get_knowledge_log_path`, `get_outcomes_ledger_path`, `_project_name` |
+| path / root resolution | `_resolve_env_path`, `_is_within`, `get_studio_root`, `_entrypoint`, `_phase_from_run_id`, `set_artifact_root` + `_artifact_root_override` state, `_installed_repo_root`, `_find_installed_root_upwards`, `get_artifact_root`, `get_output_root`, `get_knowledge_log_path`, `get_specs_dir`, `_project_name` |
 | io + index | `utc_now`, `sanitize_cell`, `write_json`, `load_json`, `collect_runs`, `write_index` |
 | finalize helpers | `_find_previous_run_dir`, `_is_same_objective`, `_norm_objective`, `_objective_changed`, `_ensure_summary_path`, `_validate_artifacts`, `_append_run_log` |
 | instruction templating | `build_instruction_doc` (~400 lines) |
@@ -23,7 +23,7 @@ before you start (they drift as the file changes).
 | CLI | `_normalize_*`, `parse_cli_args`, `_add_artifact_root_arg`, `build_parser` (~430 lines) |
 | validate | `validate_run` |
 | decisions | `record_decisions`, `_decision_to_dict`, `check_decisions`, `extract_decisions` |
-| rating/stats I/O | `record_rating`, `show_stats`, outcome export/import (pure half now in `stats.py`) |
+| stats I/O | `show_stats`, `_shipped_spec_records` (pure half now in `stats.py`) |
 | context assembly | `inject_context` |
 | thin command wrappers | `notify`, `show_clarity`, `set_clarity`, `recompute_clarity` |
 | install/setup/offload dispatch | `_do_init`, `_do_check_install`, `_do_update`, `_do_setup`, `do_offload` |
@@ -36,7 +36,7 @@ from the production side.
 ## Target modules (beyond config_loading + stats)
 
 - **`paths.py`**: root resolution. Public: `get_studio_root`, `get_artifact_root`,
-  `get_output_root`, `get_knowledge_log_path`, `get_outcomes_ledger_path`,
+  `get_output_root`, `get_knowledge_log_path`, `get_specs_dir`,
   `set_artifact_root`, `_project_name`, `ARTIFACT_ROOT_ENV`. Also lets `impl_loop.py`
   stop mirroring the artifact-root logic (follow-up, not part of the split).
 - **`phases.py`**: `PHASE_DETAILS` + `_phase_from_run_id`. Tiny data module both

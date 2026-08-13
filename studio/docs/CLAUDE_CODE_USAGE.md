@@ -193,28 +193,23 @@ python studio/run_phase.py recompute-clarity --phase studio --run-id run_studio_
 - **S2 Depth** (medium-high clarity) → fewer, only genuine gaps
 - **S3 Polish** (high clarity) → rare, mostly confirmations
 
-### Quality Ratings & Cross-Run Stats
+### Shipped Features & Cross-Run Stats
 
-The agent **verdict** (APPROVED/REJECTED) tells you what the debate concluded. It doesn't tell you whether the run was actually *useful to you*. To gauge how well Studio is doing and improve it as you use it, record your own judgment and look across runs.
+The agent **verdict** (APPROVED/REJECTED) tells you what the debate concluded. It doesn't tell you whether the run led anywhere. Studio used to ask you to type that in — a 1-5 rating, a "did it ship" flag — and in five months across ten repos nobody ever did, so all of that is gone. Nothing on the dashboard is a number a person has to remember to supply.
 
-**Rate a run** (1 = poor, 5 = excellent) after you've reviewed its output:
-```bash
-python studio/run_phase.py rate --run-dir <path> --score 4 --note "solid market read, weak on monetization"
+**What replaced it:** the one question worth answering — *did this feature ship, and what did it change?* — is answered in the feature's own spec, at the moment you know it. When you flip a spec to `status: shipped`, you fill in two more lines of its frontmatter:
+
+```yaml
+status: shipped
+shipped_impact: major          # none | minor | major
+shipped_changed: cut the lobby scope from 6 screens to 2
 ```
-This writes `{run_dir}/rating.json`, the human counterpart to the agent verdict. Re-running `rate` overwrites the prior score (e.g. after a rerun improves things).
 
-`rate` also takes optional **outcome** flags for once you know what a run actually led to downstream (which you rarely do at finalize time; that's the point):
-```bash
-python studio/run_phase.py rate --run-dir <path> --score 4 \
-    --shipped yes --impact major --changed "cut the lobby scope from 6 screens to 2"
-```
-`--shipped {yes,no,partial}` and `--impact {none,minor,major}` are coarse buckets; `--changed` is one line on what the run changed. They land under an `outcome` block in `rating.json` and feed the Outcomes section of `stats`.
+`stats` reads those straight off `specs/*.md` (or `.studio/specs/*.md` in a repo that installed Studio). The spec-verification test refuses a `shipped` claim while either line is blank, so the record can't quietly rot.
 
-**You don't have to rate at all to get analytics.** Every finalize also writes an automatic, judgment-free `{run_dir}/session.json`, a *session-health* record (how many iterations to a verdict, decisions surfaced vs answered vs assumed, clarity gained). And if you set `[outcomes] ledger_path` in `.studio/integrations.toml`, finalize appends each run to that central ledger automatically, so `stats` sees every run without a manual export/import step.
+**Be realistic about reach:** today this is effectively a Studio-source-repo feature. Every spec in the consuming repos is still at `approved`, so those repos print one line saying nothing has shipped yet, and will keep printing it until someone flips a spec there.
 
-**You don't have to remember to do it.** Rating is auto-prompted at the end of a run:
-- The `/run-phase` and `/run-studio-phase` flows close with a "rate this run" step: the assistant asks you for a 1-5 plus optional note and records it (skippable; it won't nag).
-- Running `finalize` yourself in a terminal prompts interactively (`Rate this run 1-5 (Enter to skip)`). When `finalize` runs non-interactively (automation, or the assistant via a non-TTY shell), it instead prints a copy-paste `rate` command rather than blocking on stdin. Suppress either with `finalize --no-rate-prompt`.
+**You supply nothing for the rest, either.** Every finalize writes an automatic `{run_dir}/session.json`: a judgment-free session-health record (iterations to a verdict, decisions surfaced vs answered vs assumed, clarity gained). Finalize asks you for nothing and prints no prompt.
 
 **View the cross-run dashboard:**
 ```bash
@@ -234,18 +229,12 @@ Verdicts (agent):
   APPROVED=8  REJECTED=3  UNKNOWN=1
   Approval rate: 73% (of decided runs)
 
-Quality ratings (human):
-  Rated 9/12 runs — avg 3.6/5
-  By phase: design=4.0, market=3.5, studio=3.3, tech=2.0
-  Lowest-rated (improvement targets):
-    2/5  run_tech_20260601_120000 — missed netcode tradeoffs
-
-Outcomes (did it ship / what changed):
-  12 rated runs across 2 repo(s): pictorly=9, studio=3
-  Shipped: yes=6 no=2 partial=1 (ship rate 67%)
-  Impact:  none=2 minor=4 major=3
+Shipped features (from specs/):
+  10 spec(s) at status: shipped
+  Impact:  none=0 minor=6 major=4
   Recent changes:
-    [pictorly] run_studio_20260620_090000 — cut lobby scope from 6 screens to 2
+    [retire-volunteer-metrics] deleted every dashboard number a human had to type in
+    [doc-parity-tests] a new CLI command can no longer ship undocumented
 
 Decision points:
   41 total — P0=6 P1=18 P2=17
@@ -263,7 +252,9 @@ Usage (prepare log):
   Scoped: 4 / Flat: 8
 ```
 
-**The fine-tuning loop:** `stats` surfaces *where* the system underperforms (low-rated phases, runs you flagged, expensive scopes, unanswered decisions). Use those signals to adjust the knobs that actually shape runs: phase/role personas (`.studio/personas.toml`, `.studio/roles/*.json`), scope budgets (`.studio/scopes.toml`), and clarity thresholds. Then re-rate to confirm the change helped. There's no model to train; calibration is judgment-driven, and the ratings are the evidence.
+A repo with no shipped specs sees one line instead of that block: `No shipped features recorded yet — a spec gains a line here when its frontmatter says status: shipped.`
+
+**The fine-tuning loop:** `stats` surfaces *where* the system underperforms (assumed P0s, runs that never converged, unanswered decisions, features that shipped to no effect). Use those signals to adjust the knobs that actually shape runs: phase/role personas (`.studio/personas.toml`, `.studio/roles/*.json`), scope budgets (`.studio/scopes.toml`), and clarity thresholds. There's no model to train; calibration is judgment-driven, and what shipped is the evidence.
 
 ---
 
@@ -456,4 +447,4 @@ In addition to phase runners, these slash commands are available:
 | `/offload` | Analyzes CLAUDE.md for content safe to move to companion docs, with canary token verification. |
 | `/handoff` | Writes the *state* of the work in flight to a small note in the repo, so a thread survives a `/clear` and can be resumed from something precise instead of an auto-summary. Two modes: `/handoff [note]` saves (or overwrites) the note and tells you it's safe to clear; `/handoff <slug>` resumes that thread. A save **verifies reality first** — `git status`, branches, open PRs, the files it claims changed — because a note recording what was merely believed sends the next session confidently in the wrong direction. The note lands in the repo's own home for durable notes if `CLAUDE.md` names one, else `.studio/threads/<slug>.md` in a consuming repo, else `threads/<slug>.md` in the Studio source repo. |
 | `/studio-update` | One-step update of installed Studio source and slash commands. |
-| `/studio-setup` | Configure project's Studio installation: role packs, role/phase-persona customization (`.studio/personas.toml`), unstale audit config (`.studio/unstale.toml`), smoke test config (`.studio/smoke.toml`), cleanup settings. |
+| `/studio-setup` | Configure project's Studio installation: role packs, role/phase-persona customization (`.studio/personas.toml`), unstale audit config (`.studio/unstale.toml`), smoke test config (`.studio/smoke.toml`), scope tuning, cleanup settings. |

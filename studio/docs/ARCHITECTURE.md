@@ -28,7 +28,7 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 
 | Component | Purpose |
 | --- | --- |
-| `run_phase.py` | CLI entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, clarity, install, decision, `rate`, `stats`, `export-outcomes`, `import-outcomes`, setup, offload, and `notify` subcommands. |
+| `run_phase.py` | CLI entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, clarity, install, decision, `stats`, setup, offload, and `notify` subcommands. |
 | `run_phase_roles.py` | Loads `studio.manifest.json`, applies role packs with dependency injection, applies project-local overrides, and normalizes per-role filenames. |
 | `role_overrides.py` | Project-local role customization: loads `.studio/roles/*.json` overlays, validates structure, shallow-merges with manifest roles. |
 | `persona_overrides.py` | Project-local single-phase persona overrides: loads `.studio/personas.toml`, per-phase shallow-merges over the shipped `PHASE_DETAILS` defaults. |
@@ -42,7 +42,7 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 | `cleanup.py` | TTL-based (30 days) and budget-based (900 MB) run artifact cleanup, plus loose file removal for legacy artifacts outside run directories. |
 | `rerun.py` | Detects rejection context from prior runs and generates rerun instructions. |
 | `verdict.py` | Extracts APPROVED/REJECTED/UNKNOWN verdict from agent output. |
-| `stats.py` | Pure cross-run aggregation, formatting, and outcome roll-up (`aggregate_stats`, `format_stats`, `summarize_outcomes`, `summarize_session_health`, `_parse_usage_log`). Also owns `parse_frontmatter`, the single reader of a spec's leading `---` block — `tests/test_spec_verification.py` calls it today, the dashboard next, so the two can't disagree about what a spec says. Backs the `stats` command; moved out of `run_phase.py` so the number-crunching has no I/O. |
+| `stats.py` | Pure cross-run aggregation, formatting, and the shipped-features roll-up (`aggregate_stats`, `format_stats`, `summarize_shipped_specs`, `summarize_session_health`, `_parse_usage_log`). Also owns `parse_frontmatter`, the single reader of a spec's leading `---` block — `tests/test_spec_verification.py` calls it today, the dashboard next, so the two can't disagree about what a spec says. Backs the `stats` command; moved out of `run_phase.py` so the number-crunching has no I/O. |
 | `session.py` | Pure builder for the automatic `session.json` health record (`build_session_record` + `_summarize_decisions`). Mirrors `stats.py`: data-in/data-out, no I/O; `run_phase` finalize reads the run dir and hands the pieces in. Every field is counted from a file the run already produced, so nothing in the record waits on a human. |
 | `config_loading.py` | The single shared TOML loader: picks `tomllib` (3.11+) or the `tomli` fallback (3.10) with one consistent error message. Imported by `run_phase.py`, `scopes.py`, `cleanup.py`, `persona_overrides.py`, `impl_loop.py`, and `integrations/slack_digest.py` so no module carries its own copy. |
 | `impl_loop.py` | Implementation writer/editor loop config: `LoopConfig` + `load_loop_config()`. Projects the resolved config into runtime knobs (editor on/off, read scope, output budget, mutation/static gates) for the `implementation-loop.js` Workflow, read by running the module as a script (`python .studio/source/impl_loop.py`, or `python studio/impl_loop.py` in this repo). |
@@ -62,7 +62,7 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 | `.studio/update.toml` | Optional per-repo update behavior. `[update] auto_pull_source = true` in the **source** repo's copy lets `update` fast-forward your Studio source checkout when it is cleanly behind origin (see `install.py`). |
 | `.studio/unstale.toml` | Optional per-repo override for the `/unstale` audit (`[snapshot]` commands + `[audit]` globs). Read by the `/unstale` command; absent it self-detects the stack. Authored by the setup wizard. |
 | `.studio/smoke.toml` | Optional per-repo profile for the `/smoke` command: a single `[smoke]` table pinning how to stand up a live version to hand-test (`kind`, `setup`/`build`/`launch`, `url`, `ready_probe`/`ready_log`, `golden_path`, `teardown`). Read by the `/smoke` command; absent it self-detects the stack. Authored by the setup wizard. |
-| `.studio/integrations.toml` | Optional outbound-webhook config for run digests, plus the outcomes ledger path. `[slack]` and `[n8n]` tables, each with `enabled` and `webhook_url_env` (env var holding the secret URL); `[n8n]` also takes optional `auth_header`/`auth_value_env` for Header Auth. Loaded by `integrations/slack_digest.py`. An optional `[outcomes] ledger_path` key names a local JSONL file that `finalize` auto-appends each run's outcome record to (read by `run_phase.get_configured_ledger_path`). |
+| `.studio/integrations.toml` | Optional outbound-webhook config for run digests. `[slack]` and `[n8n]` tables, each with `enabled` and `webhook_url_env` (env var holding the secret URL); `[n8n]` also takes optional `auth_header`/`auth_value_env` for Header Auth. Loaded by `integrations/slack_digest.py`. The old `[outcomes] ledger_path` key is gone — outcome data now comes from spec frontmatter — and a leftover `[outcomes]` table is ignored. |
 | Role `prompt_doc` (optional) | Per-role pointer to a long-form prompt doc, surfaced as a link in the Role Menu. Studio ships none. Projects supply their own and set the path via a `.studio/roles/*.json` override; unset renders as `-`. |
 | Active output root (`output/` or `.studio/output/`) | Run folders containing instructions, advocate/contrarian artifacts, integrator plans, summaries, and metadata. |
 | Active knowledge log (`knowledge/run_log.md` or `.studio/knowledge/run_log.md`) | Append-only log of finalized runs for easy reference across repos. |
@@ -72,7 +72,7 @@ No other services, runtimes, or APIs exist.
 ### Where Artifacts Land
 
 `get_artifact_root()` in `run_phase.py` answers one question — *is this Studio's own repo, or a
-project that installed Studio?* — and the run folder, the knowledge log, the outcomes ledger, and
+project that installed Studio?* — and the run folder, the knowledge log, the specs directory, and
 the project-local `.studio/*.toml` config all hang off the answer. An explicit `--artifact-root`
 or the `STUDIO_ARTIFACT_ROOT` environment variable beats every case below. With neither set, these
 four are tried in order:
@@ -99,6 +99,11 @@ Downstream, everything keys off whether the artifact root *is* `studio/`. When i
 `studio/output/` and no bridge doc is written, because a bridge doc exists to point a separate
 project back at Studio. Otherwise runs land in `<repo>/.studio/output/` and the first run
 scaffolds that repo's `.studio/` and its `docs/studio-bridge.md`.
+
+`get_specs_dir()` hangs off the same answer with one twist worth knowing: in the source repo the
+artifact root is `studio/`, but `specs/` sits *beside* it, so that branch climbs one level to the
+repo root. Everywhere else it is `<repo>/.studio/specs`. This is where `stats` reads the shipped
+features it reports.
 
 ---
 
@@ -158,7 +163,7 @@ No automation runs outside the assistant; the instructions are simply executed a
    - **Quality checks** (single-pass, warnings only): verdict presence, rubber-stamp detection (<200 chars), format validation, and scope stats tracking per scope. Results stored in `run.json["quality"]` and `run.json["scope_stats"]`.
 4. Finalize updates `run.json` with status, verdict, iterations, quality checks, scope stats, and for Studio: `completed` + `missing` role lists.
 5. The active index/log (`<active_output_root>/index.md` and `<active_knowledge_root>/run_log.md`) are refreshed, giving downstream repos searchable entries with summary links.
-6. Two additive, soft-fail side effects (never gate finalize): `run_phase._write_session_record` writes the automatic `session.json` health record into the run dir (built by `session.build_session_record`), and when `[outcomes] ledger_path` is configured, `run_phase._maybe_append_to_ledger` appends this run's outcome record to that local ledger, deduped by `(repo, run_id)`.
+6. One additive, soft-fail side effect (never gates finalize): `run_phase._write_session_record` writes the automatic `session.json` health record into the run dir (built by `session.build_session_record`). Finalize asks the reader for nothing.
 
 ---
 

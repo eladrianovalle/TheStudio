@@ -13,11 +13,6 @@ section) is built, via the `/forge` writer/editor loop:
   record builder (`build_session_record` + the `_summarize_*` helpers); the
   finalize wiring lives in `run_phase._write_session_record`, which reads the run
   dir and passes the pieces in. Additive and soft-fail: it never gates finalize.
-- Ledger auto-append via `[outcomes] ledger_path`. `run_phase.get_configured_ledger_path`
-  reads the path from `.studio/integrations.toml`; `run_phase._maybe_append_to_ledger`
-  appends the run's outcome record at finalize, deduped by `(repo, run_id)`, soft-fail.
-  `_outcome_record_from_run` now yields a record for unrated runs too, so the
-  ledger and `stats` see every session.
 - `stats` session-health block. `stats.summarize_session_health` (pure) computes
   the signals; `run_phase.show_stats` loads each run's `session.json` and adds
   a `session_health` key to `--json`.
@@ -27,22 +22,25 @@ blocks, and with them tokens-per-settled-decision, scope spend distribution and
 editor liveness. All three were fed by the per-agent token ledger, which an agent
 had to write by hand after every agent in every run — and across roughly 150 runs
 in ten repos, not one ever did. The `outcome` field went with them: it was the
-one field a human was meant to edit later, and the same spec moves outcome
-capture into a shipped spec's frontmatter. What survives is what finalize can
-count off disk on its own: convergence, decisions, clarity.
+one field a human was meant to edit later. The rest of that volunteer path is
+gone too: `rate` and `rating.json`, the `export-outcomes`/`import-outcomes`
+ledger, and the `[outcomes] ledger_path` auto-append this section used to
+describe as shipped. Outcome capture now lives in a shipped spec's frontmatter,
+which `stats` reads. What survives here is what finalize can count off disk on
+its own: convergence, decisions, clarity.
 
-**Still deferred:** the `studio outcome` command and session→implementation
-linking (Part 4, `--from-run`), plus richer session records in the ledger and any
-correlation/LLM-judged analytics. `rate` stays exactly as-is. The honest caveats
-below still apply to what shipped.
+**Still deferred:** session→implementation linking (Part 4, `--from-run`) and any
+correlation/LLM-judged analytics. The honest caveats below still apply to what
+shipped.
 
 ## The problem this solves
 
 Rating a run at finalize is noise: a Studio run is a *planning session*, and its
 specs/decisions get implemented later (via `/forge` or by hand in a
 consuming repo). You can't judge whether the plan was good before it's built. So
-`rate` after a run is close to useless, and the outcome ledger it feeds only sees
-the runs you bothered to rate.
+the rating prompt Studio used to close a run with was close to useless, and the
+outcome ledger it fed only ever saw the runs somebody bothered to rate — which,
+in five months, was none of them.
 
 The reframe: you can't measure plan *quality* at finalize, but you can measure
 session *health*: did the debate converge, surface and settle the right
