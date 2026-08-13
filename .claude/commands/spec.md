@@ -110,6 +110,8 @@ slug: <slug>
 ticket: <id-or-url, or "none">
 status: draft            # draft → approved (human approved it) → shipped (built AND verified)
 studio_run: <run_dir>    # the debate this spec came from
+shipped_impact:          # none | minor | major — how much it changed downstream
+shipped_changed:         # one line: what this actually changed
 ---
 
 # <Feature> — Architecture Spec
@@ -209,6 +211,15 @@ the file (the Coding Principles section "Write for Humans"). Then:
   If a `--ticket` was given, remind the user to link/attach the spec on that ticket so the tracker
   and the spec stay tied together (offer to help if it's a GitHub issue reachable via `gh`). This
   approved document is now the spec the feature is built against.
+
+  **Leave `shipped_impact` and `shipped_changed` blank here.** You don't know yet what the feature
+  changed, and asking this early is how you get an invented answer. They are filled in at the moment
+  the spec flips to `status: shipped`, and the suite refuses that flip while either is empty — so the
+  two honest exits are to fill them in or leave the spec at `approved`. `shipped_impact` is exactly
+  one of `none`, `minor`, or `major`; `none` is a real answer, since a feature that shipped and
+  changed nothing downstream is still worth recording. `shipped_changed` is one line, in plain words,
+  saying what actually changed for someone using this. Write it from what the feature does, not from
+  the fact that it landed: "it shipped" satisfies the test and tells a reader nothing.
 
   **If the spec carries a `## Verification` section**, also create its evidence file now — empty,
   before any data exists. That ordering is the whole point: headings written before the outcome is

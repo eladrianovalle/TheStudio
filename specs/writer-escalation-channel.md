@@ -4,6 +4,8 @@ slug: writer-escalation-channel
 ticket: none
 status: shipped
 studio_run: (run directory no longer on disk; removed by retention cleanup)
+shipped_impact: minor
+shipped_changed: A stuck /forge writer can report the blocker in its handoff instead of inventing a passing commit or dying as writer_failed.
 ---
 
 # Writer Escalation Channel — Architecture Spec

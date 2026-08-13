@@ -4,6 +4,8 @@ slug: contrarian-finding-verifier
 ticket: none (roadmap item R1 — see studio/docs/GSTACK_COMPARISON.md)
 status: shipped
 studio_run: studio/output/tech/run_tech_20260716_163522
+shipped_impact: minor
+shipped_changed: Contrarian findings became machine-readable, and a fresh agent now re-checks the shaky ones from the quoted claim alone.
 ---
 
 # Independent Verifier for Contrarian Findings — Architecture Spec

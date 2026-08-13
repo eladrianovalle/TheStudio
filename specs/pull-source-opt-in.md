@@ -4,6 +4,8 @@ slug: pull-source-opt-in
 ticket: none
 status: shipped
 studio_run: studio/output/tech/run_tech_20260708_223215
+shipped_impact: minor
+shipped_changed: /studio-update can fast-forward your own Studio checkout when it is cleanly behind, so the go-pull-your-source nag stops repeating.
 ---
 
 # Opt-in Source Fast-Forward for `/studio-update` — Architecture Spec

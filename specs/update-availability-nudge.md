@@ -4,6 +4,8 @@ slug: update-availability-nudge
 ticket: none
 status: shipped
 studio_run: studio/output/tech/run_tech_20260708_164348
+shipped_impact: minor
+shipped_changed: A session in a repo with Studio installed says once, at start, that the installed copy is behind upstream, and stays quiet when it is current.
 ---
 
 # Proactive Update-Availability Nudge — Architecture Spec

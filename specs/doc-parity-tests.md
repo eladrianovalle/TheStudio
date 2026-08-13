@@ -4,6 +4,8 @@ slug: doc-parity-tests
 ticket: none (roadmap item R2 — see studio/docs/GSTACK_COMPARISON.md)
 status: shipped
 studio_run: studio/output/tech/run_tech_20260716_181851
+shipped_impact: minor
+shipped_changed: A new CLI subcommand or config field fails a test until it is documented, with the hand-written prose left exactly where it is.
 ---
 
 # Doc-Parity Tests — Architecture Spec

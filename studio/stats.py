@@ -8,6 +8,7 @@ keeps the aggregation logic out of the CLI entrypoint.
 """
 from __future__ import annotations
 
+import re
 from statistics import median
 from typing import Dict, List, Optional
 
@@ -15,6 +16,30 @@ from typing import Dict, List, Optional
 # impact bucket are the cheapest things to record that still let us count.
 VALID_SHIPPED = ("yes", "no", "partial")
 VALID_IMPACT = ("none", "minor", "major")
+
+
+def parse_frontmatter(text: str) -> Dict[str, str]:
+    """The ``key: value`` lines of a markdown document's leading ``---`` block.
+
+    Only the *leading* block counts, so a document discussing a field in its prose —
+    a spec explaining what ``status: shipped`` means, say — cannot accidentally declare
+    one. Anything in that block that isn't ``key: value`` is skipped, and values come
+    back stripped.
+
+    This is the one reader of spec frontmatter: the verification test and the stats
+    dashboard both call it, so they can never disagree about what a spec says. It lives
+    here rather than beside either caller because this module does no I/O, and reading
+    a string keeps that true — opening the file stays with the caller.
+    """
+    block = re.match(r"---\n(.*?)\n---", text, re.DOTALL)
+    if not block:
+        return {}
+    fields: Dict[str, str] = {}
+    for line in block.group(1).splitlines():
+        key, separator, value = line.partition(":")
+        if separator and key.strip():
+            fields[key.strip()] = value.strip()
+    return fields
 
 
 def summarize_outcomes(records: List[Dict]) -> Dict:
