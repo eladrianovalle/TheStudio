@@ -156,7 +156,7 @@ No automation runs outside the assistant; the instructions are simply executed a
    - Studio phase: iterate through the invited roles stored in `run.json["studio_roles"]["invited"]`, using `collect_role_artifacts` to confirm both advocate and contrarian files exist. Missing roles are recorded.
    - Verify `integrator.md` and `summary.md`.
    - **Quality checks** (single-pass, warnings only): verdict presence, rubber-stamp detection (<200 chars), format validation, and scope stats tracking per scope. Results stored in `run.json["quality"]` and `run.json["scope_stats"]`.
-4. Finalize updates `run.json` with status, verdict, hours, cost, iterations, quality checks, scope stats, and for Studio: `completed` + `missing` role lists.
+4. Finalize updates `run.json` with status, verdict, iterations, quality checks, scope stats, and for Studio: `completed` + `missing` role lists.
 5. The active index/log (`<active_output_root>/index.md` and `<active_knowledge_root>/run_log.md`) are refreshed, giving downstream repos searchable entries with summary links.
 6. Two additive, soft-fail side effects (never gate finalize): `run_phase._write_session_record` writes the automatic `session.json` health record into the run dir (built by `session.build_session_record`), and when `[outcomes] ledger_path` is configured, `run_phase._maybe_append_to_ledger` appends this run's outcome record to that local ledger, deduped by `(repo, run_id)`.
 
@@ -193,7 +193,7 @@ No automation runs outside the assistant; the instructions are simply executed a
 
 Indexes:
 - `<active_output_root>/index.md`: table view
-- `<active_knowledge_root>/run_log.md`: chronological log with verdicts, hours, and summary links
+- `<active_knowledge_root>/run_log.md`: chronological log with verdicts, iterations, and summary links
 
 ---
 

@@ -210,7 +210,7 @@ python studio/run_phase.py rate --run-dir <path> --score 4 \
 ```
 `--shipped {yes,no,partial}` and `--impact {none,minor,major}` are coarse buckets; `--changed` is one line on what the run changed. They land under an `outcome` block in `rating.json` and feed the Outcomes section of `stats`.
 
-**You don't have to rate at all to get analytics.** Every finalize also writes an automatic, judgment-free `{run_dir}/session.json`, a *session-health* record (how many iterations to a verdict, decisions surfaced vs answered vs assumed, clarity gained, cost, whether the editor actually cut anything). And if you set `[outcomes] ledger_path` in `.studio/integrations.toml`, finalize appends each run to that central ledger automatically, so `stats` sees every run without a manual export/import step.
+**You don't have to rate at all to get analytics.** Every finalize also writes an automatic, judgment-free `{run_dir}/session.json`, a *session-health* record (how many iterations to a verdict, decisions surfaced vs answered vs assumed, clarity gained). And if you set `[outcomes] ledger_path` in `.studio/integrations.toml`, finalize appends each run to that central ledger automatically, so `stats` sees every run without a manual export/import step.
 
 **You don't have to remember to do it.** Rating is auto-prompted at the end of a run:
 - The `/run-phase` and `/run-studio-phase` flows close with a "rate this run" step: the assistant asks you for a 1-5 plus optional note and records it (skippable; it won't nag).
