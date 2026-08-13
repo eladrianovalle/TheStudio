@@ -28,7 +28,7 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 
 | Component | Purpose |
 | --- | --- |
-| `run_phase.py` | CLI entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, clarity, install, decision, metrics, `rate`, `stats`, `export-outcomes`, `import-outcomes`, setup, offload, and `notify` subcommands. |
+| `run_phase.py` | CLI entrypoint: `prepare`, `finalize`, `validate`, `cleanup`, clarity, install, decision, `rate`, `stats`, `export-outcomes`, `import-outcomes`, setup, offload, and `notify` subcommands. |
 | `run_phase_roles.py` | Loads `studio.manifest.json`, applies role packs with dependency injection, applies project-local overrides, and normalizes per-role filenames. |
 | `role_overrides.py` | Project-local role customization: loads `.studio/roles/*.json` overlays, validates structure, shallow-merges with manifest roles. |
 | `persona_overrides.py` | Project-local single-phase persona overrides: loads `.studio/personas.toml`, per-phase shallow-merges over the shipped `PHASE_DETAILS` defaults. |
@@ -42,8 +42,8 @@ All intelligence lives inside the assistant’s execution. Studio’s job is to 
 | `cleanup.py` | TTL-based (30 days) and budget-based (900 MB) run artifact cleanup, plus loose file removal for legacy artifacts outside run directories. |
 | `rerun.py` | Detects rejection context from prior runs and generates rerun instructions. |
 | `verdict.py` | Extracts APPROVED/REJECTED/UNKNOWN verdict from agent output. |
-| `stats.py` | Pure cross-run aggregation, formatting, and outcome roll-up (`aggregate_stats`, `format_stats`, `summarize_outcomes`, `summarize_session_health`, `detect_trend_alerts`, `_summarize_metrics`, `_parse_usage_log`). Backs the `stats` command; moved out of `run_phase.py` so the number-crunching has no I/O. `detect_trend_alerts` adds a delta-based "Trend Alerts" block — run-over-run regressions (rating falling, tokens/cost rising) that persist across 2+ consecutive runs, so a single blip never fires. |
-| `session.py` | Pure builder for the automatic `session.json` health record (`build_session_record` + `_summarize_decisions`/`_summarize_cost`/`_summarize_editor`). Mirrors `stats.py`: data-in/data-out, no I/O; `run_phase` finalize reads the run dir and hands the pieces in. |
+| `stats.py` | Pure cross-run aggregation, formatting, and outcome roll-up (`aggregate_stats`, `format_stats`, `summarize_outcomes`, `summarize_session_health`, `detect_trend_alerts`, `_parse_usage_log`). Backs the `stats` command; moved out of `run_phase.py` so the number-crunching has no I/O. `detect_trend_alerts` adds a delta-based "Trend Alerts" block — run-over-run regressions (rating falling, tokens/cost rising) that persist across 2+ consecutive runs, so a single blip never fires. |
+| `session.py` | Pure builder for the automatic `session.json` health record (`build_session_record` + `_summarize_decisions`). Mirrors `stats.py`: data-in/data-out, no I/O; `run_phase` finalize reads the run dir and hands the pieces in. Every field is counted from a file the run already produced, so nothing in the record waits on a human. |
 | `config_loading.py` | The single shared TOML loader: picks `tomllib` (3.11+) or the `tomli` fallback (3.10) with one consistent error message. Imported by `run_phase.py`, `scopes.py`, `cleanup.py`, `persona_overrides.py`, `impl_loop.py`, and `integrations/slack_digest.py` so no module carries its own copy. |
 | `impl_loop.py` | Implementation writer/editor loop config: `LoopConfig` + `load_loop_config()`. Projects the resolved config into runtime knobs (editor on/off, read scope, output budget, mutation/static gates) for the `implementation-loop.js` Workflow, read by running the module as a script (`python .studio/source/impl_loop.py`, or `python studio/impl_loop.py` in this repo). |
 | `install.py` | Cross-repo installer: `init`/`check-install`/`update` copies source + slash commands into any project. Injects coding principles into target's `CLAUDE.md` via sentinel markers. |
@@ -156,8 +156,7 @@ No automation runs outside the assistant; the instructions are simply executed a
    - Studio phase: iterate through the invited roles stored in `run.json["studio_roles"]["invited"]`, using `collect_role_artifacts` to confirm both advocate and contrarian files exist. Missing roles are recorded.
    - Verify `integrator.md` and `summary.md`.
    - **Quality checks** (single-pass, warnings only): verdict presence, rubber-stamp detection (<200 chars), format validation, and scope stats tracking per scope. Results stored in `run.json["quality"]` and `run.json["scope_stats"]`.
-   - **Agent metrics aggregation**: if `metrics.json` exists (recorded by the orchestrator during the run), summarize into `run.json["metrics"]` with totals and breakdowns by scope and role.
-4. Finalize updates `run.json` with status, verdict, hours, cost, iterations, quality checks, scope stats, agent metrics, and for Studio: `completed` + `missing` role lists.
+4. Finalize updates `run.json` with status, verdict, hours, cost, iterations, quality checks, scope stats, and for Studio: `completed` + `missing` role lists.
 5. The active index/log (`<active_output_root>/index.md` and `<active_knowledge_root>/run_log.md`) are refreshed, giving downstream repos searchable entries with summary links.
 6. Two additive, soft-fail side effects (never gate finalize): `run_phase._write_session_record` writes the automatic `session.json` health record into the run dir (built by `session.build_session_record`), and when `[outcomes] ledger_path` is configured, `run_phase._maybe_append_to_ledger` appends this run's outcome record to that local ledger, deduped by `(repo, run_id)`.
 

@@ -19,8 +19,17 @@ section) is built, via the `/forge` writer/editor loop:
   `_outcome_record_from_run` now yields a record for unrated runs too, so the
   ledger and `stats` see every session.
 - `stats` session-health block. `stats.summarize_session_health` (pure) computes
-  the five signals; `run_phase.show_stats` loads each run's `session.json` and adds
+  the signals; `run_phase.show_stats` loads each run's `session.json` and adds
   a `session_health` key to `--json`.
+
+**Since retired (see `specs/retire-volunteer-metrics.md`):** the cost and editor
+blocks, and with them tokens-per-settled-decision, scope spend distribution and
+editor liveness. All three were fed by the per-agent token ledger, which an
+agent had to write by hand after every agent in every run — and across roughly
+150 runs in ten repos, not one ever did. The `outcome` field went with them: it was the one field
+a human was meant to edit later, and outcome capture now lives in a shipped
+spec's frontmatter. What survives is what finalize can count off disk on its own:
+convergence, decisions, clarity.
 
 **Still deferred:** the `studio outcome` command and session→implementation
 linking (Part 4, `--from-run`), plus richer session records in the ledger and any
@@ -37,7 +46,7 @@ the runs you bothered to rate.
 
 The reframe: you can't measure plan *quality* at finalize, but you can measure
 session *health*: did the debate converge, surface and settle the right
-questions, reduce uncertainty, and at what cost. All of that is derivable
+questions, reduce uncertainty. All of that is derivable
 automatically from data a run already produces. None of it needs a rating or a
 wait for implementation.
 
@@ -60,12 +69,7 @@ finalize already touches. No human input. Proposed schema:
     "answered_by_user": 6, "answered_by_assumption": 3, "unanswered": 1,
     "p0_assumed": 0
   },
-  "clarity": { "mean_before": 0.42, "mean_after": 0.71, "topics_touched": 3 },
-  "cost": { "total_tokens": 210000, "duration_ms": 840000, "agents": 9,
-            "tokens_per_settled_decision": 23300,
-            "scope_pct": {"alignment": 25, "depth": 60, "polish": 15} },
-  "editor": { "first_draft_words": 2400, "final_words": 1600, "shrink_ratio": 0.33 },
-  "outcome": null
+  "clarity": { "mean_before": 0.42, "mean_after": 0.71, "topics_touched": 3 }
 }
 ```
 
@@ -85,30 +89,22 @@ Tier 1, data already in hand at finalize, zero new plumbing:
 3. **Clarity delta.** `finalize_run` already loads the prior snapshot right
    before computing the new one. Record `mean_before`, `mean_after`, topics
    touched. This is the de-risking signal.
-4. **Cost per settled decision.** `metrics.json` gives tokens/duration; divide by
-   decisions answered. Turns raw token counts into "what the spend bought."
-5. **Scope spend distribution.** `_summarize_metrics` already produces per-scope
-   token percentages. 60% of tokens in polish = misallocation.
 
-Tier 2, one small addition:
-
-6. **Contrarian cut signal (editor liveness).** The mandate says delete, but
-   nothing measures it. Cheapest honest proxy: word counts of the advocate doc
-   first draft vs final (`len(text.split())` on files already on disk). Report
-   `shrink_ratio`. Crude, but it detects the real failure mode: a *dead*
-   mandate where docs only ever grow. Don't over-engineer into diffing.
+Two more were built here and have since been retired: cost per settled decision
+and scope spend distribution, both fed by the per-agent token ledger nobody ever
+filled in. A tier-2 editor-liveness proxy (advocate-doc word counts, first draft
+vs final) went the same way — it measured debate documents, never the forge
+editor it was cited for.
 
 Skip: semantic measures of cut quality, per-role "intensity," any LLM-judge at
 finalize. Effort-heavy and gameable.
 
-`session.json` is mandatory, automatic, judgment-free. `rating.json` stays as-is:
-optional, later, human. The `outcome` field starts null and is the only part a
-human ever touches (Part 4).
+`session.json` is mandatory, automatic, judgment-free.
 
 ## Part 2: trends in `stats`
 
 A "Session health (last N vs. prior N)" block reading `session.json` files. Keep
-it to five that mean something:
+it to the few that mean something:
 
 - **Assumed-P0 rate**: P0s answered by assumption / P0s surfaced. Should trend
   to zero; the best "are we pausing when we should" number.
@@ -116,9 +112,10 @@ it to five that mean something:
   toward 1-iteration-0-rejection (rubber-stamping) as much as toward churn.
 - **Clarity gain per session**: mean delta. Zero on a new project means sessions
   aren't de-risking.
-- **Tokens per settled decision**: the honest efficiency number.
-- **Editor liveness**: % of sessions where the final doc is smaller than the
-  first draft.
+
+Two more shipped here and were retired: tokens per settled decision and editor
+liveness. Both looked like honest numbers and were computed from data nobody
+supplied, so both printed a confident answer over nothing.
 
 Vanity metrics to refuse: total runs, total tokens, and approval-rate-as-a-target
 (100% approval means the contrarian died).
@@ -166,8 +163,6 @@ Lowest-ceremony approach, added once a month of session records exists:
   rejections and clarity-before; flag 1-iteration runs on low-clarity topics.
 - **High P0 count** = thorough agents OR an under-specified prompt. Read per-topic
   over time; P0s should fall as clarity rises.
-- **Shrink ratio** isn't quality; a lazy editor could cut essence. Treat it as a
-  liveness check only; it must never become a target.
 - **Goodhart:** none of these may ever appear in agent prompts as targets
   ("surface ≥N decisions" would poison the P0 signal instantly). They're for the
   human reading `stats`, full stop.
@@ -177,10 +172,9 @@ Lowest-ceremony approach, added once a month of session records exists:
 
 ## Recommended first slice (when built)
 
-1. `session.json` at finalize (convergence, decisions, clarity delta, cost;
-   editor word-count block only if trivial).
+1. `session.json` at finalize (convergence, decisions, clarity delta).
 2. Ledger auto-append via `[outcomes] ledger_path`, soft-fail.
-3. `stats` session-health block with the five trends and the assumed-P0 nag.
+3. `stats` session-health block with the trends and the assumed-P0 nag.
 
 Defer: the `studio outcome` command and `--from-run` linking, any correlation
 analytics, all semantic/LLM-judged measures. `rate` stays exactly as-is.

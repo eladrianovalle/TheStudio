@@ -194,10 +194,6 @@ python studio/run_phase.py set-clarity --topic core_loop_design --score 0.9
 python studio/run_phase.py set-clarity --topic core_loop_design --reset
 python studio/run_phase.py recompute-clarity --phase studio --run-id <run_id>
 
-# Agent metrics (token tracking per agent)
-python studio/run_phase.py record-metrics --run-dir <path> --agent advocate --total-tokens 5000 --role marketing --scope alignment
-python studio/run_phase.py show-metrics --run-dir <path>
-
 # Quality ratings & cross-run stats (diagnostics + fine-tuning feedback loop)
 python studio/run_phase.py rate --run-dir <path> --score 4 --note "solid market read"  # human 1-5 quality score
 python studio/run_phase.py rate --run-dir <path> --score 5 --shipped yes --impact major --changed "shipped the lobby MVP"  # record the run's outcome
@@ -284,7 +280,6 @@ Runs land under the active output root: `studio/output/` when you run from this 
       decisions.json                   # Accumulated decision points + answers
       decisions.md                     # Human-readable settled decisions
       clarity.json                     # Per-topic clarity scores
-      metrics.json                     # Per-agent token usage (recorded during run)
       rating.json                      # Human 1-5 quality score (written by `rate`)
       summary.md
       run.json
@@ -300,7 +295,6 @@ Runs land under the active output root: `studio/output/` when you run from this 
 | `studio_roles` | `{pack, overrides, invited, completed, missing}` |
 | `quality` | Finalize-time quality checks: `{checks_run, warnings, errors}` |
 | `scope_stats` | Per-scope output stats: `{files, total_chars, total_words, avg_words}` |
-| `metrics` | Agent token usage: `{agents, total_tokens, total_duration_ms, by_scope, by_role}` |
 
 ---
 
@@ -361,7 +355,7 @@ Configure in `config/studio_settings.toml`. Use `--skip-cleanup` to bypass.
 
 ```
 studio/
-  run_phase.py              # CLI entrypoint: prepare, finalize, validate, cleanup, decision, clarity, metrics, rate, stats, export/import-outcomes, install, setup, offload, notify
+  run_phase.py              # CLI entrypoint: prepare, finalize, validate, cleanup, decision, clarity, rate, stats, export/import-outcomes, install, setup, offload, notify
   stats.py                  # Pure cross-run aggregation + formatting + outcome/session-health roll-up (backs `stats`)
   session.py                # Pure builder for the session.json health record finalize writes per run
   config_loading.py         # Shared TOML loader (tomllib/tomli fallback), used by every config reader
@@ -401,7 +395,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-861 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, contrarian FINDING-block parsing and the independent finding verifier, the design-phase critique guide (AI-slop blacklist + Goodwill Reservoir) gating, delta-based stats trend alerts, doc-parity (CLI/config docs vs source), installer ship-list parity (every slash command and workflow on disk is one the installer actually copies, so a new command can't work here and nowhere else), the spec-verification convention (a prompt-shaped spec may not be called shipped while its evidence file is unfilled, or has one of its headings dropped or left unanswered, and every hand-copy of the evidence skeleton's rules must still match the live one), clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, agent metrics tracking, quality ratings and cross-run stats, run outcome capture and cross-repo outcome export/import, session-health records and ledger auto-append, CLAUDE.md offload analysis, unstale audit configuration, smoke test configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
+861 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, contrarian FINDING-block parsing and the independent finding verifier, the design-phase critique guide (AI-slop blacklist + Goodwill Reservoir) gating, delta-based stats trend alerts, doc-parity (CLI/config docs vs source), installer ship-list parity (every slash command and workflow on disk is one the installer actually copies, so a new command can't work here and nowhere else), the spec-verification convention (a prompt-shaped spec may not be called shipped while its evidence file is unfilled, or has one of its headings dropped or left unanswered, and every hand-copy of the evidence skeleton's rules must still match the live one), clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, quality ratings and cross-run stats, run outcome capture and cross-repo outcome export/import, session-health records and ledger auto-append, CLAUDE.md offload analysis, unstale audit configuration, smoke test configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 

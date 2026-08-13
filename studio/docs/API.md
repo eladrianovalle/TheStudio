@@ -25,8 +25,6 @@ Supported commands:
 | `show-clarity` | Displays current project clarity scores. |
 | `set-clarity` | Overrides a topic's clarity score. |
 | `recompute-clarity` | Recomputes clarity from a run's decisions. |
-| `record-metrics` | Records token usage for a single agent invocation into `metrics.json`. |
-| `show-metrics` | Displays aggregated agent token usage for a run (by scope, role, per-agent). |
 | `rate` | Records a human quality rating (1-5, optional note) plus an optional run outcome (did it ship, what changed) into `rating.json`. |
 | `stats` | Cross-run diagnostics dashboard: run outcomes (ship rate, impact, what changed), verdict/approval rate, avg + lowest human ratings, token/cost efficiency, decision priority mix + answer rate, and prepare-usage counts. Supports `--phase`, `--json`, `--artifact-root`. |
 | `export-outcomes` | Exports this repo's rated runs as portable JSONL outcome records for another repo to import. |
@@ -94,37 +92,11 @@ Inside each run directory:
 `finalize` also has two additive side effects, both soft-fail (a failure prints a warning but never breaks finalize):
 
 - Writes `session.json` into the run directory: the automatic, judgment-free session-health record (schema in Section 4.1).
-- **Ledger auto-append.** When `[outcomes] ledger_path = "<path>"` is set under an `[outcomes]` table in `.studio/integrations.toml` (the same file that holds the Slack/n8n webhook config), `finalize` appends this run's outcome record to that local JSONL file, deduped by `(repo, run_id)` so re-finalizing refreshes the record rather than duplicating it. The record is the same shape `export-outcomes` emits (see Section 1.7), and unrated runs are included. This is a single-machine simplification: the "central ledger" becomes a fixed local file, so `finalize` can append directly instead of making you run `export-outcomes` then `import-outcomes` by hand. When the key is absent or unreadable, nothing is appended.
+- **Ledger auto-append.** When `[outcomes] ledger_path = "<path>"` is set under an `[outcomes]` table in `.studio/integrations.toml` (the same file that holds the Slack/n8n webhook config), `finalize` appends this run's outcome record to that local JSONL file, deduped by `(repo, run_id)` so re-finalizing refreshes the record rather than duplicating it. The record is the same shape `export-outcomes` emits (see Section 1.5), and unrated runs are included. This is a single-machine simplification: the "central ledger" becomes a fixed local file, so `finalize` can append directly instead of making you run `export-outcomes` then `import-outcomes` by hand. When the key is absent or unreadable, nothing is appended.
 
 ---
 
-### 1.3 `record-metrics` arguments
-
-| Flag | Required | Default | Description |
-| --- | --- | --- | --- |
-| `--run-dir PATH` | Yes | - | Path to the run directory. |
-| `--agent {advocate,contrarian,integrator,implementer}` | Yes | - | Agent type being recorded. |
-| `--total-tokens N` | Yes | - | Total tokens consumed by the agent. |
-| `--tool-uses N` | No | `0` | Number of tool uses. |
-| `--duration-ms N` | No | `0` | Wall-clock duration in milliseconds. |
-| `--role NAME` | No | `None` | Role name (for studio phase). |
-| `--scope {alignment,depth,polish,flat}` | No | `None` | Scope the agent ran in. |
-
-Appends an entry to `{run_dir}/metrics.json`. Called by the orchestrator after each Agent tool returns, using values from the `<usage>` block in the tool result.
-
----
-
-### 1.4 `show-metrics` arguments
-
-| Flag | Required | Default | Description |
-| --- | --- | --- | --- |
-| `--run-dir PATH` | Yes | - | Path to the run directory. |
-
-Displays a formatted summary of all recorded metrics: total tokens, tool uses, duration, breakdowns by scope and role, and per-agent detail.
-
----
-
-### 1.5 `rate` arguments
+### 1.3 `rate` arguments
 
 | Flag | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -141,7 +113,7 @@ The three `--shipped`/`--impact`/`--changed` flags are optional and record the r
 
 ---
 
-### 1.6 `stats` arguments
+### 1.4 `stats` arguments
 
 | Flag | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -153,13 +125,13 @@ Reads every run's `run.json`, `rating.json`, and `decisions.json` under the outp
 
 The dashboard opens with an **"Outcomes (did it ship / what changed)"** section: ship rate, impact mix, and recent "what changed" notes. It folds two sources together: this repo's rated runs plus any cross-repo ledger records pulled in via `import-outcomes` (local records win on conflict). With `--json`, the emitted dict gains an `outcomes` key holding that same summary (record/repo counts, `shipped`/`impact` tallies, `ship_rate`, and recent `changed` notes).
 
-The dashboard also renders a **"Session health"** block, computed from each run's `session.json` (see Section 4.1) by `stats.summarize_session_health`. It reports five auto-measured signals over the finalized sessions on record: assumed-P0 rate (P0s guessed instead of asked), convergence (median iterations + rejection rate), clarity gain per session, tokens per settled decision, and editor liveness (share of sessions whose final doc shrank). With enough sessions it splits earlier vs. recent to show the trend. With `--json`, the emitted dict gains a `session_health` key holding this summary.
+The dashboard also renders a **"Session health"** block, computed from each run's `session.json` (see Section 4.1) by `stats.summarize_session_health`. It reports three auto-measured signals over the finalized sessions on record: assumed-P0 rate (P0s guessed instead of asked), convergence (median iterations + rejection rate), and clarity gain per session. With enough sessions it splits earlier vs. recent to show the trend. With `--json`, the emitted dict gains a `session_health` key holding this summary.
 
 Near the top the dashboard surfaces a **"Trend Alerts"** block when a metric is regressing, computed by `stats.detect_trend_alerts`. It applies a delta-based rule: a metric — human rating (falling), tokens/run or cost/run (rising) — is flagged only when it has worsened by ≥5% relative across **2+ consecutive runs**, so a single-run blip never fires. The block is omitted entirely when nothing is regressing. With `--json`, the emitted dict gains a `trend_alerts` key holding the list of alerts (metric, direction, consecutive-run count, from/to values, pct change).
 
 ---
 
-### 1.7 `export-outcomes` arguments
+### 1.5 `export-outcomes` arguments
 
 | Flag | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -171,7 +143,7 @@ Collects this repo's rated runs into portable JSONL outcome records (one JSON ob
 
 ---
 
-### 1.8 `import-outcomes` arguments
+### 1.6 `import-outcomes` arguments
 
 | Flag | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -247,7 +219,6 @@ Every run directory contains a `run.json` created by `prepare` and updated by `f
 | `updated_iso` | string (optional) | Added by finalize to record the last change timestamp. |
 | `scope_stats` | object or null | Per-scope output stats from finalize: `{ "<scope>": { "files": int, "total_chars": int, "total_words": int, "avg_words": int } }`. |
 | `quality` | object or null | Quality check results from finalize: `{ "checks_run": int, "warnings": list[str], "errors": list[str] }`. |
-| `metrics` | object or null | Agent token usage aggregated from `metrics.json` at finalize: `{ "agents": int, "total_tokens": int, "total_duration_ms": int, "total_tool_uses": int, "by_scope": { ... }, "by_role": { ... } }`. |
 
 You can safely parse this JSON for dashboards, scripts, or audits.
 
@@ -255,7 +226,7 @@ You can safely parse this JSON for dashboards, scripts, or audits.
 
 ### 4.1 `session.json` Schema
 
-`finalize` also writes a `session.json` into each run directory: an automatic, judgment-free **session-health** record. A Studio run is a planning session whose specs get built later, so its quality can't be judged at finalize; what *can* be measured is whether the debate converged, surfaced and settled the right questions, reduced uncertainty, and at what cost. Every field is derived from files the run already produced (no human input). The record is built by `session.build_session_record` and written soft-fail, so a failure here never breaks finalize.
+`finalize` also writes a `session.json` into each run directory: an automatic, judgment-free **session-health** record. A Studio run is a planning session whose specs get built later, so its quality can't be judged at finalize; what *can* be measured is whether the debate converged, surfaced and settled the right questions, and reduced uncertainty. Every field is derived from files the run already produced (no human input). The record is built by `session.build_session_record` and written soft-fail, so a failure here never breaks finalize.
 
 | Field | Type | Description |
 | --- | --- | --- |
@@ -268,11 +239,10 @@ You can safely parse this JSON for dashboards, scripts, or audits.
 | `convergence` | object | `{ "iterations": int, "max_iterations": int, "rejections": int }`: iterations to verdict and how many REJECTED verdicts preceded it. |
 | `decisions` | object | `{ "surfaced": {"P0": int, "P1": int, "P2": int}, "answered_by_user": int, "answered_by_assumption": int, "unanswered": int, "p0_assumed": int }`. `p0_assumed` is the key signal: blocking questions the session guessed on rather than asking. |
 | `clarity` | object | `{ "mean_before": float or null, "mean_after": float or null, "topics_touched": int }`: the de-risking delta. |
-| `cost` | object | `{ "total_tokens": int, "duration_ms": int, "agents": int, "tokens_per_settled_decision": int or null, "scope_pct": { "<scope>": int } }`. `tokens_per_settled_decision` is null when nothing was settled; `scope_pct` is each scope's whole-number percent share of tokens. |
-| `editor` | object | `{ "first_draft_words": int, "final_words": int, "shrink_ratio": float }`: editor-liveness proxy from advocate-doc word counts. `shrink_ratio` of 0.33 means a third was cut; 0.0 when there is no first draft to measure against. |
-| `outcome` | null | Always null at finalize; the one field a human may edit later to record whether the plan got built. |
 
-See `docs/SESSION_ANALYTICS_PLAN.md` for the design and the five health signals `stats` derives from these records.
+Every field is counted from a file the run already produced. Nothing here waits for a person or an agent to supply a number, which is why the record is complete the moment finalize writes it.
+
+See `docs/SESSION_ANALYTICS_PLAN.md` for the design and the three health signals `stats` derives from these records.
 
 ---
 

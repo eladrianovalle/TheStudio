@@ -4,7 +4,7 @@ Studio CLI entrypoint.
 
 The single command surface for Studio. Beyond preparing per-phase instructions
 and run directories, it finalizes and validates runs, manages decisions and
-clarity, records agent metrics and human ratings, prints the cross-run stats
+clarity, records human ratings, prints the cross-run stats
 dashboard and maintains the outcomes ledger, writes session-health records,
 sends run digests, and installs/updates Studio into other repos. Runs are
 executed by an AI assistant (Claude Code is the supported path); this script
@@ -88,7 +88,6 @@ from stats import (
     VALID_IMPACT,
     VALID_SHIPPED,
     _parse_usage_log,
-    _summarize_metrics,
     aggregate_stats,
     detect_trend_alerts,
     format_stats,
@@ -219,7 +218,7 @@ SUBCOMMANDS = {
     "extract-decisions", "inject-context",
     "init", "check-install", "check-updates", "update",
     "show-clarity", "set-clarity", "recompute-clarity",
-    "record-metrics", "show-metrics", "offload", "setup",
+    "offload", "setup",
     "rate", "stats", "notify",
     "export-outcomes", "import-outcomes",
 }
@@ -1488,23 +1487,11 @@ def _count_rejections(run_dir: Path, phase: str) -> int:
     return rejections
 
 
-def _ordered_advocate_word_counts(run_dir: Path, phase: str) -> List[int]:
-    """Word count of each advocate document, first draft first, final last."""
-    counts: List[int] = []
-    for path in _ordered_agent_files(run_dir, phase, "advocate"):
-        try:
-            counts.append(len(path.read_text(encoding="utf-8").split()))
-        except OSError:
-            continue
-    return counts
-
-
 def _write_session_record(
     run_dir: Path,
     meta: Dict,
     phase: str,
     run_id: str,
-    metrics_entries: List[Dict],
     clarity_mean_before: Optional[float],
     clarity_mean_after: Optional[float],
     clarity_topics_touched: int,
@@ -1532,8 +1519,6 @@ def _write_session_record(
             clarity_mean_before=clarity_mean_before,
             clarity_mean_after=clarity_mean_after,
             clarity_topics_touched=clarity_topics_touched,
-            metrics_entries=metrics_entries,
-            advocate_word_counts=_ordered_advocate_word_counts(run_dir, phase),
         )
         write_json(run_dir / "session.json", record)
     except Exception as exc:  # never let the health record break finalize
@@ -1574,21 +1559,11 @@ def finalize_run(args: argparse.Namespace) -> None:
         meta["cost"] = args.cost
     meta["updated_iso"] = utc_now().isoformat(timespec="seconds")
 
-    # Aggregate agent metrics into run.json before the single write
-    metrics_entries = _load_metrics(run_dir)
-    if metrics_entries:
-        meta["metrics"] = _summarize_metrics(metrics_entries)
-
     write_json(meta_path, meta)
     rebuild_index()
     _append_run_log(meta)
     _maybe_notify(run_dir)
     _maybe_append_to_ledger(run_dir, meta)
-
-    if metrics_entries:
-        total_tokens = meta["metrics"]["total_tokens"]
-        agent_count = meta["metrics"]["agents"]
-        print(f"Agent metrics: {agent_count} agents, {total_tokens:,} total tokens")
 
     # Clarity delta for the session record: the "before" is captured below only
     # when there are decisions to recompute clarity from; otherwise it stays null.
@@ -1636,7 +1611,6 @@ def finalize_run(args: argparse.Namespace) -> None:
         meta,
         phase,
         run_id,
-        metrics_entries,
         clarity_mean_before,
         clarity_mean_after,
         clarity_topics_touched,
@@ -2156,24 +2130,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override artifact root directory.",
     )
 
-    # --- Agent metrics ---
-
-    record_metrics_parser = subparsers.add_parser(
-        "record-metrics", help="Record token usage for a single agent invocation."
-    )
-    record_metrics_parser.add_argument("--run-dir", type=Path, required=True, help="Path to the run directory.")
-    record_metrics_parser.add_argument("--agent", required=True, choices=["advocate", "contrarian", "integrator", "implementer"], help="Agent type.")
-    record_metrics_parser.add_argument("--total-tokens", type=int, required=True, help="Total tokens consumed.")
-    record_metrics_parser.add_argument("--tool-uses", type=int, default=0, help="Number of tool uses.")
-    record_metrics_parser.add_argument("--duration-ms", type=int, default=0, help="Duration in milliseconds.")
-    record_metrics_parser.add_argument("--role", default=None, help="Role name (for studio phase).")
-    record_metrics_parser.add_argument("--scope", default=None, choices=["alignment", "depth", "polish", "flat"], help="Scope name.")
-
-    show_metrics_parser = subparsers.add_parser(
-        "show-metrics", help="Display token usage summary for a run."
-    )
-    show_metrics_parser.add_argument("--run-dir", type=Path, required=True, help="Path to the run directory.")
-
     # --- Human quality ratings & cross-run stats ---
 
     rate_parser = subparsers.add_parser(
@@ -2516,95 +2472,6 @@ def extract_decisions(args: argparse.Namespace) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Agent metrics tracking
-# ---------------------------------------------------------------------------
-
-def _load_metrics(run_dir: Path) -> List[Dict]:
-    """Load metrics.json from a run directory, returning [] if absent."""
-    metrics_path = run_dir / "metrics.json"
-    try:
-        return json.loads(metrics_path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return []
-
-
-def _save_metrics(run_dir: Path, entries: List[Dict]) -> None:
-    """Write metrics.json to a run directory."""
-    write_json(run_dir / "metrics.json", entries)
-
-
-def record_metrics(args: argparse.Namespace) -> None:
-    """Record token usage for a single agent invocation."""
-    run_dir = Path(args.run_dir)
-    if not run_dir.is_dir():
-        raise FileNotFoundError(f"Run directory not found: {run_dir}")
-
-    entries = _load_metrics(run_dir)
-    entry: Dict = {
-        "agent": args.agent,
-        "total_tokens": args.total_tokens,
-        "tool_uses": args.tool_uses or 0,
-        "duration_ms": args.duration_ms or 0,
-        "timestamp": utc_now().isoformat(timespec="seconds"),
-    }
-    if args.role:
-        entry["role"] = args.role
-    if args.scope:
-        entry["scope"] = args.scope
-    entries.append(entry)
-    _save_metrics(run_dir, entries)
-
-
-def show_metrics(args: argparse.Namespace) -> None:
-    """Display metrics summary for a run."""
-    run_dir = Path(args.run_dir)
-    if not run_dir.is_dir():
-        raise FileNotFoundError(f"Run directory not found: {run_dir}")
-
-    entries = _load_metrics(run_dir)
-    if not entries:
-        print("No metrics recorded for this run.")
-        return
-
-    summary = _summarize_metrics(entries)
-
-    print(f"\n{'='*60}")
-    print(f"Agent Metrics — {run_dir.name}")
-    print(f"{'='*60}")
-    print(f"  Agents spawned:  {summary['agents']}")
-    print(f"  Total tokens:    {summary['total_tokens']:,}")
-    print(f"  Total tool uses: {summary['total_tool_uses']:,}")
-    total_sec = summary["total_duration_ms"] / 1000
-    print(f"  Total duration:  {total_sec:.0f}s ({total_sec/60:.1f}m)")
-
-    if summary["by_scope"]:
-        print("\n  By scope:")
-        for scope, stats in sorted(summary["by_scope"].items()):
-            pct = (stats["total_tokens"] / summary["total_tokens"] * 100) if summary["total_tokens"] else 0
-            print(f"    {scope:12s}  {stats['agents']} agents  {stats['total_tokens']:>8,} tokens ({pct:.0f}%)")
-
-    if summary["by_role"]:
-        print("\n  By role:")
-        for role, stats in sorted(summary["by_role"].items()):
-            pct = (stats["total_tokens"] / summary["total_tokens"] * 100) if summary["total_tokens"] else 0
-            print(f"    {role:16s}  {stats['agents']} agents  {stats['total_tokens']:>8,} tokens ({pct:.0f}%)")
-
-    # Per-agent detail
-    print("\n  Agent detail:")
-    for e in entries:
-        role = e.get("role", "")
-        scope = e.get("scope", "")
-        label = e["agent"]
-        if role:
-            label = f"{label}--{role}"
-        if scope:
-            label = f"{label} ({scope})"
-        print(f"    {label:40s}  {e.get('total_tokens', 0):>8,} tokens  {e.get('duration_ms', 0)/1000:.0f}s")
-
-    print()
-
-
-# ---------------------------------------------------------------------------
 # Human quality ratings & cross-run stats
 # ---------------------------------------------------------------------------
 
@@ -2668,7 +2535,7 @@ def _write_rating(
 def record_rating(args: argparse.Namespace) -> None:
     """Record a human quality rating (1-5), plus optional outcome, for a run.
 
-    Stored as rating.json alongside metrics.json, the human counterpart to the
+    Stored as rating.json in the run directory, the human counterpart to the
     agent-emitted verdict. The score says how good the run was; the optional
     ``--shipped/--impact/--changed`` outcome says what it actually led to. This
     is the signal `stats` uses to gauge how well the system is doing and which
@@ -3429,10 +3296,6 @@ def _dispatch(args: argparse.Namespace) -> None:
         set_clarity(args)
     elif args.command == "recompute-clarity":
         recompute_clarity(args)
-    elif args.command == "record-metrics":
-        record_metrics(args)
-    elif args.command == "show-metrics":
-        show_metrics(args)
     elif args.command == "rate":
         record_rating(args)
     elif args.command == "stats":

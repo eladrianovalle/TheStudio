@@ -247,3 +247,19 @@ class TestCLIOutcomes:
         assert stats.returncode == 0, stats.stderr
         assert "Outcomes (did it ship" in stats.stdout
         assert "cut lobby scope" in stats.stdout
+
+
+class TestRetiredMetricsCommands:
+    """The volunteer-fed metrics commands are gone, not deprecated."""
+
+    @pytest.mark.parametrize("command", ["record-metrics", "show-metrics"])
+    def test_command_is_rejected_as_an_invalid_choice(self, cli_studio_root, command):
+        result = _run_cli(command, "--help", studio_root=cli_studio_root)
+        assert result.returncode != 0
+        assert "invalid choice" in result.stderr
+        assert command in result.stderr
+
+    def test_a_command_that_survived_still_works(self, cli_studio_root):
+        """Guards the test above: the CLI itself is fine, these two names are not."""
+        result = _run_cli("show-clarity", "--help", studio_root=cli_studio_root)
+        assert result.returncode == 0, result.stderr

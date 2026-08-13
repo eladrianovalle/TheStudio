@@ -23,7 +23,7 @@ before you start (they drift as the file changes).
 | CLI | `_normalize_*`, `parse_cli_args`, `_add_artifact_root_arg`, `build_parser` (~430 lines) |
 | validate | `validate_run` |
 | decisions | `record_decisions`, `_decision_to_dict`, `check_decisions`, `extract_decisions` |
-| metrics/rating/stats I/O | `record_metrics`, `show_metrics`, `record_rating`, `show_stats`, outcome export/import (pure half now in `stats.py`) |
+| rating/stats I/O | `record_rating`, `show_stats`, outcome export/import (pure half now in `stats.py`) |
 | context assembly | `inject_context` |
 | thin command wrappers | `notify`, `show_clarity`, `set_clarity`, `recompute_clarity` |
 | install/setup/offload dispatch | `_do_init`, `_do_check_install`, `_do_update`, `_do_setup`, `do_offload` |
