@@ -289,19 +289,12 @@ class TestShippedFeaturesBlock:
             "frontmatter says status: shipped."
         ) in dashboard.stdout
 
-    def test_shipped_specs_show_before_a_repo_has_any_runs(self, cli_studio_root):
-        """The state right after /spec lands somewhere new: features, no runs yet."""
-        self._write_spec(cli_studio_root.parent / "specs", "first-thing",
-                         changed="the very first landing")
-
-        dashboard = _run_cli("stats", studio_root=cli_studio_root)
-
-        assert dashboard.returncode == 0, dashboard.stderr
-        assert "No local runs found yet" in dashboard.stdout
-        assert "[first-thing] the very first landing" in dashboard.stdout
-
     def test_a_consuming_repos_specs_are_found_under_dot_studio(self, cli_studio_root, tmp_path):
-        """The consuming-repo branch: artifact root elsewhere, specs in .studio/specs."""
+        """The consuming-repo branch: artifact root elsewhere, specs in .studio/specs.
+
+        This repo has no runs either, so it doubles as the "features before any
+        run" case: specs reach the dashboard without a single finalized run.
+        """
         consumer = tmp_path / "my_game"
         (consumer / ".studio").mkdir(parents=True)
         self._write_spec(

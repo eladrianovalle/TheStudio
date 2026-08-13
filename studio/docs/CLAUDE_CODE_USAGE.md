@@ -207,7 +207,7 @@ shipped_changed: cut the lobby scope from 6 screens to 2
 
 `stats` reads those straight off `specs/*.md` (or `.studio/specs/*.md` in a repo that installed Studio). The spec-verification test refuses a `shipped` claim while either line is blank, so the record can't quietly rot.
 
-**Be realistic about reach:** this is a **Studio-source-repo feature**. Across the consuming repos there are 19 specs and every one is still at `approved` — none has ever been flipped to `shipped` — so in those repos the block prints one line saying nothing has shipped yet, and it will keep printing it until someone flips one.
+**Be realistic about reach:** today this is effectively a Studio-source-repo feature. Every spec in the consuming repos is still at `approved`, so those repos print one line saying nothing has shipped yet, and will keep printing it until someone flips a spec there.
 
 **You supply nothing for the rest, either.** Every finalize writes an automatic `{run_dir}/session.json`: a judgment-free session-health record (iterations to a verdict, decisions surfaced vs answered vs assumed, clarity gained). Finalize asks you for nothing and prints no prompt.
 
