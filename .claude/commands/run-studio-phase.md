@@ -263,20 +263,8 @@ Write `{run_dir}/summary.md` covering:
 ### Step 6: Finalize
 
 ```bash
-python ".studio/source/run_phase.py" finalize --phase studio --run-id {run_id} --status completed --verdict {APPROVED|REJECTED} --no-rate-prompt
+python ".studio/source/run_phase.py" finalize --phase studio --run-id {run_id} --status completed --verdict {APPROVED|REJECTED}
 ```
-
-### Step 7: Rate this run (quality feedback loop)
-
-Ask the user, in one short message, to rate the run's quality 1-5 (1 = poor, 5 = excellent) with an optional one-line note. Make clear it's optional. They can skip.
-
-If they give a score, record it (the human signal `stats` uses to gauge and tune Studio over time):
-
-```bash
-python ".studio/source/run_phase.py" rate --run-dir {run_dir} --score {1-5} --note "{their note}"
-```
-
-If they skip, do nothing. Don't nag.
 
 ---
 

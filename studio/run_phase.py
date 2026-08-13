@@ -4,8 +4,7 @@ Studio CLI entrypoint.
 
 The single command surface for Studio. Beyond preparing per-phase instructions
 and run directories, it finalizes and validates runs, manages decisions and
-clarity, records human ratings, prints the cross-run stats
-dashboard and maintains the outcomes ledger, writes session-health records,
+clarity, prints the cross-run stats dashboard, writes session-health records,
 sends run digests, and installs/updates Studio into other repos. Runs are
 executed by an AI assistant (Claude Code is the supported path); this script
 does the mechanics around them.
@@ -78,20 +77,18 @@ import clarity
 from verdict import extract_verdict
 from session import build_session_record
 from integrations.slack_digest import (
-    INTEGRATIONS_FILENAME,
     load_integrations_config,
     notify_run,
 )
 
 from config_loading import tomllib
 from stats import (
-    VALID_IMPACT,
-    VALID_SHIPPED,
     _parse_usage_log,
     aggregate_stats,
     format_stats,
-    summarize_outcomes,
+    parse_frontmatter,
     summarize_session_health,
+    summarize_shipped_specs,
 )
 
 
@@ -218,8 +215,7 @@ SUBCOMMANDS = {
     "init", "check-install", "check-updates", "update",
     "show-clarity", "set-clarity", "recompute-clarity",
     "offload", "setup",
-    "rate", "stats", "notify",
-    "export-outcomes", "import-outcomes",
+    "stats", "notify",
 }
 
 
@@ -362,7 +358,7 @@ def get_knowledge_log_path() -> Path:
 
 
 def _project_name() -> str:
-    """Short name for the repo a run belongs to; tags outcome records.
+    """Short name for the repo a run belongs to; names the repo in ``session.json``.
 
     In a consuming repo the artifact root IS the repo root, so its directory name
     is the project name. In this tool repo the artifact root is the ``studio/``
@@ -375,48 +371,20 @@ def _project_name() -> str:
     return artifact_root.name
 
 
-def get_outcomes_ledger_path() -> Path:
-    """Central append-only ledger of run outcomes (mirrors get_knowledge_log_path).
+def get_specs_dir() -> Path:
+    """Where /spec writes specs: repo-root specs/ here, .studio/specs/ in a consuming repo.
 
-    This is where cross-repo outcome records land via ``import-outcomes`` so that
-    ``stats`` in the tool repo can see results from every project, not only runs
-    done here. Lives under ``knowledge/`` (gitignored). It can name unshipped
-    work, so it stays local unless you deliberately commit a redacted copy.
+    The ``.parent`` is load-bearing. In this repo the artifact root is the
+    ``studio/`` directory, not the repo root, and ``specs/`` sits beside it — so
+    the source-repo branch has to climb one level. Everything branches off the
+    artifact root, never the studio root, the same way ``get_output_root`` and
+    ``get_knowledge_log_path`` do.
     """
     artifact_root = get_artifact_root().resolve()
     studio_root = get_studio_root().resolve()
     if artifact_root == studio_root:
-        return studio_root / "knowledge" / "outcomes.jsonl"
-    return artifact_root / ".studio" / "knowledge" / "outcomes.jsonl"
-
-
-def get_configured_ledger_path() -> Optional[Path]:
-    """Local ledger path for auto-appending outcome records at finalize.
-
-    Reads an optional ``[outcomes] ledger_path`` from
-    ``<artifact_root>/.studio/integrations.toml``, the same file that holds the
-    Slack/n8n webhook config. This is a single-user simplification: the "central
-    ledger" is just a fixed local file (typically the tool repo's
-    ``knowledge/outcomes.jsonl``), so finalize can append there directly instead
-    of making you run export-outcomes then import-outcomes by hand.
-
-    Returns the resolved path when configured, or None when the config file, the
-    ``[outcomes]`` table, or the ``ledger_path`` key is absent or unreadable. The
-    ledger file itself need not exist yet; the first append creates it. Never
-    raises: a broken config must not break finalize.
-    """
-    config_path = get_artifact_root() / ".studio" / INTEGRATIONS_FILENAME
-    try:
-        if not config_path.is_file():
-            return None
-        with config_path.open("rb") as fh:
-            data = tomllib.load(fh)
-        raw = (data.get("outcomes") or {}).get("ledger_path")
-        if not isinstance(raw, str) or not raw.strip():
-            return None
-        return Path(raw).expanduser().resolve()
-    except Exception:
-        return None
+        return studio_root.parent / "specs"
+    return artifact_root / ".studio" / "specs"
 
 
 def utc_now() -> datetime:
@@ -1557,7 +1525,6 @@ def finalize_run(args: argparse.Namespace) -> None:
     rebuild_index()
     _append_run_log(meta)
     _maybe_notify(run_dir)
-    _maybe_append_to_ledger(run_dir, meta)
 
     # Clarity delta for the session record: the "before" is captured below only
     # when there are decisions to recompute clarity from; otherwise it stays null.
@@ -1625,10 +1592,6 @@ def finalize_run(args: argparse.Namespace) -> None:
         print("   2. Prepare a rerun with revised approach")
         print("   3. Rerun will automatically inject failure context")
 
-    # Invite a human quality rating to close the feedback loop (skippable).
-    if meta['status'] == 'COMPLETED' and not getattr(args, 'no_rate_prompt', False):
-        _prompt_for_rating(run_dir)
-
 
 def _maybe_notify(run_dir: Path) -> None:
     """Auto-fire the run digest on finalize if a webhook target is enabled.
@@ -1648,38 +1611,6 @@ def _maybe_notify(run_dir: Path) -> None:
             print(f"Notify: {line}")
     except Exception as exc:
         print(f"Notify failed: {exc}", file=sys.stderr)
-
-
-def _maybe_append_to_ledger(run_dir: Path, meta: Dict) -> None:
-    """Append this run's outcome record to the configured local ledger.
-
-    Collapses the manual export-outcomes → import-outcomes two-step into one
-    finalize side effect: when ``[outcomes] ledger_path`` is set in
-    ``.studio/integrations.toml``, the finalized run (rated or not) is appended to
-    that ledger, deduped by (repo, run_id) so re-finalizing refreshes the record
-    instead of duplicating it. Default-off and soft-fail: on any error we warn,
-    print the manual import fallback, and never break finalize. Mirrors
-    _maybe_notify.
-    """
-    ledger_path = get_configured_ledger_path()
-    if ledger_path is None:
-        return
-    try:
-        run = dict(meta)
-        run["_rating"] = _load_rating(run_dir)
-        record = _outcome_record_from_run(run, _project_name())
-        existing = _read_ledger(ledger_path)
-        merged = _merge_outcomes(existing, [record])
-        ledger_path.parent.mkdir(parents=True, exist_ok=True)
-        _write_ledger(ledger_path, merged)
-        print(f"Appended outcome record to ledger: {ledger_path}")
-    except Exception as exc:
-        print(f"Ledger append failed ({exc}); record NOT added to {ledger_path}", file=sys.stderr)
-        print(
-            f"   Fallback: {_entrypoint()} export-outcomes --out out.jsonl && "
-            f"{_entrypoint()} import-outcomes --from out.jsonl",
-            file=sys.stderr,
-        )
 
 
 def rebuild_index() -> None:
@@ -1820,7 +1751,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_artifact_root_arg(prepare_parser)
 
-    finalize_parser = subparsers.add_parser("finalize", help="Mark a run completed: refresh index, write session.json, append to the outcomes ledger.")
+    finalize_parser = subparsers.add_parser("finalize", help="Mark a run completed: refresh index, write session.json, append the run log.")
     finalize_parser.add_argument(
         "--phase",
         required=False,
@@ -1850,11 +1781,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--iterations-run",
         type=int,
         help="Number of iterations executed.",
-    )
-    finalize_parser.add_argument(
-        "--no-rate-prompt",
-        action="store_true",
-        help="Suppress the end-of-run quality-rating prompt/nudge.",
     )
     _add_artifact_root_arg(finalize_parser)
 
@@ -2114,53 +2040,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override artifact root directory.",
     )
 
-    # --- Human quality ratings & cross-run stats ---
-
-    rate_parser = subparsers.add_parser(
-        "rate", help="Record a human quality rating (1-5) for a completed run."
-    )
-    rate_parser.add_argument("--run-dir", type=Path, required=True, help="Path to the run directory.")
-    rate_parser.add_argument(
-        "--score", type=int, required=True, choices=[1, 2, 3, 4, 5],
-        help="Quality score: 1 (poor) to 5 (excellent).",
-    )
-    rate_parser.add_argument("--note", default=None, help="Optional note on what was good or bad.")
-    rate_parser.add_argument(
-        "--shipped", default=None, choices=list(VALID_SHIPPED),
-        help="Outcome: did this run's result actually ship? (yes/no/partial)",
-    )
-    rate_parser.add_argument(
-        "--impact", default=None, choices=list(VALID_IMPACT),
-        help="Outcome: how much did it change downstream? (none/minor/major)",
-    )
-    rate_parser.add_argument(
-        "--changed", default=None,
-        help="Outcome: one line on what this run actually changed.",
-    )
-
-    export_outcomes_parser = subparsers.add_parser(
-        "export-outcomes",
-        help="Export this repo's runs as portable JSONL outcome records (rated or not).",
-    )
-    export_outcomes_parser.add_argument(
-        "--out", default=None, help="Write JSONL here (default: stdout)."
-    )
-    export_outcomes_parser.add_argument(
-        "--repo", default=None, help="Project name to tag records with (default: repo dir name)."
-    )
-    _add_artifact_root_arg(export_outcomes_parser)
-
-    import_outcomes_parser = subparsers.add_parser(
-        "import-outcomes",
-        help="Merge JSONL outcome records into the central ledger (dedup by repo+run_id).",
-    )
-    import_outcomes_parser.add_argument(
-        "--from", dest="from_file", required=True, help="Path to a JSONL outcomes export."
-    )
-    _add_artifact_root_arg(import_outcomes_parser)
+    # --- Cross-run stats ---
 
     stats_parser = subparsers.add_parser(
-        "stats", help="Cross-run diagnostics: outcomes, ratings, decisions, usage."
+        "stats", help="Cross-run diagnostics: shipped features, verdicts, decisions, usage."
     )
     stats_parser.add_argument(
         "--phase", default=None, choices=sorted(PHASE_DETAILS.keys()),
@@ -2456,18 +2339,8 @@ def extract_decisions(args: argparse.Namespace) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Human quality ratings & cross-run stats
+# Cross-run stats
 # ---------------------------------------------------------------------------
-
-def _load_rating(run_dir: Path) -> Optional[Dict]:
-    """Load rating.json from a run directory, returning None if absent/unreadable."""
-    try:
-        return json.loads((run_dir / "rating.json").read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return None
-    except (json.JSONDecodeError, OSError):
-        return None
-
 
 def _load_session(run_dir: Path) -> Optional[Dict]:
     """Load session.json from a run directory, returning None if absent/unreadable.
@@ -2483,230 +2356,43 @@ def _load_session(run_dir: Path) -> Optional[Dict]:
         return None
 
 
-def _write_rating(
-    run_dir: Path,
-    score: int,
-    note: str,
-    shipped: Optional[str] = None,
-    impact: Optional[str] = None,
-    changed: Optional[str] = None,
-) -> Dict:
-    """Write rating.json (the human counterpart to the agent verdict).
+def _shipped_spec_records() -> List[Dict]:
+    """One record per spec whose frontmatter says ``status: shipped``.
 
-    The optional shipped/impact/changed fields are the *outcome* of the run
-    (what it led to downstream), stored under an ``outcome`` block. They answer
-    "did this actually change anything, and what," which is the signal a run's
-    verdict and quality score can't capture on their own.
+    Reads the specs directory directly — no index, no cache — because the
+    frontmatter of a file already on disk is the whole data source. Eval-results
+    files are skipped: they sit beside a spec and carry their own headings, not a
+    spec's status. Frontmatter is parsed by ``stats.parse_frontmatter``, the same
+    reader ``tests/test_spec_verification.py`` uses, so the gate that demands
+    these two lines and the dashboard that prints them can never disagree.
+
+    Returns an empty list when the directory is absent, which is the normal case
+    in a repo that has never run /spec.
     """
-    rating = {
-        "score": score,
-        "note": (note or "").strip(),
-        "rated_iso": utc_now().isoformat(timespec="seconds"),
-    }
-    outcome = {}
-    if shipped:
-        outcome["shipped"] = shipped
-    if impact:
-        outcome["impact"] = impact
-    if changed and changed.strip():
-        outcome["changed"] = changed.strip()
-    if outcome:
-        rating["outcome"] = outcome
-    write_json(run_dir / "rating.json", rating)
-    return rating
-
-
-def record_rating(args: argparse.Namespace) -> None:
-    """Record a human quality rating (1-5), plus optional outcome, for a run.
-
-    Stored as rating.json in the run directory, the human counterpart to the
-    agent-emitted verdict. The score says how good the run was; the optional
-    ``--shipped/--impact/--changed`` outcome says what it actually led to. This
-    is the signal `stats` uses to gauge how well the system is doing and which
-    runs to learn from.
-    """
-    run_dir = Path(args.run_dir)
-    if not run_dir.is_dir():
-        raise FileNotFoundError(f"Run directory not found: {run_dir}")
-
-    rating = _write_rating(
-        run_dir,
-        args.score,
-        args.note,
-        shipped=getattr(args, "shipped", None),
-        impact=getattr(args, "impact", None),
-        changed=getattr(args, "changed", None),
-    )
-    suffix = f' — "{rating["note"]}"' if rating["note"] else ""
-    print(f"Recorded rating {rating['score']}/5 for {run_dir.name}{suffix}")
-    outcome = rating.get("outcome")
-    if outcome:
-        print("  Outcome: " + ", ".join(f"{k}={v}" for k, v in outcome.items()))
-
-
-def _prompt_for_rating(run_dir: Path) -> None:
-    """Invite a human quality rating at the end of finalize.
-
-    Interactive when attached to a TTY (a human running ``finalize`` directly);
-    otherwise prints a copy-paste nudge so automation (and the assistant driving
-    finalize via a non-interactive shell) never blocks on stdin.
-    """
-    nudge = (
-        f"   {_entrypoint()} rate --run-dir {run_dir} "
-        f"--score <1-5> --note \"...\""
-    )
-    if not sys.stdin.isatty():
-        print("\n📊 Rate this run (feeds `stats` + tuning over time):")
-        print(nudge)
-        return
-
-    try:
-        raw = input("\n📊 Rate this run 1-5 (Enter to skip): ").strip()
-    except (EOFError, KeyboardInterrupt):
-        print()
-        return
-    if not raw:
-        return
-    try:
-        score = int(raw)
-    except ValueError:
-        print(f"   Not a number — skipped. Rate later with:\n{nudge}")
-        return
-    if not 1 <= score <= 5:
-        print("   Score must be 1-5 — skipped.")
-        return
-    try:
-        note = input("   Note (optional, Enter to skip): ").strip()
-    except (EOFError, KeyboardInterrupt):
-        note = ""
-        print()
-    _write_rating(run_dir, score, note)
-    print(f"   Recorded {score}/5.")
-
-
-def _outcome_record_from_run(run: Dict, repo: str) -> Dict:
-    """Build a portable outcome record from an enriched run dict.
-
-    Every run yields a record, including unrated ones; an unrated run is still a
-    session the ledger and stats should see. A rating, when present, fills in
-    score/shipped/impact/changed/rated_iso; without one those stay null while
-    repo, run_id, phase, verdict, and status are still recorded.
-    """
-    rating = run.get("_rating") or {}
-    outcome = rating.get("outcome") or {}
-    return {
-        "repo": repo,
-        "run_id": run.get("run_id", Path(run.get("run_dir", "?")).name),
-        "phase": run.get("phase"),
-        "verdict": run.get("verdict"),
-        "status": run.get("status"),
-        "score": rating.get("score"),
-        "shipped": outcome.get("shipped"),
-        "impact": outcome.get("impact"),
-        "changed": outcome.get("changed"),
-        "rated_iso": rating.get("rated_iso"),
-    }
-
-
-def _read_ledger(path: Path) -> List[Dict]:
-    """Read a JSONL outcomes file, skipping blank or unparseable lines."""
-    if not path.exists():
+    specs_dir = get_specs_dir()
+    if not specs_dir.is_dir():
         return []
+
     records: List[Dict] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
+    for spec_path in sorted(specs_dir.glob("*.md")):
+        if spec_path.name.endswith("-eval-results.md"):
             continue
         try:
-            records.append(json.loads(line))
-        except json.JSONDecodeError:
+            frontmatter = parse_frontmatter(spec_path.read_text(encoding="utf-8"))
+        except OSError:
             continue
+        if frontmatter.get("status", "").strip() != "shipped":
+            continue
+        records.append({
+            "slug": frontmatter.get("slug", "").strip() or spec_path.stem,
+            "impact": frontmatter.get("shipped_impact", "").strip(),
+            "changed": frontmatter.get("shipped_changed", "").strip(),
+        })
     return records
 
 
-def _write_ledger(path: Path, records: List[Dict]) -> None:
-    """Write outcome records as JSONL (one compact object per line)."""
-    path.write_text("".join(json.dumps(r) + "\n" for r in records), encoding="utf-8")
-
-
-def _collect_local_outcomes(runs: List[Dict], repo: str) -> List[Dict]:
-    """Outcome records for this repo's runs (runs already carry _rating).
-
-    Includes unrated runs; every run yields a record, so stats and the ledger
-    see every session rather than only the ones a human bothered to rate.
-    """
-    return [_outcome_record_from_run(run, repo) for run in runs]
-
-
-def _merge_outcomes(ledger: List[Dict], local: List[Dict]) -> List[Dict]:
-    """Combine cross-repo ledger records with this repo's fresh local records.
-
-    Dedup by (repo, run_id); local wins, since it's read straight from the run
-    directories and the ledger may hold an older export of the same run.
-    """
-    by_key = {(r.get("repo"), r.get("run_id")): r for r in ledger}
-    for rec in local:
-        by_key[(rec.get("repo"), rec.get("run_id"))] = rec
-    return list(by_key.values())
-
-
-def export_outcomes(args: argparse.Namespace) -> None:
-    """Collect this repo's runs into a portable JSONL of outcome records.
-
-    Includes unrated runs; every session is a record. Writes to --out (default:
-    stdout). Feed the file to ``import-outcomes`` in the tool repo so a consuming
-    repo's results become visible to ``stats`` there. This is the bridge that lets
-    evidence reach the main repo when a repo lives on another machine.
-    """
-    repo = getattr(args, "repo", None) or _project_name()
-    runs = collect_runs(get_output_root())
-    for run in runs:
-        run["_rating"] = _load_rating(Path(run["run_dir"]))
-    records = _collect_local_outcomes(runs, repo)
-
-    payload = "".join(json.dumps(r) + "\n" for r in records)
-    out = getattr(args, "out", None)
-    if out:
-        out_path = Path(out)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(payload, encoding="utf-8")
-        print(f"Exported {len(records)} outcome record(s) from '{repo}' to {out_path}")
-    else:
-        if payload:
-            print(payload, end="")
-        print(f"# {len(records)} outcome record(s) from '{repo}'", file=sys.stderr)
-
-
-def import_outcomes(args: argparse.Namespace) -> None:
-    """Merge outcome records from a JSONL file into the central ledger.
-
-    Dedup by (repo, run_id): re-importing an updated export refreshes existing
-    records instead of duplicating them. This is how outcomes from other repos
-    reach ``stats`` in this repo.
-    """
-    src = Path(args.from_file)
-    if not src.is_file():
-        raise FileNotFoundError(f"Outcomes file not found: {src}")
-    incoming = _read_ledger(src)
-
-    ledger_path = get_outcomes_ledger_path()
-    existing = _read_ledger(ledger_path)
-    keys_before = {(r.get("repo"), r.get("run_id")) for r in existing}
-    merged = _merge_outcomes(existing, incoming)
-
-    added = sum(1 for r in incoming if (r.get("repo"), r.get("run_id")) not in keys_before)
-    updated = len(incoming) - added
-
-    ledger_path.parent.mkdir(parents=True, exist_ok=True)
-    _write_ledger(ledger_path, merged)
-    print(
-        f"Imported {len(incoming)} record(s) into {ledger_path} "
-        f"(+{added} new, {updated} updated; {len(merged)} total)"
-    )
-
-
 def show_stats(args: argparse.Namespace) -> None:
-    """Display cross-run diagnostics: outcomes, ratings, decisions, usage."""
+    """Display cross-run diagnostics: shipped features, verdicts, decisions, usage."""
     root = Path(args.artifact_root).resolve() if getattr(args, "artifact_root", None) else get_artifact_root()
     runs = collect_runs(get_output_root())
 
@@ -2716,7 +2402,6 @@ def show_stats(args: argparse.Namespace) -> None:
 
     for run in runs:
         run_dir = Path(run["run_dir"])
-        run["_rating"] = _load_rating(run_dir)
         run["_session"] = _load_session(run_dir)
         try:
             run["_decisions"] = load_decisions_json(run_dir)
@@ -2732,18 +2417,13 @@ def show_stats(args: argparse.Namespace) -> None:
     session_records.sort(key=lambda record: record.get("finalized_iso") or "")
     session_health = summarize_session_health(session_records)
 
-    # Outcomes: this repo's rated runs plus the cross-repo ledger (imported from
-    # other projects). Local records win on conflict since they're the fresher read.
-    local_outcomes = _collect_local_outcomes(runs, _project_name())
-    ledger_outcomes = _read_ledger(get_outcomes_ledger_path())
-    outcome_records = _merge_outcomes(ledger_outcomes, local_outcomes)
-    if phase_filter:
-        outcome_records = [r for r in outcome_records if r.get("phase") == phase_filter]
-    outcomes = summarize_outcomes(outcome_records)
+    # Shipped features: read straight off the specs directory. A spec belongs to
+    # the repo, not to a phase, so --phase does not narrow this.
+    shipped_specs = summarize_shipped_specs(_shipped_spec_records())
 
     if getattr(args, "json", False):
         print(json.dumps(
-            {**agg, "outcomes": outcomes, "session_health": session_health},
+            {**agg, "shipped_specs": shipped_specs, "session_health": session_health},
             indent=2,
         ))
         return
@@ -2762,7 +2442,7 @@ def show_stats(args: argparse.Namespace) -> None:
         clarity_note = f"{len(snapshot.topics)} topics tracked (run 'show-clarity' for the table)"
 
     print(format_stats(
-        agg, usage=usage, clarity_note=clarity_note, outcomes=outcomes,
+        agg, usage=usage, clarity_note=clarity_note, shipped_specs=shipped_specs,
         session_health=session_health,
     ))
 
@@ -3276,14 +2956,8 @@ def _dispatch(args: argparse.Namespace) -> None:
         set_clarity(args)
     elif args.command == "recompute-clarity":
         recompute_clarity(args)
-    elif args.command == "rate":
-        record_rating(args)
     elif args.command == "stats":
         show_stats(args)
-    elif args.command == "export-outcomes":
-        export_outcomes(args)
-    elif args.command == "import-outcomes":
-        import_outcomes(args)
     elif args.command == "notify":
         notify(args)
     elif args.command == "offload":

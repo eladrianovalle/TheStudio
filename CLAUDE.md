@@ -168,14 +168,8 @@ python studio/run_phase.py prepare --phase design --text "description" --mode qu
 python studio/run_phase.py finalize --phase <phase> --run-id <run_id> --status completed --verdict APPROVED
 python studio/run_phase.py validate --phase <phase> --run-id <run_id>
 
-# Rate a run + record what it led to (outcome), then view the cross-run dashboard
-python studio/run_phase.py rate --run-dir <path> --score 4 --note "..." \
-    --shipped yes --impact major --changed "cut lobby scope in half"
-python studio/run_phase.py stats                       # verdicts, ratings, outcomes, tokens, decisions
-
-# Bridge outcomes from a consuming repo back to this one (see API.md)
-python studio/run_phase.py export-outcomes --repo <name> --out outcomes.jsonl
-python studio/run_phase.py import-outcomes --from outcomes.jsonl
+# Cross-run dashboard: shipped features (from specs/), verdicts, decisions, session health
+python studio/run_phase.py stats
 
 # Cross-repo install / update (also: check-install, setup, offload, notify, cleanup)
 python studio/run_phase.py init --target /path/to/project
@@ -199,7 +193,7 @@ See **`studio/docs/ARCHITECTURE.md`** for the full per-module reference.
 
 - **Debate / flow:** `scopes.py` (+ `CONTRARIAN_MANDATE`), `question_mode.py`, `decision_points.py` (owns the canonical decision-point emit/parse format), `findings.py` (the parseable `FINDING` block → `findings.json`), `verifier.py` (independent finding verifier, behind `finding-verifier.js`), `clarity.py`, `verdict.py`, `rerun.py`
 - **Roles / personas:** `run_phase_roles.py`, `role_overrides.py`, `persona_overrides.py`, `design_mandate.py` (design-phase-only AI-slop blacklist + Goodwill Reservoir critique guide) (+ `studio.manifest.json`, `role_packs/`)
-- **Diagnostics:** `stats.py` (pure cross-run aggregation, ratings, and the outcome summary that `rate`/`export-outcomes`/`import-outcomes` feed), `session.py` (pure; builds the automatic `session.json` health record finalize writes for each run)
+- **Diagnostics:** `stats.py` (pure cross-run aggregation, plus the shipped-features summary read off spec frontmatter — a feature counts as shipped when its spec says `status: shipped`), `session.py` (pure; builds the automatic `session.json` health record finalize writes for each run)
 - **Workflows / loops:** `impl_loop.py` (config for `.claude/workflows/implementation-loop.js`, the `/forge` writer/editor loop — see `studio/docs/IMPLEMENTATION_LOOP_SPEC.md`) and `.claude/workflows/finding-verifier.js` (the independent finding verifier; core in `verifier.py`)
 - **Cross-repo + hygiene:** `install.py`, `setup.py`, `offload.py`, `cleanup.py`
 - **Shared:** `config_loading.py` (the single TOML loader), `validators/`, `integrations/slack_digest.py`
