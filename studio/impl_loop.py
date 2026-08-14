@@ -329,9 +329,9 @@ class LoopConfig:
     [gate] defaults are Python's, and they are **not** what a repository gets:
     ``load_loop_config`` builds its merge base from ``resolve_profile`` instead, so a
     Node repo starts from Node's commands and a repo Studio cannot identify starts from
-    none at all. They are kept here as plain literals rather than a factory reading
-    PROFILES — that would trade a readable default for indirection, to prevent a drift
-    that ``test_shipped_config_matches_dataclass_defaults`` already catches.
+    none at all. No production path reads them — the loader always passes the gate keys
+    in — so they stand only as an example of the shape for whoever reads a bare
+    ``LoopConfig()``, which is why they are plain literals and not a factory over PROFILES.
     """
     # [loop]
     deliver_on_gate_fail: bool = True

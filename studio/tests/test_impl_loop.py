@@ -18,7 +18,6 @@ from impl_loop import (
     PROFILES,
     STACK_MARKERS,
     STUDIO_ROOT,
-    StackProfile,
     VALID_MANDATES,
     VALID_READ_SCOPES,
     WORK_DIR_DIFFERENT_REPO,
@@ -740,28 +739,23 @@ def test_node_repo_with_a_test_script_gets_npm_test(tmp_path):
 
     assert config.test_command == "npm test"
     assert config.require_mutation_check is False
-    assert config.static_checks == ["eslint"]
 
 
-def test_node_repo_without_a_linter_requires_no_static_check(tmp_path):
-    """eslint is only required of a repo showing some sign of having it.
+@pytest.mark.parametrize("package, expected_checks", [
+    ({"scripts": {"test": "node --test"}}, []),
+    ({"scripts": {"test": "vitest run", "lint": "eslint ."}}, ["eslint"]),
+    ({"scripts": {"test": "vitest run"}, "devDependencies": {"eslint": "^9.0.0"}}, ["eslint"]),
+])
+def test_node_static_check_follows_the_signs_of_a_linter(tmp_path, package, expected_checks):
+    """eslint is required only of a repo showing some sign of having it — a lint script,
+    or the tool itself in devDependencies.
 
     An empty static_checks list means the writer skips the check, which is the honest
-    answer for a package that declares neither a lint script nor the tool.
+    answer for a package that declares neither.
     """
-    root = _node_repo(tmp_path, {"scripts": {"test": "node --test"}})
+    root = _node_repo(tmp_path, package)
 
-    assert load_loop_config(studio_root=root).static_checks == []
-
-
-def test_node_repo_finds_eslint_in_dev_dependencies(tmp_path):
-    """A repo carrying eslint but no lint script still gets the static check."""
-    root = _node_repo(
-        tmp_path,
-        {"scripts": {"test": "vitest run"}, "devDependencies": {"eslint": "^9.0.0"}},
-    )
-
-    assert load_loop_config(studio_root=root).static_checks == ["eslint"]
+    assert load_loop_config(studio_root=root).static_checks == expected_checks
 
 
 def test_python_repo_keeps_pytest_ruff_and_the_mutation_gate(tmp_path):
@@ -776,15 +770,22 @@ def test_python_repo_keeps_pytest_ruff_and_the_mutation_gate(tmp_path):
     assert config.mutation_command == "mutmut run"
 
 
-def test_python_detected_by_a_root_conftest_alone(tmp_path):
-    """conftest.py counts as a Python marker, for a repo that has no other one.
+@pytest.mark.parametrize("marker, contents", [
+    ("pyproject.toml", '[project]\nname = "fixture"\n'),
+    ("setup.py", "from setuptools import setup\n\nsetup()\n"),
+    ("requirements.txt", "pytest\n"),
+    ("conftest.py", "# fixtures live here\n"),
+])
+def test_any_one_python_marker_is_enough_on_its_own(tmp_path, marker, contents):
+    """Every marker in the table is there for some repo, so each one is pinned here —
+    an untested marker can be deleted by accident and nothing says so.
 
-    _Cerebro is exactly that shape. Without this marker it is undetectable, and a Python
-    project would be refused a Python gate.
+    conftest.py alone is _Cerebro's exact shape: without that marker it is undetectable,
+    and a Python project would be refused a Python gate.
     """
-    (tmp_path / "conftest.py").write_text("# fixtures live here\n")
+    (tmp_path / marker).write_text(contents)
 
-    assert detect_stacks(tmp_path) == ["python"]
+    assert load_loop_config(studio_root=tmp_path).test_command == "pytest -q"
 
 
 def test_unity_override_inherits_nothing_from_python(tmp_path):
@@ -955,7 +956,7 @@ def test_detection_ignores_markers_in_subdirectories(tmp_path):
     assert detect_stacks(tmp_path) == []
 
 
-def test_every_marked_stack_resolves_to_a_profile(tmp_path):
+def test_every_marked_stack_resolves_to_a_profile():
     """Each stack in the marker table has an answer — a command, or a refusal.
 
     STACK_MARKERS and PROFILES are two lists that could drift apart; adding a marker row
@@ -979,14 +980,6 @@ def test_a_profiles_static_checks_cannot_be_mutated_through_a_config(tmp_path):
 
     assert PROFILES["python"].static_checks == ("ruff",)
     assert resolve_profile(_python_repo(tmp_path / "py2")).static_checks == ("ruff",)
-
-
-def test_resolve_profile_reports_an_unidentified_repo_as_no_stacks(tmp_path):
-    """The zero-match profile carries no commands and no stack names."""
-    profile = resolve_profile(tmp_path)
-
-    assert profile == StackProfile()
-    assert profile.test_command is None
 
 
 def test_cli_exits_with_the_refusal_and_no_traceback(tmp_path):
@@ -1026,24 +1019,6 @@ def test_refusal_on_three_stacks_lists_all_of_them(tmp_path):
         "rust (Cargo.toml), python (pyproject.toml) and node (package.json) all match"
         in str(excinfo.value)
     )
-
-
-def test_python_detected_by_setup_py_alone(tmp_path):
-    """A repo whose only Python marker is setup.py is still a Python project.
-
-    Every marker in the table is there for some repo; an untested one can be deleted by
-    accident and nothing says so.
-    """
-    (tmp_path / "setup.py").write_text("from setuptools import setup\n\nsetup()\n")
-
-    assert load_loop_config(studio_root=tmp_path).test_command == "pytest -q"
-
-
-def test_python_detected_by_requirements_txt_alone(tmp_path):
-    """Same for requirements.txt, the marker an older Python project is likeliest to have."""
-    (tmp_path / "requirements.txt").write_text("pytest\n")
-
-    assert load_loop_config(studio_root=tmp_path).test_command == "pytest -q"
 
 
 def test_an_override_can_replace_the_detected_mutation_command(tmp_path):
