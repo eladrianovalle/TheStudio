@@ -139,7 +139,12 @@ class TestPendingSteps:
                 state["completed_steps"][step["name"]] = step["introduced_at"]
         pend = setup.pending_steps(state)
         names = [s["name"] for s in pend]
-        assert names == ["persona_customization", "unstale_config", "smoke_config"]
+        assert names == [
+            "persona_customization",
+            "unstale_config",
+            "smoke_config",
+            "implementation_loop_config",
+        ]
 
     def test_detects_new_step(self, monkeypatch: pytest.MonkeyPatch) -> None:
         state = setup._empty_state()
@@ -856,3 +861,219 @@ class TestApplySmokeConfig:
         state = setup.load_setup_state(project)
         assert state["completed_steps"]["smoke_config"] == 4
         assert state["choices"]["smoke_config"] == {"kind": "", "keys": []}
+
+
+# ---------------------------------------------------------------------------
+# Forge gate commands (.studio/implementation_loop.toml)
+# ---------------------------------------------------------------------------
+
+
+# Orkid Garden's real override, byte for byte. It keeps its Unity project in a
+# subdirectory, so nothing at its root identifies it and this file is the only reason
+# /forge works there at all.
+ORKID_OVERRIDE = (
+    "# Orkid Garden's overrides for the implementation writer/editor loop.\n"
+    "\n"
+    "[gate]\n"
+    'test_command = "./scripts/run-editmode-tests.sh"\n'
+    "static_checks = []\n"
+    "require_mutation_check = false\n"
+)
+
+
+def _install_shipped_loop_config(project: Path) -> None:
+    """Put Studio's shipped config where an installed snapshot would have it.
+
+    Without this the loader has no shipped file to fall back to, and the test would
+    prove less than a real installed repo does.
+    """
+    shipped = Path(__file__).resolve().parent.parent / "config" / "implementation_loop.toml"
+    config_dir = project / ".studio" / "source" / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "implementation_loop.toml").write_text(
+        shipped.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+
+
+def _resolved_gate(project: Path):
+    """The config /forge would resolve in *project*, read as an installed snapshot."""
+    from impl_loop import load_loop_config
+
+    return load_loop_config(studio_root=project / ".studio" / "source")
+
+
+@pytest.fixture
+def node_project(project: Path) -> Path:
+    """A ``project`` that a root package.json makes detectable as Node."""
+    (project / "package.json").write_text(
+        json.dumps({"scripts": {"test": "vitest run", "lint": "eslint ."}}),
+        encoding="utf-8",
+    )
+    _install_shipped_loop_config(project)
+    return project
+
+
+class TestApplyImplementationLoopConfig:
+    @pytest.fixture(autouse=True)
+    def _no_artifact_root_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # impl_loop honors STUDIO_ARTIFACT_ROOT, which another test may have left set —
+        # it would point detection at some entirely different repository.
+        monkeypatch.delenv("STUDIO_ARTIFACT_ROOT", raising=False)
+
+    def test_node_repo_gets_its_own_commands(
+        self, node_project: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        config_path = node_project / ".studio" / "implementation_loop.toml"
+
+        setup.apply_implementation_loop_config(node_project)
+
+        content = config_path.read_text(encoding="utf-8")
+        assert 'test_command = "npm test"' in content
+        assert 'static_checks = ["eslint"]' in content
+        assert "require_mutation_check = false" in content
+        assert capsys.readouterr().out == f"Wrote {config_path}: test_command = npm test\n"
+
+    def test_written_file_resolves_to_what_detection_alone_produced(
+        self, node_project: Path
+    ) -> None:
+        """The file is a printout of the detection, not a second opinion about it."""
+        detected_only = _resolved_gate(node_project)
+
+        setup.apply_implementation_loop_config(node_project)
+
+        assert _resolved_gate(node_project) == detected_only
+        assert detected_only.test_command == "npm test"
+
+    def test_marker_less_repo_writes_nothing_and_prints_the_refusal(
+        self, project: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        from impl_loop import LoopConfigError
+
+        _install_shipped_loop_config(project)
+
+        setup.apply_implementation_loop_config(project)
+
+        assert not (project / ".studio" / "implementation_loop.toml").exists()
+        printed = capsys.readouterr().out
+        assert "gate.test_command is not set" in printed
+        assert "no marker file Studio recognises is present here" in printed
+        assert str(project / ".studio" / "implementation_loop.toml") in printed
+        with pytest.raises(LoopConfigError):
+            _resolved_gate(project)
+        state = setup.load_setup_state(project)
+        assert state["choices"]["implementation_loop_config"] == {
+            "status": "undetected",
+            "test_command": "",
+        }
+
+    def test_ambiguous_repo_writes_nothing_and_names_both_markers(
+        self, project: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        from impl_loop import LoopConfigError
+
+        _install_shipped_loop_config(project)
+        (project / "Cargo.toml").write_text("[package]", encoding="utf-8")
+        (project / "package.json").write_text(
+            json.dumps({"scripts": {"test": "vitest run"}}), encoding="utf-8"
+        )
+
+        setup.apply_implementation_loop_config(project)
+
+        assert not (project / ".studio" / "implementation_loop.toml").exists()
+        printed = capsys.readouterr().out
+        assert "rust (Cargo.toml) and node (package.json) both match" in printed
+        with pytest.raises(LoopConfigError):
+            _resolved_gate(project)
+
+    def test_never_overwrites_orkid_gardens_own_file(
+        self, project: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """The one file keeping /forge alive in the repo that reported the bug."""
+        (project / "unity").mkdir()  # the Unity project, invisible to root-only detection
+        config_path = project / ".studio" / "implementation_loop.toml"
+        config_path.write_text(ORKID_OVERRIDE, encoding="utf-8")
+
+        setup.apply_implementation_loop_config(project)
+
+        assert config_path.read_text(encoding="utf-8") == ORKID_OVERRIDE
+        assert capsys.readouterr().out == (
+            f"Kept the existing {config_path} — setup never overwrites one.\n"
+        )
+        state = setup.load_setup_state(project)
+        assert state["choices"]["implementation_loop_config"] == {
+            "status": "kept",
+            "test_command": "",
+        }
+
+    def test_never_overwrites_even_when_detection_has_an_answer(
+        self, node_project: Path
+    ) -> None:
+        """Detection having something to say is not a licence to replace your file."""
+        config_path = node_project / ".studio" / "implementation_loop.toml"
+        config_path.write_text(ORKID_OVERRIDE, encoding="utf-8")
+
+        setup.apply_implementation_loop_config(node_project)
+
+        assert config_path.read_text(encoding="utf-8") == ORKID_OVERRIDE
+        assert _resolved_gate(node_project).test_command == "./scripts/run-editmode-tests.sh"
+
+    def test_marks_the_step_and_records_the_command(self, node_project: Path) -> None:
+        setup.apply_implementation_loop_config(node_project)
+        state = setup.load_setup_state(node_project)
+        assert state["completed_steps"]["implementation_loop_config"] == 5
+        assert state["choices"]["implementation_loop_config"] == {
+            "status": "written",
+            "test_command": "npm test",
+        }
+
+    def test_runs_from_an_answers_payload(self, node_project: Path) -> None:
+        state = setup.apply_from_answers(node_project, {"implementation_loop_config": {}})
+        assert state["choices"]["implementation_loop_config"]["status"] == "written"
+        assert (node_project / ".studio" / "implementation_loop.toml").exists()
+
+    def test_defaults_run_the_step(self, project: Path) -> None:
+        state = setup.apply_defaults(project)
+        assert state["completed_steps"]["implementation_loop_config"] == 5
+        assert setup.pending_steps(state) == []
+        # Nothing detectable at this fixture's root, so nothing is written.
+        assert not (project / ".studio" / "implementation_loop.toml").exists()
+
+    def test_status_row_names_the_detected_command(self, node_project: Path) -> None:
+        setup.apply_defaults(node_project)
+        # Whole line, not a substring: the row is the only place a person sees which
+        # command /forge will run, so its wording is the thing under test.
+        assert (
+            "  Forge gates: npm test (written to .studio/implementation_loop.toml)"
+            in setup.show_status(node_project).splitlines()
+        )
+
+    def test_status_row_says_when_nothing_was_detected(self, project: Path) -> None:
+        setup.apply_defaults(project)
+        assert (
+            "  Forge gates: none detected — /forge refuses until you write "
+            ".studio/implementation_loop.toml" in setup.show_status(project).splitlines()
+        )
+
+    def test_status_row_says_when_your_own_file_was_kept(self, project: Path) -> None:
+        (project / ".studio" / "implementation_loop.toml").write_text(
+            ORKID_OVERRIDE, encoding="utf-8"
+        )
+        setup.apply_defaults(project)
+        assert (
+            "  Forge gates: your own .studio/implementation_loop.toml (left alone)"
+            in setup.show_status(project).splitlines()
+        )
+
+
+class TestPendingStepsAtV4:
+    def test_v4_state_leaves_exactly_the_new_step_pending(self) -> None:
+        """Every installed repo reports this one step until the wizard is re-run."""
+        state = setup._empty_state()
+        state["setup_version"] = 4
+        for step in setup.SETUP_STEPS:
+            if step["introduced_at"] <= 4:
+                state["completed_steps"][step["name"]] = step["introduced_at"]
+
+        pend = setup.pending_steps(state)
+
+        assert [s["name"] for s in pend] == ["implementation_loop_config"]

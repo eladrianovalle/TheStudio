@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional
 # ---------------------------------------------------------------------------
 
 # Bump when adding new configurable features so the wizard detects them.
-CURRENT_SETUP_VERSION = 4
+CURRENT_SETUP_VERSION = 5
 
 SETUP_STEPS: List[Dict[str, Any]] = [
     {"name": "role_pack", "introduced_at": 1, "label": "Role Pack Selection"},
@@ -34,6 +34,7 @@ SETUP_STEPS: List[Dict[str, Any]] = [
     {"name": "persona_customization", "introduced_at": 2, "label": "Phase Persona Customization"},
     {"name": "unstale_config", "introduced_at": 3, "label": "Unstale Audit Configuration"},
     {"name": "smoke_config", "introduced_at": 4, "label": "Smoke Test Configuration"},
+    {"name": "implementation_loop_config", "introduced_at": 5, "label": "Forge Gate Commands"},
 ]
 
 # O(1) lookup by step name
@@ -629,6 +630,83 @@ def apply_smoke_config(
         save_setup_state(target, state)
 
 
+def _format_loop_toml(profile: Any) -> str:
+    """Format an ``impl_loop.StackProfile`` as ``.studio/implementation_loop.toml`` content.
+
+    Writes all four ``[gate]`` keys, including the empty ones, so the file shows the whole
+    shape of what can be set here rather than only the parts this repo's stack answered.
+    """
+    checks = ", ".join(_toml_quote(check) for check in profile.static_checks)
+    stacks = ", ".join(profile.stacks)
+    return "\n".join([
+        f"# /forge gate commands, detected from this repo's stack ({stacks}) by the setup wizard.",
+        "#",
+        "# Edit anything here. /forge reads this file *instead of* Studio's shipped",
+        "# config/implementation_loop.toml: a [gate] key you delete falls back to what detection",
+        "# finds, and [loop]/[editor] keys fall back to Studio's built-in defaults.",
+        "",
+        "[gate]",
+        f"test_command = {_toml_quote(profile.test_command)}",
+        f"static_checks = [{checks}]",
+        f"require_mutation_check = {str(profile.require_mutation_check).lower()}",
+        f"mutation_command = {_toml_quote(profile.mutation_command or '')}",
+        "",
+    ])
+
+
+def apply_implementation_loop_config(
+    target: Path,
+    state: Optional[Dict[str, Any]] = None,
+    _save: bool = True,
+) -> None:
+    """Write ``.studio/implementation_loop.toml`` with this repo's detected gate commands.
+
+    The step asks nothing, and it works nothing out for itself: the commands come from
+    ``impl_loop.resolve_profile``, the same call ``/forge`` resolves its own gate with. One
+    function, two callers, so the file you can edit and the commands the loop actually runs
+    cannot drift apart.
+
+    Three outcomes, and only one of them writes a file:
+
+    - **A file is already there:** left exactly as it is. A hand-written override is the only
+      thing making ``/forge`` work in a repo Studio cannot identify, and this step must never
+      eat one.
+    - **Detection has no test command** (nothing recognised, two stacks at once, or a stack
+      Studio ships no command for): nothing is written, and the refusal ``/forge`` would print
+      is printed here instead — it already names the file and the lines to write by hand.
+    - **Otherwise:** the detected commands are written out for the user to edit.
+    """
+    import impl_loop
+
+    target = Path(target).resolve()
+    config_path = target / ".studio" / "implementation_loop.toml"
+
+    if config_path.exists():
+        print(f"Kept the existing {config_path} — setup never overwrites one.")
+        outcome = {"status": "kept", "test_command": ""}
+    else:
+        profile = impl_loop.resolve_profile(target)
+        if profile.test_command:
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            config_path.write_text(_format_loop_toml(profile), encoding="utf-8")
+            print(f"Wrote {config_path}: test_command = {profile.test_command}")
+            outcome = {"status": "written", "test_command": profile.test_command}
+        else:
+            # The loader's own refusal, word for word rather than paraphrased: the two
+            # messages have to name the same file and the same lines, and a copy here
+            # would be the one that goes stale.
+            print(impl_loop._no_test_command_message(profile, target))
+            outcome = {"status": "undetected", "test_command": ""}
+
+    if state is None:
+        state = load_setup_state(target)
+    state.setdefault("choices", {})
+    state["choices"]["implementation_loop_config"] = outcome
+    _mark_step(state, "implementation_loop_config")
+    if _save:
+        save_setup_state(target, state)
+
+
 def _format_settings_toml(ttl_days: int, size_limit_mb: int) -> str:
     """Format cleanup settings as TOML content."""
     return (
@@ -687,6 +765,7 @@ def apply_defaults(target: Path) -> Dict[str, Any]:
     apply_cleanup(target, state=state, _save=False)
     apply_unstale_config(target, {}, state=state, _save=False)
     apply_smoke_config(target, {}, state=state, _save=False)
+    apply_implementation_loop_config(target, state=state, _save=False)
 
     save_setup_state(target, state)
     return state
@@ -702,6 +781,8 @@ def apply_from_answers(target: Path, answers: Dict[str, Any]) -> Dict[str, Any]:
         persona_customizations: dict[phase, dict]: per-phase persona override fields
         unstale_config: dict: .studio/unstale.toml override (snapshot + audit)
         smoke_config: dict: .studio/smoke.toml override (flat [smoke] fields)
+        implementation_loop_config: any value: the step takes no options, so the key's
+            presence is the whole instruction ("run it"); detection decides the rest
         cleanup: dict with ttl_days and size_limit_mb
     """
     target = Path(target).resolve()
@@ -735,6 +816,9 @@ def apply_from_answers(target: Path, answers: Dict[str, Any]) -> Dict[str, Any]:
         apply_smoke_config(
             target, answers["smoke_config"], state=state, _save=False,
         )
+
+    if "implementation_loop_config" in answers:
+        apply_implementation_loop_config(target, state=state, _save=False)
 
     cleanup = answers.get("cleanup")
     if cleanup is not None:
@@ -815,6 +899,24 @@ def show_status(target: Path) -> str:
         lines.append(f"  Smoke test: custom profile ({kind})")
     else:
         lines.append("  Smoke test: self-detect (no override)")
+
+    # /forge gate commands
+    gates = choices.get("implementation_loop_config", {})
+    gate_status = gates.get("status")
+    if gate_status == "written":
+        lines.append(
+            f"  Forge gates: {gates.get('test_command')} "
+            "(written to .studio/implementation_loop.toml)"
+        )
+    elif gate_status == "kept":
+        lines.append("  Forge gates: your own .studio/implementation_loop.toml (left alone)")
+    elif gate_status == "undetected":
+        lines.append(
+            "  Forge gates: none detected — /forge refuses until you write "
+            ".studio/implementation_loop.toml"
+        )
+    else:
+        lines.append("  Forge gates: not configured")
 
     # Cleanup
     cleanup = choices.get("cleanup")

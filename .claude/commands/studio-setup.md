@@ -1,6 +1,6 @@
 # Studio Setup Wizard
 
-Configure this project's Studio installation: role packs, role/phase-persona customization, unstale and smoke profiles, cleanup settings.
+Configure this project's Studio installation: role packs, role/phase-persona customization, unstale and smoke profiles, the `/forge` gate commands, cleanup settings.
 
 ## Arguments
 
@@ -177,6 +177,29 @@ Present the suggested profile. Let the user edit any of: `kind` (`web`/`game`/`s
 ```bash
 python ".studio/source/run_phase.py" setup --target . --answers '<json with smoke_config>'
 ```
+
+### Step 6.75: Forge Gate Commands (no questions)
+
+`/forge` checks every unit it builds by running this repo's tests, its linter and its mutation
+tool. It works those commands out from the marker files at the repo root. This step writes what it
+found into `.studio/implementation_loop.toml`, so the commands are in a file you can read and edit
+instead of being invisible.
+
+Ask nothing here. Just run it:
+
+```bash
+python ".studio/source/run_phase.py" setup --target . --answers '{"implementation_loop_config": {}}'
+```
+
+Then relay what it printed:
+
+- **It wrote the file.** Tell the user which test command it detected and that they can edit the
+  file if it's wrong.
+- **It printed a refusal** ("gate.test_command is not set…"). Studio recognised nothing at this
+  root, or two stacks at once. Nothing was written on purpose. Show the message as-is — it names
+  the file and the exact lines to write — and offer to write them once the user says what runs this
+  repo's tests. `/forge` will refuse to start until that file exists.
+- **It kept an existing file.** The user already has an override; setup never overwrites one.
 
 ### Step 7: Cleanup Settings
 
