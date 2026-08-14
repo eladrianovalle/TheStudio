@@ -85,6 +85,8 @@ Inside each run directory:
 
 `finalize` writes `session.json` into the run directory — the automatic, judgment-free session-health record (schema in Section 4.1) — soft-fail, so a failure there prints a warning but never breaks finalize.
 
+`finalize` also collects the contrarian's `FINDING` blocks out of the run's markdown and writes them to `findings.json`, the file the independent finding verifier reads (see `specs/contrarian-finding-verifier.md`). Two rules keep re-running safe: a run with no findings gets no file at all, and an existing `findings.json` is left untouched — the verifier writes adjusted confidences back into that same file, so re-extracting over it would throw its verdicts away.
+
 The `[outcomes] ledger_path` key that used to make `finalize` append an outcome record to a local JSONL ledger is **gone**, along with the `rate`, `export-outcomes`, and `import-outcomes` commands. Outcome data now comes from the `shipped_impact` / `shipped_changed` lines in a spec's frontmatter, which `stats` reads directly. A leftover `[outcomes]` table in `.studio/integrations.toml` is ignored; existing `rating.json` and `outcomes.jsonl` files are simply no longer read.
 
 ---

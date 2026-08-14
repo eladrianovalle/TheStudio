@@ -84,9 +84,16 @@ makes a decision one.
 - **`CONTRARIAN_MANDATE` addition** (`scopes.py`): the evidence-gate bullets already tell the
   contrarian to quote and rate; this adds "emit each finding as a FINDING block so it's captured."
   It extends — does not rewrite — the shipped gate.
-- **Contract:** `findings.json` is a list of `Finding` records keyed by a stable `finding_id`
-  (`source_file` + index). It is the artifact both the verifier (Unit 2) and any future stats/dedup
-  consumer read.
+- **Contract:** `findings.json` is a list of `Finding` records keyed **by position**. There is no
+  `finding_id` field — this line used to claim one, and nothing ever wrote or read it. The verifier
+  round-trips on list index (`select_rows_for_run` emits `{"index": i, ...}` and
+  `apply_verdicts_to_run` indexes straight back in), which is safe precisely because `finalize`
+  never rewrites an existing file, so the order cannot shift between selection and write-back.
+  Giving records a real id would change the schema and the verifier's tests, so it wants its own
+  spec pass rather than a quiet edit here. It is the artifact both the verifier (Unit 2) and any
+  future stats/dedup consumer read. `finalize` is what writes it, extracting the run's FINDING blocks once the agent
+  files are on disk; it skips a run with no findings and never overwrites an existing file, so the
+  verifier's write-back is safe from a second finalize.
 
 Unit 1 is usable on its own the moment it lands: the confidence gate becomes machine-readable, so
 `stats` can count/trend findings and dedup them across iterations — value even if Unit 2 never
