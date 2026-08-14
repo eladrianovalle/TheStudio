@@ -86,7 +86,9 @@ makes a decision one.
   It extends — does not rewrite — the shipped gate.
 - **Contract:** `findings.json` is a list of `Finding` records keyed by a stable `finding_id`
   (`source_file` + index). It is the artifact both the verifier (Unit 2) and any future stats/dedup
-  consumer read.
+  consumer read. `finalize` is what writes it, extracting the run's FINDING blocks once the agent
+  files are on disk; it skips a run with no findings and never overwrites an existing file, so the
+  verifier's write-back is safe from a second finalize.
 
 Unit 1 is usable on its own the moment it lands: the confidence gate becomes machine-readable, so
 `stats` can count/trend findings and dedup them across iterations — value even if Unit 2 never

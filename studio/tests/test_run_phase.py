@@ -1364,3 +1364,95 @@ def test_setup_defaults_step_count_ignores_retired_steps(tmp_path, capsys):
     out = capsys.readouterr().out
     assert f"({len(setup.SETUP_STEPS)} steps)" in out
     assert "Pending:" not in out
+
+
+# ---------------------------------------------------------------------------
+# finalize writes findings.json (the verifier's input)
+# ---------------------------------------------------------------------------
+
+CONTRARIAN_WITH_FINDINGS = """\
+The plan leans on an unbacked assumption.
+
+> **FINDING [confidence: medium]:** The retry loop never backs off between attempts.
+> **Quote:** `worker.py:88` — "for attempt in range(retries): call()"
+> **Impact:** A flapping dependency turns into a tight hammering loop.
+
+And a second problem:
+
+> **FINDING [confidence: high]:** The lobby has no cap on players.
+> **Quote:** `lobby.py:12` — "while True: accept()"
+> **Impact:** One popular match can exhaust the server's sockets.
+"""
+
+
+def _run_with_contrarian_text(studio_root, contrarian_text: str):
+    """Prepare a market run, drop in agent output, and return (run_id, run_dir)."""
+    run_id = run_phase.prepare_run(make_prepare_args())
+    run_dir = studio_root / "output" / "market" / run_id
+    (run_dir / "advocate_1.md").write_text("Advocate output", encoding="utf-8")
+    (run_dir / "contrarian_1.md").write_text(contrarian_text, encoding="utf-8")
+    (run_dir / "summary.md").write_text("Summary output", encoding="utf-8")
+    return run_id, run_dir
+
+
+def test_finalize_writes_findings_json_from_contrarian_output(studio_root):
+    """A finished run leaves its FINDING blocks as findings.json, one record per block."""
+    run_id, run_dir = _run_with_contrarian_text(studio_root, CONTRARIAN_WITH_FINDINGS)
+
+    run_phase.finalize_run(make_finalize_args(run_id=run_id))
+
+    records = json.loads((run_dir / "findings.json").read_text(encoding="utf-8"))
+    assert len(records) == 2
+    assert records[0]["confidence"] == "medium"
+    assert records[0]["flaw"] == "The retry loop never backs off between attempts."
+    assert records[0]["source_file"] == "contrarian_1.md"
+    assert records[1]["confidence"] == "high"
+    assert records[1]["flaw"] == "The lobby has no cap on players."
+
+
+def test_finalize_writes_no_findings_json_when_there_are_no_findings(studio_root):
+    """No FINDING blocks means no file at all — not an empty one."""
+    run_id, run_dir = _run_with_contrarian_text(
+        studio_root, "Contrarian output with plain prose and no finding blocks.\n"
+    )
+
+    run_phase.finalize_run(make_finalize_args(run_id=run_id))
+
+    assert not (run_dir / "findings.json").exists()
+
+
+def test_finalize_leaves_an_existing_findings_json_alone(studio_root):
+    """Re-finalizing must not clobber the verifier's adjusted confidences."""
+    run_id, run_dir = _run_with_contrarian_text(studio_root, CONTRARIAN_WITH_FINDINGS)
+    run_phase.finalize_run(make_finalize_args(run_id=run_id))
+
+    # Stand in for the verifier: rewrite the file with a verdict and a bumped confidence.
+    findings_path = run_dir / "findings.json"
+    verified = json.loads(findings_path.read_text(encoding="utf-8"))
+    verified[0]["confidence"] = "high"
+    verified[0]["verdict"] = "confirmed"
+    verified[0]["verified_confidence"] = "high"
+    findings_path.write_text(json.dumps(verified, indent=2), encoding="utf-8")
+    before = findings_path.read_bytes()
+
+    run_phase.finalize_run(make_finalize_args(run_id=run_id))
+
+    assert findings_path.read_bytes() == before
+    survivor = json.loads(findings_path.read_text(encoding="utf-8"))[0]
+    assert survivor["confidence"] == "high"
+    assert survivor["verdict"] == "confirmed"
+    assert survivor["verified_confidence"] == "high"
+
+
+def test_verifier_can_load_the_findings_finalize_wrote(studio_root):
+    """The file finalize writes is exactly what the verifier reads back."""
+    import verifier
+    from findings import extract_findings_from_run
+
+    run_id, run_dir = _run_with_contrarian_text(studio_root, CONTRARIAN_WITH_FINDINGS)
+    run_phase.finalize_run(make_finalize_args(run_id=run_id))
+
+    loaded = verifier.load_findings_json(run_dir)
+    expected = extract_findings_from_run(run_dir)
+    assert loaded == expected
+    assert [f.flaw for f in loaded] == [f.flaw for f in expected]

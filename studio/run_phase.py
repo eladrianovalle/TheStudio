@@ -62,6 +62,10 @@ from decision_points import (
     parse_decision_points,
     save_decisions_json,
 )
+from findings import (
+    extract_findings_from_run,
+    save_findings_json,
+)
 from question_mode import (
     generate_question_instructions,
     generate_question_integrator_instructions,
@@ -1565,6 +1569,20 @@ def finalize_run(args: argparse.Namespace) -> None:
         clarity_mean_before = prior.mean_score if prior is not None else None
         clarity_mean_after = snapshot.mean_score
         clarity_topics_touched = len(snapshot.topics)
+
+    # Write findings.json so the independent verifier has something to read.
+    # Unlike decisions above, this deliberately does NOT merge: the verifier
+    # round-trips through findings.json and writes adjusted confidences back
+    # into it, so re-extracting over an existing file would silently destroy
+    # those verdicts. If the file is already there, leave it exactly as it is.
+    # A run with no findings gets no file at all — a missing findings.json is
+    # already the verifier's normal "nothing to verify" case.
+    findings_path = run_dir / "findings.json"
+    if not findings_path.exists():
+        findings = extract_findings_from_run(run_dir)
+        if findings:
+            save_findings_json(run_dir, findings)
+            print(f"Generated {findings_path.name} with {len(findings)} finding(s)")
 
     # Auto-write the judgment-free session health record (additive, soft-fail).
     _write_session_record(
