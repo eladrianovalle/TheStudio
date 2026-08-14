@@ -2,8 +2,10 @@
 feature: Retire the volunteer-fed metrics, read outcomes from shipped specs
 slug: retire-volunteer-metrics
 ticket: none
-status: approved
+status: shipped
 studio_run: studio/output/tech/run_tech_20260812_202226
+shipped_impact: major
+shipped_changed: Studio stopped asking anyone to type a number — five commands, the ratings loop and the trend alerts are gone, and the dashboard's outcome data now comes from what a spec says when you flip it to shipped.
 ---
 
 # Retire the Volunteer-Fed Metrics — Architecture Spec
