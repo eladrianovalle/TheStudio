@@ -2877,13 +2877,17 @@ def _do_setup(args: argparse.Namespace) -> None:
         # The wizard writes no temp files: every /studio-setup step passes its answers
         # inline, as `--answers '{"cleanup": {...}}'`. A path is still accepted, and the
         # two can't be confused — no filename starts with `{`.
-        raw = str(args.answers).strip()
+        raw = args.answers.strip()
         if raw.startswith("{"):
-            answers = json.loads(raw)
             source = "inline JSON"
+            text = raw
         else:
-            answers = json.loads(Path(raw).read_text(encoding="utf-8"))
             source = raw
+            text = Path(raw).read_text(encoding="utf-8")
+        try:
+            answers = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"--answers ({source}) is not valid JSON: {exc}") from exc
         _setup.apply_from_answers(target, answers)
         print(f"Applied configuration from {source}.")
     elif args.role_pack:

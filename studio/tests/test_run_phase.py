@@ -1403,6 +1403,19 @@ def test_setup_answers_still_takes_a_file(tmp_path, capsys):
     assert f"Applied configuration from {answers_file}." in capsys.readouterr().out
 
 
+def test_setup_answers_names_the_flag_when_the_json_is_bad(tmp_path):
+    """A typo'd object says which flag it came from, not just where the parser gave up."""
+    args = run_phase.build_parser().parse_args([
+        "setup", "--target", str(tmp_path), "--answers", '{"cleanup": }',
+    ])
+
+    with pytest.raises(ValueError) as err:
+        run_phase._do_setup(args)
+
+    assert "--answers" in str(err.value)
+    assert "inline JSON" in str(err.value)
+
+
 # ---------------------------------------------------------------------------
 # finalize writes findings.json (the verifier's input)
 # ---------------------------------------------------------------------------
