@@ -140,6 +140,15 @@ class TestHookOptOut:
         ]
         assert "echo keep-me" in commands
 
+    def test_install_hook_false_installs_no_hook(self, target_dir, studio_dir):
+        # `init --no-hook`: the target comes out with no hook at all.
+        install_studio(target_dir, studio_dir, install_hook=False)
+
+        settings = _settings_path(target_dir)
+        if settings.is_file():
+            data = json.loads(settings.read_text(encoding="utf-8"))
+            assert _our_entries(data) == []
+
     def test_sentinel_present_installs_no_hook(self, target_dir, studio_dir):
         # A durable opt-out sentinel disables the hook even on a normal install.
         (target_dir / ".studio").mkdir(parents=True, exist_ok=True)
@@ -243,7 +252,7 @@ class TestUpdateHookOnEarlyReturn:
         assert ours[0]["command"] == _hook_command()
 
 
-def _make_out_of_date(target: Path, studio_dir: Path) -> None:
+def _make_out_of_date(target: Path) -> None:
     """Make an installed target genuinely out of date, so `update` re-installs.
 
     Overwrite one snapshot file and record ITS hash in the manifest, so the file
@@ -273,7 +282,7 @@ class TestUpdateHookOnReinstall:
         from install import update_studio
 
         install_studio(target_dir, studio_dir)
-        _make_out_of_date(target_dir, studio_dir)
+        _make_out_of_date(target_dir)
 
         result = update_studio(target_dir, studio_dir, install_hook=True)
         # Guard the guard: if this update short-circuited, the assertion below
@@ -290,7 +299,7 @@ class TestUpdateHookOnReinstall:
 
         install_studio(target_dir, studio_dir)
         assert len(_our_entries(json.loads(_settings_path(target_dir).read_text()))) == 1
-        _make_out_of_date(target_dir, studio_dir)
+        _make_out_of_date(target_dir)
 
         result = update_studio(target_dir, studio_dir, install_hook=False)
         assert result["updated"] >= 1
@@ -303,28 +312,10 @@ class TestUpdateHookOnReinstall:
 
         install_studio(target_dir, studio_dir)
         (target_dir / ".studio" / UPDATE_CHECK_SENTINEL).write_text("", encoding="utf-8")
-        _make_out_of_date(target_dir, studio_dir)
+        _make_out_of_date(target_dir)
 
         result = update_studio(target_dir, studio_dir, install_hook=True)
         assert result["updated"] >= 1
 
         data = json.loads(_settings_path(target_dir).read_text(encoding="utf-8"))
         assert _our_entries(data) == []
-
-
-class TestInitHookIntent:
-    """`init` honours the same flag: on by default, off with --no-hook."""
-
-    def test_init_installs_hook(self, target_dir, studio_dir):
-        install_studio(target_dir, studio_dir)
-
-        data = json.loads(_settings_path(target_dir).read_text(encoding="utf-8"))
-        assert len(_our_entries(data)) == 1
-
-    def test_init_no_hook_leaves_target_without_one(self, target_dir, studio_dir):
-        install_studio(target_dir, studio_dir, install_hook=False)
-
-        settings = _settings_path(target_dir)
-        if settings.is_file():
-            data = json.loads(settings.read_text(encoding="utf-8"))
-            assert _our_entries(data) == []
