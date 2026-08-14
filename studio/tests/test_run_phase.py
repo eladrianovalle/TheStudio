@@ -1366,6 +1366,43 @@ def test_setup_defaults_step_count_ignores_retired_steps(tmp_path, capsys):
     assert "Pending:" not in out
 
 
+def test_setup_answers_takes_inline_json(tmp_path, capsys):
+    """`--answers '{...}'` — the shape every /studio-setup step uses — is applied, not opened."""
+    args = run_phase.build_parser().parse_args([
+        "setup", "--target", str(tmp_path),
+        "--answers", '{"cleanup": {"ttl_days": 7, "size_limit_mb": 100}}',
+    ])
+
+    capsys.readouterr()
+    run_phase._do_setup(args)
+
+    settings = (tmp_path / ".studio" / "config" / "studio_settings.toml").read_text(
+        encoding="utf-8"
+    )
+    assert "7" in settings and "100" in settings
+    assert "Applied configuration from inline JSON." in capsys.readouterr().out
+
+
+def test_setup_answers_still_takes_a_file(tmp_path, capsys):
+    """A path keeps working — inline JSON is an addition, not a swap."""
+    answers_file = tmp_path / "answers.json"
+    answers_file.write_text(
+        json.dumps({"cleanup": {"ttl_days": 7, "size_limit_mb": 100}}), encoding="utf-8"
+    )
+    args = run_phase.build_parser().parse_args([
+        "setup", "--target", str(tmp_path), "--answers", str(answers_file),
+    ])
+
+    capsys.readouterr()
+    run_phase._do_setup(args)
+
+    settings = (tmp_path / ".studio" / "config" / "studio_settings.toml").read_text(
+        encoding="utf-8"
+    )
+    assert "7" in settings and "100" in settings
+    assert f"Applied configuration from {answers_file}." in capsys.readouterr().out
+
+
 # ---------------------------------------------------------------------------
 # finalize writes findings.json (the verifier's input)
 # ---------------------------------------------------------------------------
