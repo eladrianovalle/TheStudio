@@ -140,6 +140,15 @@ class TestHookOptOut:
         ]
         assert "echo keep-me" in commands
 
+    def test_install_hook_false_installs_no_hook(self, target_dir, studio_dir):
+        # `init --no-hook`: the target comes out with no hook at all.
+        install_studio(target_dir, studio_dir, install_hook=False)
+
+        settings = _settings_path(target_dir)
+        if settings.is_file():
+            data = json.loads(settings.read_text(encoding="utf-8"))
+            assert _our_entries(data) == []
+
     def test_sentinel_present_installs_no_hook(self, target_dir, studio_dir):
         # A durable opt-out sentinel disables the hook even on a normal install.
         (target_dir / ".studio").mkdir(parents=True, exist_ok=True)
@@ -241,3 +250,72 @@ class TestUpdateHookOnEarlyReturn:
         ours = _our_entries(data)
         assert len(ours) == 1
         assert ours[0]["command"] == _hook_command()
+
+
+def _make_out_of_date(target: Path) -> None:
+    """Make an installed target genuinely out of date, so `update` re-installs.
+
+    Overwrite one snapshot file and record ITS hash in the manifest, so the file
+    is not "locally modified" (which would block the update) but does differ from
+    live source (which is what makes the update do real work). Same trick as
+    ``TestSnapshotStaleDetection._stale_install`` in test_install.py.
+    """
+    import hashlib
+
+    stale = b"# stale snapshot"
+    (target / ".studio" / "source" / "verdict.py").write_bytes(stale)
+    manifest_path = target / ".studio" / "MANIFEST.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["verdict.py"] = hashlib.sha256(stale).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+
+class TestUpdateHookOnReinstall:
+    """Regression for #120: the update that actually re-installs must KEEP the hook.
+
+    Every one of these drives an update past the up-to-date short-circuit and into
+    the re-install — the path where the hook used to be written and then deleted
+    milliseconds later, which is why the bug shipped with a green suite.
+    """
+
+    def test_reinstalling_update_keeps_the_hook(self, target_dir, studio_dir):
+        from install import update_studio
+
+        install_studio(target_dir, studio_dir)
+        _make_out_of_date(target_dir)
+
+        result = update_studio(target_dir, studio_dir, install_hook=True)
+        # Guard the guard: if this update short-circuited, the assertion below
+        # would pass on the broken code too.
+        assert result["updated"] >= 1
+
+        data = json.loads(_settings_path(target_dir).read_text(encoding="utf-8"))
+        ours = _our_entries(data)
+        assert len(ours) == 1
+        assert ours[0]["command"] == _hook_command()
+
+    def test_reinstalling_update_no_hook_removes_the_hook(self, target_dir, studio_dir):
+        from install import update_studio
+
+        install_studio(target_dir, studio_dir)
+        assert len(_our_entries(json.loads(_settings_path(target_dir).read_text()))) == 1
+        _make_out_of_date(target_dir)
+
+        result = update_studio(target_dir, studio_dir, install_hook=False)
+        assert result["updated"] >= 1
+
+        data = json.loads(_settings_path(target_dir).read_text(encoding="utf-8"))
+        assert _our_entries(data) == []
+
+    def test_reinstalling_update_respects_sentinel(self, target_dir, studio_dir):
+        from install import update_studio
+
+        install_studio(target_dir, studio_dir)
+        (target_dir / ".studio" / UPDATE_CHECK_SENTINEL).write_text("", encoding="utf-8")
+        _make_out_of_date(target_dir)
+
+        result = update_studio(target_dir, studio_dir, install_hook=True)
+        assert result["updated"] >= 1
+
+        data = json.loads(_settings_path(target_dir).read_text(encoding="utf-8"))
+        assert _our_entries(data) == []

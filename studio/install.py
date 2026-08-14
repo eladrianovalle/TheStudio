@@ -1286,9 +1286,10 @@ def update_studio(
     # short-circuits below, which return before the re-install. Otherwise
     # `update --no-hook` on an already-current repo (the most common way someone
     # turns the nudge off) would silently no-op and leave the hook in place. The
-    # re-install path passes install_hook=False so this isn't done twice. The hook
-    # lives in .claude/settings.local.json, separate from the snapshot, so it's
-    # correct to handle even when a re-install is blocked on local edits.
+    # re-install below is handed this same intent, so it lands on the same answer
+    # and doing it twice changes nothing. The hook lives in
+    # .claude/settings.local.json, separate from the snapshot, so it's correct to
+    # handle even when a re-install is blocked on local edits.
     hook_enabled = install_hook and not (dot_studio / UPDATE_CHECK_SENTINEL).exists()
     _install_sessionstart_hook(target, enabled=hook_enabled)
 
@@ -1366,9 +1367,11 @@ def update_studio(
         # Copy from the materialized tree, but record the durable upstream in
         # VERSION — not the throwaway worktree path, which is gone after this.
         override = source_dir if effective_dir != source_dir else None
-        # install_hook=False: update_studio already handled the hook up front (above),
-        # on every path, so don't let the re-install touch it a second time.
-        install_studio(target, effective_dir, source_path_override=override, install_hook=False)
+        # Pass the caller's real hook intent through. install_studio always acts on
+        # this flag — it never reads it as "leave the hook alone" — so hard-coding
+        # False here told it to DELETE the hook update_studio had just written
+        # (#120). Handing it the same intent makes the second pass idempotent.
+        install_studio(target, effective_dir, source_path_override=override, install_hook=install_hook)
 
         # Delete the commands and workflows Studio has stopped shipping. Only files
         # the manifest records — ones this installer wrote — so a command the project
