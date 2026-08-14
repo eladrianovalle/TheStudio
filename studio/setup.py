@@ -683,7 +683,7 @@ def apply_implementation_loop_config(
 
     if config_path.exists():
         print(f"Kept the existing {config_path} — setup never overwrites one.")
-        outcome = {"status": "kept", "test_command": ""}
+        outcome = {"status": "kept"}
     else:
         profile = impl_loop.resolve_profile(target)
         if profile.test_command:
@@ -696,7 +696,7 @@ def apply_implementation_loop_config(
             # messages have to name the same file and the same lines, and a copy here
             # would be the one that goes stale.
             print(impl_loop._no_test_command_message(profile, target))
-            outcome = {"status": "undetected", "test_command": ""}
+            outcome = {"status": "undetected"}
 
     if state is None:
         state = load_setup_state(target)

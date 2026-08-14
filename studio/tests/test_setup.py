@@ -146,6 +146,18 @@ class TestPendingSteps:
             "implementation_loop_config",
         ]
 
+    def test_v4_state_leaves_exactly_the_new_step_pending(self) -> None:
+        """Every installed repo reports this one step until the wizard is re-run."""
+        state = setup._empty_state()
+        state["setup_version"] = 4
+        for step in setup.SETUP_STEPS:
+            if step["introduced_at"] <= 4:
+                state["completed_steps"][step["name"]] = step["introduced_at"]
+
+        pend = setup.pending_steps(state)
+
+        assert [s["name"] for s in pend] == ["implementation_loop_config"]
+
     def test_detects_new_step(self, monkeypatch: pytest.MonkeyPatch) -> None:
         state = setup._empty_state()
         for step in setup.SETUP_STEPS:
@@ -961,10 +973,7 @@ class TestApplyImplementationLoopConfig:
         with pytest.raises(LoopConfigError):
             _resolved_gate(project)
         state = setup.load_setup_state(project)
-        assert state["choices"]["implementation_loop_config"] == {
-            "status": "undetected",
-            "test_command": "",
-        }
+        assert state["choices"]["implementation_loop_config"] == {"status": "undetected"}
 
     def test_ambiguous_repo_writes_nothing_and_names_both_markers(
         self, project: Path, capsys: pytest.CaptureFixture
@@ -1000,10 +1009,7 @@ class TestApplyImplementationLoopConfig:
             f"Kept the existing {config_path} — setup never overwrites one.\n"
         )
         state = setup.load_setup_state(project)
-        assert state["choices"]["implementation_loop_config"] == {
-            "status": "kept",
-            "test_command": "",
-        }
+        assert state["choices"]["implementation_loop_config"] == {"status": "kept"}
 
     def test_never_overwrites_even_when_detection_has_an_answer(
         self, node_project: Path
@@ -1063,17 +1069,3 @@ class TestApplyImplementationLoopConfig:
             "  Forge gates: your own .studio/implementation_loop.toml (left alone)"
             in setup.show_status(project).splitlines()
         )
-
-
-class TestPendingStepsAtV4:
-    def test_v4_state_leaves_exactly_the_new_step_pending(self) -> None:
-        """Every installed repo reports this one step until the wizard is re-run."""
-        state = setup._empty_state()
-        state["setup_version"] = 4
-        for step in setup.SETUP_STEPS:
-            if step["introduced_at"] <= 4:
-                state["completed_steps"][step["name"]] = step["introduced_at"]
-
-        pend = setup.pending_steps(state)
-
-        assert [s["name"] for s in pend] == ["implementation_loop_config"]

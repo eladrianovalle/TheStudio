@@ -240,8 +240,9 @@ once — is refused at load with the file and the lines to write.
 Two things about the file itself. A `[gate]` table in a project file merges **over** the detected
 profile, so setting only `test_command` leaves the rest as the stack's rather than another
 language's. `/studio-setup` writes that project file with the detected commands (and leaves an
-existing one untouched), so what the gate runs is visible and editable rather than implied. And a project file is read **instead of** the shipped one, never merged with it — so
-copy over any `[loop]`/`[editor]` value you want to keep. Those two tables match the dataclass
+existing one untouched), so what the gate runs is visible and editable rather than implied. And a
+project file is read **instead of** the shipped one, never merged with it — so copy over any
+`[loop]`/`[editor]` value you want to keep. Those two tables match the dataclass
 defaults exactly, which is the only reason that shadowing is harmless; `test_impl_loop.py` holds
 them to it.
 
