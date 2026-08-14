@@ -323,6 +323,10 @@ def apply_persona_customization(
         save_setup_state(target, state)
 
 
+# The three suggest_*_from_stack helpers below sniff the same marker files as
+# impl_loop.STACK_MARKERS, and deliberately do not share it: a wizard suggestion has to
+# make a best guess out of whatever it finds, while the loop's gate has to refuse rather
+# than guess wrong. Same markers, opposite policy on being unsure.
 def suggest_personas_from_stack(target: Path) -> Dict[str, Dict]:
     """Suggest phase persona overrides by sniffing the project's tech stack.
 

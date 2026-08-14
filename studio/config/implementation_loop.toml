@@ -1,18 +1,23 @@
 # Default configuration for the implementation writer/editor loop.
 #
-# Follows the scopes.toml pattern: shipped default, overridable by
-# .studio/implementation_loop.toml. See studio/docs/IMPLEMENTATION_LOOP_SPEC.md §4.
+# Overridable by .studio/implementation_loop.toml at your repo root. See
+# studio/docs/IMPLEMENTATION_LOOP_SPEC.md §4.
+#
+# A project file is read *instead of* this one, not merged with it — so if you write one,
+# copy over any [loop] or [editor] value you want to keep. (Those two tables match the
+# built-in defaults exactly, which is the only reason that is harmless today; a test
+# holds them to it.)
+#
+# There is deliberately no [gate] table here. The gate commands are detected from your
+# repo's own stack (see impl_loop.STACK_MARKERS), and a [gate] table in your project file
+# merges *over* what was detected — so setting only test_command leaves the rest as your
+# stack's, rather than inheriting another language's tools. When Studio cannot identify
+# the repo, or finds two stacks at once, it refuses to start and says what to write.
 
 [loop]
 # if the writer can't reach green, deliver flagged (uncommitted) rather than spin. One exception: a
 # writer that escalates commits its partial work as `writer(stuck): <unit_id>` (spec §4 says why).
 deliver_on_gate_fail = true
-
-[gate]
-test_command = "pytest -q"       # per-repo; the only stack-specific knob. Runs the unit-scoped tests.
-static_checks = ["ruff"]         # CodeValidator static/lint half (mypy opt-in, off by default)
-require_mutation_check = true    # writer runs the mutation check on the touched code and reports it
-mutation_command = "mutmut run"  # the tool that check runs (mutmut scope/runner in setup.cfg)
 
 [editor]
 mandate = "contrarian"        # reuse CONTRARIAN_MANDATE; "off" disables the editor pass

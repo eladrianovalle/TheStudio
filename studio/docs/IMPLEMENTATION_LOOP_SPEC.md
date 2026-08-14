@@ -225,18 +225,31 @@ shallow-merges over (mirrors `persona_overrides.py` and `role_overrides.py`).
 
 ### 4. Config: `implementation_loop.toml`
 
-Follows the `scopes.toml` + `ScopeConfig` pattern exactly: same `[table]` shape, same
-tomllib/tomli loader, same resolution chain (CLI flag → `.studio/` override → shipped default →
-disabled). A `LoopConfig` dataclass + `load_loop_config()` would live in a new
-`studio/impl_loop.py`, co-located like `ScopeConfig`/`load_scopes_config()` in `scopes.py`.
+Follows the `scopes.toml` + `ScopeConfig` pattern: same `[table]` shape, same
+tomllib/tomli loader, same resolution chain (CLI flag → `.studio/` override → shipped default).
+`LoopConfig` + `load_loop_config()` live in `studio/impl_loop.py`, co-located like
+`ScopeConfig`/`load_scopes_config()` in `scopes.py`.
+
+Below is **everything a repo may set**, not what ships. Studio ships `[loop]` and `[editor]`
+only; the `[gate]` commands are detected from the repo's own stack (`impl_loop.STACK_MARKERS` →
+`resolve_profile`), so a Python repo gets `pytest -q` + `ruff` + `mutmut run`, a Node repo with a
+`test` script gets `npm test`, and a repo Studio can't identify — or one matching two stacks at
+once — is refused at load with the file and the lines to write.
+
+Two things about the file itself. A `[gate]` table in a project file merges **over** the detected
+profile, so setting only `test_command` leaves the rest as the stack's rather than another
+language's. And a project file is read **instead of** the shipped one, never merged with it — so
+copy over any `[loop]`/`[editor]` value you want to keep. Those two tables match the dataclass
+defaults exactly, which is the only reason that shadowing is harmless; `test_impl_loop.py` holds
+them to it.
 
 ```toml
 [loop]
 deliver_on_gate_fail = true   # if the writer can't reach green, deliver flagged (uncommitted) rather than spin
 
-[gate]
-test_command = "pytest -q"       # per-repo; the only stack-specific knob. Runs the unit-scoped tests.
-static_checks = ["ruff"]         # CodeValidator static/lint half (mypy opt-in, off by default)
+[gate]                             # detected per repo; set these only to override the detection
+test_command = "pytest -q"       # what runs the unit-scoped tests here (a Node repo: "npm test")
+static_checks = ["ruff"]         # CodeValidator static/lint half; [] skips the check entirely
 require_mutation_check = true    # writer runs the mutation check on the touched code and reports it
 mutation_command = "mutmut run"  # the tool that check runs (scope/runner in setup.cfg)
 
