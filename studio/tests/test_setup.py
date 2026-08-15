@@ -1032,6 +1032,32 @@ class TestApplyImplementationLoopConfig:
             "test_command": "npm test",
         }
 
+    def test_says_so_when_forge_is_pointed_at_another_repo(
+        self, node_project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """A redirected artifact root means the written file describes a repo /forge isn't gating."""
+        elsewhere = tmp_path / "some-other-repo"
+        elsewhere.mkdir()
+        monkeypatch.setenv("STUDIO_ARTIFACT_ROOT", str(elsewhere))
+
+        setup.apply_implementation_loop_config(node_project)
+
+        printed = capsys.readouterr().out
+        assert f"STUDIO_ARTIFACT_ROOT points /forge at {elsewhere}" in printed
+        assert str(node_project) in printed
+
+    def test_no_note_when_the_artifact_root_is_the_target(
+        self, node_project: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """The installed layout sets the two to the same directory; that is not worth a note."""
+        monkeypatch.setenv("STUDIO_ARTIFACT_ROOT", str(node_project))
+
+        setup.apply_implementation_loop_config(node_project)
+
+        assert "STUDIO_ARTIFACT_ROOT" not in capsys.readouterr().out
+
     def test_runs_from_an_answers_payload(self, node_project: Path) -> None:
         state = setup.apply_from_answers(node_project, {"implementation_loop_config": {}})
         assert state["choices"]["implementation_loop_config"]["status"] == "written"

@@ -1416,6 +1416,20 @@ def test_setup_answers_names_the_flag_when_the_json_is_bad(tmp_path):
     assert "inline JSON" in str(err.value)
 
 
+def test_setup_answers_names_the_flag_when_the_file_is_missing(tmp_path):
+    """A typo'd filename says which flag it came from, same as a typo'd object does."""
+    missing = tmp_path / "anwsers.json"
+    args = run_phase.build_parser().parse_args([
+        "setup", "--target", str(tmp_path), "--answers", str(missing),
+    ])
+
+    with pytest.raises(ValueError) as err:
+        run_phase._do_setup(args)
+
+    assert "--answers" in str(err.value)
+    assert str(missing) in str(err.value)
+
+
 # ---------------------------------------------------------------------------
 # finalize writes findings.json (the verifier's input)
 # ---------------------------------------------------------------------------

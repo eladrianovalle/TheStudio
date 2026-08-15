@@ -16,6 +16,7 @@ Usage via run_phase.py:
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -675,11 +676,25 @@ def apply_implementation_loop_config(
       Studio ships no command for): nothing is written, and the refusal ``/forge`` would print
       is printed here instead — it already names the file and the lines to write by hand.
     - **Otherwise:** the detected commands are written out for the user to edit.
+
+    Everything here — the detection and the file — is about ``target``. ``/forge`` looks at
+    ``STUDIO_ARTIFACT_ROOT`` first when that is set, which is the same directory in the
+    installed layout the wizard runs in and some other repository entirely when someone has
+    redirected it. That case is called out rather than left to be discovered later, because
+    the file this step writes would then describe a repo ``/forge`` is not gating.
     """
     import impl_loop
 
     target = Path(target).resolve()
     config_path = target / ".studio" / "implementation_loop.toml"
+
+    redirect = os.environ.get("STUDIO_ARTIFACT_ROOT")
+    if redirect and Path(redirect).expanduser().resolve() != target:
+        gated = Path(redirect).expanduser().resolve()
+        print(
+            f"Note: STUDIO_ARTIFACT_ROOT points /forge at {gated}, not {target}. "
+            f"This step detects and writes for {target}, so /forge will gate a different repo."
+        )
 
     if config_path.exists():
         print(f"Kept the existing {config_path} — setup never overwrites one.")

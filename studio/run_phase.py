@@ -2883,7 +2883,10 @@ def _do_setup(args: argparse.Namespace) -> None:
             text = raw
         else:
             source = raw
-            text = Path(raw).read_text(encoding="utf-8")
+            try:
+                text = Path(raw).read_text(encoding="utf-8")
+            except OSError as exc:
+                raise ValueError(f"--answers ({source}) could not be read: {exc}") from exc
         try:
             answers = json.loads(text)
         except json.JSONDecodeError as exc:
