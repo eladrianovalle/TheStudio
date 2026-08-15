@@ -2109,8 +2109,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Apply all default configuration non-interactively.",
     )
     setup_parser.add_argument(
-        "--answers", type=Path, default=None,
-        help="Apply configuration from a JSON answers file.",
+        "--answers", type=str, default=None,
+        help="Apply configuration from a JSON answers file, or from a JSON object given inline.",
     )
     setup_parser.add_argument(
         "--role-pack", type=str, default=None,
@@ -2874,9 +2874,22 @@ def _do_setup(args: argparse.Namespace) -> None:
         if pend:
             print(f"  Pending: {', '.join(s['label'] for s in pend)}")
     elif args.answers:
-        answers = json.loads(Path(args.answers).read_text(encoding="utf-8"))
+        # The wizard writes no temp files: every /studio-setup step passes its answers
+        # inline, as `--answers '{"cleanup": {...}}'`. A path is still accepted, and the
+        # two can't be confused — no filename starts with `{`.
+        raw = args.answers.strip()
+        if raw.startswith("{"):
+            source = "inline JSON"
+            text = raw
+        else:
+            source = raw
+            text = Path(raw).read_text(encoding="utf-8")
+        try:
+            answers = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"--answers ({source}) is not valid JSON: {exc}") from exc
         _setup.apply_from_answers(target, answers)
-        print(f"Applied configuration from {args.answers}.")
+        print(f"Applied configuration from {source}.")
     elif args.role_pack:
         _setup.apply_role_pack(target, args.role_pack, args.roles or [])
         print(f"Role pack set to '{args.role_pack}'.")

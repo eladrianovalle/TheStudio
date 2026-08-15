@@ -65,7 +65,7 @@ Slash commands are the main way you use Studio day to day. `init` installs them 
 **Maintain the install**
 | Command | What it does |
 |---------|--------------|
-| `/studio-setup` | Configure roles, personas, scopes, and cleanup after install |
+| `/studio-setup` | Configure roles, personas, the `/forge` gate commands, and cleanup after install |
 | `/studio-update` | Pull the latest Studio source and commands into an installed project |
 
 Every command works from any project once you've run `init`. See [CLAUDE_CODE_USAGE.md](./studio/docs/CLAUDE_CODE_USAGE.md) for full arguments.
