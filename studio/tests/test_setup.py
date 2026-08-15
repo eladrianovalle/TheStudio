@@ -1058,6 +1058,30 @@ class TestApplyImplementationLoopConfig:
 
         assert "STUDIO_ARTIFACT_ROOT" not in capsys.readouterr().out
 
+    def test_says_so_when_target_points_away_from_the_installs_own_repo(
+        self, node_project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """--target elsewhere is the same drift as a redirected env var, with no env var set."""
+        import impl_loop
+
+        installed_in = tmp_path / "the-installs-own-repo"
+        monkeypatch.setattr(impl_loop, "STUDIO_ROOT", installed_in / ".studio" / "source")
+
+        setup.apply_implementation_loop_config(node_project)
+
+        printed = capsys.readouterr().out
+        assert f"/forge gates {installed_in}, not {node_project}" in printed
+        assert "STUDIO_ARTIFACT_ROOT" not in printed
+
+    def test_no_note_from_a_source_checkout_that_is_installed_nowhere(
+        self, node_project: Path, capsys: pytest.CaptureFixture,
+    ) -> None:
+        """The loader falls back to the source dir there; it gates no consuming repo to name."""
+        setup.apply_implementation_loop_config(node_project)
+
+        assert "/forge gates" not in capsys.readouterr().out
+
     def test_runs_from_an_answers_payload(self, node_project: Path) -> None:
         state = setup.apply_from_answers(node_project, {"implementation_loop_config": {}})
         assert state["choices"]["implementation_loop_config"]["status"] == "written"

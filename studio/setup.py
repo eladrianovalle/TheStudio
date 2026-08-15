@@ -677,11 +677,15 @@ def apply_implementation_loop_config(
       is printed here instead — it already names the file and the lines to write by hand.
     - **Otherwise:** the detected commands are written out for the user to edit.
 
-    Everything here — the detection and the file — is about ``target``. ``/forge`` looks at
-    ``STUDIO_ARTIFACT_ROOT`` first when that is set, which is the same directory in the
-    installed layout the wizard runs in and some other repository entirely when someone has
-    redirected it. That case is called out rather than left to be discovered later, because
-    the file this step writes would then describe a repo ``/forge`` is not gating.
+    Everything here — the detection and the file — is about ``target``. Where this Studio's
+    ``/forge`` looks is a separate question, answered by the loader's own
+    ``_project_artifact_root``: ``STUDIO_ARTIFACT_ROOT`` when it is set, else the repo an
+    installed snapshot sits in. Either can be some other repository — a redirected env var,
+    or a ``--target`` pointed away from the install's own root — and both are called out
+    rather than left to be discovered later, because the file this step writes would then
+    describe a repo ``/forge`` is not gating. The one case that stays quiet is a Studio
+    source checkout that is not installed anywhere: there the loader falls back to the source
+    directory itself, which says nothing about where any consumer's ``/forge`` will look.
     """
     import impl_loop
 
@@ -689,10 +693,14 @@ def apply_implementation_loop_config(
     config_path = target / ".studio" / "implementation_loop.toml"
 
     redirect = os.environ.get("STUDIO_ARTIFACT_ROOT")
-    if redirect and Path(redirect).expanduser().resolve() != target:
-        gated = Path(redirect).expanduser().resolve()
+    gated = impl_loop._project_artifact_root(impl_loop.STUDIO_ROOT)
+    # A source checkout that is not installed anywhere lands on the loader's last branch,
+    # which returns the source directory itself — no consuming repo to compare against.
+    knows_what_forge_gates = bool(redirect) or gated != impl_loop.STUDIO_ROOT
+    if knows_what_forge_gates and gated != target:
+        pointed_by = "STUDIO_ARTIFACT_ROOT points /forge at" if redirect else "/forge gates"
         print(
-            f"Note: STUDIO_ARTIFACT_ROOT points /forge at {gated}, not {target}. "
+            f"Note: {pointed_by} {gated}, not {target}. "
             f"This step detects and writes for {target}, so /forge will gate a different repo."
         )
 

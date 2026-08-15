@@ -1430,6 +1430,22 @@ def test_setup_answers_names_the_flag_when_the_file_is_missing(tmp_path):
     assert str(missing) in str(err.value)
 
 
+def test_setup_answers_names_the_flag_when_the_file_is_not_utf8(tmp_path):
+    """A file that isn't text is unreadable too, and says so the same way."""
+    not_text = tmp_path / "answers.json"
+    not_text.write_bytes(b'{"cleanup": "\xff\xfe"}')
+    args = run_phase.build_parser().parse_args([
+        "setup", "--target", str(tmp_path), "--answers", str(not_text),
+    ])
+
+    with pytest.raises(ValueError) as err:
+        run_phase._do_setup(args)
+
+    assert "--answers" in str(err.value)
+    assert str(not_text) in str(err.value)
+    assert "could not be read" in str(err.value)
+
+
 # ---------------------------------------------------------------------------
 # finalize writes findings.json (the verifier's input)
 # ---------------------------------------------------------------------------

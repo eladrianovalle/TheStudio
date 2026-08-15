@@ -2885,7 +2885,10 @@ def _do_setup(args: argparse.Namespace) -> None:
             source = raw
             try:
                 text = Path(raw).read_text(encoding="utf-8")
-            except OSError as exc:
+            except (OSError, UnicodeDecodeError) as exc:
+                # UnicodeDecodeError is a ValueError, not an OSError: a binary or
+                # latin-1 file is unreadable for the same reason a missing one is,
+                # and has to name the flag the same way.
                 raise ValueError(f"--answers ({source}) could not be read: {exc}") from exc
         try:
             answers = json.loads(text)
