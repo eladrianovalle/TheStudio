@@ -1075,9 +1075,19 @@ class TestApplyImplementationLoopConfig:
         assert "STUDIO_ARTIFACT_ROOT" not in printed
 
     def test_no_note_from_a_source_checkout_that_is_installed_nowhere(
-        self, node_project: Path, capsys: pytest.CaptureFixture,
+        self, node_project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
     ) -> None:
         """The loader falls back to the source dir there; it gates no consuming repo to name."""
+        import impl_loop
+
+        # A checkout whose path is not <repo>/.studio/source, pinned rather than inherited
+        # from wherever this test run happens to live — that layout is the whole reason the
+        # loader falls back, and the assert below is what says the branch actually fired.
+        checkout = tmp_path / "some-studio-checkout" / "studio"
+        monkeypatch.setattr(impl_loop, "STUDIO_ROOT", checkout)
+        assert impl_loop.project_artifact_root(checkout) == checkout
+
         setup.apply_implementation_loop_config(node_project)
 
         assert "/forge gates" not in capsys.readouterr().out

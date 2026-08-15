@@ -187,7 +187,7 @@ than by discipline.
 
 ```python
 # was: defaults = LoopConfig()                      (impl_loop.py:200)
-detected = resolve_profile(_project_artifact_root(root))
+detected = resolve_profile(project_artifact_root(root))
 defaults = LoopConfig(
     test_command=detected.test_command or "",
     static_checks=list(detected.static_checks),
@@ -271,7 +271,7 @@ recreates the hole the load-time refusal closes.
 ### What each repo actually gets
 
 Eleven rows — the ten consumers, plus the Studio source repo, which is listed because its detection
-root is `studio/` rather than the repo root (`_project_artifact_root` returns the source root when the
+root is `studio/` rather than the repo root (`project_artifact_root` returns the source root when the
 layout is not `.studio/source`, `impl_loop.py:120-126`).
 
 | Outcome | Count | Repos |

@@ -679,7 +679,7 @@ def apply_implementation_loop_config(
 
     Everything here — the detection and the file — is about ``target``. Where this Studio's
     ``/forge`` looks is a separate question, answered by the loader's own
-    ``_project_artifact_root``: ``STUDIO_ARTIFACT_ROOT`` when it is set, else the repo an
+    ``project_artifact_root``: ``STUDIO_ARTIFACT_ROOT`` when it is set, else the repo an
     installed snapshot sits in. Either can be some other repository — a redirected env var,
     or a ``--target`` pointed away from the install's own root — and both are called out
     rather than left to be discovered later, because the file this step writes would then
@@ -693,7 +693,7 @@ def apply_implementation_loop_config(
     config_path = target / ".studio" / "implementation_loop.toml"
 
     redirect = os.environ.get("STUDIO_ARTIFACT_ROOT")
-    gated = impl_loop._project_artifact_root(impl_loop.STUDIO_ROOT)
+    gated = impl_loop.project_artifact_root(impl_loop.STUDIO_ROOT)
     # A source checkout that is not installed anywhere lands on the loader's last branch,
     # which returns the source directory itself — no consuming repo to compare against.
     knows_what_forge_gates = bool(redirect) or gated != impl_loop.STUDIO_ROOT

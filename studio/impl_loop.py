@@ -373,8 +373,12 @@ class LoopConfig:
         return self.mandate != "off"
 
 
-def _project_artifact_root(studio_root: Path) -> Path:
+def project_artifact_root(studio_root: Path) -> Path:
     """The consuming repo root where project-local config lives.
+
+    Public because ``setup.py`` asks it where ``/forge`` will look, the same way it asks
+    ``resolve_profile`` what ``/forge`` will run: one function, two callers, so the two
+    answers cannot drift.
 
     Mirrors run_phase.get_artifact_root's installed-layout detection WITHOUT importing
     run_phase (impl_loop ships standalone to .studio/source/): honor STUDIO_ARTIFACT_ROOT,
@@ -399,7 +403,7 @@ def _resolve_config_path(path: Path | None, studio_root: Path) -> Path | None:
     """
     if path is not None:
         return Path(path)
-    local = _project_artifact_root(studio_root) / ".studio" / "implementation_loop.toml"
+    local = project_artifact_root(studio_root) / ".studio" / "implementation_loop.toml"
     if local.exists():
         return local
     shipped = studio_root / "config" / "implementation_loop.toml"
@@ -448,7 +452,7 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
         raise FileNotFoundError(f"Loop config not found at explicit path: {path}")
 
     root = studio_root if studio_root is not None else STUDIO_ROOT
-    repo_root = _project_artifact_root(root)
+    repo_root = project_artifact_root(root)
     detected = resolve_profile(repo_root)
     defaults = LoopConfig(
         test_command=detected.test_command or "",
