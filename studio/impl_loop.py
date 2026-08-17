@@ -64,12 +64,274 @@ class WorkDirError(ValueError):
     """A --work-dir the loop must refuse before any agent spawns."""
 
 
+class LoopConfigError(ValueError):
+    """A resolved loop config the loop cannot run, raised with what to do about it."""
+
+
+# Marker files that identify a stack, looked for at the repository root only. A pattern
+# holding a `*` is globbed; every other pattern is an exact path test.
+#
+# `rust` is recognised but unserved: Studio ships no gate commands for it, which is how
+# the loader says "I know what this is and still have no command for it" instead of
+# guessing. It is load-bearing. Without the row, a Rust game whose package.json only
+# describes CI tooling matches node alone and gets handed `npm test`, which passes while
+# testing none of the game — a wrong-reason *pass*, worse than the wrong-reason failure
+# this detection removes. There is no `go` row because no repo here is Go; it is one line
+# to add the day one appears.
+#
+# Deliberately NOT shared with the three suggest_*_from_stack ladders in setup.py: those
+# have to return a best guess, this one has to refuse. Same markers, opposite policy.
+STACK_MARKERS: list[tuple[str, tuple[str, ...]]] = [
+    ("unity", ("ProjectSettings/ProjectVersion.txt", "*.csproj")),
+    ("rust", ("Cargo.toml",)),
+    ("python", ("pyproject.toml", "setup.py", "requirements.txt", "conftest.py")),
+    ("node", ("package.json",)),
+]
+
+
+@dataclass(frozen=True)
+class StackProfile:
+    """The gate commands Studio can offer a repository, and what it found there.
+
+    ``stacks`` holds every stack whose markers are present. None of them means nothing
+    was recognised, and two or more means the repository is ambiguous; both carry no
+    commands and both are refusals. A single stack whose ``test_command`` is None is the
+    third no-command case — recognised, but Studio has nothing honest to run (Unity,
+    Rust, a Node package declaring no test script). That is a valid result, not an error:
+    the loader decides whether it is fatal, because an override may still supply the
+    command.
+
+    ``static_checks`` is a tuple rather than a list because PROFILES is module-level
+    shared state, and ``frozen=True`` would not stop a caller mutating a list in place.
+    """
+    stacks: tuple[str, ...] = ()
+    test_command: str | None = None
+    static_checks: tuple[str, ...] = ()
+    require_mutation_check: bool = False
+    mutation_command: str | None = None
+
+
+# The gate commands for each stack whose answer is the same in every repository. Node is
+# missing on purpose: what it can offer depends on what package.json declares, so
+# _node_profile works it out per repo.
+PROFILES: dict[str, StackProfile] = {
+    "python": StackProfile(
+        stacks=("python",),
+        test_command="pytest -q",
+        static_checks=("ruff",),
+        require_mutation_check=True,
+        mutation_command="mutmut run",
+    ),
+    # Recognised, deliberately unserved. A Unity test run needs a wrapper that reads the
+    # result file (the editor reports success even when it discovered no tests at all),
+    # and no Rust profile is shipped, so both fall through to the refusal.
+    "unity": StackProfile(stacks=("unity",)),
+    "rust": StackProfile(stacks=("rust",)),
+}
+
+
+def _first_marker(root: Path, patterns: tuple[str, ...]) -> str | None:
+    """The first of ``patterns`` present at ``root``, named for the error message."""
+    for pattern in patterns:
+        if "*" in pattern:
+            matches = sorted(match.name for match in root.glob(pattern))
+            if matches:
+                return matches[0]
+        elif (root / pattern).exists():
+            return pattern
+    return None
+
+
+def _matched_markers(root: Path) -> list[tuple[str, str]]:
+    """Every (stack, the marker file that gave it away) present at ``root``."""
+    matched = []
+    for stack, patterns in STACK_MARKERS:
+        marker = _first_marker(root, patterns)
+        if marker is not None:
+            matched.append((stack, marker))
+    return matched
+
+
+def detect_stacks(root: Path) -> list[str]:
+    """Every stack whose markers are present at ``root``, in STACK_MARKERS order.
+
+    Every match, never just the first. Zero matches and two-or-more matches are both
+    refusals, with different messages, so STACK_MARKERS order survives only as the order
+    the ambiguity message lists things in — never as a tiebreak. Every ranking is wrong
+    for some real repository: rank package.json first and a Rust game with a CI-tooling
+    package.json gets a green gate over nothing; rank Cargo.toml first and a Node repo
+    vendoring a Rust crate is refused for the wrong reason.
+    """
+    return [stack for stack, _ in _matched_markers(root)]
+
+
+def _read_package_json(root: Path) -> dict:
+    """``package.json`` as a dict, or empty when it is missing or unreadable.
+
+    A malformed package.json is not this loader's problem to report: it falls through to
+    "no test script", and the refusal that follows names the file to fix.
+    """
+    try:
+        with open(root / "package.json", "rb") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _node_profile(root: Path) -> StackProfile:
+    """Node's gate commands, read out of the repository's own package.json.
+
+    ``npm test`` is offered only when a ``test`` script is declared: without one it exits
+    with *"missing script: test"*, which is exactly the wrong-reason failure this
+    detection exists to remove. eslint is required only when the repo shows some sign of
+    having it — a ``lint`` script or an ``eslint`` dev dependency.
+    """
+    package = _read_package_json(root)
+    scripts = package.get("scripts")
+    dev_dependencies = package.get("devDependencies")
+    if not isinstance(scripts, dict):
+        scripts = {}
+    if not isinstance(dev_dependencies, dict):
+        dev_dependencies = {}
+
+    has_test_script = bool(str(scripts.get("test", "")).strip())
+    has_linter = "lint" in scripts or "eslint" in dev_dependencies
+
+    return StackProfile(
+        stacks=("node",),
+        test_command="npm test" if has_test_script else None,
+        static_checks=("eslint",) if has_linter else (),
+    )
+
+
+def resolve_profile(root: Path) -> StackProfile:
+    """The gate defaults for the repository at ``root``.
+
+    A profile whose test_command is None is a valid result meaning "recognised, no
+    command known" — the loader decides whether that is fatal, because an override may
+    still supply one.
+    """
+    stacks = tuple(detect_stacks(root))
+    if len(stacks) != 1:
+        return StackProfile(stacks=stacks)
+    if stacks[0] == "node":
+        return _node_profile(root)
+    return PROFILES[stacks[0]]
+
+
+def _detected_line(profile: StackProfile, root: Path) -> str:
+    """The one line of the refusal that says what was found here, and why it is no help."""
+    markers = dict(_matched_markers(root))
+    named = [f"{stack} ({markers[stack]})" for stack in profile.stacks]
+
+    if not named:
+        # Deliberately no list of the stacks Studio knows: the table recognises more of
+        # them than it serves, so naming a few while recognising more reads as a lie.
+        return "nothing — no marker file Studio recognises is present here."
+
+    if len(named) > 1:
+        both = (
+            f"{named[0]} and {named[1]} both match"
+            if len(named) == 2
+            else ", ".join(named[:-1]) + f" and {named[-1]} all match"
+        )
+        return (
+            f"{both}. Pick one by writing the command yourself; guessing here would gate "
+            "one language's code with the other's test runner."
+        )
+
+    stack = profile.stacks[0]
+    if stack == "unity":
+        return (
+            f"{named[0]}. Studio ships no test command for Unity — a batchmode run needs a "
+            "wrapper that reads the result file, because Unity reports success even when "
+            "it discovered no tests at all."
+        )
+    if stack == "node":
+        return (
+            f'{named[0]}. package.json declares no "test" script. `npm test` in this repo '
+            'exits with "missing script: test", which would fail your unit for the wrong '
+            "reason."
+        )
+    return f"{named[0]}. Studio ships no test command for {stack.capitalize()}."
+
+
+def _no_test_command_message(profile: StackProfile, root: Path) -> str:
+    """Why the loop is refusing to start, and the exact three lines that fix it.
+
+    Five repositories in ten reach this message rather than a detected profile, so it is
+    not an edge case — it is this feature's main interface. It never offers a value that
+    skips the gate: the only command that would satisfy such a value is one that does
+    nothing, which reopens the hole the refusal closes.
+    """
+    override = root / ".studio" / "implementation_loop.toml"
+    return "\n".join([
+        "gate.test_command is not set, and Studio has no default for this repository.",
+        "",
+        f"  Looked in:  {root}",
+        f"  Detected:   {_detected_line(profile, root)}",
+        "",
+        "/forge runs a test gate; without a command it would ask the writer agent to invent",
+        "one and then believe whatever it reported back. It will not do that.",
+        "",
+        f"Set the command in {override}:",
+        "",
+        "    [gate]",
+        '    test_command = "<the command that runs this repo\'s tests>"',
+        "",
+        "Or run /studio-setup, which writes that file for you.",
+    ])
+
+
+def _no_mutation_command_message(root: Path) -> str:
+    """The other way a gate can be unrunnable: the check is on and has nothing to run."""
+    override = root / ".studio" / "implementation_loop.toml"
+    return "\n".join([
+        "gate.require_mutation_check is on, but gate.mutation_command is empty.",
+        "",
+        f"  Looked in:  {root}",
+        "",
+        "The writer would be told to run the mutation check with no command to run.",
+        "",
+        f"Give it one in {override}, or turn the check off there:",
+        "",
+        "    [gate]",
+        '    mutation_command = "<the command that mutation-tests this repo>"',
+        "    # or, if this repo has no mutation tooling:",
+        "    require_mutation_check = false",
+    ])
+
+
+def _require_gate_commands(config: LoopConfig, detected: StackProfile, root: Path) -> None:
+    """Refuse a resolved config whose gate the loop cannot actually run.
+
+    Deliberately not a branch in ``LoopConfig.__post_init__``: that checks types, while
+    this asks whether a resolved config is *runnable*, which needs the detection context
+    to explain itself. An empty string passes __post_init__ today and would flow all the
+    way to the writer, which is told to run the command and then believed when it reports
+    the result.
+
+    ``static_checks`` is never a refusal — an empty list already means "skip the static
+    check", and the command that runs is authored per unit by /forge.
+    """
+    if not config.test_command.strip():
+        raise LoopConfigError(_no_test_command_message(detected, root))
+    if config.require_mutation_check and not config.mutation_command.strip():
+        raise LoopConfigError(_no_mutation_command_message(root))
+
+
 @dataclass
 class LoopConfig:
     """Configuration for the implementation writer/editor loop.
 
-    Field defaults are the shipped defaults from the spec §4, so an absent or
-    empty config yields a fully usable LoopConfig.
+    The [loop] and [editor] defaults are the shipped defaults from the spec §4. The
+    [gate] defaults are Python's, and they are **not** what a repository gets:
+    ``load_loop_config`` builds its merge base from ``resolve_profile`` instead, so a
+    Node repo starts from Node's commands and a repo Studio cannot identify starts from
+    none at all. No production path reads them — the loader always passes the gate keys
+    in — so they stand only as an example of the shape for whoever reads a bare
+    ``LoopConfig()``, which is why they are plain literals and not a factory over PROFILES.
     """
     # [loop]
     deliver_on_gate_fail: bool = True
@@ -111,8 +373,12 @@ class LoopConfig:
         return self.mandate != "off"
 
 
-def _project_artifact_root(studio_root: Path) -> Path:
+def project_artifact_root(studio_root: Path) -> Path:
     """The consuming repo root where project-local config lives.
+
+    Public because ``setup.py`` asks it where ``/forge`` will look, the same way it asks
+    ``resolve_profile`` what ``/forge`` will run: one function, two callers, so the two
+    answers cannot drift.
 
     Mirrors run_phase.get_artifact_root's installed-layout detection WITHOUT importing
     run_phase (impl_loop ships standalone to .studio/source/): honor STUDIO_ARTIFACT_ROOT,
@@ -137,7 +403,7 @@ def _resolve_config_path(path: Path | None, studio_root: Path) -> Path | None:
     """
     if path is not None:
         return Path(path)
-    local = _project_artifact_root(studio_root) / ".studio" / "implementation_loop.toml"
+    local = project_artifact_root(studio_root) / ".studio" / "implementation_loop.toml"
     if local.exists():
         return local
     shipped = studio_root / "config" / "implementation_loop.toml"
@@ -153,15 +419,21 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
     Resolution chain: explicit ``path`` → project override at
     ``<artifact-root>/.studio/implementation_loop.toml`` (the consuming repo root, found
     even when this module runs from an installed ``.studio/source`` snapshot) → shipped
-    ``<studio-root>/config/implementation_loop.toml`` → built-in defaults. An end-of-chain
-    miss (no ``path`` given and nothing found) yields the default LoopConfig; the loop
-    ships with a working default, so absence is not a failure. But an explicit ``path``
-    that does not exist raises FileNotFoundError: a typo'd config path is an error rather
-    than a silent request for defaults.
+    ``<studio-root>/config/implementation_loop.toml``. An explicit ``path`` that does not
+    exist raises FileNotFoundError: a typo'd config path is an error rather than a silent
+    request for defaults.
 
-    All tables/keys are optional; unspecified keys inherit the LoopConfig defaults.
-    See config/implementation_loop.toml (the shipped default) and SPEC §4 for the
-    canonical table shape.
+    **The gate commands come from the repository, not from a shipped default.** The merge
+    base is ``resolve_profile``'s answer for the repo being built in, so a config file
+    that sets only ``gate.test_command`` no longer inherits ``ruff`` and ``mutmut``
+    through the gap. When nothing supplies a test command — no override, and a repo Studio
+    cannot identify — this raises LoopConfigError rather than returning a config the loop
+    would fail on later for a reason that has nothing to do with your code.
+
+    All tables/keys are optional; unspecified keys inherit the detected profile for the
+    gate and the LoopConfig defaults for everything else. See
+    config/implementation_loop.toml (the shipped default) and SPEC §4 for the canonical
+    table shape.
 
     Args:
         path: Explicit path to a .toml config. When None, the resolution chain runs.
@@ -169,20 +441,30 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
             dir). Exposed for testing.
 
     Returns:
-        LoopConfig with parsed values merged over defaults.
+        LoopConfig with parsed values merged over the detected profile.
 
     Raises:
         FileNotFoundError: If an explicit ``path`` is given but does not exist.
+        LoopConfigError: If the resolved gate has no command to run.
         ValueError: If the resolved file has invalid TOML or invalid field values.
     """
     if path is not None and not Path(path).exists():
         raise FileNotFoundError(f"Loop config not found at explicit path: {path}")
 
     root = studio_root if studio_root is not None else STUDIO_ROOT
-    config_path = _resolve_config_path(path, root)
+    repo_root = project_artifact_root(root)
+    detected = resolve_profile(repo_root)
+    defaults = LoopConfig(
+        test_command=detected.test_command or "",
+        static_checks=list(detected.static_checks),
+        require_mutation_check=detected.require_mutation_check,
+        mutation_command=detected.mutation_command or "",
+    )
 
+    config_path = _resolve_config_path(path, root)
     if config_path is None or not config_path.exists():
-        return LoopConfig()
+        _require_gate_commands(defaults, detected, repo_root)
+        return defaults
 
     try:
         with open(config_path, "rb") as f:
@@ -197,8 +479,7 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
         if not isinstance(table, dict):
             raise ValueError(f"'{name}' must be a table/dict: {config_path}")
 
-    defaults = LoopConfig()
-    return LoopConfig(
+    resolved = LoopConfig(
         deliver_on_gate_fail=loop.get("deliver_on_gate_fail", defaults.deliver_on_gate_fail),
         test_command=gate.get("test_command", defaults.test_command),
         static_checks=gate.get("static_checks", list(defaults.static_checks)),
@@ -208,6 +489,8 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
         read_scope=editor.get("read_scope", defaults.read_scope),
         output_budget=editor.get("output_budget", defaults.output_budget),
     )
+    _require_gate_commands(resolved, detected, repo_root)
+    return resolved
 
 
 def _git_common_dir(directory: Path) -> str | None:
@@ -362,6 +645,7 @@ def _cli(argv: List[str]) -> str:
 
     Raises:
         WorkDirError: If ``--work-dir`` is given and is not a worktree of this repo.
+        LoopConfigError: If this repository's gate has no test command to run.
     """
     parser = argparse.ArgumentParser(
         prog="impl_loop.py",
@@ -391,6 +675,8 @@ if __name__ == "__main__":
     import sys
     try:
         print(_cli(sys.argv))
-    except WorkDirError as e:
+    except (WorkDirError, LoopConfigError) as e:
+        # Both are refusals with an explanation already written for a person: print the
+        # message alone, with no traceback in front of it, and stop the run.
         print(e, file=sys.stderr)
         sys.exit(1)

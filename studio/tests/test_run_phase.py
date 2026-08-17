@@ -1366,6 +1366,86 @@ def test_setup_defaults_step_count_ignores_retired_steps(tmp_path, capsys):
     assert "Pending:" not in out
 
 
+def test_setup_answers_takes_inline_json(tmp_path, capsys):
+    """`--answers '{...}'` — the shape every /studio-setup step uses — is applied, not opened."""
+    args = run_phase.build_parser().parse_args([
+        "setup", "--target", str(tmp_path),
+        "--answers", '{"cleanup": {"ttl_days": 7, "size_limit_mb": 100}}',
+    ])
+
+    capsys.readouterr()
+    run_phase._do_setup(args)
+
+    settings = (tmp_path / ".studio" / "config" / "studio_settings.toml").read_text(
+        encoding="utf-8"
+    )
+    assert "7" in settings and "100" in settings
+    assert "Applied configuration from inline JSON." in capsys.readouterr().out
+
+
+def test_setup_answers_still_takes_a_file(tmp_path, capsys):
+    """A path keeps working — inline JSON is an addition, not a swap."""
+    answers_file = tmp_path / "answers.json"
+    answers_file.write_text(
+        json.dumps({"cleanup": {"ttl_days": 7, "size_limit_mb": 100}}), encoding="utf-8"
+    )
+    args = run_phase.build_parser().parse_args([
+        "setup", "--target", str(tmp_path), "--answers", str(answers_file),
+    ])
+
+    capsys.readouterr()
+    run_phase._do_setup(args)
+
+    settings = (tmp_path / ".studio" / "config" / "studio_settings.toml").read_text(
+        encoding="utf-8"
+    )
+    assert "7" in settings and "100" in settings
+    assert f"Applied configuration from {answers_file}." in capsys.readouterr().out
+
+
+def test_setup_answers_names_the_flag_when_the_json_is_bad(tmp_path):
+    """A typo'd object says which flag it came from, not just where the parser gave up."""
+    args = run_phase.build_parser().parse_args([
+        "setup", "--target", str(tmp_path), "--answers", '{"cleanup": }',
+    ])
+
+    with pytest.raises(ValueError) as err:
+        run_phase._do_setup(args)
+
+    assert "--answers" in str(err.value)
+    assert "inline JSON" in str(err.value)
+
+
+def test_setup_answers_names_the_flag_when_the_file_is_missing(tmp_path):
+    """A typo'd filename says which flag it came from, same as a typo'd object does."""
+    missing = tmp_path / "anwsers.json"
+    args = run_phase.build_parser().parse_args([
+        "setup", "--target", str(tmp_path), "--answers", str(missing),
+    ])
+
+    with pytest.raises(ValueError) as err:
+        run_phase._do_setup(args)
+
+    assert "--answers" in str(err.value)
+    assert str(missing) in str(err.value)
+
+
+def test_setup_answers_names_the_flag_when_the_file_is_not_utf8(tmp_path):
+    """A file that isn't text is unreadable too, and says so the same way."""
+    not_text = tmp_path / "answers.json"
+    not_text.write_bytes(b'{"cleanup": "\xff\xfe"}')
+    args = run_phase.build_parser().parse_args([
+        "setup", "--target", str(tmp_path), "--answers", str(not_text),
+    ])
+
+    with pytest.raises(ValueError) as err:
+        run_phase._do_setup(args)
+
+    assert "--answers" in str(err.value)
+    assert str(not_text) in str(err.value)
+    assert "could not be read" in str(err.value)
+
+
 # ---------------------------------------------------------------------------
 # finalize writes findings.json (the verifier's input)
 # ---------------------------------------------------------------------------

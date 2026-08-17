@@ -131,7 +131,8 @@ likeliest blocker and leaves a clean tree), reports that SHA, reports `tests` ho
 The gate is the checkpoint, and it has **two distinct moments**, not one rule applied twice:
 
 - **Entry gate (after the writer): purely mechanical.** Admits the unit to the editor when the
-  writer has *declared done* (`mvi_claimed`) **and** the machine checks pass (tests green + ruff).
+  writer has *declared done* (`mvi_claimed`) **and** the machine checks pass (tests green + the
+  repo's static check).
   The writer's declaration is only a trigger: the writer is the one agent that knows when it has
   finished a complete thought, so it must be the one to say "hand it off." It is *not* a trusted
   MVI verdict.
@@ -164,7 +165,7 @@ the existing rule that a self-reported problem is not a delivery blocker.
 | Component | Criterion | Source |
 | --- | --- | --- |
 | Tests green | `tests.command` (unit-scoped) exits 0, run by the agent and recorded in the handoff. | `TEST_DRIVEN_GUIDE.md` |
-| Static checks | `ruff` clean via `CodeValidator`. (mypy is **out** of the gate: `mypy . --strict` blocks virtually any real repo; opt-in only.) | `code_validator.py` |
+| Static checks | The repo's configured `static_checks` run clean via `CodeValidator` — `ruff` in a Python repo, `eslint` in a Node one, and `[]` skips the check entirely. (mypy is **out** of the gate: `mypy . --strict` blocks virtually any real repo; opt-in only.) | `code_validator.py` |
 | Full suite at delivery | The complete test suite runs once before the unit is delivered, not on every gate check (keeps the inner loop fast). | n/a |
 
 **Agent-attested (recorded signals, not enforcement; judged by the *editor*, the fresh agent,
@@ -173,7 +174,7 @@ not the writer about its own work):**
 | Component | Criterion | Source |
 | --- | --- | --- |
 | MVI complete | Editor's exit-gate `mvi_verdict`: *"If we stopped here, could someone use what we've built?"* — judged against the unit's `title`, or, when the unit carries acceptance criteria, `true` only if the unit is usable as a complete interaction **and** every criterion passes. Overturns the writer's `mvi_claimed`. | `MVI_METHODOLOGY.md` |
-| Mutation verified | Run the configured `mutation_command` (mutmut; scope in `setup.cfg`) on the touched code; survivors → strengthen tests and redo. Falls back to hand-mutating 2-3 places in the production code if mutmut is absent — never the assertions, which fail by construction and prove nothing. | `AI_TDD_METHODOLOGY.md` |
+| Mutation verified | Run the configured `mutation_command` (mutmut in this repo; scope in `setup.cfg`) on the touched code; survivors → strengthen tests and redo. Falls back to hand-mutating 2-3 places in the production code if mutmut is absent — never the assertions, which fail by construction and prove nothing. | `AI_TDD_METHODOLOGY.md` |
 | No anti-patterns | No self-mocking tests, hallucinated assertions, green-checkmark traps. | `AI_TDD_METHODOLOGY.md` |
 | Test output pristine | Green is not enough: a suite passing while it emits new warnings, deprecation notices or stray output is a finding. The editor fixes it in the pass or records it as a Reviewer Concern. | `AI_TDD_METHODOLOGY.md` |
 
@@ -225,18 +226,33 @@ shallow-merges over (mirrors `persona_overrides.py` and `role_overrides.py`).
 
 ### 4. Config: `implementation_loop.toml`
 
-Follows the `scopes.toml` + `ScopeConfig` pattern exactly: same `[table]` shape, same
-tomllib/tomli loader, same resolution chain (CLI flag → `.studio/` override → shipped default →
-disabled). A `LoopConfig` dataclass + `load_loop_config()` would live in a new
-`studio/impl_loop.py`, co-located like `ScopeConfig`/`load_scopes_config()` in `scopes.py`.
+Follows the `scopes.toml` + `ScopeConfig` pattern: same `[table]` shape, same
+tomllib/tomli loader, same resolution chain (CLI flag → `.studio/` override → shipped default).
+`LoopConfig` + `load_loop_config()` live in `studio/impl_loop.py`, co-located like
+`ScopeConfig`/`load_scopes_config()` in `scopes.py`.
+
+Below is **everything a repo may set**, not what ships. Studio ships `[loop]` and `[editor]`
+only; the `[gate]` commands are detected from the repo's own stack (`impl_loop.STACK_MARKERS` →
+`resolve_profile`), so a Python repo gets `pytest -q` + `ruff` + `mutmut run`, a Node repo with a
+`test` script gets `npm test`, and a repo Studio can't identify — or one matching two stacks at
+once — is refused at load with the file and the lines to write.
+
+Two things about the file itself. A `[gate]` table in a project file merges **over** the detected
+profile, so setting only `test_command` leaves the rest as the stack's rather than another
+language's. `/studio-setup` writes that project file with the detected commands (and leaves an
+existing one untouched), so what the gate runs is visible and editable rather than implied. And a
+project file is read **instead of** the shipped one, never merged with it — so copy over any
+`[loop]`/`[editor]` value you want to keep. Those two tables match the dataclass
+defaults exactly, which is the only reason that shadowing is harmless; `test_impl_loop.py` holds
+them to it.
 
 ```toml
 [loop]
 deliver_on_gate_fail = true   # if the writer can't reach green, deliver flagged (uncommitted) rather than spin
 
-[gate]
-test_command = "pytest -q"       # per-repo; the only stack-specific knob. Runs the unit-scoped tests.
-static_checks = ["ruff"]         # CodeValidator static/lint half (mypy opt-in, off by default)
+[gate]                             # detected per repo; set these only to override the detection
+test_command = "pytest -q"       # what runs the unit-scoped tests here (a Node repo: "npm test")
+static_checks = ["ruff"]         # CodeValidator static/lint half; [] skips the check entirely
 require_mutation_check = true    # writer runs the mutation check on the touched code and reports it
 mutation_command = "mutmut run"  # the tool that check runs (scope/runner in setup.cfg)
 
@@ -275,7 +291,7 @@ unit:
 
 ```js
 writer = agent(writer_prompt(unit, config), { schema: HANDOFF })   // build unit; commit passing state -> writer_sha
-if (gate(writer)) {                                                 // tests green + ruff + attested MVI/mutation
+if (gate(writer)) {                                                 // tests green + static check + attested MVI/mutation
   editor = agent(editor_prompt(writer, CONTRARIAN_MANDATE),         // diff writer_sha.., apply edits, re-run tests
                  { schema: HANDOFF })
   if (!gate(editor)) revertTo(writer.writer_sha)                    // edit broke green / hit load_bearing -> reset

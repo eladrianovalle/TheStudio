@@ -199,8 +199,9 @@ If `--plan`, stop here.
 exist but `studio/impl_loop.py` does, use that instead (you are in the Studio source repo).
 
 Read the loop config knobs. Resolution finds a project override at the repo root
-(`.studio/implementation_loop.toml`) automatically, falling back to the shipped default →
-built-in defaults, so no path argument is needed:
+(`.studio/implementation_loop.toml`) automatically, falling back to the shipped default, so no
+path argument is needed. The gate commands are detected from this repo's own stack; anything the
+override sets merges over that:
 
 ```bash
 python .studio/source/impl_loop.py
@@ -209,6 +210,11 @@ python .studio/source/impl_loop.py
 
 If `--work-dir` was given you already ran this in Step 3 (with the flag) and it produced the same
 JSON. Reuse that output; don't run it a second time.
+
+**If this command exits non-zero, STOP — do not run the loop.** It means Studio has no test command
+for this repository (it recognised no stack, or two at once). Its message already names the file and
+the exact lines to write; print it as-is and let the user fix it. Do not invent a test command and
+carry on: the writer would run it, and the gate would believe whatever came back.
 
 **If you resolved criteria in Step 1 and `editor_enabled` is `false`, STOP here — do not run the
 loop.** The editor is the only thing that grades criteria, so this pair asks for a graded run and
@@ -246,8 +252,9 @@ runs render exactly as they always have.
 How the workflow consumes each knob: `editor_enabled=false` → skip the editor pass;
 `read_scope`/`output_budget` → shape the editor prompt; `require_mutation_check=false` → writer
 skips the mutation check; `mutation_command` → the command the writer runs for the mutation check
-(default `mutmut run`); `static_checks=[]` → writer skips the static check and the entry gate
-doesn't require it. So passing all knobs makes `implementation_loop.toml` fully live.
+(detected per repo — `mutmut run` in a Python one); `static_checks=[]` → writer skips the static
+check and the entry gate doesn't require it. So passing all knobs makes
+`implementation_loop.toml` fully live.
 
 The workflow runs in the background and notifies on completion. Do not re-run it or poll;
 wait for the completion notification.

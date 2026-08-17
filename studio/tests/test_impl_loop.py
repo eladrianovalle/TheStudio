@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
 """Tests for the implementation writer/editor loop config loader."""
+import dataclasses
 import json
+import os
 import string
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 import pytest
 
+from config_loading import tomllib
 from impl_loop import (
     LoopConfig,
+    LoopConfigError,
+    PROFILES,
+    STACK_MARKERS,
     STUDIO_ROOT,
     VALID_MANDATES,
     VALID_READ_SCOPES,
@@ -23,17 +30,51 @@ from impl_loop import (
     _KNOWN_BAD,
     _cli,
     _git_common_dir,
+    detect_stacks,
     explain_unquotable_path,
     load_loop_config,
+    resolve_profile,
     runtime_knobs,
     validate_work_dir,
 )
+
+
+@pytest.fixture(autouse=True)
+def _ignore_ambient_artifact_root(monkeypatch):
+    """Keep a STUDIO_ARTIFACT_ROOT in the developer's shell out of these tests.
+
+    The gate commands are detected from whichever repo the loader resolves to, and that
+    variable moves it. Without this, a machine that happens to export it would run every
+    fixture's detection against an unrelated directory. The one test that is *about* the
+    variable sets it back for itself.
+    """
+    monkeypatch.delenv("STUDIO_ARTIFACT_ROOT", raising=False)
 
 
 def _write_toml(text: str) -> Path:
     with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
         f.write(text)
         return Path(f.name)
+
+
+def _python_repo(root: Path) -> Path:
+    """Make ``root`` look like a Python project, and hand it back.
+
+    The loader now refuses a repository whose stack it cannot identify, so a fixture that
+    only cares about the config resolution chain still has to look like *something*.
+    Python is the cheapest one to write, and it keeps these tests asserting what they
+    always asserted.
+    """
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "pyproject.toml").write_text('[project]\nname = "fixture"\n')
+    return root
+
+
+def _node_repo(root: Path, package: dict) -> Path:
+    """A repository whose only marker is a package.json holding ``package``."""
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "package.json").write_text(json.dumps(package))
+    return root
 
 
 def test_loop_config_defaults_match_spec():
@@ -129,7 +170,11 @@ output_budget = 250
 
 
 def test_load_loop_config_partial_inherits_defaults():
-    """Unspecified keys inherit the shipped defaults (shallow merge)."""
+    """Unspecified keys inherit the defaults (shallow merge).
+
+    The gate half of those defaults is detected from this repo, which is a Python
+    project — the stack-detected gate commands block below covers that on its own.
+    """
     config_path = _write_toml("""
 [editor]
 output_budget = 999
@@ -150,18 +195,33 @@ output_budget = 999
 def test_load_loop_config_explicit_missing_path_raises():
     """An explicit path that doesn't exist is an error (a typo), not a silent default.
 
-    End-of-chain absence still yields defaults — see the no_config_anywhere test below.
+    End-of-chain absence is a different failure — see the no_config_and_no_stack test
+    below, which refuses rather than raising FileNotFoundError.
     """
     with pytest.raises(FileNotFoundError):
         load_loop_config(Path("/nonexistent/implementation_loop.toml"))
 
 
-def test_load_loop_config_no_config_anywhere_returns_defaults():
-    """When the resolution chain finds nothing, defaults are returned."""
+def test_load_loop_config_no_config_and_no_stack_refuses():
+    """A repo Studio can't identify is refused at load, not handed Python's commands.
+
+    This reverses the contract this test used to state — absence used to yield the
+    shipped defaults. Nine of the ten repos that run /forge are not Python projects, so
+    that default meant `pytest` failing for a reason that had nothing to do with the
+    unit. The refusal has to name the repo it looked in and the file to write, because
+    for five of those repos it is the only thing they will see.
+    """
     with tempfile.TemporaryDirectory() as tmp:
-        # Empty studio_root: no .studio/ and no config/ files exist.
-        config = load_loop_config(studio_root=Path(tmp))
-        assert config == LoopConfig()
+        # Empty studio_root: no marker files, no .studio/ and no config/ files exist.
+        with pytest.raises(LoopConfigError) as excinfo:
+            load_loop_config(studio_root=Path(tmp))
+
+        message = str(excinfo.value)
+        assert tmp in message
+        assert ".studio/implementation_loop.toml" in message
+        assert "Detected:   nothing" in message
+        # No escape hatch: the only value that would satisfy one is a no-op command.
+        assert "skip" not in message.lower()
 
 
 def test_load_loop_config_invalid_toml():
@@ -195,7 +255,7 @@ def test_load_loop_config_plain_source_dir_is_not_an_installed_snapshot(tmp_path
     A directory that merely happens to be named `source` reads its own `.studio/`, so
     an unrelated `.studio/` two levels up can never hijack the config.
     """
-    source = tmp_path / "checkout" / "source"
+    source = _python_repo(tmp_path / "checkout" / "source")
     (source / ".studio").mkdir(parents=True)
     (source / ".studio" / "implementation_loop.toml").write_text(
         "[editor]\noutput_budget = 111\n"
@@ -212,7 +272,7 @@ def test_load_loop_config_plain_source_dir_is_not_an_installed_snapshot(tmp_path
 def test_load_loop_config_studio_override_beats_shipped_default():
     """.studio/implementation_loop.toml wins over config/implementation_loop.toml."""
     with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
+        root = _python_repo(Path(tmp))
         (root / ".studio").mkdir()
         (root / "config").mkdir()
         (root / "config" / "implementation_loop.toml").write_text(
@@ -229,7 +289,7 @@ def test_load_loop_config_installed_override_resolves_at_repo_root(tmp_path, mon
     """In an installed layout (studio_root = <repo>/.studio/source), the project override
     is read from <repo>/.studio/, NOT from under the source snapshot."""
     monkeypatch.delenv("STUDIO_ARTIFACT_ROOT", raising=False)
-    repo = tmp_path / "repo"
+    repo = _python_repo(tmp_path / "repo")
     snapshot = repo / ".studio" / "source"
     (snapshot / "config").mkdir(parents=True)
     # shipped default under the snapshot
@@ -246,7 +306,7 @@ def test_load_loop_config_installed_override_resolves_at_repo_root(tmp_path, mon
 
 def test_load_loop_config_artifact_root_env_override(tmp_path, monkeypatch):
     """STUDIO_ARTIFACT_ROOT points the project-override lookup at an explicit root."""
-    repo = tmp_path / "elsewhere"
+    repo = _python_repo(tmp_path / "elsewhere")
     (repo / ".studio").mkdir(parents=True)
     (repo / ".studio" / "implementation_loop.toml").write_text("[editor]\nmandate = \"off\"\n")
     snapshot = tmp_path / "src" / ".studio" / "source"
@@ -259,7 +319,7 @@ def test_load_loop_config_artifact_root_env_override(tmp_path, monkeypatch):
 def test_load_loop_config_falls_back_to_shipped_default():
     """With no .studio override, the shipped config/ default is used."""
     with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
+        root = _python_repo(Path(tmp))
         (root / "config").mkdir()
         (root / "config" / "implementation_loop.toml").write_text(
             '[editor]\nmandate = "off"\n'
@@ -271,7 +331,7 @@ def test_load_loop_config_falls_back_to_shipped_default():
 def test_explicit_path_beats_resolution_chain():
     """An explicit path takes priority over the .studio/config chain."""
     with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
+        root = _python_repo(Path(tmp))
         (root / ".studio").mkdir()
         (root / ".studio" / "implementation_loop.toml").write_text(
             '[editor]\noutput_budget = 50\n'
@@ -301,7 +361,7 @@ def test_runtime_knobs_default_config():
 def test_runtime_knobs_reflects_loaded_override():
     """Values from a loaded .studio override flow through to the knobs."""
     with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
+        root = _python_repo(Path(tmp))
         (root / ".studio").mkdir()
         (root / ".studio" / "implementation_loop.toml").write_text(
             "[gate]\n"
@@ -326,13 +386,19 @@ def test_runtime_knobs_reflects_loaded_override():
         }
 
 
+SHIPPED_CONFIG = Path(__file__).resolve().parents[1] / "config" / "implementation_loop.toml"
+
+
 def test_load_default_loop_config():
-    """The shipped default implementation_loop.toml loads correctly."""
-    default_path = Path(__file__).resolve().parents[1] / "config" / "implementation_loop.toml"
-    if not default_path.exists():
+    """The shipped default implementation_loop.toml loads correctly.
+
+    The gate half of this config is not in the file — it comes from detecting this
+    repository, which is a Python project, so the values are the ones they always were.
+    """
+    if not SHIPPED_CONFIG.exists():
         pytest.skip("Default implementation_loop.toml not found")
 
-    config = load_loop_config(default_path)
+    config = load_loop_config(SHIPPED_CONFIG)
     assert config.deliver_on_gate_fail is True
     assert config.test_command == "pytest -q"
     assert config.static_checks == ["ruff"]
@@ -341,6 +407,48 @@ def test_load_default_loop_config():
     assert config.mandate == "contrarian"
     assert config.read_scope == "touched+importers"
     assert config.output_budget == 400
+
+
+def test_shipped_config_ships_no_gate_table():
+    """The shipped file must define no [gate] table, or detection is dead code.
+
+    Nine of the ten repos with Studio installed have no config file of their own, so the
+    shipped one is what they resolve to. As long as it hard-sets the gate, it wins over
+    everything detection computes and every one of those repos still runs `pytest`.
+    """
+    with open(SHIPPED_CONFIG, "rb") as f:
+        data = tomllib.load(f)
+    assert "gate" not in data
+
+
+def test_shipped_config_matches_dataclass_defaults():
+    """The shipped [loop]/[editor] values must equal LoopConfig()'s own defaults.
+
+    A project file is read *instead of* the shipped one, so the moment a repo writes one
+    these two tables are never read again and those keys fall back to the dataclass. The
+    values are identical today, which is the only reason that shadowing is harmless. This
+    test is what makes a future edit to either side fail loudly instead of going dark in
+    every repo that has its own file.
+    """
+    with open(SHIPPED_CONFIG, "rb") as f:
+        data = tomllib.load(f)
+    defaults = LoopConfig()
+    assert data["loop"]["deliver_on_gate_fail"] == defaults.deliver_on_gate_fail
+    assert data["editor"]["mandate"] == defaults.mandate
+    assert data["editor"]["read_scope"] == defaults.read_scope
+    assert data["editor"]["output_budget"] == defaults.output_budget
+
+
+def test_shipped_config_is_still_installed_into_consuming_repos():
+    """The shipped config must stay in SOURCE_FILES even with its [gate] table gone.
+
+    There is no prune for `.studio/source/`, so dropping the file from the install list
+    would leave every already-installed repo holding its old copy — [gate] table intact —
+    forever, which is the one outcome this whole change exists to prevent.
+    """
+    from install import SOURCE_FILES
+
+    assert "config/implementation_loop.toml" in SOURCE_FILES
 
 
 def test_cli_no_arg_emits_default_knobs():
@@ -594,3 +702,348 @@ def test_cli_bad_work_dir_raises_before_any_knobs_are_emitted(tmp_path):
     absent = tmp_path / "not-here"
     with pytest.raises(WorkDirError, match=WORK_DIR_MISSING):
         _cli(["impl_loop.py", "--work-dir", str(absent)])
+
+
+# --- stack-detected gate commands ------------------------------------------
+#
+# The gate's test command is detected from the repository being built in, not shipped.
+# These fixtures are real directories holding real marker files: detection reads the
+# filesystem, and a mocked one would only prove we can repeat our own assumptions back.
+
+
+def _unity_repo(root: Path) -> Path:
+    """A repository whose only marker is Unity's ProjectVersion.txt."""
+    (root / "ProjectSettings").mkdir(parents=True)
+    (root / "ProjectSettings" / "ProjectVersion.txt").write_text("m_EditorVersion: 6000.0.0f1\n")
+    return root
+
+
+def _override(root: Path, text: str) -> Path:
+    """Write a project override at ``root/.studio/implementation_loop.toml``."""
+    (root / ".studio").mkdir(parents=True, exist_ok=True)
+    (root / ".studio" / "implementation_loop.toml").write_text(text)
+    return root
+
+
+def test_node_repo_with_a_test_script_gets_npm_test(tmp_path):
+    """A Node project resolves to `npm test`, and to no mutation gate.
+
+    Three of the ten repos with Studio installed are Node projects, and every /forge run
+    in them used to fail on a `pytest` that was never there. Mutation checking is off
+    because no mutation tool is wired up for them: a gate that always passes with
+    "unavailable" is decoration.
+    """
+    root = _node_repo(tmp_path, {"scripts": {"test": "vitest run", "lint": "eslint ."}})
+
+    config = load_loop_config(studio_root=root)
+
+    assert config.test_command == "npm test"
+    assert config.require_mutation_check is False
+
+
+@pytest.mark.parametrize("package, expected_checks", [
+    ({"scripts": {"test": "node --test"}}, []),
+    ({"scripts": {"test": "vitest run", "lint": "eslint ."}}, ["eslint"]),
+    ({"scripts": {"test": "vitest run"}, "devDependencies": {"eslint": "^9.0.0"}}, ["eslint"]),
+])
+def test_node_static_check_follows_the_signs_of_a_linter(tmp_path, package, expected_checks):
+    """eslint is required only of a repo showing some sign of having it — a lint script,
+    or the tool itself in devDependencies.
+
+    An empty static_checks list means the writer skips the check, which is the honest
+    answer for a package that declares neither.
+    """
+    root = _node_repo(tmp_path, package)
+
+    assert load_loop_config(studio_root=root).static_checks == expected_checks
+
+
+def test_python_repo_keeps_pytest_ruff_and_the_mutation_gate(tmp_path):
+    """A Python project resolves to exactly the commands that used to be hard-coded."""
+    root = _python_repo(tmp_path / "py")
+
+    config = load_loop_config(studio_root=root)
+
+    assert config.test_command == "pytest -q"
+    assert config.static_checks == ["ruff"]
+    assert config.require_mutation_check is True
+    assert config.mutation_command == "mutmut run"
+
+
+@pytest.mark.parametrize("marker, contents", [
+    ("pyproject.toml", '[project]\nname = "fixture"\n'),
+    ("setup.py", "from setuptools import setup\n\nsetup()\n"),
+    ("requirements.txt", "pytest\n"),
+    ("conftest.py", "# fixtures live here\n"),
+])
+def test_any_one_python_marker_is_enough_on_its_own(tmp_path, marker, contents):
+    """Every marker in the table is there for some repo, so each one is pinned here —
+    an untested marker can be deleted by accident and nothing says so.
+
+    conftest.py alone is _Cerebro's exact shape: without that marker it is undetectable,
+    and a Python project would be refused a Python gate.
+    """
+    (tmp_path / marker).write_text(contents)
+
+    assert load_loop_config(studio_root=tmp_path).test_command == "pytest -q"
+
+
+def test_unity_override_inherits_nothing_from_python(tmp_path):
+    """An override setting only test_command gets no Python value through the gap.
+
+    This is the same bug one level down: before the merge base became the detected
+    profile, a Unity repo naming only its test wrapper still inherited `ruff` and
+    `mutmut` from the shipped defaults and failed the gate on tools it does not have.
+    """
+    root = _unity_repo(tmp_path)
+    _override(root, '[gate]\ntest_command = "./scripts/run-editmode-tests.sh"\n')
+
+    config = load_loop_config(studio_root=root)
+
+    assert config.test_command == "./scripts/run-editmode-tests.sh"
+    assert config.static_checks == []
+    assert config.require_mutation_check is False
+
+
+def test_orkid_gardens_own_override_still_resolves_and_raises_nothing(tmp_path):
+    """The repo that reported this bug keeps working, byte-for-byte as it is today.
+
+    Orkid Garden keeps its Unity project in a subdirectory, so nothing at its root
+    identifies it — detection alone would refuse. Its hand-written override is still the
+    answer, and this change must not disturb it.
+    """
+    root = tmp_path / "Orkid Garden"
+    root.mkdir()
+    (root / "unity").mkdir()  # the Unity project, invisible to root-only detection
+    _override(root, (
+        "# Orkid Garden's overrides for the implementation writer/editor loop.\n"
+        "\n"
+        "[gate]\n"
+        'test_command = "./scripts/run-editmode-tests.sh"\n'
+        "static_checks = []\n"
+        "require_mutation_check = false\n"
+    ))
+
+    config = load_loop_config(studio_root=root)
+
+    assert config.test_command == "./scripts/run-editmode-tests.sh"
+    assert config.static_checks == []
+    assert config.require_mutation_check is False
+
+
+def test_refusal_names_unity_and_why_no_command_ships_for_it(tmp_path):
+    """Unity is recognised and still refused, for a reason that names the trap."""
+    root = _unity_repo(tmp_path)
+
+    with pytest.raises(LoopConfigError) as excinfo:
+        load_loop_config(studio_root=root)
+
+    message = str(excinfo.value)
+    assert "Detected:   unity (ProjectSettings/ProjectVersion.txt)" in message
+    assert "reports success even when it discovered no tests at all" in message
+
+
+def test_refusal_on_two_stacks_names_both_markers(tmp_path):
+    """Cargo.toml beside package.json is refused, not ranked.
+
+    cemetery-security is that repo: a Rust/wasm game whose package.json is CI release
+    tooling. Ranking package.json first hands it `npm test`, which passes while testing
+    none of the game — a wrong-reason pass, worse than the failure being fixed.
+    """
+    root = _node_repo(tmp_path, {"scripts": {"test": "npm run ci"}})
+    (root / "Cargo.toml").write_text('[package]\nname = "game"\n')
+
+    with pytest.raises(LoopConfigError) as excinfo:
+        load_loop_config(studio_root=root)
+
+    message = str(excinfo.value)
+    assert "rust (Cargo.toml) and node (package.json) both match" in message
+    assert "npm test" not in message
+
+
+def test_refusal_on_a_recognised_but_unserved_stack(tmp_path):
+    """Rust is recognised on its own and still refused: no command is shipped for it."""
+    (tmp_path / "Cargo.toml").write_text('[package]\nname = "game"\n')
+
+    with pytest.raises(LoopConfigError) as excinfo:
+        load_loop_config(studio_root=tmp_path)
+
+    assert "Detected:   rust (Cargo.toml). Studio ships no test command for Rust." in str(
+        excinfo.value
+    )
+
+
+def test_refusal_when_package_json_declares_no_test_script(tmp_path):
+    """A Node repo with no `test` script is refused rather than handed `npm test`.
+
+    `npm test` there exits with "missing script: test" — the wrong-reason failure this
+    detection exists to remove, so offering it would be the bug wearing a new hat.
+    """
+    root = _node_repo(tmp_path, {"scripts": {"build": "vite build"}})
+
+    with pytest.raises(LoopConfigError) as excinfo:
+        load_loop_config(studio_root=root)
+
+    message = str(excinfo.value)
+    assert 'package.json declares no "test" script' in message
+    assert "missing script: test" in message
+
+
+def test_refusal_message_does_not_enumerate_the_known_stacks(tmp_path):
+    """The no-match message must not list stacks: it knows more than it serves.
+
+    Naming three while recognising four reads as a contradiction to whoever is holding
+    the fourth.
+    """
+    with pytest.raises(LoopConfigError) as excinfo:
+        load_loop_config(studio_root=tmp_path)
+
+    message = str(excinfo.value)
+    for stack, _ in STACK_MARKERS:
+        assert stack not in message.lower()
+
+
+def test_refusal_when_the_mutation_check_is_on_with_no_command(tmp_path):
+    """Turning the mutation check on without a command to run is refused too.
+
+    Only reachable by hand: no profile ships that pair. It exists so the writer is never
+    told to run a check that has nothing to run.
+    """
+    root = _node_repo(tmp_path, {"scripts": {"test": "vitest run"}})
+    _override(root, "[gate]\nrequire_mutation_check = true\n")
+
+    with pytest.raises(LoopConfigError, match="mutation_command"):
+        load_loop_config(studio_root=root)
+
+
+def test_an_override_can_supply_a_command_for_an_unrecognised_repo(tmp_path):
+    """Detection failing is not fatal on its own — the override is the way out.
+
+    The refusal is about a gate with no command, not about an unfamiliar repo. This is
+    the path the error message tells five repos to take.
+    """
+    root = tmp_path / "mystery"
+    root.mkdir()
+    _override(root, '[gate]\ntest_command = "make test"\n')
+
+    config = load_loop_config(studio_root=root)
+
+    assert config.test_command == "make test"
+    assert config.static_checks == []
+
+
+def test_detect_stacks_returns_every_match_in_marker_order(tmp_path):
+    """Detection reports all matches; the order is only how the message lists them."""
+    (tmp_path / "Cargo.toml").write_text("")
+    (tmp_path / "package.json").write_text("{}")
+    (tmp_path / "pyproject.toml").write_text("")
+
+    assert detect_stacks(tmp_path) == ["rust", "python", "node"]
+
+
+def test_detect_stacks_finds_unity_by_a_csproj_glob(tmp_path):
+    """The glob half of the marker table works, not just the exact paths."""
+    (tmp_path / "Assembly-CSharp.csproj").write_text("<Project />")
+
+    assert detect_stacks(tmp_path) == ["unity"]
+
+
+def test_detection_ignores_markers_in_subdirectories(tmp_path):
+    """Only the repo root is searched, so a vendored tools/package.json can't match."""
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "package.json").write_text('{"scripts": {"test": "x"}}')
+
+    assert detect_stacks(tmp_path) == []
+
+
+def test_every_marked_stack_resolves_to_a_profile():
+    """Each stack in the marker table has an answer — a command, or a refusal.
+
+    STACK_MARKERS and PROFILES are two lists that could drift apart; adding a marker row
+    with no profile behind it would be a KeyError at load in a real repository.
+    """
+    for stack, _ in STACK_MARKERS:
+        assert stack == "node" or stack in PROFILES, f"{stack} has no profile"
+
+
+def test_a_profiles_static_checks_cannot_be_mutated_through_a_config(tmp_path):
+    """PROFILES is shared module state, so its lists must not be handed out by reference.
+
+    A tuple makes that structural instead of something every caller has to remember.
+    """
+    assert isinstance(PROFILES["python"].static_checks, tuple)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        PROFILES["python"].test_command = "npm test"
+
+    config = load_loop_config(studio_root=_python_repo(tmp_path / "py"))
+    config.static_checks.append("mypy")
+
+    assert PROFILES["python"].static_checks == ("ruff",)
+    assert resolve_profile(_python_repo(tmp_path / "py2")).static_checks == ("ruff",)
+
+
+def test_cli_exits_with_the_refusal_and_no_traceback(tmp_path):
+    """Run as a script in an unidentifiable repo, the module prints the refusal and stops.
+
+    /forge reads this command's output, so the failure has to arrive as the message
+    itself on stderr and a non-zero status — not a traceback, and never a knobs JSON
+    carrying an empty test command.
+    """
+    result = subprocess.run(
+        [sys.executable, str(STUDIO_ROOT / "impl_loop.py")],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "STUDIO_ARTIFACT_ROOT": str(tmp_path)},
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr.startswith("gate.test_command is not set")
+    assert "Traceback" not in result.stderr
+
+
+def test_refusal_on_three_stacks_lists_all_of_them(tmp_path):
+    """More than two matches still reads as a sentence, and still names every marker.
+
+    Two is the case a real repo hits today; three is one vendored crate away, and the
+    branch that formats it is only ever exercised by a message nobody sees until then.
+    """
+    root = _node_repo(tmp_path, {"scripts": {"test": "vitest run"}})
+    (root / "Cargo.toml").write_text('[package]\nname = "helper"\n')
+    (root / "pyproject.toml").write_text('[project]\nname = "tooling"\n')
+
+    with pytest.raises(LoopConfigError) as excinfo:
+        load_loop_config(studio_root=root)
+
+    assert (
+        "rust (Cargo.toml), python (pyproject.toml) and node (package.json) all match"
+        in str(excinfo.value)
+    )
+
+
+def test_an_override_can_replace_the_detected_mutation_command(tmp_path):
+    """Every gate key merges over detection, not just the test command."""
+    root = _python_repo(tmp_path / "py")
+    _override(root, '[gate]\nmutation_command = "cosmic-ray exec"\n')
+
+    config = load_loop_config(studio_root=root)
+
+    assert config.mutation_command == "cosmic-ray exec"
+    assert config.test_command == "pytest -q"  # the rest still comes from detection
+
+
+def test_a_hand_edited_package_json_is_refused_not_crashed(tmp_path):
+    """Malformed JSON, or a `scripts` key that isn't a table, reaches the refusal.
+
+    package.json is hand-edited constantly. A traceback out of the config loader would
+    be a worse answer than the message that names the file to fix.
+    """
+    broken_json = tmp_path / "broken"
+    broken_json.mkdir()
+    (broken_json / "package.json").write_text("{ not json at all")
+
+    scripts_not_a_table = _node_repo(tmp_path / "odd", {"scripts": "vitest run"})
+
+    for root in (broken_json, scripts_not_a_table):
+        with pytest.raises(LoopConfigError, match="gate.test_command is not set"):
+            load_loop_config(studio_root=root)
