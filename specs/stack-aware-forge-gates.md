@@ -2,7 +2,7 @@
 feature: Stack-aware quality gates for the /forge loop
 slug: stack-aware-forge-gates
 ticket: none
-status: approved
+status: shipped
 studio_run: studio/output/tech/run_tech_20260814_164651
 # Leave the two below EMPTY until this spec flips to `shipped`, and keep their notes on
 # comment lines like these. An inline `# ...` after the colon is read as the VALUE, and
@@ -10,8 +10,8 @@ studio_run: studio/output/tech/run_tech_20260814_164651
 # satisfy the gate having edited nothing.
 # shipped_impact: one of none | minor | major — how much it changed downstream
 # shipped_changed: one line, in plain words, on what this actually changed
-shipped_impact:
-shipped_changed:
+shipped_impact: major
+shipped_changed: /forge now reads the repo to pick its test and mutation gates, and refuses with instructions when it can't tell — instead of running pytest everywhere; the setup wizard writes those commands into a file you can edit, and an installed repo only gets this once it runs `update --target` and `/studio-setup` again.
 ---
 
 # Stack-Aware Quality Gates for the /forge Loop — Architecture Spec
