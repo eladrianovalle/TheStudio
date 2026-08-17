@@ -11,7 +11,7 @@ studio_run: studio/output/tech/run_tech_20260814_164651
 # shipped_impact: one of none | minor | major — how much it changed downstream
 # shipped_changed: one line, in plain words, on what this actually changed
 shipped_impact: major
-shipped_changed: /forge now reads the repo to pick its test and mutation gates, and refuses with instructions when it can't tell — instead of running pytest everywhere; the setup wizard writes those commands into a file you can edit.
+shipped_changed: /forge now reads the repo to pick its test and mutation gates, and refuses with instructions when it can't tell — instead of running pytest everywhere; the setup wizard writes those commands into a file you can edit, and an installed repo only gets this once it runs `update --target` and `/studio-setup` again.
 ---
 
 # Stack-Aware Quality Gates for the /forge Loop — Architecture Spec
