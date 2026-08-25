@@ -165,6 +165,32 @@ test('with zero criteria the editor still judges against the title', () => {
   assert.equal(editorPrompt({ ...UNIT, acceptance_criteria: [] }, WRITER), prompt)
 })
 
+// ---------------------------------------------------------------------------
+// implementation-loop.js — find before you grep: an index locates, the file evidences.
+// ---------------------------------------------------------------------------
+
+// The prompt is hard-wrapped, so a sentence spanning two array entries arrives with a newline in
+// the middle. Flatten whitespace before matching so the assertions pin the wording, not the wrap.
+const flat = (prompt) => prompt.replace(/\s+/g, ' ')
+
+test('the editor is told to locate with an index and still quote the real file', () => {
+  const prompt = flat(editorPrompt(UNIT, WRITER))
+  // (a) locate with the index first — and only when the repo actually has one.
+  assert.match(prompt, /if this repo has a code index or symbol search, use it to LOCATE code before grepping/)
+  // (b) the quote comes from the file opened at the returned location, not from the index.
+  assert.match(prompt, /open the file at the returned file:line and quote what you read there/)
+  assert.match(prompt, /An index summary or an inlined source excerpt is never the quote/)
+  // (c) the consequence is one that already exists in the mandate.
+  assert.match(prompt, /A quote taken from a summary rather than the file is `\(unverified\)`/)
+})
+
+test('the find-then-quote rule reaches the editor with or without acceptance criteria', () => {
+  // It sits above the criteria branch, so neither run shape can lose it.
+  for (const unit of [UNIT, { ...UNIT, acceptance_criteria: ['One verdict per criterion'] }]) {
+    assert.match(flat(editorPrompt(unit, WRITER)), /code index or symbol search/)
+  }
+})
+
 // The gate's criteria rule (unconfirmedCriteria) and the gate itself (passesExitGate).
 const unconfirmedCriteria = loadFunction('../implementation-loop.js', 'unconfirmedCriteria')
 const passesExitGate = loadFunction('../implementation-loop.js', 'passesExitGate')

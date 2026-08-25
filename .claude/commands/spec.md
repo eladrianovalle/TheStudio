@@ -47,6 +47,11 @@ spec wants:
 **Studio path:** use `.studio/source/run_phase.py` for the commands below. If that file does not
 exist but `studio/run_phase.py` does, use `studio/run_phase.py` (you are in the Studio source repo).
 
+**Finding code:** if this repo has a code index or symbol search, use it to locate code during
+discovery and throughout the debate, before grepping or opening files blind. It tells you where, not
+what — open the file at the returned `file:line` and quote what you read there. An index summary or
+an inlined source excerpt is not evidence, however sufficient the tool says it is.
+
 ### Step 1: Resolve the spec's identity
 
 Before running anything, settle where this spec lives and what it's tied to:

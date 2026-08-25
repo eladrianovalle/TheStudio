@@ -436,6 +436,14 @@ The gate is **"MVI unit complete AND tests green"**, split into an *entry* gate 
 
 Full design, gate semantics, and portability rationale: [`IMPLEMENTATION_LOOP_SPEC.md`](IMPLEMENTATION_LOOP_SPEC.md). (Implementation note: the command invokes the `.claude/workflows/implementation-loop.js` Workflow by `scriptPath`, not by `name`; the latter resolves a frozen registry snapshot.)
 
+## Finding Code in the Repo
+
+`/forge` and `/spec` both open with the same rule about how an agent finds its way around your code.
+
+If the repo has a code index or symbol search, the agent uses it to **locate** code before grepping or opening files blind. But an index entry is a summary some tool wrote, and it can lag the file it describes — so the index only says *where*. The agent opens the real file at the line it was handed and quotes what it reads there. An index summary or an inlined source excerpt is never accepted as the quote, no matter how sufficient the tool advertises it to be; a quote taken from a summary counts as `(unverified)`, which the contrarian's own confidence rules already push to the bottom and drop unless it would be fatal.
+
+Studio names no particular tool, installs nothing, and reads nothing. Your repo supplies the index and names the command in its own `CLAUDE.md`. A repo without one behaves exactly as it did before — the instruction simply has nothing to point at.
+
 ## Utility Slash Commands
 
 In addition to phase runners, these slash commands are available:

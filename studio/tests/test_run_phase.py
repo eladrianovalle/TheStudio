@@ -157,6 +157,26 @@ def test_design_phase_has_slop_blacklist_and_goodwill_reservoir(studio_root):
     assert "embarrassment self-gate" in instructions
 
 
+@pytest.mark.parametrize("phase", ["market", "design"])
+def test_codeless_phases_get_no_code_index_instruction(studio_root, phase):
+    """Market and design debates have no codebase, so nothing may tell them to query a code index.
+
+    CONTRARIAN_MANDATE ships to every deliverable run regardless of phase (run_phase.py gates it on
+    question mode only), so the find-then-quote rule deliberately lives in the /forge editor prompt,
+    forge.md and spec.md instead. This is the guard against someone moving it into the mandate: a
+    market contrarian judging a launch plan has no file to open at a `file:line`.
+    """
+    run_id = run_phase.prepare_run(make_prepare_args(phase=phase))
+    run_dir = studio_root / "output" / phase / run_id
+    instructions = (run_dir / "instructions.md").read_text().lower()
+    # The mandate itself is present — this run is a deliverable run, not a question-mode one.
+    assert "contrarian mandate" in instructions
+    for phrase in ("code index", "symbol search", "file:line", "grep"):
+        assert phrase not in instructions, (
+            f"{phase} instructions must not carry a code-index instruction ({phrase!r})"
+        )
+
+
 def test_market_phase_omits_design_critique_guide(studio_root):
     """The design critique guide is design-only — market runs must not carry it."""
     run_id = run_phase.prepare_run(make_prepare_args(phase="market"))
