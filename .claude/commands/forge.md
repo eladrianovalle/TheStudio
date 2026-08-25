@@ -99,9 +99,9 @@ From `$ARGUMENTS`, construct the workflow `args`:
   the smallest usable interaction, or stop and say it isn't an MVI unit.
 - `instructions`: concrete build steps: what files to create/modify, what tests to write. Keep
   it to this one unit; no speculative scope. If this repo has a code index or symbol search, say so
-  here: the writer should use it to locate code before grepping or opening files blind, and it tells
-  the writer where, not what — open the file at the returned `file:line` and quote from there, never
-  from the index's own summary or excerpt.
+  here: the writer should use it to locate code before grepping or opening files blind. It tells the
+  writer where, not what — open the file at the returned `file:line` and quote from there, never from
+  the index's own summary or excerpt.
 - `acceptance_criteria`: the criteria resolved in Step 1, each string **verbatim** from the spec, in
   the spec's order. Omit it (or pass `[]`) when there was no `--spec` — the editor then judges against
   the title, as it always did.

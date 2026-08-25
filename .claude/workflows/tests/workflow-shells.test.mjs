@@ -182,13 +182,9 @@ test('the editor is told to locate with an index and still quote the real file',
   assert.match(prompt, /An index summary or an inlined source excerpt is never the quote/)
   // (c) the consequence is one that already exists in the mandate.
   assert.match(prompt, /A quote taken from a summary rather than the file is `\(unverified\)`/)
-})
-
-test('the find-then-quote rule reaches the editor with or without acceptance criteria', () => {
-  // It sits above the criteria branch, so neither run shape can lose it.
-  for (const unit of [UNIT, { ...UNIT, acceptance_criteria: ['One verdict per criterion'] }]) {
-    assert.match(flat(editorPrompt(unit, WRITER)), /code index or symbol search/)
-  }
+  // UNIT carries no criteria; the rule sits above that branch, so a --spec run gets it too.
+  const graded = { ...UNIT, acceptance_criteria: ['One verdict per criterion'] }
+  assert.match(flat(editorPrompt(graded, WRITER)), /code index or symbol search/)
 })
 
 // The gate's criteria rule (unconfirmedCriteria) and the gate itself (passesExitGate).
