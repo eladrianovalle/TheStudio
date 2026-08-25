@@ -187,6 +187,19 @@ test('the editor is told to locate with an index and still quote the real file',
   assert.match(flat(editorPrompt(graded, WRITER)), /code index or symbol search/)
 })
 
+test('the writer is told the same thing, by construction and not by convention', () => {
+  // The writer does most of the code-finding, and it does NOT inherit the editor's mandate.
+  // Leaving this to whoever fills in per-unit `instructions` means a workflow invoked directly
+  // — without /forge — hands the writer nothing. So the rule lives in the shell.
+  const prompt = flat(writerPrompt(UNIT))
+  assert.match(prompt, /if this repo has a code index or symbol search, use it to LOCATE code before grepping/)
+  assert.match(prompt, /open the file at the returned file:line and read it there before you rely on it/)
+  assert.match(prompt, /never a substitute for the file/)
+  // UNIT carries no instructions of its own here, which is the point: nothing was typed in.
+  const graded = { ...UNIT, acceptance_criteria: ['One verdict per criterion'] }
+  assert.match(flat(writerPrompt(graded)), /code index or symbol search/)
+})
+
 // The gate's criteria rule (unconfirmedCriteria) and the gate itself (passesExitGate).
 const unconfirmedCriteria = loadFunction('../implementation-loop.js', 'unconfirmedCriteria')
 const passesExitGate = loadFunction('../implementation-loop.js', 'passesExitGate')
