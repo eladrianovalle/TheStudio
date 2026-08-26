@@ -945,6 +945,37 @@ class TestApplyImplementationLoopConfig:
         assert "require_mutation_check = false" in content
         assert capsys.readouterr().out == f"Wrote {config_path}: test_command = npm test\n"
 
+    def test_a_source_checkout_gets_the_file_where_its_own_forge_reads_it(
+        self, tmp_path: Path
+    ) -> None:
+        """Issue #133: the step wrote to <repo>/.studio/, the loader reads <repo>/studio/.studio/.
+
+        A Studio source checkout keeps project-local config under ``studio/`` — that is what
+        ``run_phase.get_artifact_root`` returns for it, and where its ``integrations.toml``
+        already lives. Writing one level up produced a file /forge never read, so the step
+        looked like it had configured the repo and had not.
+        """
+        repo = tmp_path / "TheStudio"
+        (repo / "studio").mkdir(parents=True)
+        # Enough of a source checkout for project_config_root to recognise it...
+        (repo / "studio" / "impl_loop.py").write_text("", encoding="utf-8")
+        # ...and a stack for detection to find, so the step actually writes something.
+        (repo / "pyproject.toml").write_text("", encoding="utf-8")
+
+        setup.apply_implementation_loop_config(repo)
+
+        assert (repo / "studio" / ".studio" / "implementation_loop.toml").is_file()
+        assert not (repo / ".studio" / "implementation_loop.toml").exists()
+
+    def test_an_ordinary_repo_still_gets_the_file_at_its_root(
+        self, node_project: Path
+    ) -> None:
+        """The source-checkout branch must not move the file in a consuming repo."""
+        setup.apply_implementation_loop_config(node_project)
+
+        assert (node_project / ".studio" / "implementation_loop.toml").is_file()
+        assert not (node_project / "studio" / ".studio" / "implementation_loop.toml").exists()
+
     def test_written_file_resolves_to_what_detection_alone_produced(
         self, node_project: Path
     ) -> None:

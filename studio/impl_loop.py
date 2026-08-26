@@ -393,6 +393,25 @@ def project_artifact_root(studio_root: Path) -> Path:
     return studio_root
 
 
+def project_config_root(repo_root: Path) -> Path:
+    """Where ``repo_root`` keeps its project-local Studio config.
+
+    ``project_artifact_root`` answers this for the Studio *this process is running from*.
+    ``setup.py`` needs the same answer about a repo named by ``--target``, which may be a
+    different one entirely — so it asks here, naming the repo rather than inheriting ours.
+
+    A Studio source checkout keeps project-local config under ``studio/`` — beside the
+    ``integrations.toml`` already there — because in that layout the artifact root IS the
+    package directory, which is what ``run_phase.get_artifact_root`` returns for it too. Every
+    other repo keeps it at the root. Get this wrong in the source repo and the wizard writes a
+    file ``/forge`` never reads (issue #133).
+    """
+    package = repo_root / "studio"
+    if (package / "impl_loop.py").is_file():
+        return package
+    return repo_root
+
+
 def _resolve_config_path(path: Path | None, studio_root: Path) -> Path | None:
     """Resolve the config path via the resolution chain.
 

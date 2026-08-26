@@ -677,6 +677,12 @@ def apply_implementation_loop_config(
       is printed here instead — it already names the file and the lines to write by hand.
     - **Otherwise:** the detected commands are written out for the user to edit.
 
+    The file goes where ``target``'s own ``/forge`` will look for it, which
+    ``impl_loop.project_config_root`` answers — a Studio source checkout keeps project-local
+    config under ``studio/``, everything else at the repo root. Writing to
+    ``<target>/.studio/`` unconditionally is what made this step inert in the source repo:
+    the file landed one directory above the only place the loader reads (issue #133).
+
     Everything here — the detection and the file — is about ``target``. Where this Studio's
     ``/forge`` looks is a separate question, answered by the loader's own
     ``project_artifact_root``: ``STUDIO_ARTIFACT_ROOT`` when it is set, else the repo an
@@ -690,7 +696,7 @@ def apply_implementation_loop_config(
     import impl_loop
 
     target = Path(target).resolve()
-    config_path = target / ".studio" / "implementation_loop.toml"
+    config_path = impl_loop.project_config_root(target) / ".studio" / "implementation_loop.toml"
 
     redirect = os.environ.get("STUDIO_ARTIFACT_ROOT")
     gated = impl_loop.project_artifact_root(impl_loop.STUDIO_ROOT)
