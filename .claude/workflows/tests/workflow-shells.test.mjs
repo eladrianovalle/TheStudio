@@ -165,6 +165,41 @@ test('with zero criteria the editor still judges against the title', () => {
   assert.equal(editorPrompt({ ...UNIT, acceptance_criteria: [] }, WRITER), prompt)
 })
 
+// ---------------------------------------------------------------------------
+// implementation-loop.js — find before you grep: an index locates, the file evidences.
+// ---------------------------------------------------------------------------
+
+// The prompt is hard-wrapped, so a sentence spanning two array entries arrives with a newline in
+// the middle. Flatten whitespace before matching so the assertions pin the wording, not the wrap.
+const flat = (prompt) => prompt.replace(/\s+/g, ' ')
+
+test('the editor is told to locate with an index and still quote the real file', () => {
+  const prompt = flat(editorPrompt(UNIT, WRITER))
+  // (a) locate with the index first — and only when the repo actually has one.
+  assert.match(prompt, /if this repo has a code index or symbol search, use it to LOCATE code before grepping/)
+  // (b) the quote comes from the file opened at the returned location, not from the index.
+  assert.match(prompt, /open the file at the returned file:line and quote what you read there/)
+  assert.match(prompt, /An index summary or an inlined source excerpt is never the quote/)
+  // (c) the consequence is one that already exists in the mandate.
+  assert.match(prompt, /A quote taken from a summary rather than the file is `\(unverified\)`/)
+  // UNIT carries no criteria; the rule sits above that branch, so a --spec run gets it too.
+  const graded = { ...UNIT, acceptance_criteria: ['One verdict per criterion'] }
+  assert.match(flat(editorPrompt(graded, WRITER)), /code index or symbol search/)
+})
+
+test('the writer is told the same thing, by construction and not by convention', () => {
+  // The writer does most of the code-finding, and it does NOT inherit the editor's mandate.
+  // Leaving this to whoever fills in per-unit `instructions` means a workflow invoked directly
+  // — without /forge — hands the writer nothing. So the rule lives in the shell.
+  const prompt = flat(writerPrompt(UNIT))
+  assert.match(prompt, /if this repo has a code index or symbol search, use it to LOCATE code before grepping/)
+  assert.match(prompt, /open the file at the returned file:line and read it there before you rely on it/)
+  assert.match(prompt, /never a substitute for the file/)
+  // UNIT carries no instructions of its own here, which is the point: nothing was typed in.
+  const graded = { ...UNIT, acceptance_criteria: ['One verdict per criterion'] }
+  assert.match(flat(writerPrompt(graded)), /code index or symbol search/)
+})
+
 // The gate's criteria rule (unconfirmedCriteria) and the gate itself (passesExitGate).
 const unconfirmedCriteria = loadFunction('../implementation-loop.js', 'unconfirmedCriteria')
 const passesExitGate = loadFunction('../implementation-loop.js', 'passesExitGate')

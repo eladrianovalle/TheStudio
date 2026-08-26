@@ -70,6 +70,8 @@ Slash commands are the main way you use Studio day to day. `init` installs them 
 
 Every command works from any project once you've run `init`. See [CLAUDE_CODE_USAGE.md](./studio/docs/CLAUDE_CODE_USAGE.md) for full arguments.
 
+**Find before you grep.** If your repo has a code index or symbol search, `/forge` and `/spec` reach for it to *locate* code instead of grepping around blind. The index says where, not what — the agent opens the real file at the line it was handed and quotes from there, never from the index's own summary or excerpt, which can lag the code it describes. Studio names no particular tool and installs nothing; your repo brings its own, and a repo without one works exactly as it did before.
+
 ---
 
 ## The Discipline Layer

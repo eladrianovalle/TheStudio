@@ -98,7 +98,9 @@ From `$ARGUMENTS`, construct the workflow `args`:
   request describes a partial component ("add a data model", "define the schema"), reframe it as
   the smallest usable interaction, or stop and say it isn't an MVI unit.
 - `instructions`: concrete build steps: what files to create/modify, what tests to write. Keep
-  it to this one unit; no speculative scope.
+  it to this one unit; no speculative scope. You do **not** need to tell the writer to use a code
+  index — the writer prompt already carries that rule, conditional on the repo having one. Name the
+  specific tool here only if the repo's index needs a command or a scope that isn't obvious.
 - `acceptance_criteria`: the criteria resolved in Step 1, each string **verbatim** from the spec, in
   the spec's order. Omit it (or pass `[]`) when there was no `--spec` — the editor then judges against
   the title, as it always did.
