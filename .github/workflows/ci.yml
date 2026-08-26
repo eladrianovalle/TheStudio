@@ -36,3 +36,14 @@ jobs:
 
       - name: Tests
         run: python -m pytest tests/ -q
+
+      # The writer/editor prompt shells live in .claude/workflows/*.js, and their
+      # tests are the only thing that catches a prompt losing its mandate — no
+      # Python test loads that file. Without this step a change to the loop can
+      # break all of them and still show green (issue #136). Node ships on the
+      # runner and these use only node:test/node:assert, so there is nothing to
+      # install. Named explicitly rather than passing the directory: `node --test`
+      # on tests/ tries to run the fixtures/ subdir and fails.
+      - name: Workflow shell tests
+        working-directory: .
+        run: node --test .claude/workflows/tests/workflow-shells.test.mjs
