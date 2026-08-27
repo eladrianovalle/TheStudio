@@ -75,6 +75,18 @@ ROLE_PACK_GLOB = "role_packs/*.json"
 PROMPT_DOC_GLOB = "docs/role_prompts/*.md"
 
 # Slash commands to copy to {target}/.claude/commands/
+# Commands Studio shipped once and no longer does. This list is the only way to spot one
+# that was retired before the manifest pruning existed: the rename dropped the old name
+# from SLASH_COMMANDS, the next manifest rebuild omitted it, and the file stayed on disk
+# with nothing recording that Studio put it there (issue #95).
+#
+# Add a name here the same day you remove it from SLASH_COMMANDS, and never remove one:
+# an entry costs a filesystem check, while a missing entry is a stale command that keeps
+# answering with pre-rename behavior and nothing anywhere says so.
+RETIRED_SLASH_COMMANDS = [
+    "studio-implement.md",  # renamed to forge.md in 11086a4, 2026-07-08
+]
+
 SLASH_COMMANDS = [
     "run-phase.md",
     "run-studio-phase.md",
@@ -865,8 +877,42 @@ def _retired_claude_files(extra: List[str]) -> List[str]:
     Deliberately limited to ``.claude/``. Retired files under ``.studio/source/``
     are left alone — that snapshot is Studio's own tree, a leftover module there
     is inert, and removing files from it is a separate decision.
+
+    **The boundary, because it reads wider than it is:** this deletes what the manifest
+    still records. A file that fell out of the manifest *before* pruning existed is
+    invisible here, permanently — renaming ``/studio-implement`` to ``/forge`` dropped the
+    old name from SLASH_COMMANDS, so the next rebuild simply omitted it and left the file
+    on disk with nothing behind it. ``_historical_orphans`` reports that class; it cannot
+    be fixed here without the manifest entry this function is built on (issue #95).
     """
     return sorted(key for key in extra if key.startswith(".claude/"))
+
+
+def _historical_orphans(target: Path, manifest: dict) -> List[str]:
+    """Commands Studio used to ship that are still on disk with no manifest entry.
+
+    The prune above can only remove what the manifest records, so a command retired
+    before pruning existed is invisible to it forever. Those files keep working as slash
+    commands and ``check-install`` called the repo up to date, so a user could invoke
+    pre-rename behavior for weeks with nothing saying it was stale — silent in both
+    directions, which is what makes it worth a check of its own.
+
+    Matching on RETIRED_SLASH_COMMANDS rather than on "every ``.claude/commands/*.md``
+    Studio does not currently ship" is the whole safety argument. The second reading would
+    sweep up the project's own hand-written commands, which is precisely what the manifest
+    normally protects and exactly what we have lost here. A name Studio itself retired is
+    the one signal available that does not need the manifest.
+
+    Reports, never deletes. A project may legitimately have written its own command at a
+    name Studio once used, and no evidence available here separates that from a leftover.
+    """
+    recorded = set(manifest)
+    found = []
+    for name in RETIRED_SLASH_COMMANDS:
+        key = f".claude/commands/{name}"
+        if key not in recorded and (target / key).is_file():
+            found.append(key)
+    return sorted(found)
 
 
 def _manifest_source_path(studio_dir: Path, key: str) -> Path:
@@ -1213,11 +1259,17 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None, fetch: bool = 
         claude_md_stale = _principles_block_stale(target, source_dir)
 
     retired = _retired_claude_files(extra)
+    orphaned = _historical_orphans(target, installed_manifest)
 
+    # `orphaned` counts here on purpose. The whole complaint in #95 is that a repo
+    # carrying a stale command reported itself up to date, so a user could invoke
+    # pre-rename behavior with nothing saying it was stale. Reporting it without
+    # breaking up_to_date would keep exactly that silence.
     up_to_date = (
         not changed
         and not missing
         and not retired
+        and not orphaned
         and not claude_md_stale
         and not (staleness and staleness.is_stale)
     )
@@ -1229,6 +1281,7 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None, fetch: bool = 
         "missing": missing,
         "extra": extra,
         "retired": retired,
+        "orphaned": orphaned,
         "locally_modified": locally_modified,
         "claude_md_stale": claude_md_stale,
         "source_note": source_note,
@@ -1387,6 +1440,10 @@ def update_studio(
             "added": len(status["missing"]),
             "removed": len(retired),
             "retired": retired,
+            # Reported, never removed: update cannot reach these (issue #95). Carried out
+            # so the CLI can say why the repo still reports as needing an update after a
+            # successful one — otherwise it is a nag loop with no stated cause.
+            "orphaned": status.get("orphaned", []),
             "locally_modified": locally_modified,
             "claude_md_refreshed": status.get("claude_md_stale", False),
             "source_note": source_note,
