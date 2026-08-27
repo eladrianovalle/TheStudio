@@ -1105,6 +1105,76 @@ class TestCommandRegistration:
         assert not absent, f"WORKFLOW_FILES names files that don't exist: {absent}"
 
 
+class TestHistoricalOrphans:
+    """Commands retired BEFORE manifest pruning existed, which the prune cannot see.
+
+    Issue #95. Renaming `/studio-implement` to `/forge` dropped the old name from
+    SLASH_COMMANDS, so the next manifest rebuild simply omitted it — leaving the file on
+    disk with nothing recording that Studio wrote it. Four repos carried it beside
+    `/forge` for three weeks while `check-install` called them up to date.
+
+    The distinction from TestRetiredCommandRemoval is the whole point: there the manifest
+    still records the file, which is what makes deleting it safe. Here it does not, so
+    these are reported and never deleted.
+    """
+
+    ORPHAN = "studio-implement.md"
+    ORPHAN_KEY = ".claude/commands/studio-implement.md"
+
+    def _leave_an_orphan(self, target_dir):
+        """A file Studio once shipped, on disk, with no manifest entry behind it."""
+        (target_dir / ".claude" / "commands" / self.ORPHAN).write_text(
+            "# the pre-rename command", encoding="utf-8"
+        )
+
+    def test_it_is_reported_and_refuses_up_to_date(self, target_dir, studio_dir):
+        """The silence is the bug: the repo called itself current while a stale command
+        kept answering with pre-rename behavior."""
+        install_studio(target_dir, studio_dir)
+        self._leave_an_orphan(target_dir)
+
+        status = check_studio(target_dir, studio_dir)
+
+        assert self.ORPHAN_KEY in status["orphaned"]
+        assert status["up_to_date"] is False
+
+    def test_the_existing_prune_genuinely_cannot_see_it(self, target_dir, studio_dir):
+        """Pins WHY this needed its own check rather than a fix to the prune.
+
+        If this ever starts appearing in `retired`, the manifest gained an entry for it
+        and _historical_orphans has become dead code — delete it rather than keeping two
+        reports of one file.
+        """
+        install_studio(target_dir, studio_dir)
+        self._leave_an_orphan(target_dir)
+
+        status = check_studio(target_dir, studio_dir)
+
+        assert self.ORPHAN_KEY not in status["retired"]
+        assert self.ORPHAN_KEY not in status["extra"]
+
+    def test_update_leaves_it_alone(self, target_dir, studio_dir):
+        """Reported, never deleted. Nothing here separates Studio's leftover from a
+        command the project happened to write at the same name."""
+        install_studio(target_dir, studio_dir)
+        self._leave_an_orphan(target_dir)
+        orphan = target_dir / ".claude" / "commands" / self.ORPHAN
+
+        update_studio(target_dir, studio_dir)
+
+        assert orphan.is_file()
+
+    def test_a_manifest_recorded_file_is_not_an_orphan(self, target_dir, studio_dir):
+        """The guard against reporting every command Studio ships. A retired name that
+        IS in the manifest belongs to the prune, not here."""
+        install_studio(target_dir, studio_dir)
+
+        status = check_studio(target_dir, studio_dir)
+
+        assert status["orphaned"] == []
+        assert status["up_to_date"] is True
+
+
 class TestRetiredCommandRemoval:
     """Update deletes the commands Studio has stopped shipping.
 

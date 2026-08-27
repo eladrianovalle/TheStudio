@@ -2719,6 +2719,11 @@ def _do_check_install(args: argparse.Namespace) -> None:
             print(f"  Missing: {', '.join(status['missing'])}")
         if status.get("retired"):
             print(f"  Retired (update will delete): {', '.join(status['retired'])}")
+        if status.get("orphaned"):
+            # Not "update will delete": update CANNOT reach these. They predate manifest
+            # tracking, so nothing records that Studio wrote them, and a project may
+            # legitimately have written its own command at that name. Say what to do.
+            print(f"  Left over from an older Studio (delete by hand): {', '.join(status['orphaned'])}")
         if status.get("claude_md_stale"):
             print("  CLAUDE.md: coding-principles block is behind the current template")
         print(f"\nCatch your source up first:  git -C {source_dir} pull")
@@ -2738,6 +2743,11 @@ def _do_check_install(args: argparse.Namespace) -> None:
             print(f"  Missing: {', '.join(status['missing'])}")
         if status.get("retired"):
             print(f"  Retired (update will delete): {', '.join(status['retired'])}")
+        if status.get("orphaned"):
+            # Not "update will delete": update CANNOT reach these. They predate manifest
+            # tracking, so nothing records that Studio wrote them, and a project may
+            # legitimately have written its own command at that name. Say what to do.
+            print(f"  Left over from an older Studio (delete by hand): {', '.join(status['orphaned'])}")
         if status.get("claude_md_stale"):
             print("  CLAUDE.md: coding-principles block is behind the current template")
         print(f"\nRun: {_entrypoint()} update --target {target}")
@@ -2831,6 +2841,7 @@ def _do_update(args: argparse.Namespace) -> None:
         and result["added"] == 0
         and result.get("removed", 0) == 0
         and not result.get("claude_md_refreshed")
+        and not result.get("orphaned")
     ):
         print(f"Studio at {target} is already up to date.")
     else:
@@ -2844,6 +2855,13 @@ def _do_update(args: argparse.Namespace) -> None:
                   f"{', '.join(result.get('retired', []))}")
         if result.get("claude_md_refreshed"):
             print("  CLAUDE.md: refreshed the coding-principles block (your own notes left untouched)")
+        if result.get("orphaned"):
+            # Said here as well as in check-install, because this is the one update cannot
+            # fix. Without it the repo reports "needs updating" after every successful
+            # update and nothing explains why.
+            print(f"  Left over from an older Studio, delete by hand: {', '.join(result['orphaned'])}")
+            print("    (Studio shipped these once and no longer does. Nothing records that it")
+            print("     wrote them, so update will not remove a file you may have written.)")
         # Check for new setup steps
         try:
             import setup as _setup
