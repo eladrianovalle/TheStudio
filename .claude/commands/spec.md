@@ -212,16 +212,45 @@ Keep the writing human (Coding Principles §6): plain language, say what a thing
 matters, match a calm engineering voice. The diagram is required, not optional — if the feature
 truly has no structure worth drawing, it probably didn't need a spec.
 
-### Step 4: Approve → make it the source of truth
+### Step 4: Open a PR for the spec — this is how a /spec run ends
 
-Present the spec to the user for approval. Summarize in plain words what the architecture landed on,
-the decisions that shaped it, and anything still open — enough that they can approve without opening
-the file (the Coding Principles section "Write for Humans"). Then:
+**A `/spec` run is not finished until the spec document is pushed as a pull request.** Not written to
+the working tree, not described in chat, not left for someone to ask about: committed on a branch and
+opened as a PR. That PR is the review, and merging it is the approval.
 
-- **On approval:** set `status: approved` in the frontmatter, save the file, and confirm the path.
-  If a `--ticket` was given, remind the user to link/attach the spec on that ticket so the tracker
-  and the spec stay tied together (offer to help if it's a GitHub issue reachable via `gh`). This
-  approved document is now the spec the feature is built against.
+Do this without being asked, every time:
+
+```bash
+git checkout -b spec/<slug>
+git add specs/<slug>.md              # .studio/specs/<slug>.md in a consuming repo
+git commit                            # say what the feature is and why it is shaped that way
+git push <remote-url> spec/<slug>:spec/<slug>
+```
+
+Then open the PR. Commit **only** the spec file — a `git add -A` here sweeps unrelated working-tree
+changes into a document review, and the reviewer cannot tell which is which.
+
+The spec goes up at `status: draft`. Leaving it at draft is what makes merging mean something: the
+frontmatter should not claim approval that has not happened yet. Say so in the PR body — "merging is
+the approval" — so a reviewer knows the status flip follows the merge rather than preceding it.
+
+**The PR body is where the debate's value survives.** The spec records what was decided; the PR
+records what was *rejected and why*, which is the part that stops a settled question being reopened
+in three months. Include: what the contrarian cut and the reason, any factual claim the debate
+corrected (especially one of yours), and any limit the design does not fix — stated plainly rather
+than left for a reader to discover. A `VERDICT: REJECTED` that was resolved by revising the design
+belongs here too; a rejected architecture must never become a source of truth silently.
+
+Summarize the same things in chat, in plain words, so the user can decide without opening the file
+(the Coding Principles section "Write for Humans"). Then:
+
+- **On approval — which in practice means the PR merged:** set `status: approved` in the frontmatter
+  and confirm the path. That flip is a follow-up commit, not part of the spec PR, because a document
+  cannot honestly claim approval in the same change that requests it. Ship the flip on its own or
+  alongside the first `/forge` unit built from it; either way it lands after the merge, never before.
+  If a `--ticket` was given, link the spec on that ticket so the tracker and the spec stay tied
+  together (do it with `gh` rather than reminding the user to). This approved document is now the
+  spec the feature is built against.
 
   **Leave `shipped_impact` and `shipped_changed` blank here.** You don't know yet what the feature
   changed, and asking this early is how you get an invented answer. They are filled in at the moment
@@ -312,8 +341,11 @@ python ".studio/source/run_phase.py" finalize --phase tech --run-id {run_id} \
   `approved` until that file is filled in: `shipped` is the claim that the feature works, and the
   claim costs evidence. When a test *could* catch the breakage, leave the section out; prose beside a
   test is theatre.
-- **Specs are tracked.** They live in `specs/` (or `.studio/specs/` in a consuming repo), are meant
-  to be committed, and stay linked to their ticket. They are not throwaway `output/` artifacts.
+- **Specs are tracked, and a run ends in a PR.** They live in `specs/` (or `.studio/specs/` in a
+  consuming repo), stay linked to their ticket, and are not throwaway `output/` artifacts. Every
+  `/spec` run finishes by pushing the spec as a pull request at `status: draft` — that PR is the
+  review and merging it is the approval. A spec left sitting in the working tree has not been
+  delivered, however good it is.
 - **The Build Plan is a contract, not a summary.** Each unit carries checkable criteria, because
   `/forge --spec` judges the built unit against them one by one. Vague criteria there become a vague
   verdict downstream.

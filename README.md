@@ -46,7 +46,7 @@ Slash commands are the main way you use Studio day to day. `init` installs them 
 |---------|--------------|
 | `/run-phase` | Single-phase advocate/contrarian debate (market, design, or tech) |
 | `/run-studio-phase` | Multi-role debate across disciplines (alignment → depth → polish) |
-| `/spec` | Map a feature's architecture into an approved source-of-truth spec (plain language + technical + diagram) before you build it |
+| `/spec` | Map a feature's architecture into an approved source-of-truth spec (plain language + technical + diagram) before you build it. The run ends by opening the spec as a PR — that PR is the review, and merging it is the approval |
 
 **Build**
 | Command | What it does |
