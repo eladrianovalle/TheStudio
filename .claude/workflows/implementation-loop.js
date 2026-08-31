@@ -27,7 +27,9 @@ const DEFAULT_UNIT = {
   title: 'Studio can load implementation_loop.toml into a LoopConfig (with project-local override)',
   // Run from repo root; tests live under studio/.
   test_command: 'cd studio && python -m pytest tests/test_impl_loop.py -q',
-  static_check: 'cd studio && ruff check impl_loop.py',
+  // The lint commands to run, straight from the config (impl_loop.py detects them per repo)
+  // with any {paths} token already substituted by /forge. An empty list skips the check.
+  static_checks: ['cd studio && ruff check impl_loop.py'],
   mutation_command: 'cd studio && mutmut run',
   instructions: [
     'Build studio/impl_loop.py mirroring the ScopeConfig / load_scopes_config() pattern in studio/scopes.py:',
@@ -70,6 +72,16 @@ function workDirPreamble(u) {
     `checkout your shell is sitting in, which is how the wrong branch gets moved.`,
     ``,
   ]
+}
+
+// The lint commands this unit runs. `static_checks` answers both halves of the old duality: a
+// non-empty list means a static check is required AND says what runs. Every element runs, and the
+// handoff's single `static_ok` is the AND across them — the schema has one boolean, so the
+// aggregate is the contract. An empty list (or a malformed payload) means skip the check, which is
+// also what the entry gate waives on.
+function staticCheckCommands(u) {
+  if (!u || !Array.isArray(u.static_checks)) return []
+  return u.static_checks.filter((c) => typeof c === 'string' && c.trim())
 }
 
 // The one place acceptance criteria are read, so both prompts see the same list and a malformed
@@ -184,6 +196,12 @@ const EDITOR_HANDOFF = {
 // ---------------------------------------------------------------------------
 function writerPrompt(u) {
   const criteria = unitCriteria(u)
+  // Every configured command is named, so a repo with two linters gets both run rather than
+  // whichever one happened to be written into the unit.
+  const checks = staticCheckCommands(u)
+  let staticClause = ' (static check skipped — config static_checks=[]).'
+  if (checks.length === 1) staticClause = `  and the static check: \`${checks[0]}\`.`
+  else if (checks.length > 1) staticClause = `  and every static check: ${checks.map((c) => `\`${c}\``).join(', ')} — report static_ok true only if all of them are clean.`
   return [
     ...workDirPreamble(u),
     `You are the WRITER in an implementation writer/editor loop. Build ONE complete MVI unit, then declare done.`,
@@ -209,7 +227,7 @@ function writerPrompt(u) {
     `Discipline:`,
     `- Build a usable interaction, not a partial component (MVI). No speculative scope beyond the unit.`,
     `- Hold AI-TDD: write the tests and run them.${u.require_mutation_check === false ? ' (Mutation check disabled by config: require_mutation_check=false.)' : ` Then run the configured mutation check on the code you touched: \`${u.mutation_command}\` (scope + runner live in studio/setup.cfg), and report the outcome in mutation_check. If mutmut isn't installed, fall back to hand-mutating — change 2-3 things in the PRODUCTION code the tests cover (flip a comparison, drop a guard clause, return a constant), confirm the tests FAIL, then restore. Mutate the code, never the assertions: breaking an assertion fails its test by construction and tells you nothing about whether that test would catch a real bug.`}`,
-    `- Run the unit tests: \`${u.test_command}\`${(Array.isArray(u.static_checks) && u.static_checks.length === 0) ? ' (static check skipped — config static_checks=[]).' : `  and the static check: \`${u.static_check}\`.`}`,
+    `- Run the unit tests: \`${u.test_command}\`${staticClause}`,
     `- When (and only when) tests pass, COMMIT the passing state on the current branch (one exception: escalation, below).`,
     `  (\`${gitIn(u)} add -A && ${gitIn(u)} commit -m "writer: ${u.unit_id}"\`) and capture the short SHA — that is writer_sha.`,
     `- Persist your handoff: \`mkdir -p ${runDir(u)}\` then write it to ${runDir(u)}/impl--${u.unit_id}--writer.json.`,
@@ -320,11 +338,9 @@ phase('Writer')
 const writer = await agent(writerPrompt(unit), { schema: WRITER_HANDOFF, label: `writer:${unit.unit_id}`, phase: 'Writer', model: unit.model })
 
 // Entry gate — purely mechanical: writer declared done AND machine checks pass.
-// NOTE the static-check duality: `static_checks` (config array) gates WHETHER static checking is
-// required; `static_check` (per-unit command string, used in writerPrompt) is WHAT runs. They
-// travel together today. If the schema ever consolidates on the array, drive the command off it
-// here and in writerPrompt too, so the two don't drift.
-const staticRequired = !(Array.isArray(unit.static_checks) && unit.static_checks.length === 0)
+// The gate and the writer prompt read the same list through the same helper, so what the writer
+// was told to run and what the gate holds it to cannot drift apart.
+const staticRequired = staticCheckCommands(unit).length > 0
 
 // NOTE: named function, not an inline expression, so the JS shell tests can load and exercise it.
 // The gate is the only load-bearing branch here and its two subtleties — `static_ok !== false`

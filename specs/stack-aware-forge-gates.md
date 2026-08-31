@@ -205,6 +205,11 @@ return resolved
 | `mutation_command` | `require_mutation_check` is true **and** resolved command is empty | Only fires when a user turned the check on without giving it a command. |
 | `static_checks` | never | `[]` already means *skip* (`implementation-loop.js:314`), and the command that runs is authored per-unit by `/forge` (`forge.md:111`). |
 
+> **Superseded on the `static_checks` row.** `specs/detected-static-check-command.md` replaces the
+> reasoning above: the field holds commands rather than tool names, so `/forge` no longer authors the
+> lint command per unit, and a leftover bare name (`ruff`, `eslint`, `mypy`) *is* refused at load.
+> The rest of this spec still stands.
+
 This does **not** add a branch to `LoopConfig.__post_init__` (`:86-106`). That checks types; this
 checks whether a resolved config is *runnable*, which needs detection context to explain itself. Note
 that `""` passes `__post_init__` today (`:99-100`) and would otherwise flow all the way to the writer —

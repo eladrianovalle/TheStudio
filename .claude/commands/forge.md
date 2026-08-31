@@ -110,7 +110,15 @@ From `$ARGUMENTS`, construct the workflow `args`:
   - Rust (`Cargo.toml`): `cargo test`.
   - Unity / other: ask if you cannot infer a runnable command.
   - If you cannot infer one, fall back to the config knob `test_command` from the knobs JSON (Step 5).
-- `static_check`: `ruff check <path>` for Python; the project linter otherwise; omit if none.
+- `static_checks`: take the list from the knobs JSON (Step 5) — it is detected from this repo, so
+  do not invent a linter here. Before passing it on, replace every `{paths}` token with the paths
+  this unit is expected to touch, space-separated and each double-quoted
+  (`ruff check "studio/impl_loop.py" "studio/tests/test_impl_loop.py"`). A command with no token
+  goes through as written. If you cannot name any paths, **drop that command** rather than
+  substituting `.` — linting the whole repo would fail the unit for pre-existing debt it never
+  touched. If that empties the list, pass `[]`, which is how the config already says "skip the
+  static check". Honest limit: the paths are predicted before the writer runs, so they are a good
+  guess, not a record of what it changed.
 
 ### Step 3: Validate the work directory, then pick the target branch (safety)
 
@@ -238,12 +246,13 @@ workflow copy that belongs to the tree being built, and merging the config knobs
 
 ```
 Workflow({ scriptPath: "<work_dir or repo>/.claude/workflows/implementation-loop.js", args: {
-  unit_id, title, instructions, static_check,
+  unit_id, title, instructions,
   acceptance_criteria,     // verbatim from the spec (Step 1); omit or [] without --spec
   work_dir,                // the resolved path from Step 3; omit entirely without --work-dir
   test_command,            // per-unit inferred; if none, use the knob test_command
+  static_checks,           // the knob list with {paths} substituted (Step 2)
   editor_enabled, read_scope, output_budget,           // from impl_loop.py
-  static_checks, require_mutation_check, mutation_command  // from impl_loop.py
+  require_mutation_check, mutation_command             // from impl_loop.py
 }})
 ```
 
@@ -254,8 +263,9 @@ runs render exactly as they always have.
 How the workflow consumes each knob: `editor_enabled=false` → skip the editor pass;
 `read_scope`/`output_budget` → shape the editor prompt; `require_mutation_check=false` → writer
 skips the mutation check; `mutation_command` → the command the writer runs for the mutation check
-(detected per repo — `mutmut run` in a Python one); `static_checks=[]` → writer skips the static
-check and the entry gate doesn't require it. So passing all knobs makes
+(detected per repo — `mutmut run` in a Python one); `static_checks` → the lint **commands** the
+writer runs, all of them, with `static_ok` the AND across the lot (`[]` → writer skips the static
+check and the entry gate doesn't require it). So passing all knobs makes
 `implementation_loop.toml` fully live.
 
 The workflow runs in the background and notifies on completion. Do not re-run it or poll;

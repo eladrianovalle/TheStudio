@@ -27,6 +27,17 @@ VALID_MANDATES = {"contrarian", "off"}
 
 VALID_READ_SCOPES = {"touched", "touched+importers"}
 
+# The static-check tool NAMES Studio itself once documented and once wrote into config files,
+# each with the command that replaces it. static_checks now holds commands, so one of these
+# left behind would run nothing while the loop reported a clean check — the loader refuses it
+# by name instead. Only these three: Studio owes a migration for values it authored, and
+# refusing anything that merely *looks* like a name would reject someone's one-word script.
+LEGACY_STATIC_CHECK_COMMANDS = {
+    "ruff": "ruff check {paths}",
+    "eslint": "npx eslint {paths}",
+    "mypy": "mypy {paths}",
+}
+
 # The four ways a --work-dir can be unusable. /forge prints the one it hit, so a
 # refused run says what is actually wrong instead of just "bad path".
 WORK_DIR_MISSING = "missing"
@@ -118,7 +129,7 @@ PROFILES: dict[str, StackProfile] = {
     "python": StackProfile(
         stacks=("python",),
         test_command="pytest -q",
-        static_checks=("ruff",),
+        static_checks=("ruff check {paths}",),
         require_mutation_check=True,
         mutation_command="mutmut run",
     ),
@@ -184,8 +195,12 @@ def _node_profile(root: Path) -> StackProfile:
 
     ``npm test`` is offered only when a ``test`` script is declared: without one it exits
     with *"missing script: test"*, which is exactly the wrong-reason failure this
-    detection exists to remove. eslint is required only when the repo shows some sign of
-    having it — a ``lint`` script or an ``eslint`` dev dependency.
+    detection exists to remove.
+
+    The lint command comes from the two signs a repo can show, told apart because they
+    need different commands: a ``lint`` script is run through npm, while eslint sitting in
+    devDependencies with no script is run directly. Neither means no static check, which
+    is the honest answer for a package that declares neither.
     """
     package = _read_package_json(root)
     scripts = package.get("scripts")
@@ -196,12 +211,26 @@ def _node_profile(root: Path) -> StackProfile:
         dev_dependencies = {}
 
     has_test_script = bool(str(scripts.get("test", "")).strip())
-    has_linter = "lint" in scripts or "eslint" in dev_dependencies
+    # The same .strip() the test script gets, and for a sharper reason now that the script
+    # IS the command: `"lint": ""` runs nothing, exits 0, and would report a clean static
+    # check. A blank script is no script.
+    lint_script = str(scripts.get("lint", "")).strip()
+    has_eslint_dependency = "eslint" in dev_dependencies
+
+    if lint_script:
+        # Deliberately no {paths}: `npm run lint -- src/foo.js` appends to a script that
+        # usually already names its own target (`eslint .`), which widens the run rather
+        # than narrowing it. Do not "fix" this by adding `-- {paths}`.
+        static_checks: tuple[str, ...] = ("npm run lint",)
+    elif has_eslint_dependency:
+        static_checks = ("npx eslint {paths}",)
+    else:
+        static_checks = ()
 
     return StackProfile(
         stacks=("node",),
         test_command="npm test" if has_test_script else None,
-        static_checks=("eslint",) if has_linter else (),
+        static_checks=static_checks,
     )
 
 
@@ -303,7 +332,39 @@ def _no_mutation_command_message(root: Path) -> str:
     ])
 
 
-def _require_gate_commands(config: LoopConfig, detected: StackProfile, root: Path) -> None:
+def _bare_static_check_name_message(entry: str, config_path: Path) -> str:
+    """Why a leftover tool name is refused, and the exact line that replaces it.
+
+    Studio itself planted these: `/studio-setup` in a Python repo wrote
+    ``static_checks = ["ruff"]`` and never overwrites what it wrote, so a config file out
+    there says a name where the loop now expects a command. Refusing beats auto-upgrading —
+    an auto-upgrade leaves the file saying one thing while the loop runs another.
+    """
+    replacement = LEGACY_STATIC_CHECK_COMMANDS[entry.strip()]
+    return "\n".join([
+        f'gate.static_checks holds "{entry}", which is a tool name and not a command to run.',
+        "",
+        f"  Looked in:  {config_path}",
+        "",
+        "static_checks now holds the commands /forge actually runs, so a bare name would run",
+        "nothing and still report a clean static check.",
+        "",
+        f"Replace that entry in {config_path}:",
+        "",
+        "    [gate]",
+        f'    static_checks = ["{replacement}"]',
+        "",
+        "{paths} is replaced with the paths the unit is scoped to. A command without it runs as",
+        'written, which is what you want for a wrapper like "make lint" or "npm run lint".',
+    ])
+
+
+def _require_gate_commands(
+    config: LoopConfig,
+    detected: StackProfile,
+    root: Path,
+    config_path: Path | None = None,
+) -> None:
     """Refuse a resolved config whose gate the loop cannot actually run.
 
     Deliberately not a branch in ``LoopConfig.__post_init__``: that checks types, while
@@ -312,13 +373,18 @@ def _require_gate_commands(config: LoopConfig, detected: StackProfile, root: Pat
     way to the writer, which is told to run the command and then believed when it reports
     the result.
 
-    ``static_checks`` is never a refusal — an empty list already means "skip the static
-    check", and the command that runs is authored per unit by /forge.
+    ``static_checks`` holds the commands the loop runs. An empty list is still not a
+    refusal — it means "skip the static check" — and any command is taken as written. The
+    one refusal is a leftover bare tool name, which would run nothing at all.
     """
     if not config.test_command.strip():
         raise LoopConfigError(_no_test_command_message(detected, root))
     if config.require_mutation_check and not config.mutation_command.strip():
         raise LoopConfigError(_no_mutation_command_message(root))
+    for entry in config.static_checks:
+        if isinstance(entry, str) and entry.strip() in LEGACY_STATIC_CHECK_COMMANDS:
+            named_file = config_path or root / ".studio" / "implementation_loop.toml"
+            raise LoopConfigError(_bare_static_check_name_message(entry, named_file))
 
 
 @dataclass
@@ -337,7 +403,7 @@ class LoopConfig:
     deliver_on_gate_fail: bool = True
     # [gate]
     test_command: str = "pytest -q"
-    static_checks: List[str] = field(default_factory=lambda: ["ruff"])
+    static_checks: List[str] = field(default_factory=lambda: ["ruff check {paths}"])
     require_mutation_check: bool = True
     mutation_command: str = "mutmut run"
     # [editor]
@@ -508,7 +574,7 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
         read_scope=editor.get("read_scope", defaults.read_scope),
         output_budget=editor.get("output_budget", defaults.output_budget),
     )
-    _require_gate_commands(resolved, detected, repo_root)
+    _require_gate_commands(resolved, detected, repo_root, config_path)
     return resolved
 
 

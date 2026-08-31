@@ -925,6 +925,45 @@ def node_project(project: Path) -> Path:
     return project
 
 
+@pytest.fixture
+def python_project(project: Path) -> Path:
+    """A ``project`` that a root pyproject.toml makes detectable as Python."""
+    (project / "pyproject.toml").write_text('[project]\nname = "fixture"\n', encoding="utf-8")
+    _install_shipped_loop_config(project)
+    return project
+
+
+class TestFormatLoopToml:
+    """What the wizard writes *above* gate.static_checks.
+
+    The commands themselves are pinned where they are decided (``test_impl_loop.py``) and
+    where the wizard's file is read back again (``test_node_repo_gets_its_own_commands``
+    and the round-trip below). The comment block is the part only testable here.
+    """
+
+    def test_the_comment_block_explains_the_paths_token(self, tmp_path: Path) -> None:
+        """`{paths}` is template syntax in a hand-edited file, so the file has to say so.
+
+        Someone reading this file sees a brace token in a shell command and has no way to
+        tell whether it is substituted or literal — and the answer decides whether adding
+        `make lint` scopes to the unit or runs the whole tree.
+        """
+        import impl_loop
+
+        repo = tmp_path / "py"
+        repo.mkdir()
+        (repo / "pyproject.toml").write_text('[project]\nname = "fixture"\n', encoding="utf-8")
+
+        comments = [
+            line for line in setup._format_loop_toml(impl_loop.resolve_profile(repo)).splitlines()
+            if line.startswith("#")
+        ]
+        explanation = " ".join(comments)
+
+        assert "replaces {paths} with the files this unit is" in explanation
+        assert "a command with no {paths} in it runs exactly as written" in explanation
+
+
 class TestApplyImplementationLoopConfig:
     @pytest.fixture(autouse=True)
     def _no_artifact_root_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -941,7 +980,9 @@ class TestApplyImplementationLoopConfig:
 
         content = config_path.read_text(encoding="utf-8")
         assert 'test_command = "npm test"' in content
-        assert 'static_checks = ["eslint"]' in content
+        # The wizard prints what detection found, and detection now finds a command:
+        # this project declares a `lint` script, so the file says how to run it.
+        assert 'static_checks = ["npm run lint"]' in content
         assert "require_mutation_check = false" in content
         assert capsys.readouterr().out == f"Wrote {config_path}: test_command = npm test\n"
 
@@ -986,6 +1027,30 @@ class TestApplyImplementationLoopConfig:
 
         assert _resolved_gate(node_project) == detected_only
         assert detected_only.test_command == "npm test"
+
+    @pytest.mark.parametrize("fixture, expected_checks", [
+        ("python_project", ["ruff check {paths}"]),
+        ("node_project", ["npm run lint"]),
+    ])
+    def test_the_written_file_loads_back_with_the_same_static_checks(
+        self, request: pytest.FixtureRequest, fixture: str, expected_checks: list[str]
+    ) -> None:
+        """The wizard writes a file the loader accepts, and this is the pin that says so.
+
+        This round-trip is the reason `{paths}` travels inside the command string instead
+        of the loop deciding what to scope from where a value came from: the wizard writes
+        the detected value *into* the override file, so after one `/studio-setup` run there
+        is nothing left to tell detected from hand-written. It is also the shape of the bug
+        this unit closes — a wizard that writes `["ruff"]` and a loader that then refuses
+        the file the wizard just wrote.
+        """
+        target = request.getfixturevalue(fixture)
+
+        setup.apply_implementation_loop_config(target)
+
+        # Raising is the failure mode: the loader refuses a bare tool name, so a wizard
+        # that regressed to writing one turns this line into a LoopConfigError.
+        assert _resolved_gate(target).static_checks == expected_checks
 
     def test_marker_less_repo_writes_nothing_and_prints_the_refusal(
         self, project: Path, capsys: pytest.CaptureFixture

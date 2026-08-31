@@ -636,6 +636,11 @@ def _format_loop_toml(profile: Any) -> str:
 
     Writes all four ``[gate]`` keys, including the empty ones, so the file shows the whole
     shape of what can be set here rather than only the parts this repo's stack answered.
+
+    ``static_checks`` is written straight out of the profile, so it holds *commands*
+    (``ruff check {paths}``, ``npm run lint``) — the values the loader expects, not the
+    bare tool names it refuses. The comment block says what ``{paths}`` does, so someone
+    hand-editing the file is not left guessing whether the token is literal.
     """
     checks = ", ".join(_toml_quote(check) for check in profile.static_checks)
     stacks = ", ".join(profile.stacks)
@@ -645,6 +650,9 @@ def _format_loop_toml(profile: Any) -> str:
         "# Edit anything here. /forge reads this file *instead of* Studio's shipped",
         "# config/implementation_loop.toml: a [gate] key you delete falls back to what detection",
         "# finds, and [loop]/[editor] keys fall back to Studio's built-in defaults.",
+        "#",
+        "# static_checks holds commands: /forge replaces {paths} with the files this unit is",
+        "# scoped to, and a command with no {paths} in it runs exactly as written.",
         "",
         "[gate]",
         f"test_command = {_toml_quote(profile.test_command)}",
