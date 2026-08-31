@@ -56,8 +56,8 @@ switch every later rule off while the suite stayed green.
 
 **Components.** Two files change, and no new module appears.
 
-- `studio/tests/test_spec_verification.py` — gains rule 6 inside `_violations()`, and its frontmatter
-  parser is generalized (below).
+- `studio/tests/test_spec_verification.py` — gains rule 6 inside `_violations()`, reading the field
+  with the frontmatter parser that already exists (below). No parser work.
 - `.claude/commands/spec.md` — the frontmatter template gains the field; Step 4's approval bullet
   gains the instruction to write it.
 
@@ -149,8 +149,9 @@ section, so the case it proves is obvious."
   only `pull_request`, so a passing deadline can block the queue with no commit involved. Accepted
   with eyes open: a deadline that does not fire on its own is not a deadline. Named here so nobody
   discovers it as a surprise.
-- **Deleting the `## Verification` section silences rules 2 through 5.** That hole predates this
-  feature and is not widened mechanically — but the *incentive* to use it grows, because keeping the
+- **Deleting the `## Verification` section silences rules 2 through 6**, the new deadline rule
+  included, since 6 is gated on `promised_evidence` too. That hole predates this feature — rule 6
+  joins it rather than opening it — but the *incentive* to use it grows, because keeping the
   section at `approved` now costs a deadline where before it cost nothing. Nothing cheap fixes this
   without a build signal, which was measured and rejected. Named, not built for.
 - **Rule 6 ships with zero live coverage.** No spec in the repo will exercise it: both specs carrying
