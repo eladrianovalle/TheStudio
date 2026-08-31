@@ -2,7 +2,7 @@
 feature: The static-check command comes from detection, not from a guess
 slug: detected-static-check-command
 ticket: https://github.com/eladrianovalle/TheStudio/issues/131
-status: draft
+status: approved
 studio_run: studio/output/tech/run_tech_20260827_220909
 # Leave the two below EMPTY until this spec flips to `shipped`, and keep their notes on
 # comment lines like these. An inline `# ...` after the colon is read as the VALUE, and
