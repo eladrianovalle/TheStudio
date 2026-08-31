@@ -165,7 +165,7 @@ the existing rule that a self-reported problem is not a delivery blocker.
 | Component | Criterion | Source |
 | --- | --- | --- |
 | Tests green | `tests.command` (unit-scoped) exits 0, run by the agent and recorded in the handoff. | `TEST_DRIVEN_GUIDE.md` |
-| Static checks | The repo's configured `static_checks` run clean via `CodeValidator` — `ruff` in a Python repo, `eslint` in a Node one, and `[]` skips the check entirely. (mypy is **out** of the gate: `mypy . --strict` blocks virtually any real repo; opt-in only.) | `code_validator.py` |
+| Static checks | Every command in the repo's configured `static_checks` runs clean, and `static_ok` is the AND across them — `ruff check {paths}` in a Python repo, `npm run lint` in a Node one that declares a lint script, `[]` skips the check entirely. `/forge` replaces `{paths}` with the paths the unit is scoped to; a command without the token runs as written. (mypy is **out** of the gate: `mypy . --strict` blocks virtually any real repo; opt-in only.) | `impl_loop.py`, `forge.md` |
 | Full suite at delivery | The complete test suite runs once before the unit is delivered, not on every gate check (keeps the inner loop fast). | n/a |
 
 **Agent-attested (recorded signals, not enforcement; judged by the *editor*, the fresh agent,
@@ -252,7 +252,7 @@ deliver_on_gate_fail = true   # if the writer can't reach green, deliver flagged
 
 [gate]                             # detected per repo; set these only to override the detection
 test_command = "pytest -q"       # what runs the unit-scoped tests here (a Node repo: "npm test")
-static_checks = ["ruff"]         # CodeValidator static/lint half; [] skips the check entirely
+static_checks = ["ruff check {paths}"]  # the lint commands to run; {paths} = the unit's paths, [] skips
 require_mutation_check = true    # writer runs the mutation check on the touched code and reports it
 mutation_command = "mutmut run"  # the tool that check runs (scope/runner in setup.cfg)
 
@@ -270,7 +270,8 @@ Notes on what was cut vs the first draft:
 - **`test_command` is now the single source of truth for running tests.** The first draft also had
   `validator_checks = ["pytest", ...]`, duplicating the test run and implying `CodeValidator`
   consumes `test_command` (it does not: `run_pytest` hardcodes `pytest -v` + a path). Tests run
-  via `test_command`; `static_checks` is lint/static only.
+  via `test_command`; `static_checks` holds the lint/static commands only — commands, not tool
+  names, so a leftover `"ruff"` is refused at load with the line to write instead.
 - **`read_scope` added** because the real cost driver is the editor's *input* context, and the
   only prior knob (`output_budget`) caps *output*. Bounding reads is also what makes the
   cadence-lab token numbers meaningful.

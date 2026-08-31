@@ -263,8 +263,9 @@ runs render exactly as they always have.
 How the workflow consumes each knob: `editor_enabled=false` → skip the editor pass;
 `read_scope`/`output_budget` → shape the editor prompt; `require_mutation_check=false` → writer
 skips the mutation check; `mutation_command` → the command the writer runs for the mutation check
-(detected per repo — `mutmut run` in a Python one); `static_checks=[]` → writer skips the static
-check and the entry gate doesn't require it. So passing all knobs makes
+(detected per repo — `mutmut run` in a Python one); `static_checks` → the lint **commands** the
+writer runs, all of them, with `static_ok` the AND across the lot (`[]` → writer skips the static
+check and the entry gate doesn't require it). So passing all knobs makes
 `implementation_loop.toml` fully live.
 
 The workflow runs in the background and notifies on completion. Do not re-run it or poll;
