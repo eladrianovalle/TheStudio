@@ -934,38 +934,12 @@ def python_project(project: Path) -> Path:
 
 
 class TestFormatLoopToml:
-    """What the wizard writes into gate.static_checks.
+    """What the wizard writes *above* gate.static_checks.
 
-    The profiles come from ``resolve_profile`` on real directories rather than a
-    hand-built StackProfile: the point of these tests is that the wizard writes what
-    detection actually found, and a fixture profile would only prove the formatter can
-    echo whatever it is handed.
+    The commands themselves are pinned where they are decided (``test_impl_loop.py``) and
+    where the wizard's file is read back again (``test_node_repo_gets_its_own_commands``
+    and the round-trip below). The comment block is the part only testable here.
     """
-
-    def test_a_python_repo_gets_the_ruff_command(self, tmp_path: Path) -> None:
-        import impl_loop
-
-        repo = tmp_path / "py"
-        repo.mkdir()
-        (repo / "pyproject.toml").write_text('[project]\nname = "fixture"\n', encoding="utf-8")
-
-        content = setup._format_loop_toml(impl_loop.resolve_profile(repo))
-
-        assert 'static_checks = ["ruff check {paths}"]' in content
-
-    def test_a_node_repo_with_a_lint_script_gets_npm_run_lint(self, tmp_path: Path) -> None:
-        import impl_loop
-
-        repo = tmp_path / "node"
-        repo.mkdir()
-        (repo / "package.json").write_text(
-            json.dumps({"scripts": {"test": "vitest run", "lint": "eslint ."}}),
-            encoding="utf-8",
-        )
-
-        content = setup._format_loop_toml(impl_loop.resolve_profile(repo))
-
-        assert 'static_checks = ["npm run lint"]' in content
 
     def test_the_comment_block_explains_the_paths_token(self, tmp_path: Path) -> None:
         """`{paths}` is template syntax in a hand-edited file, so the file has to say so.
@@ -986,7 +960,6 @@ class TestFormatLoopToml:
         ]
         explanation = " ".join(comments)
 
-        assert "{paths}" in explanation
         assert "replaces {paths} with the files this unit is" in explanation
         assert "a command with no {paths} in it runs exactly as written" in explanation
 

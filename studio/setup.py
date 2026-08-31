@@ -637,11 +637,10 @@ def _format_loop_toml(profile: Any) -> str:
     Writes all four ``[gate]`` keys, including the empty ones, so the file shows the whole
     shape of what can be set here rather than only the parts this repo's stack answered.
 
-    ``static_checks`` is written straight out of the profile, which means it holds
-    *commands* (``ruff check {paths}``, ``npm run lint``) — the same values the loader
-    expects. A bare tool name here would be a file the wizard wrote and the loader then
-    refused, so the comment block explains the ``{paths}`` token rather than leaving the
-    reader to guess what a command may contain.
+    ``static_checks`` is written straight out of the profile, so it holds *commands*
+    (``ruff check {paths}``, ``npm run lint``) — the values the loader expects, not the
+    bare tool names it refuses. The comment block says what ``{paths}`` does, so someone
+    hand-editing the file is not left guessing whether the token is literal.
     """
     checks = ", ".join(_toml_quote(check) for check in profile.static_checks)
     stacks = ", ".join(profile.stacks)
