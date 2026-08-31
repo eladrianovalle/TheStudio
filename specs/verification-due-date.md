@@ -2,7 +2,7 @@
 feature: A Deadline on the Approved-but-Unverified Tolerance
 slug: verification-due-date
 ticket: none
-status: draft
+status: approved
 studio_run: studio/output/tech/run_tech_20260805_004612
 ---
 
@@ -175,6 +175,7 @@ section, so the case it proves is obvious."
      - [ ] `verification_due` is read only from the leading `---` block, so the same text inside the spec's prose or a code fence does not satisfy 6a.
      - [ ] A `verification_due` line carrying a trailing `#` comment parses as a valid date.
      - [ ] The three existing tests that assert exact violation counts still pass with their assertions unchanged.
+     - [ ] `specs/find-before-you-grep.md` carries a `verification_due` date and the full suite is green — the rule ships with the repo passing, not with a known-red spec.
    - **Out of scope:** writing the field at approval time; any change to `.claude/commands/spec.md`.
 
 2. **`approval_writes_the_date` — approving a spec that promised evidence records when the evidence is
@@ -186,4 +187,8 @@ section, so the case it proves is obvious."
      - [ ] Step 4's approval step instructs setting `verification_due` to 30 days from approval, in the same place it already instructs creating the evidence file.
      - [ ] No document still describes the convention as four rules, or states that the only trigger is a human typing `shipped`.
      - [ ] The full suite passes and `ruff check .` is clean.
-   - **Out of scope:** backfilling `verification_due` into existing specs — none promise evidence at `approved`, so there is nothing to backfill.
+   - **Out of scope:** backfilling `verification_due` into existing specs — unit 1 already does the one
+     that needs it. (This line previously claimed no spec promised evidence at `approved`. That was
+     true when this was drafted and is not now: `find-before-you-grep.md` sits at `approved` with a
+     `## Verification` section, so rule 6a fires on it and the backfill moved into unit 1, the same
+     way #122 shipped its rule together with the backfill that kept the suite green.)
