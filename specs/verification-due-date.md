@@ -136,8 +136,9 @@ section, so the case it proves is obvious."
 
 - **Stale `approved` status generally.** Rule 5 fires only on specs that promised evidence. Specs with
   no `## Verification` section can sit at `approved` after shipping and nothing here touches them.
-  That is a real and larger gap — eight specs on `main` are in exactly that state today — and it is
-  being closed separately as bookkeeping in PR #112, not by this mechanism.
+  That is a real and larger gap, and it is bookkeeping rather than something this mechanism handles.
+  PR #112 has since cleared the backlog of eight that prompted this note; one spec sits in that state
+  on `main` today.
 - **A `today` injection parameter.** Cut; see above.
 - **A `FILL_ME` sub-condition on 5b.** Cut; removing it is simpler and catches more.
 - **Any bypass or skip flag.** Deliberately absent. A deadline that can be waved off is decorative,
