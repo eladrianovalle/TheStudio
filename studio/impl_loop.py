@@ -381,12 +381,10 @@ def _require_gate_commands(
         raise LoopConfigError(_no_test_command_message(detected, root))
     if config.require_mutation_check and not config.mutation_command.strip():
         raise LoopConfigError(_no_mutation_command_message(root))
-    override = root / ".studio" / "implementation_loop.toml"
     for entry in config.static_checks:
         if isinstance(entry, str) and entry.strip() in LEGACY_STATIC_CHECK_COMMANDS:
-            raise LoopConfigError(
-                _bare_static_check_name_message(entry, config_path or override)
-            )
+            named_file = config_path or root / ".studio" / "implementation_loop.toml"
+            raise LoopConfigError(_bare_static_check_name_message(entry, named_file))
 
 
 @dataclass

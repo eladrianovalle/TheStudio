@@ -201,7 +201,7 @@ function writerPrompt(u) {
   const checks = staticCheckCommands(u)
   let staticClause = ' (static check skipped — config static_checks=[]).'
   if (checks.length === 1) staticClause = `  and the static check: \`${checks[0]}\`.`
-  if (checks.length > 1) staticClause = `  and every static check: ${checks.map((c) => `\`${c}\``).join(', ')} — report static_ok true only if all of them are clean.`
+  else if (checks.length > 1) staticClause = `  and every static check: ${checks.map((c) => `\`${c}\``).join(', ')} — report static_ok true only if all of them are clean.`
   return [
     ...workDirPreamble(u),
     `You are the WRITER in an implementation writer/editor loop. Build ONE complete MVI unit, then declare done.`,

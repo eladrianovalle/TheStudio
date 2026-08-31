@@ -775,8 +775,10 @@ def test_a_blank_lint_script_is_no_lint_script(tmp_path, lint_script):
     Membership alone ("lint" in scripts) was harmless while the list was only a flag. Now
     that the script becomes the command, a blank one has to fall through to the next sign.
     """
-    package = {"scripts": {"test": "vitest run", "lint": lint_script}}
-    package["devDependencies"] = {"eslint": "^9.0.0"}
+    package = {
+        "scripts": {"test": "vitest run", "lint": lint_script},
+        "devDependencies": {"eslint": "^9.0.0"},
+    }
 
     assert load_loop_config(studio_root=_node_repo(tmp_path, package)).static_checks == [
         "npx eslint {paths}"
@@ -881,38 +883,28 @@ def test_alfreds_own_override_finally_runs_the_lint_it_always_named(tmp_path):
     assert config.static_checks == ["make lint"]
 
 
-def test_a_leftover_tool_name_is_refused_and_the_message_says_what_to_write(tmp_path):
+@pytest.mark.parametrize("name, replacement", [
+    ("ruff", "ruff check {paths}"),
+    ("eslint", "npx eslint {paths}"),
+    ("mypy", "mypy {paths}"),
+])
+def test_a_leftover_tool_name_is_refused_and_the_message_says_what_to_write(tmp_path, name, replacement):
     """A bare name would run nothing and still report a clean check, so the loop refuses.
 
     /studio-setup wrote `static_checks = ["ruff"]` into config files and never overwrites
-    what it wrote, so these are Studio's own leftovers to clean up.
+    what it wrote, so these are Studio's own leftovers to clean up. All three names Studio
+    ever documented refuse, each pointed at the command that replaces it.
     """
     root = _python_repo(tmp_path / "py")
-    _override(root, '[gate]\nstatic_checks = ["ruff"]\n')
+    _override(root, f'[gate]\nstatic_checks = ["{name}"]\n')
 
     with pytest.raises(LoopConfigError) as excinfo:
         load_loop_config(studio_root=root)
 
     message = str(excinfo.value)
     assert str(root / ".studio" / "implementation_loop.toml") in message  # the file to edit
-    assert '"ruff"' in message                                           # the entry that is wrong
-    assert 'static_checks = ["ruff check {paths}"]' in message           # the line that replaces it
-
-
-@pytest.mark.parametrize("name, replacement", [
-    ("ruff", "ruff check {paths}"),
-    ("eslint", "npx eslint {paths}"),
-    ("mypy", "mypy {paths}"),
-])
-def test_every_name_studio_shipped_is_refused_with_its_own_replacement(tmp_path, name, replacement):
-    """All three names Studio ever documented, each pointed at the command that replaces it."""
-    root = _node_repo(tmp_path / name, {"scripts": {"test": "vitest run"}})
-    _override(root, f'[gate]\nstatic_checks = ["{name}"]\n')
-
-    with pytest.raises(LoopConfigError) as excinfo:
-        load_loop_config(studio_root=root)
-
-    assert f'static_checks = ["{replacement}"]' in str(excinfo.value)
+    assert f'"{name}"' in message                                        # the entry that is wrong
+    assert f'static_checks = ["{replacement}"]' in message               # the line that replaces it
 
 
 def test_a_one_word_command_studio_never_shipped_is_taken_as_written(tmp_path):
