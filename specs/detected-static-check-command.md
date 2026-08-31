@@ -248,3 +248,25 @@ where one is in and the other is not.
 - [ ] Suite green, `ruff check .` clean.
 
 **Out of scope:** any change to detection or the refusal, and any edit to a consuming repo's config file.
+
+### 3. `stale_configs_get_the_new_command` — repos configured by an older Studio stop refusing
+
+Added during the build of units 1 and 2, not at design time. Units 1 and 2 fix what the wizard
+writes from now on and nothing about the files it already wrote. Measured against the ten installed
+repos on 2026-08-31 by running the new `load_loop_config` against each: **`_Cerebro` and
+`OrcPunk-biz` now raise `LoopConfigError`**, because their `.studio/source/config/implementation_loop.toml`
+snapshot still carries `static_checks = ["ruff"]`. `_Alfred` (`["make lint"]`) and `Orkid Garden`
+(`[]`) load unchanged; the other six carry no config and fall through to detection.
+
+The refusal is doing its job — the point is that nobody should meet it by surprise, mid-`/forge`, in
+a repo they did not know was stale. Studio's own shipped `config/implementation_loop.toml` has no
+`static_checks` line at all, so a plain `update` replaces the stale snapshot and detection supplies
+the command; no hand-editing is needed.
+
+**Acceptance criteria:**
+- [ ] Running `update` against a repo whose snapshot carries `static_checks = ["ruff"]` leaves a tree where `load_loop_config` returns `["ruff check {paths}"]` and raises nothing.
+- [ ] `_Cerebro` and `OrcPunk-biz` both load without raising, verified by running `load_loop_config` against each after the update.
+- [ ] `_Alfred` and `Orkid Garden` still load to `["make lint"]` and `[]` respectively — an update must not overwrite a project's own override.
+
+**Out of scope:** any further change to detection, the refusal, or the wizard. `_Cerebro` is blocked
+on its own stale PRs (#224/#225) and a tracked `.studio/`, so it may have to lag the other repo.
