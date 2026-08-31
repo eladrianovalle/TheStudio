@@ -941,7 +941,9 @@ class TestApplyImplementationLoopConfig:
 
         content = config_path.read_text(encoding="utf-8")
         assert 'test_command = "npm test"' in content
-        assert 'static_checks = ["eslint"]' in content
+        # The wizard prints what detection found, and detection now finds a command:
+        # this project declares a `lint` script, so the file says how to run it.
+        assert 'static_checks = ["npm run lint"]' in content
         assert "require_mutation_check = false" in content
         assert capsys.readouterr().out == f"Wrote {config_path}: test_command = npm test\n"
 

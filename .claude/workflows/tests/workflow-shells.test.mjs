@@ -70,7 +70,7 @@ test('collectReviewerConcerns defaults safely on a non-array field (never crashe
 // and the editor grades each one. A spec-less run carries none and must behave exactly as before.
 // ---------------------------------------------------------------------------
 const unitCriteria = loadFunction('../implementation-loop.js', 'unitCriteria')
-const writerPrompt = loadFunction('../implementation-loop.js', 'writerPrompt', ['unitCriteria', 'runDir', 'gitIn', 'workDirPreamble'])
+const writerPrompt = loadFunction('../implementation-loop.js', 'writerPrompt', ['unitCriteria', 'staticCheckCommands', 'runDir', 'gitIn', 'workDirPreamble'])
 const editorPrompt = loadFunction('../implementation-loop.js', 'editorPrompt', ['unitCriteria', 'runDir', 'gitIn', 'workDirPreamble'])
 
 // A unit with no acceptance_criteria key at all — the shape every run had before this feature.
@@ -78,7 +78,7 @@ const UNIT = {
   unit_id: 'unit_demo',
   title: 'Users can create and view a profile',
   test_command: 'pytest -q',
-  static_check: 'ruff check .',
+  static_checks: ['ruff check "src/profile.py"'],
   mutation_command: 'mutmut run',
   instructions: 'Build the profile page.',
 }
@@ -163,6 +163,58 @@ test('with zero criteria the editor still judges against the title', () => {
   assert.equal(numberedLines(prompt).length, 0)
   assert.match(prompt, /Leave\ncriteria_verdicts empty/)
   assert.equal(editorPrompt({ ...UNIT, acceptance_criteria: [] }, WRITER), prompt)
+})
+
+// ---------------------------------------------------------------------------
+// implementation-loop.js — the static checks. `static_checks` is now the whole story: it says
+// whether a check is required AND which commands run. There is no per-unit `static_check` string
+// left for it to drift away from.
+// ---------------------------------------------------------------------------
+const staticCheckCommands = loadFunction('../implementation-loop.js', 'staticCheckCommands')
+
+// The line of the writer prompt that names what to run.
+const runLine = (prompt) => prompt.split('\n').find((line) => line.startsWith('- Run the unit tests:'))
+
+test('staticCheckCommands keeps the commands the unit was handed, and degrades to none', () => {
+  assert.deepEqual(staticCheckCommands({ static_checks: ['make lint', 'npm run lint'] }), ['make lint', 'npm run lint'])
+  assert.deepEqual(staticCheckCommands({ static_checks: [] }), [])
+  // Junk never reaches a prompt: a blank entry would render an empty backticked command.
+  assert.deepEqual(staticCheckCommands({ static_checks: ['keep me', '', '  ', null, 42] }), ['keep me'])
+  assert.deepEqual(staticCheckCommands({ static_checks: 'ruff check .' }), [])
+  assert.deepEqual(staticCheckCommands({}), [])
+  assert.deepEqual(staticCheckCommands(null), [])
+})
+
+test('the writer prompt names the one configured static check', () => {
+  assert.equal(runLine(writerPrompt(UNIT)), '- Run the unit tests: `pytest -q`  and the static check: `ruff check "src/profile.py"`.')
+})
+
+test('the writer prompt names EVERY configured static check, and says static_ok is the AND', () => {
+  // A repo with two linters used to get whichever single command was written into the unit.
+  const two = { ...UNIT, static_checks: ['ruff check "a.py"', 'mypy "a.py"'] }
+  const line = runLine(writerPrompt(two))
+  assert.ok(line.includes('`ruff check "a.py"`'), line)
+  assert.ok(line.includes('`mypy "a.py"`'), line)
+  assert.match(line, /report static_ok true only if all of them are clean/)
+})
+
+test('an empty list still skips the check, exactly as it did', () => {
+  const skipped = runLine(writerPrompt({ ...UNIT, static_checks: [] }))
+  assert.equal(skipped, '- Run the unit tests: `pytest -q` (static check skipped — config static_checks=[]).')
+  // A unit carrying no static_checks key at all has nothing to run either — it must not
+  // render a half-built line where a command used to be interpolated.
+  const { static_checks, ...noKey } = UNIT
+  assert.equal(runLine(writerPrompt(noKey)), skipped)
+  assert.equal(runLine(writerPrompt({ ...UNIT, static_checks: 'ruff' })), skipped)
+})
+
+test('no singular static_check identifier survives in the loop or in /forge', () => {
+  // The removal is the unit: while both existed, the array said WHETHER and the string said
+  // WHAT, and nothing kept them describing the same linter.
+  for (const rel of ['../implementation-loop.js', '../../commands/forge.md']) {
+    const src = readFileSync(new URL(rel, import.meta.url), 'utf8')
+    assert.deepEqual([...src.matchAll(/static_check(?!s)/g)].map((m) => src.slice(Math.max(0, m.index - 30), m.index + 20)), [], rel)
+  }
 })
 
 // ---------------------------------------------------------------------------

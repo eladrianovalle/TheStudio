@@ -82,7 +82,7 @@ def test_loop_config_defaults_match_spec():
     config = LoopConfig()
     assert config.deliver_on_gate_fail is True
     assert config.test_command == "pytest -q"
-    assert config.static_checks == ["ruff"]
+    assert config.static_checks == ["ruff check {paths}"]
     assert config.require_mutation_check is True
     assert config.mutation_command == "mutmut run"
     assert config.mandate == "contrarian"
@@ -148,7 +148,7 @@ deliver_on_gate_fail = false
 
 [gate]
 test_command = "python -m pytest tests/ -q"
-static_checks = ["ruff", "mypy"]
+static_checks = ["ruff check {paths}", "mypy {paths}"]
 require_mutation_check = false
 
 [editor]
@@ -160,7 +160,7 @@ output_budget = 250
         config = load_loop_config(config_path)
         assert config.deliver_on_gate_fail is False
         assert config.test_command == "python -m pytest tests/ -q"
-        assert config.static_checks == ["ruff", "mypy"]
+        assert config.static_checks == ["ruff check {paths}", "mypy {paths}"]
         assert config.require_mutation_check is False
         assert config.mandate == "off"
         assert config.read_scope == "touched"
@@ -185,7 +185,7 @@ output_budget = 999
         assert config.output_budget == 999
         # Inherited defaults
         assert config.test_command == "pytest -q"
-        assert config.static_checks == ["ruff"]
+        assert config.static_checks == ["ruff check {paths}"]
         assert config.mandate == "contrarian"
         assert config.deliver_on_gate_fail is True
     finally:
@@ -350,7 +350,7 @@ def test_runtime_knobs_default_config():
     assert knobs == {
         "editor_enabled": True,
         "test_command": "pytest -q",
-        "static_checks": ["ruff"],
+        "static_checks": ["ruff check {paths}"],
         "require_mutation_check": True,
         "mutation_command": "mutmut run",
         "read_scope": "touched+importers",
@@ -366,7 +366,7 @@ def test_runtime_knobs_reflects_loaded_override():
         (root / ".studio" / "implementation_loop.toml").write_text(
             "[gate]\n"
             'test_command = "python -m pytest tests/ -q"\n'
-            'static_checks = ["ruff", "mypy"]\n'
+            'static_checks = ["ruff check {paths}", "mypy {paths}"]\n'
             "require_mutation_check = false\n"
             "[editor]\n"
             'mandate = "off"\n'
@@ -378,7 +378,7 @@ def test_runtime_knobs_reflects_loaded_override():
         assert knobs == {
             "editor_enabled": False,
             "test_command": "python -m pytest tests/ -q",
-            "static_checks": ["ruff", "mypy"],
+            "static_checks": ["ruff check {paths}", "mypy {paths}"],
             "require_mutation_check": False,
             "mutation_command": "mutmut run",
             "read_scope": "touched",
@@ -401,7 +401,7 @@ def test_load_default_loop_config():
     config = load_loop_config(SHIPPED_CONFIG)
     assert config.deliver_on_gate_fail is True
     assert config.test_command == "pytest -q"
-    assert config.static_checks == ["ruff"]
+    assert config.static_checks == ["ruff check {paths}"]
     assert config.require_mutation_check is True
     assert config.mutation_command == "mutmut run"
     assert config.mandate == "contrarian"
@@ -743,12 +743,21 @@ def test_node_repo_with_a_test_script_gets_npm_test(tmp_path):
 
 @pytest.mark.parametrize("package, expected_checks", [
     ({"scripts": {"test": "node --test"}}, []),
-    ({"scripts": {"test": "vitest run", "lint": "eslint ."}}, ["eslint"]),
-    ({"scripts": {"test": "vitest run"}, "devDependencies": {"eslint": "^9.0.0"}}, ["eslint"]),
+    ({"scripts": {"test": "vitest run", "lint": "eslint ."}}, ["npm run lint"]),
+    ({"scripts": {"test": "vitest run"}, "devDependencies": {"eslint": "^9.0.0"}}, ["npx eslint {paths}"]),
+    # A lint script AND the dependency: the script is the repo's own answer, so it wins.
+    (
+        {
+            "scripts": {"test": "vitest run", "lint": "biome check ."},
+            "devDependencies": {"eslint": "^9.0.0"},
+        },
+        ["npm run lint"],
+    ),
 ])
 def test_node_static_check_follows_the_signs_of_a_linter(tmp_path, package, expected_checks):
-    """eslint is required only of a repo showing some sign of having it — a lint script,
-    or the tool itself in devDependencies.
+    """The lint command comes from what package.json declares, and the two signs are told
+    apart because they need different commands: a `lint` script runs through npm, eslint in
+    devDependencies runs directly.
 
     An empty static_checks list means the writer skips the check, which is the honest
     answer for a package that declares neither.
@@ -758,6 +767,26 @@ def test_node_static_check_follows_the_signs_of_a_linter(tmp_path, package, expe
     assert load_loop_config(studio_root=root).static_checks == expected_checks
 
 
+@pytest.mark.parametrize("lint_script", ["", "   ", "\t\n"])
+def test_a_blank_lint_script_is_no_lint_script(tmp_path, lint_script):
+    """`"lint": ""` runs nothing and exits 0, which would report a clean check having run
+    nothing — the exact wrong-reason *pass* this detection exists to avoid.
+
+    Membership alone ("lint" in scripts) was harmless while the list was only a flag. Now
+    that the script becomes the command, a blank one has to fall through to the next sign.
+    """
+    package = {"scripts": {"test": "vitest run", "lint": lint_script}}
+    package["devDependencies"] = {"eslint": "^9.0.0"}
+
+    assert load_loop_config(studio_root=_node_repo(tmp_path, package)).static_checks == [
+        "npx eslint {paths}"
+    ]
+
+    # And with nothing else to fall through to, a blank script means no static check at all.
+    bare = {"scripts": {"test": "vitest run", "lint": lint_script}}
+    assert load_loop_config(studio_root=_node_repo(tmp_path / "bare", bare)).static_checks == []
+
+
 def test_python_repo_keeps_pytest_ruff_and_the_mutation_gate(tmp_path):
     """A Python project resolves to exactly the commands that used to be hard-coded."""
     root = _python_repo(tmp_path / "py")
@@ -765,7 +794,7 @@ def test_python_repo_keeps_pytest_ruff_and_the_mutation_gate(tmp_path):
     config = load_loop_config(studio_root=root)
 
     assert config.test_command == "pytest -q"
-    assert config.static_checks == ["ruff"]
+    assert config.static_checks == ["ruff check {paths}"]
     assert config.require_mutation_check is True
     assert config.mutation_command == "mutmut run"
 
@@ -829,6 +858,86 @@ def test_orkid_gardens_own_override_still_resolves_and_raises_nothing(tmp_path):
     assert config.test_command == "./scripts/run-editmode-tests.sh"
     assert config.static_checks == []
     assert config.require_mutation_check is False
+
+
+def test_alfreds_own_override_finally_runs_the_lint_it_always_named(tmp_path):
+    """Alfred's config has held a lint *command* since before this field ran anything.
+
+    It is the reason the field holds commands now rather than names: the file says
+    `make lint`, and nothing has ever run it. This pins that the file loads untouched —
+    the value reaches the loop as written, with no {paths} appended to it.
+    """
+    root = tmp_path / "_Alfred"
+    root.mkdir()
+    _override(root, (
+        "[gate]\n"
+        'test_command = "make test"\n'
+        'static_checks = ["make lint"]\n'
+    ))
+
+    config = load_loop_config(studio_root=root)
+
+    assert config.test_command == "make test"
+    assert config.static_checks == ["make lint"]
+
+
+def test_a_leftover_tool_name_is_refused_and_the_message_says_what_to_write(tmp_path):
+    """A bare name would run nothing and still report a clean check, so the loop refuses.
+
+    /studio-setup wrote `static_checks = ["ruff"]` into config files and never overwrites
+    what it wrote, so these are Studio's own leftovers to clean up.
+    """
+    root = _python_repo(tmp_path / "py")
+    _override(root, '[gate]\nstatic_checks = ["ruff"]\n')
+
+    with pytest.raises(LoopConfigError) as excinfo:
+        load_loop_config(studio_root=root)
+
+    message = str(excinfo.value)
+    assert str(root / ".studio" / "implementation_loop.toml") in message  # the file to edit
+    assert '"ruff"' in message                                           # the entry that is wrong
+    assert 'static_checks = ["ruff check {paths}"]' in message           # the line that replaces it
+
+
+@pytest.mark.parametrize("name, replacement", [
+    ("ruff", "ruff check {paths}"),
+    ("eslint", "npx eslint {paths}"),
+    ("mypy", "mypy {paths}"),
+])
+def test_every_name_studio_shipped_is_refused_with_its_own_replacement(tmp_path, name, replacement):
+    """All three names Studio ever documented, each pointed at the command that replaces it."""
+    root = _node_repo(tmp_path / name, {"scripts": {"test": "vitest run"}})
+    _override(root, f'[gate]\nstatic_checks = ["{name}"]\n')
+
+    with pytest.raises(LoopConfigError) as excinfo:
+        load_loop_config(studio_root=root)
+
+    assert f'static_checks = ["{replacement}"]' in str(excinfo.value)
+
+
+def test_a_one_word_command_studio_never_shipped_is_taken_as_written(tmp_path):
+    """The refusal covers the three values Studio authored, not everything short.
+
+    A "looks like a tool name" heuristic would reject someone's legitimate one-word script,
+    and Studio owes a migration only for what it wrote itself.
+    """
+    root = _python_repo(tmp_path / "py")
+    _override(root, '[gate]\nstatic_checks = ["pylint"]\n')
+
+    assert load_loop_config(studio_root=root).static_checks == ["pylint"]
+
+
+def test_resolve_profile_hands_out_commands_not_tool_names(tmp_path):
+    """The detected profile is the merge base for every repo, so it is pinned directly."""
+    assert resolve_profile(_python_repo(tmp_path / "py")).static_checks == ("ruff check {paths}",)
+
+    lint_script = _node_repo(tmp_path / "node-script", {"scripts": {"lint": "eslint ."}})
+    assert resolve_profile(lint_script).static_checks == ("npm run lint",)
+
+    dependency_only = _node_repo(tmp_path / "node-dep", {"devDependencies": {"eslint": "^9"}})
+    assert resolve_profile(dependency_only).static_checks == ("npx eslint {paths}",)
+
+    assert resolve_profile(_node_repo(tmp_path / "node-none", {})).static_checks == ()
 
 
 def test_refusal_names_unity_and_why_no_command_ships_for_it(tmp_path):
@@ -978,8 +1087,8 @@ def test_a_profiles_static_checks_cannot_be_mutated_through_a_config(tmp_path):
     config = load_loop_config(studio_root=_python_repo(tmp_path / "py"))
     config.static_checks.append("mypy")
 
-    assert PROFILES["python"].static_checks == ("ruff",)
-    assert resolve_profile(_python_repo(tmp_path / "py2")).static_checks == ("ruff",)
+    assert PROFILES["python"].static_checks == ("ruff check {paths}",)
+    assert resolve_profile(_python_repo(tmp_path / "py2")).static_checks == ("ruff check {paths}",)
 
 
 def test_cli_exits_with_the_refusal_and_no_traceback(tmp_path):
