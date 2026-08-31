@@ -40,7 +40,7 @@ flowchart TD
     D --> E["Rule 1: status is known"]
     D --> F["Rule 2: evidence file exists"]
     D --> G["Rules 3+4: fire at 'shipped'<br/>no FILL_ME, shape intact"]
-    D --> H["Rule 5 (new): fires at 'approved'<br/>5a due date present<br/>5b due date not passed"]
+    D --> H["Rule 6 (new): fires at 'approved'<br/>6a due date present<br/>6b due date not passed"]
     H -->|past due| I["RED SUITE<br/>fill it in, or move the date"]
     G -->|unbacked claim| I
     style H fill:#f9e79f,stroke:#b7950b
@@ -48,7 +48,7 @@ flowchart TD
 ```
 
 Rules 3 and 4 police the `shipped` end: if you claim the feature works, the evidence must be there
-and intact. Rule 5 polices the `approved` end, and the two never overlap — a spec is in exactly one
+and intact. Rule 6 polices the `approved` end, and the two never overlap — a spec is in exactly one
 status, so the branches are disjoint. Rule 1 protects all of them, since an unrecognized status would
 switch every later rule off while the suite stayed green.
 
@@ -56,37 +56,34 @@ switch every later rule off while the suite stayed green.
 
 **Components.** Two files change, and no new module appears.
 
-- `studio/tests/test_spec_verification.py` — gains rule 5 inside `_violations()`, and its frontmatter
+- `studio/tests/test_spec_verification.py` — gains rule 6 inside `_violations()`, and its frontmatter
   parser is generalized (below).
 - `.claude/commands/spec.md` — the frontmatter template gains the field; Step 4's approval bullet
   gains the instruction to write it.
 
-**The generalized reader — a concept removed, not added.** Today `_frontmatter_status()` reads one
-named field from the leading `---` block, scoped deliberately so "a spec that discusses statuses in
-its prose doesn't accidentally declare one." Rule 5 needs the same scoping for the same reason: specs
-about this convention transcribe frontmatter into their own prose, and a match from inside a code
-fence would let a spec self-satisfy the rule. Rather than add a second parsing idiom, generalize:
+**The generalized reader already exists — this spec no longer builds one.** When this was drafted,
+the test carried a private `_frontmatter_status()` that read a single named field, and the plan was to
+generalize it. PR #122 did that work first: `stats.parse_frontmatter` (`studio/stats.py:20`) returns
+every `key: value` line of the leading `---` block, `_frontmatter_status` is gone, and
+`test_spec_verification.py` already imports and calls it. Its docstring names it "the one reader of
+spec frontmatter."
 
-```python
-def _frontmatter_field(spec_text: str, name: str) -> str:
-    """The raw value of one field in the leading --- block, or "" if absent."""
-
-def _frontmatter_status(spec_text: str) -> str:
-    return _frontmatter_field(spec_text, "status")
-```
+So the new rule just calls it. The scoping this spec wanted is already guaranteed there — only the
+*leading* block counts, so a spec transcribing `verification_due:` into its own prose or a code fence
+cannot self-satisfy the rule.
 
 This also kills a second bug before it ships. The frontmatter template writes trailing comments
 (`status: draft            # draft → approved → shipped`), so a date regex anchored with `$` would
 reject `verification_due: 2026-09-03   # 30 days from approval` — the template would teach a form the
 gate rejects. Reading the raw token and parsing the date from it handles both.
 
-**Rule 5.** One block in `_violations()`, gated on `promised_evidence and status == "approved"`:
+**Rule 6.** One block in `_violations()`, gated on `promised_evidence and status == "approved"`:
 
-- **5a — the deadline exists.** No parseable `verification_due` date → violation. Malformed counts as
+- **6a — the deadline exists.** No parseable `verification_due` date → violation. Malformed counts as
   missing.
-- **5b — the deadline holds.** `date.today() > due` → violation, naming both exits.
+- **6b — the deadline holds.** `date.today() > due` → violation, naming both exits.
 
-Note what 5b does **not** check: whether `FILL_ME` is still present. A spec past due with a *filled*
+Note what 6b does **not** check: whether `FILL_ME` is still present. A spec past due with a *filled*
 evidence file is a feature that did the work and forgot to flip its status — the same stale-status
 bug, currently escaping forever because rules 3 and 4 need `shipped`. Dropping the clause is one
 fewer moving part and strictly more coverage.
@@ -98,7 +95,7 @@ absorbs it. The only case injection would buy is the exact `today == due` bounda
 worth a permanent parameter on this file's most-read helper.
 
 **Fixture migration, which is not optional.** `_synthetic_spec()` builds frontmatter with no
-`verification_due`, so rule 5a fires on it and three tests that assert exact violation counts turn
+`verification_due`, so rule 6a fires on it and three tests that assert exact violation counts turn
 red: `test_approved_with_missing_results_file_fails`, `test_a_widened_verification_heading_is_still_gated`,
 and `test_approved_with_placeholders_passes`. The fix is a `due` parameter defaulting to a valid
 future date, so all three keep their existing assertions and keep proving exactly what they were
@@ -117,7 +114,7 @@ section, so the case it proves is obvious."
   CI checks out shallow, so the history isn't there to read.
 - **The field is mandatory, settled by precedent rather than taste.** Rule 1 exists because an
   unrecognized status "would otherwise switch the two rules below off forever while the suite stayed
-  green." A missing `verification_due` does precisely that to rule 5b. Optional means off — and the
+  green." A missing `verification_due` does precisely that to rule 6b. Optional means off — and the
   only writer of this field is prose an AI executes, which is exactly the thing that can forget.
 - **Failing, not reporting.** Report-only was rejected because it carries the identical weakness that
   caused the original failure: it relies on someone reading and acting, which is what did not happen
@@ -128,19 +125,19 @@ section, so the case it proves is obvious."
   of bumping the date, which is the one behavior that destroys the signal entirely. Sixty outlives the
   working memory of whoever approved it.
 - **This spec carries no `## Verification` section, deliberately.** The test is *could a failing
-  pytest tell us this broke?* Here it could — rule 5 is a pytest. The prompt-shaped half (an AI
-  remembering to write the field) is itself backed by rule 5a going red. A feature that fixes the
+  pytest tell us this broke?* Here it could — rule 6 is a pytest. The prompt-shaped half (an AI
+  remembering to write the field) is itself backed by rule 6a going red. A feature that fixes the
   verification tier turns out not to need it.
 
 ## Non-Goals / Cut Scope
 
-- **Stale `approved` status generally.** Rule 5 fires only on specs that promised evidence. Specs with
+- **Stale `approved` status generally.** Rule 6 fires only on specs that promised evidence. Specs with
   no `## Verification` section can sit at `approved` after shipping and nothing here touches them.
   That is a real and larger gap, and it is bookkeeping rather than something this mechanism handles.
   PR #112 has since cleared the backlog of eight that prompted this note; one spec sits in that state
   on `main` today.
 - **A `today` injection parameter.** Cut; see above.
-- **A `FILL_ME` sub-condition on 5b.** Cut; removing it is simpler and catches more.
+- **A `FILL_ME` sub-condition on 6b.** Cut; removing it is simpler and catches more.
 - **Any bypass or skip flag.** Deliberately absent. A deadline that can be waved off is decorative,
   and this is a single-maintainer repo where the blast radius of a red suite is one person.
 - **Specs at `draft`.** A built feature whose spec never left `draft` triggers nothing. Drafts are
@@ -156,7 +153,7 @@ section, so the case it proves is obvious."
   feature and is not widened mechanically — but the *incentive* to use it grows, because keeping the
   section at `approved` now costs a deadline where before it cost nothing. Nothing cheap fixes this
   without a build signal, which was measured and rejected. Named, not built for.
-- **Rule 5 ships with zero live coverage.** No spec in the repo will exercise it: both specs carrying
+- **Rule 6 ships with zero live coverage.** No spec in the repo will exercise it: both specs carrying
   a `## Verification` section are already `shipped` and filled. Every assertion about it is synthetic
   until the next prompt-shaped spec exists.
 - **Moving the date is defended only by review legibility.** Setting `verification_due: 2099-01-01` is
@@ -165,16 +162,16 @@ section, so the case it proves is obvious."
 ## Build Plan
 
 1. **`due_date_rule` — the suite refuses an approved spec whose promised evidence has no live
-   deadline.** Generalize `_frontmatter_status` into `_frontmatter_field`, add rule 5 (5a mandatory
-   field, 5b deadline passed) to `_violations()`, give `_synthetic_spec` a `due` parameter, and correct
+   deadline.** Read the field with the existing `stats.parse_frontmatter`, add rule 6 (6a mandatory
+   field, 6b deadline passed) to `_violations()`, give `_synthetic_spec` a `due` parameter, and correct
    the module and `_violations` docstrings in place — both currently state that the only trigger is a
-   human typing `shipped`, which rule 5 falsifies.
+   human typing `shipped`, which rule 6 falsifies.
    - **Acceptance criteria:**
      - [ ] A spec with a `## Verification` section at `status: approved` with no `verification_due` field produces exactly one violation naming the missing field.
      - [ ] A spec with a `## Verification` section at `status: approved` whose `verification_due` is in the past produces a violation naming both exits: fill in the evidence, or move the date.
      - [ ] That same past-due violation fires whether or not the evidence file still contains `FILL_ME`.
-     - [ ] A spec with no `## Verification` section at `status: approved` and no `verification_due` produces no violation from rule 5.
-     - [ ] `verification_due` is read only from the leading `---` block, so the same text inside the spec's prose or a code fence does not satisfy 5a.
+     - [ ] A spec with no `## Verification` section at `status: approved` and no `verification_due` produces no violation from rule 6.
+     - [ ] `verification_due` is read only from the leading `---` block, so the same text inside the spec's prose or a code fence does not satisfy 6a.
      - [ ] A `verification_due` line carrying a trailing `#` comment parses as a valid date.
      - [ ] The three existing tests that assert exact violation counts still pass with their assertions unchanged.
    - **Out of scope:** writing the field at approval time; any change to `.claude/commands/spec.md`.
