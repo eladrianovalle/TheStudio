@@ -207,15 +207,27 @@ def _has_verification_section(spec_text): ...  # prefix match on "## Verificatio
 def _violations(spec_name, spec_text, results_name, results_text): ...
 ```
 
-`_violations` implements four rules; the fourth has its own section below:
+`_violations` implements six rules. The three this spec shipped come first; the fourth has its own
+section below, and rules 5 and 6 arrived later, from the specs named with them:
 
 1. **Known status.** Must be in `{draft, approved, shipped}`. Without this, a typo (`Shipped`, `ship`,
-   `done`) silently disables rules 2 and 3 forever while the suite stays green.
+   `done`) silently disables every rule below it forever while the suite stays green.
 2. **Evidence has a home.** Verification section + `approved` or `shipped` → the sibling must
    **exist**. Existence only; a skeleton full of `FILL_ME` satisfies it. This is the
    approved-but-not-built tolerance, and it is the pre-registration — the whole borrowing.
 3. **A claim costs evidence.** Verification section + `shipped` → the sibling must contain no
    `FILL_ME`.
+4. **A claim costs the whole shape.** Verification section + `shipped` → every heading the skeleton
+   printed must still be there, each carrying at least one line the reporter wrote rather than one
+   the template printed. Its own section below.
+5. **A shipped claim costs an outcome.** `shipped` → the spec's frontmatter must carry
+   `shipped_impact` (one of `none`, `minor`, `major`) and `shipped_changed` (one line on what
+   actually changed). The one rule with no Verification-section tolerance, because every feature
+   that ships changed something. From `specs/retire-volunteer-metrics.md`.
+6. **The wait for evidence has a deadline.** Verification section + `approved` → `verification_due`
+   must name a readable date, and that date must not have passed. Rules 3 and 4 fire only on a spec
+   that *claims* to be done, so without this one a feature can be built, merged and in daily use
+   while its spec sits at `approved` with a blank evidence file. From `specs/verification-due-date.md`.
 
 `_has_verification_section` matches by **prefix**, not line equality, so `## Verification & Evidence`
 is still gated. For a gate the forgiving reading is the correct one.
@@ -466,8 +478,10 @@ honest criteria — that is a human reading what `/spec` produces.
 
 - **This enforces that a claim of verification is backed, not that verification happened.** Stated
   plainly because a spec implying a stronger gate than it has would be the exact flattery this feature
-  exists to stop. The only trigger is a human typing `shipped`. Decline to type it and the feature
-  ships anyway with the suite green.
+  exists to stop. Typing `shipped` was the only trigger until rule 6 added a second one: an approved
+  spec that promised evidence now carries a due date, and letting that date pass turns the suite red
+  on its own. What neither trigger reaches is a spec that never left `draft`, or one that dropped its
+  `## Verification` section.
 - **And the evidence says that is the default.** All five existing specs are shipped-in-reality and
   all five sit at `approved`. Nobody has ever advanced a spec past approval in this repo. That is why
   the template names the flip explicitly — but naming it is persuasion, not enforcement, and it may

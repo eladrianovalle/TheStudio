@@ -57,6 +57,11 @@ _REQUIRED_HEADINGS = (
 # this block: spec.md also carries the *spec* template, whose headings are a different list.
 _SKELETON_TITLE = "# <Feature> — Verification Results"
 
+# The two places in spec.md that teach the field rule 6 reads: the frontmatter template a spec
+# is born from, and the approval bullet that creates the evidence file. Nothing else writes it.
+_TEMPLATE_FIRST_LINE = "feature: <human title>"
+_APPROVAL_EVIDENCE_STEP = "**If the spec carries a `## Verification` section**"
+
 
 def _spec_files(specs_dir: Path) -> list[Path]:
     """Every spec in the directory, excluding the results files that sit beside them."""
@@ -179,6 +184,32 @@ def _own_words(body: str, printed: frozenset[str]) -> bool:
     that, someone typed on purpose.
     """
     return any(line.strip() and line.strip() not in printed for line in body.splitlines())
+
+
+def _frontmatter_template(command_text: str) -> list[str]:
+    """The frontmatter block /spec tells an author to write, out of .claude/commands/spec.md.
+
+    Scoped from the template's first line to the ``---`` that closes it. The command names
+    ``verification_due`` in its approval step as well, and a field explained there but missing
+    from the template is a field an author copying the template never writes.
+    """
+    lines = command_text.splitlines()
+    if _TEMPLATE_FIRST_LINE not in lines:
+        return []
+    block: list[str] = []
+    for line in lines[lines.index(_TEMPLATE_FIRST_LINE):]:
+        if line.strip() == "---":
+            break
+        block.append(line)
+    return block
+
+
+def _approval_step(command_text: str) -> str:
+    """The approval bullet that creates the evidence file, up to the skeleton it prints."""
+    if _APPROVAL_EVIDENCE_STEP not in command_text:
+        return ""
+    after_marker = command_text.split(_APPROVAL_EVIDENCE_STEP, 1)[1]
+    return after_marker.split("```markdown", 1)[0]
 
 
 _SKELETON_LINES = _skeleton_block(SPEC_COMMAND.read_text(encoding="utf-8"))
@@ -555,6 +586,50 @@ class TestRealSpecs:
         assert printed_headings == list(_REQUIRED_HEADINGS), (
             f"the skeleton in {SPEC_COMMAND.name} prints {printed_headings}, but rule 4 "
             f"requires {list(_REQUIRED_HEADINGS)}. Change both or neither."
+        )
+
+    def test_the_frontmatter_template_offers_the_due_date_field(self):
+        """Rule 6a and /spec's template, agreed both ways.
+
+        The only writer of `verification_due` is an author following that template. Drop the
+        field from it and every prompt-shaped spec written afterwards is born failing rule 6a,
+        with nothing on the page to say where the date was supposed to come from.
+        """
+        template = _frontmatter_template(SPEC_COMMAND.read_text(encoding="utf-8"))
+        assert template, (
+            f"{_TEMPLATE_FIRST_LINE!r} is no longer in {SPEC_COMMAND.name}, so the frontmatter "
+            "template cannot be found — has it moved or been reworded?"
+        )
+        assert any(line.strip().startswith(f"{_DUE_FIELD}:") for line in template), (
+            f"{SPEC_COMMAND.name}'s frontmatter template no longer carries a `{_DUE_FIELD}:` "
+            "line, but rule 6a still demands one at `approved`. Put it back, or drop the rule."
+        )
+        assert "## Verification" in "\n".join(template), (
+            f"the template offers `{_DUE_FIELD}` without saying it is required only of a spec "
+            "carrying a `## Verification` section, which is how rule 6 is gated. An author "
+            "reading it cannot tell whether their spec needs a date at all."
+        )
+
+    def test_the_approval_step_sets_the_due_date_where_it_creates_the_evidence_file(self):
+        """The deadline gets written at the one moment rule 6 starts watching: approval.
+
+        Approval is already where the blank evidence file is created, and the date is what
+        bounds how long that file may stay blank. Said anywhere else it is guidance sitting
+        beside the step rather than part of it — and the step is what an agent follows.
+        """
+        step = _approval_step(SPEC_COMMAND.read_text(encoding="utf-8"))
+        assert step, (
+            f"{SPEC_COMMAND.name} no longer has the approval bullet that creates the evidence "
+            f"file ({_APPROVAL_EVIDENCE_STEP!r}), so there is nowhere for the deadline to be set."
+        )
+        assert _DUE_FIELD in step, (
+            f"the approval step in {SPEC_COMMAND.name} creates the evidence file but never sets "
+            f"`{_DUE_FIELD}`, so a spec approved by following it fails rule 6a the moment it "
+            "lands."
+        )
+        assert "30 days" in step, (
+            f"the approval step in {SPEC_COMMAND.name} no longer says how far out the date goes, "
+            "and rule 6a's own failure message tells an author 30 days is the convention."
         )
 
     def test_unfilled_sections_are_regenerable_from_the_skeleton(self):

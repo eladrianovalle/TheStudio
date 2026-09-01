@@ -472,11 +472,13 @@ without a written pass criterion and a place its evidence has to go. Also resolv
 Two changes from the proposal as written. The stop marker is `FILL_ME`, not `<fill>` — angle brackets
 parse as a raw HTML tag in CommonMark and render as zero visible characters, so the one file whose job
 is to look conspicuously unfinished would have rendered as complete. And the convention is enforced by
-`studio/tests/test_spec_verification.py`, four rules that leave existing specs alone and refuse only
-the `shipped` claim — with unfilled evidence, with one of the evidence file's headings dropped, or with
-one left holding nothing but the guidance the skeleton printed. That last rule closed the deletion gap
-the first three missed; what remains is filler like "N/A", which that spec's Risks record as
-undetectable in principle.
+`studio/tests/test_spec_verification.py`, which Phase 4 left at four rules refusing the `shipped`
+claim — with unfilled evidence, with one of the evidence file's headings dropped, or with one left
+holding nothing but the guidance the skeleton printed. That last rule closed the deletion gap the
+first three missed; what remains is filler like "N/A", which that spec's Risks record as undetectable
+in principle. Two more rules have joined from later specs: a `shipped` claim also costs a one-line
+record of what the feature changed, and an approved spec that promised evidence carries a due date
+that turns the suite red once it passes.
 
 **Later, if the numbers ask for it.** The eval harness, under the re-entry condition above. That is
 all that is left here: teaching `/forge` to read its approved spec **shipped 2026-07-29** as PR #85,
