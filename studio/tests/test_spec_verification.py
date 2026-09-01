@@ -17,8 +17,9 @@ other. Same spirit, different contract.
 Be straight about the limit: this enforces that a *claim* of verification is backed,
 not that verification happened. Typing ``shipped`` is one trigger; the calendar is the
 other. Approving a spec that promised evidence means writing down the date you expect to
-have it, and the suite goes red once that date passes with the results file still empty —
-so a shipped feature can no longer sit at ``approved`` with nothing recorded forever.
+have it, and once that date passes the suite goes red until you either record what you
+found and flip the status, or move the date — so a finished feature can no longer sit at
+``approved`` with nobody noticing.
 """
 from __future__ import annotations
 
@@ -198,10 +199,6 @@ def _violations(
     tolerance is what leaves a spec with no prose-shaped behavior alone. Rule 5 has no such
     tolerance; see its comment.
 
-    Rules 3 and 4 police the ``shipped`` end: claim the feature works and the evidence must
-    be there and intact. Rule 6 polices the ``approved`` end, where the wait for evidence
-    used to be unbounded.
-
     Frontmatter comes from ``stats.parse_frontmatter``, the one reader of it.
     """
     problems: list[str] = []
@@ -309,8 +306,7 @@ def _violations(
             )
         # 6b: the deadline passed. Deliberately not gated on FILL_ME still being present —
         # a past-due spec with a filled-in results file is a feature that did the work and
-        # forgot to flip its status, which is the same stale-status bug and otherwise escapes
-        # forever, since rules 3 and 4 need `shipped`.
+        # forgot to flip its status, which is the same stale-status bug.
         elif date.today() > due:
             problems.append(
                 f"specs/{spec_name} is marked `status: approved` with "
