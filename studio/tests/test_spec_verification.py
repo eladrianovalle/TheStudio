@@ -15,10 +15,15 @@ name the code defines is documented, while this one compares two documents to ea
 other. Same spirit, different contract.
 
 Be straight about the limit: this enforces that a *claim* of verification is backed,
-not that verification happened. The only trigger is a human typing ``shipped``.
+not that verification happened. Typing ``shipped`` is one trigger; the calendar is the
+other. Approving a spec that promised evidence means writing down the date you expect to
+have it, and once that date passes the suite goes red until you either record what you
+found and flip the status, or move the date — so a finished feature can no longer sit at
+``approved`` with nobody noticing.
 """
 from __future__ import annotations
 
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -35,6 +40,9 @@ _STATUSES = {"draft", "approved", "shipped"}
 _RESULTS_SUFFIX = "-eval-results.md"
 _FILL = "FILL_ME"
 
+# The frontmatter field naming the day the evidence is due. Rule 6 below is the only reader.
+_DUE_FIELD = "verification_due"
+
 # The four headings an evidence file is born with, stated once. /spec's skeleton prints these
 # and rule 4 below requires them; `test_the_skeleton_prints_exactly_the_required_headings`
 # holds the two lists to each other so neither side can drift out from under the other.
@@ -48,6 +56,11 @@ _REQUIRED_HEADINGS = (
 # The line the evidence skeleton opens with inside spec.md. Extraction has to be scoped to
 # this block: spec.md also carries the *spec* template, whose headings are a different list.
 _SKELETON_TITLE = "# <Feature> — Verification Results"
+
+# The two places in spec.md that teach the field rule 6 reads: the frontmatter template a spec
+# is born from, and the approval bullet that creates the evidence file. Nothing else writes it.
+_TEMPLATE_FIRST_LINE = "feature: <human title>"
+_APPROVAL_EVIDENCE_STEP = "**If the spec carries a `## Verification` section**"
 
 
 def _spec_files(specs_dir: Path) -> list[Path]:
@@ -65,6 +78,24 @@ def _has_verification_section(spec_text: str) -> bool:
     is the correct one.
     """
     return any(line.startswith("## Verification") for line in spec_text.splitlines())
+
+
+def _parse_due(raw_value: str) -> date | None:
+    """The date a ``verification_due`` value names, or ``None`` if there isn't a readable one.
+
+    The frontmatter template writes trailing comments after a value — ``status: draft
+    # draft → approved → shipped`` — and the reader strips whitespace but not comments, so
+    this can arrive as ``2026-09-30   # 30 days from approval``. Everything from the first
+    ``#`` on is a note to the reader, not part of the date.
+
+    Malformed reads the same as missing on purpose: rule 6a says so, and a date nothing can
+    parse holds no deadline no matter how it got that way.
+    """
+    date_token = raw_value.split("#", 1)[0].strip()
+    try:
+        return date.fromisoformat(date_token)
+    except ValueError:
+        return None
 
 
 def _section_of_first_fill(results_text: str) -> str:
@@ -155,6 +186,32 @@ def _own_words(body: str, printed: frozenset[str]) -> bool:
     return any(line.strip() and line.strip() not in printed for line in body.splitlines())
 
 
+def _frontmatter_template(command_text: str) -> list[str]:
+    """The frontmatter block /spec tells an author to write, out of .claude/commands/spec.md.
+
+    Scoped from the template's first line to the ``---`` that closes it. The command names
+    ``verification_due`` in its approval step as well, and a field explained there but missing
+    from the template is a field an author copying the template never writes.
+    """
+    lines = command_text.splitlines()
+    if _TEMPLATE_FIRST_LINE not in lines:
+        return []
+    block: list[str] = []
+    for line in lines[lines.index(_TEMPLATE_FIRST_LINE):]:
+        if line.strip() == "---":
+            break
+        block.append(line)
+    return block
+
+
+def _approval_step(command_text: str) -> str:
+    """The approval bullet that creates the evidence file, up to the skeleton it prints."""
+    if _APPROVAL_EVIDENCE_STEP not in command_text:
+        return ""
+    after_marker = command_text.split(_APPROVAL_EVIDENCE_STEP, 1)[1]
+    return after_marker.split("```markdown", 1)[0]
+
+
 _SKELETON_LINES = _skeleton_block(SPEC_COMMAND.read_text(encoding="utf-8"))
 _PRINTED_LINES = _printed_lines(_SKELETON_LINES)
 _PREAMBLE_RULES = _preamble_rules(_SKELETON_LINES)
@@ -168,10 +225,10 @@ def _violations(
 ) -> list[str]:
     """Every way this spec breaks the convention, in plain sentences.
 
-    ``results_text`` is ``None`` when the results file does not exist. Five rules, and
-    rules 2 to 4 stay quiet unless the spec actually has a Verification section — that
-    tolerance is what leaves a spec with no prose-shaped behavior alone. Rule 5 has no
-    such tolerance; see its comment.
+    ``results_text`` is ``None`` when the results file does not exist. Six rules, and rules
+    2 to 4 and rule 6 stay quiet unless the spec actually has a Verification section — that
+    tolerance is what leaves a spec with no prose-shaped behavior alone. Rule 5 has no such
+    tolerance; see its comment.
 
     Frontmatter comes from ``stats.parse_frontmatter``, the one reader of it.
     """
@@ -260,7 +317,44 @@ def _violations(
                 "read by no one, so pick the bucket that fits."
             )
 
+    # Rule 6: the wait for evidence has a deadline. A spec that promised evidence is allowed
+    # to sit at `approved` holding a blank results file — that blank file is the whole
+    # pre-registration — but not forever. Without a clock, a feature can be built, merged and
+    # in daily use while its spec quietly stays `approved` with nothing recorded, because
+    # rules 3 and 4 only fire on a spec that *claims* to be done.
+    if promised_evidence and status == "approved":
+        due = _parse_due(frontmatter.get(_DUE_FIELD, ""))
+        # 6a: no readable date means no deadline, and optional means off. Rule 1 exists for
+        # the same reason — a missing value must not silently switch the check below off.
+        if due is None:
+            problems.append(
+                f"specs/{spec_name} has a `## Verification` section and is marked "
+                f"`status: approved`, but its frontmatter has no readable `{_DUE_FIELD}` "
+                "date (write it as YYYY-MM-DD; 30 days out is the convention). Approving a "
+                "spec that promised evidence means saying when you expect to have it. With "
+                "no date there is no deadline, and this spec can sit here forever holding an "
+                "empty results file while the feature is already in daily use."
+            )
+        # 6b: the deadline passed. Deliberately not gated on FILL_ME still being present —
+        # a past-due spec with a filled-in results file is a feature that did the work and
+        # forgot to flip its status, which is the same stale-status bug.
+        elif date.today() > due:
+            problems.append(
+                f"specs/{spec_name} is marked `status: approved` with "
+                f"`{_DUE_FIELD}: {due.isoformat()}`, and that date has passed. Two honest "
+                f"ways out: fill in {results_name} with what you actually observed and flip "
+                "this spec to `status: shipped`, or move the date to when you now expect the "
+                "evidence. Moving the date is allowed and sometimes correct — the point is "
+                "that it becomes a visible edit somebody can question, rather than silence "
+                "nobody notices."
+            )
+
     return problems
+
+
+# A deadline comfortably ahead of any run of this suite, so the cases that predate rule 6
+# keep proving what they were written to prove instead of tripping over a missing date.
+_FUTURE_DUE = (date.today() + timedelta(days=30)).isoformat()
 
 
 def _synthetic_spec(
@@ -270,16 +364,21 @@ def _synthetic_spec(
     heading: str = "## Verification",
     impact: str | None = "minor",
     changed: str | None = "The synthetic feature started doing the synthetic thing.",
+    due: str | None = _FUTURE_DUE,
 ) -> str:
     """A minimal spec body for the synthetic cases below.
 
     `heading` exists so one case can widen it and prove the prefix match is doing real work.
 
     `impact` and `changed` carry values by default so that every `shipped` case here keeps
-    proving what its name says instead of tripping over rule 5. Pass `None` to leave the
-    line out of the frontmatter entirely — that is how the missing-field cases are built.
+    proving what its name says instead of tripping over rule 5. `due` carries a future date
+    by default for the same reason, one rule along: without it every `approved` case would
+    fail rule 6a. Pass `None` to any of the three to leave that line out of the frontmatter
+    entirely — that is how the missing-field cases are built.
     """
     lines = ["---", "feature: Synthetic", "slug: synthetic", f"status: {status}"]
+    if due is not None:
+        lines.append(f"{_DUE_FIELD}: {due}")
     if impact is not None:
         lines.append(f"shipped_impact: {impact}")
     if changed is not None:
@@ -489,6 +588,50 @@ class TestRealSpecs:
             f"requires {list(_REQUIRED_HEADINGS)}. Change both or neither."
         )
 
+    def test_the_frontmatter_template_offers_the_due_date_field(self):
+        """Rule 6a and /spec's template, agreed both ways.
+
+        The only writer of `verification_due` is an author following that template. Drop the
+        field from it and every prompt-shaped spec written afterwards is born failing rule 6a,
+        with nothing on the page to say where the date was supposed to come from.
+        """
+        template = _frontmatter_template(SPEC_COMMAND.read_text(encoding="utf-8"))
+        assert template, (
+            f"{_TEMPLATE_FIRST_LINE!r} is no longer in {SPEC_COMMAND.name}, so the frontmatter "
+            "template cannot be found — has it moved or been reworded?"
+        )
+        assert any(line.strip().startswith(f"{_DUE_FIELD}:") for line in template), (
+            f"{SPEC_COMMAND.name}'s frontmatter template no longer carries a `{_DUE_FIELD}:` "
+            "line, but rule 6a still demands one at `approved`. Put it back, or drop the rule."
+        )
+        assert "## Verification" in "\n".join(template), (
+            f"the template offers `{_DUE_FIELD}` without saying it is required only of a spec "
+            "carrying a `## Verification` section, which is how rule 6 is gated. An author "
+            "reading it cannot tell whether their spec needs a date at all."
+        )
+
+    def test_the_approval_step_sets_the_due_date_where_it_creates_the_evidence_file(self):
+        """The deadline gets written at the one moment rule 6 starts watching: approval.
+
+        Approval is already where the blank evidence file is created, and the date is what
+        bounds how long that file may stay blank. Said anywhere else it is guidance sitting
+        beside the step rather than part of it — and the step is what an agent follows.
+        """
+        step = _approval_step(SPEC_COMMAND.read_text(encoding="utf-8"))
+        assert step, (
+            f"{SPEC_COMMAND.name} no longer has the approval bullet that creates the evidence "
+            f"file ({_APPROVAL_EVIDENCE_STEP!r}), so there is nowhere for the deadline to be set."
+        )
+        assert _DUE_FIELD in step, (
+            f"the approval step in {SPEC_COMMAND.name} creates the evidence file but never sets "
+            f"`{_DUE_FIELD}`, so a spec approved by following it fails rule 6a the moment it "
+            "lands."
+        )
+        assert "30 days" in step, (
+            f"the approval step in {SPEC_COMMAND.name} no longer says how far out the date goes, "
+            "and rule 6a's own failure message tells an author 30 days is the convention."
+        )
+
     def test_unfilled_sections_are_regenerable_from_the_skeleton(self):
         """A section still holding a placeholder has not been reported in, so every other line
         in it came from the template. One that didn't means this file was built from a skeleton
@@ -671,6 +814,97 @@ class TestSyntheticSpecs:
             "synthetic.md",
             _synthetic_spec(status, verification=True, impact=impact, changed=changed),
             "synthetic-eval-results.md", _SKELETON,
+        ) == []
+
+    def test_approved_without_a_due_date_fails(self):
+        """Rule 6a. Optional would mean off: with no date, 6b can never fire and the spec
+        sits at `approved` with an empty results file for as long as nobody looks."""
+        problems = _violations(
+            "synthetic.md", _synthetic_spec("approved", verification=True, due=None),
+            "synthetic-eval-results.md", _SKELETON,
+        )
+        assert len(problems) == 1
+        assert f"no readable `{_DUE_FIELD}`" in problems[0]
+
+    def test_a_due_date_nothing_can_parse_counts_as_missing(self):
+        """A date the rule cannot read holds no deadline, however it got that way."""
+        problems = _violations(
+            "synthetic.md", _synthetic_spec("approved", verification=True, due="next quarter"),
+            "synthetic-eval-results.md", _SKELETON,
+        )
+        assert len(problems) == 1
+        assert f"no readable `{_DUE_FIELD}`" in problems[0]
+
+    def test_a_due_date_written_only_in_the_prose_does_not_satisfy_the_rule(self):
+        """The field is read from the leading `---` block and nowhere else.
+
+        Specs quote each other's frontmatter, and this convention's own specs quote this
+        very field. A spec that merely *mentions* a deadline has not set one.
+        """
+        spec_naming_the_field_in_its_body = (
+            _synthetic_spec("approved", verification=True, due=None)
+            + f"\n## Notes\n\nWhen you approve one of these, set `{_DUE_FIELD}: {_FUTURE_DUE}`:\n"
+            + f"\n```\n---\nstatus: approved\n{_DUE_FIELD}: {_FUTURE_DUE}\n---\n```\n"
+        )
+        problems = _violations(
+            "synthetic.md", spec_naming_the_field_in_its_body,
+            "synthetic-eval-results.md", _SKELETON,
+        )
+        assert len(problems) == 1
+        assert f"no readable `{_DUE_FIELD}`" in problems[0]
+
+    def test_a_due_date_with_a_trailing_comment_still_reads_as_a_date(self):
+        """The frontmatter template writes notes after a value, and the reader strips
+        whitespace but not comments. A gate that rejected the form the template teaches
+        would fire on every spec written the way it was told to write them."""
+        assert _violations(
+            "synthetic.md",
+            _synthetic_spec(
+                "approved", verification=True, due=f"{_FUTURE_DUE}   # 30 days from approval",
+            ),
+            "synthetic-eval-results.md", _SKELETON,
+        ) == []
+
+    def test_approved_past_its_due_date_fails(self):
+        """Rule 6b, the deadline itself."""
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        problems = _violations(
+            "synthetic.md", _synthetic_spec("approved", verification=True, due=yesterday),
+            "synthetic-eval-results.md", _SKELETON,
+        )
+        assert len(problems) == 1
+        assert f"`{_DUE_FIELD}: {yesterday}`" in problems[0]
+        # Two honest exits, so nobody is cornered into deleting this test to get green.
+        assert "fill in synthetic-eval-results.md" in problems[0]
+        assert "move the date" in problems[0]
+
+    def test_the_deadline_fires_even_when_the_evidence_is_filled_in(self):
+        """No `FILL_ME` clause on 6b, on purpose. A past-due spec whose results file is
+        complete is a feature that did the work and forgot to flip its status — the same
+        stale-status bug, and one rules 3 and 4 never see, because they need `shipped`."""
+        assert _FILL not in _FILLED
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        problems = _violations(
+            "synthetic.md", _synthetic_spec("approved", verification=True, due=yesterday),
+            "synthetic-eval-results.md", _FILLED,
+        )
+        assert len(problems) == 1
+        assert f"`{_DUE_FIELD}: {yesterday}`" in problems[0]
+
+    def test_a_spec_promising_no_evidence_needs_no_deadline(self):
+        """Most specs are not prompt-shaped. Rule 6 keeps rules 2 to 4's tolerance."""
+        assert _violations(
+            "synthetic.md", _synthetic_spec("approved", verification=False, due=None),
+            "synthetic-eval-results.md", None,
+        ) == []
+
+    @pytest.mark.parametrize("status", ["draft", "shipped"])
+    def test_the_deadline_is_demanded_only_at_approved(self, status):
+        """A draft is legitimately open-ended, and a shipped spec is past this rule —
+        rules 3 and 4 have it from there."""
+        assert _violations(
+            "synthetic.md", _synthetic_spec(status, verification=True, due=None),
+            "synthetic-eval-results.md", _FILLED,
         ) == []
 
     def test_an_impact_of_none_is_a_legitimate_answer(self):

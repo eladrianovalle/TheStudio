@@ -54,17 +54,20 @@ authoring effort of one section and one file. The limits are elsewhere, and they
 - **This file is itself a counterexample to the convention's reach.** The feature shipped 2026-07-28
   and this evidence file sat blank until 2026-08-02 — five days during which the convention was in
   force and its own results were unrecorded. It never technically broke the rule, because
-  `test_spec_verification.py` only refuses a spec claiming `status: shipped`, and this spec stayed at
-  `approved`. That is the hole: **the enforcement binds only those who claim completion, so the way
-  around it is to never claim it.** The file was filled because a human asked, not because anything
-  compelled it. A reader should not conclude from the table above that the convention enforces
-  itself; it enforces a *claim*, which is a narrower thing.
+  `test_spec_verification.py` at the time only refused a spec claiming `status: shipped`, and this
+  spec stayed at `approved`. That was the hole: **the enforcement bound only those who claim
+  completion, so the way around it was to never claim it.** (`specs/verification-due-date.md` closed
+  this one afterwards, by putting a due date on an approved spec that promised evidence.) The file
+  was filled because a human asked, not because anything compelled it. A reader should not conclude
+  from the table above that the convention enforces itself; it enforces a *claim*, which is a
+  narrower thing.
 - **The criterion measures process compliance, not outcome.** It asks whether the next spec carried a
   criterion and filled its file. It never asks whether doing so caught a defect that would otherwise
   have shipped. A convention can be complied with perfectly and still find nothing, and this result
   would look identical either way.
 - **Filler still passes.** As the spec recorded when it was written: "N/A" under every heading
-  satisfies all four rules. That remains undetectable in principle, and nothing here changes it.
+  satisfies every rule that counts placeholders or headings. That remains undetectable in principle,
+  and nothing here changes it.
 
 ## Verdict
 One of **criterion met** / **criterion not met** / **inconclusive, and why**.

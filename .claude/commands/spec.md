@@ -115,6 +115,9 @@ slug: <slug>
 ticket: <id-or-url, or "none">
 status: draft            # draft → approved (human approved it) → shipped (built AND verified)
 studio_run: <run_dir>    # the debate this spec came from
+# verification_due: the date the evidence is due (YYYY-MM-DD). Required once this spec is
+# `approved`, and only if it carries a `## Verification` section — no section, no deadline.
+verification_due:
 # Leave the two below EMPTY until this spec flips to `shipped`, and keep their notes on
 # comment lines like these. An inline `# ...` after the colon is read as the VALUE, and
 # `shipped_changed` has no vocabulary check to catch it — so a spec could otherwise
@@ -261,9 +264,11 @@ Summarize the same things in chat, in plain words, so the user can decide withou
   saying what actually changed for someone using this. Write it from what the feature does, not from
   the fact that it landed: "it shipped" satisfies the test and tells a reader nothing.
 
-  **If the spec carries a `## Verification` section**, also create its evidence file now — empty,
-  before any data exists. That ordering is the whole point: headings written before the outcome is
-  known can't be arranged to flatter it. Write the skeleton below to
+  **If the spec carries a `## Verification` section**, set `verification_due` to 30 days from today
+  and create its evidence file now — empty, before any data exists. That ordering is the whole point:
+  headings written before the outcome is known can't be arranged to flatter it. The date bounds the
+  wait: once it passes with the evidence still blank, the suite goes red until you either record what
+  you found or move the date. Write the skeleton below to
   `specs/<slug>-eval-results.md` (`.studio/specs/<slug>-eval-results.md` in a consuming repo),
   substituting `<Feature>` and `<slug>`, and **copy the pass criterion out of the spec word for
   word** — don't summarize it, don't improve it. Leave every `FILL_ME` in place; each one marks data
