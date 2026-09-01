@@ -476,9 +476,7 @@ is to look conspicuously unfinished would have rendered as complete. And the con
 claim — with unfilled evidence, with one of the evidence file's headings dropped, or with one left
 holding nothing but the guidance the skeleton printed. That last rule closed the deletion gap the
 first three missed; what remains is filler like "N/A", which that spec's Risks record as undetectable
-in principle. Two more rules have joined from later specs: a `shipped` claim also costs a one-line
-record of what the feature changed, and an approved spec that promised evidence carries a due date
-that turns the suite red once it passes.
+in principle. Two more rules have joined from later specs since; the file itself is the inventory.
 
 **Later, if the numbers ask for it.** The eval harness, under the re-entry condition above. That is
 all that is left here: teaching `/forge` to read its approved spec **shipped 2026-07-29** as PR #85,

@@ -57,9 +57,10 @@ authoring effort of one section and one file. The limits are elsewhere, and they
   `test_spec_verification.py` at the time only refused a spec claiming `status: shipped`, and this
   spec stayed at `approved`. That was the hole: **the enforcement bound only those who claim
   completion, so the way around it was to never claim it.** (`specs/verification-due-date.md` closed
-  this one afterwards, by putting a due date on an approved spec that promised evidence.) The file was filled because a human asked, not because anything
-  compelled it. A reader should not conclude from the table above that the convention enforces
-  itself; it enforces a *claim*, which is a narrower thing.
+  this one afterwards, by putting a due date on an approved spec that promised evidence.) The file
+  was filled because a human asked, not because anything compelled it. A reader should not conclude
+  from the table above that the convention enforces itself; it enforces a *claim*, which is a
+  narrower thing.
 - **The criterion measures process compliance, not outcome.** It asks whether the next spec carried a
   criterion and filled its file. It never asks whether doing so caught a defect that would otherwise
   have shipped. A convention can be complied with perfectly and still find nothing, and this result
