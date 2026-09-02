@@ -2,8 +2,10 @@
 feature: A Deadline on the Approved-but-Unverified Tolerance
 slug: verification-due-date
 ticket: none
-status: approved
+status: shipped
 studio_run: studio/output/tech/run_tech_20260805_004612
+shipped_impact: minor
+shipped_changed: Approving a spec that promises evidence now records a date 30 days out, and the suite goes red once that date passes with the evidence still unwritten — so a spec can no longer sit at `approved` indefinitely by simply never claiming it shipped.
 ---
 
 # A Deadline on the Approved-but-Unverified Tolerance — Architecture Spec
