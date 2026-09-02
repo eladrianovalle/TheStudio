@@ -9,7 +9,7 @@
 - **[API.md](./API.md)** - CLI reference for `run_phase.py`
 - **[CODING_PRINCIPLES.md](./CODING_PRINCIPLES.md)** - Karpathy-inspired coding principles (injected into target CLAUDE.md on install)
 - **[RUN_PHASE_SPLIT_PLAN.md](./RUN_PHASE_SPLIT_PLAN.md)** - Deferred plan for decomposing `run_phase.py` (config_loading + stats already extracted)
-- **[SESSION_ANALYTICS_PLAN.md](./SESSION_ANALYTICS_PLAN.md)** - Auto session-health metrics: design + status (first slice shipped: `session.json` at finalize, ledger auto-append, `stats` session-health block; `studio outcome` + session linking still deferred)
+- **[SESSION_ANALYTICS_PLAN.md](./SESSION_ANALYTICS_PLAN.md)** - Auto session-health metrics: design + status (first slice shipped: `session.json` at finalize and the `stats` session-health block; `studio outcome` + session linking still deferred)
 - **[GSTACK_COMPARISON.md](./GSTACK_COMPARISON.md)** - Study of garrytan/gstack: what Studio borrowed, why, and the (completed) roadmap
 - **[GSTACK_SCORECARD.md](./GSTACK_SCORECARD.md)** - The gstack retrospective + how we'll measure whether the borrowings improve or degrade Studio output (per-mechanism triggers, top-line metrics, exit rule)
 - **[SUPERPOWERS_COMPARISON.md](./SUPERPOWERS_COMPARISON.md)** - Study of obra/superpowers: 6 proposed borrowings that survived adversarial vetting, 25 rejected with reasons, and a phased plan that starts by capturing a baseline

@@ -78,7 +78,7 @@ Every command works from any project once you've run `init`. See [CLAUDE_CODE_US
 
 Studio isn't only a debate runner. It's a way to hold AI agents to a standard. Install it and these travel with your project:
 
-- **Coding principles**: nine rules that counter common LLM failure modes, from "think before coding" and "make surgical changes" to writing docs, code, and progress updates for a human reader, and getting a feature's architecture approved before building it. `init` injects them into your project's CLAUDE.md. See [CLAUDE.md](./CLAUDE.md#coding-principles).
+- **Coding principles**: seven rules that counter common LLM failure modes, from "think before coding" and "make surgical changes" to writing docs, code, and progress updates for a human reader, and getting a feature's architecture approved before building it. `init` injects them into your project's CLAUDE.md. See [CLAUDE.md](./CLAUDE.md#coding-principles).
 - **MVI (Minimum Viable Interaction)**: every increment ends in something usable. "Build a skateboard, not a wheel." The Product, Engineering, and Design contrarians enforce it. See [MVI_METHODOLOGY.md](./studio/docs/MVI_METHODOLOGY.md).
 - **AI-TDD**: scenario-first tests, humans own the assertions, and mutation verification proves the tests actually bite. The Test Engineer role enforces it. See [AI_TDD_METHODOLOGY.md](./studio/docs/AI_TDD_METHODOLOGY.md).
 
@@ -210,7 +210,7 @@ python studio/run_phase.py update --target /path/to/project          # add --for
 python studio/run_phase.py cleanup --dry-run
 python studio/run_phase.py cleanup
 
-# Setup wizard (configure roles, scopes, cleanup after install)
+# Setup wizard (configure roles, personas, the /forge gate commands, cleanup)
 python studio/run_phase.py setup --target . --status
 python studio/run_phase.py setup --target . --defaults
 
@@ -262,7 +262,7 @@ Runs land under the active output root: `studio/output/` when you run from this 
       advocate_1.md            # Advocate's proposal
       contrarian_1.md          # Contrarian's critique + VERDICT
       summary.md               # Run summary
-      run.json                 # Metadata, quality checks, token budget
+      run.json                 # Metadata, quality checks, storage stats
   studio/
     run_studio_20260314_034202/
       instructions.md
@@ -365,7 +365,7 @@ studio/
   clarity.py                # Per-topic Clarity Score tracking and question density control
   question_mode.py          # Pre-flight question surfacing (--mode questions)
   install.py                # Cross-repo installer (init/check/update)
-  setup.py                  # Setup wizard: project config after install (roles, scopes, cleanup)
+  setup.py                  # Setup wizard: project config after install (roles, personas, forge gates, cleanup)
   offload.py                # CLAUDE.md analyzer: section classification, pointer scoring, canary tokens
   cleanup.py                # TTL + budget-based artifact cleanup + loose file removal
   rerun.py                  # Rejection context injection for iterate-on-failure
@@ -379,7 +379,7 @@ studio/
   config/studio_settings.toml # Cleanup settings
   config/implementation_loop.toml # Implementation writer/editor loop defaults
   docs/                     # Guides, role prompts, architecture
-  tests/                    # 900 tests (pytest)
+  tests/                    # 992 tests (pytest)
 ```
 
 ---
@@ -390,7 +390,7 @@ studio/
 cd studio && python -m pytest tests/ -v
 ```
 
-900 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, contrarian FINDING-block parsing and the independent finding verifier, the design-phase critique guide (AI-slop blacklist + Goodwill Reservoir) gating, doc-parity (CLI/config docs vs source), installer ship-list parity (every slash command and workflow on disk is one the installer actually copies, so a new command can't work here and nowhere else), the spec-verification convention (a prompt-shaped spec may not be called shipped while its evidence file is unfilled, or has one of its headings dropped or left unanswered, and every hand-copy of the evidence skeleton's rules must still match the live one), clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, cross-run stats, the shipped-features block read off spec frontmatter, session-health records, CLAUDE.md offload analysis, unstale audit configuration, smoke test configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
+992 tests covering: prepare/finalize lifecycle, role resolution with dependency injection, TTL/budget cleanup with boundary conditions, loose file cleanup, scope allocation, rerun detection, fresh-run/cross-phase context reset, verdict extraction, document validation, code validation, decision point parsing, contrarian FINDING-block parsing and the independent finding verifier, the design-phase critique guide (AI-slop blacklist + Goodwill Reservoir) gating, doc-parity (CLI/config docs vs source), installer ship-list parity (every slash command and workflow on disk is one the installer actually copies, so a new command can't work here and nowhere else), the spec-verification convention (a prompt-shaped spec may not be called shipped while its evidence file is unfilled, or has one of its headings dropped or left unanswered, every hand-copy of the evidence skeleton's rules must still match the live one, and an approved spec whose `verification_due` date has passed reds the suite without any `shipped` claim at all), clarity scoring, role overrides, phase persona overrides, cross-repo artifact routing, install/update workflows (incl. stale-snapshot resolution), CLAUDE.md principles injection, cross-run stats, the shipped-features block read off spec frontmatter, session-health records, CLAUDE.md offload analysis, unstale audit configuration, smoke test configuration, setup wizard configuration, and Slack/n8n run-digest webhooks.
 
 Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.toml`).
 

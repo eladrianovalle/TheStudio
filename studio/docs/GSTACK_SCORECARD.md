@@ -98,15 +98,19 @@ back out" trigger** so a bad one doesn't just quietly stay.
 
 ### The instruments we already have
 
-We don't need to build measurement — Studio ships it:
+Studio ships most of this, though two instruments named in the original plan have since been
+retired — `rate` and the outcomes ledger both depended on someone volunteering a score after every
+run, and nobody did. What replaced them is the `shipped_impact` / `shipped_changed` pair on a spec's
+frontmatter, which costs nothing extra because flipping a spec to `shipped` already demands it:
 
-- **`rate`** — a human 1–5 score per run, plus outcome capture (shipped yes/no, impact
-  major/minor, what it changed). This is the ground truth signal.
-- **`stats`** — the cross-run dashboard: verdicts, ratings, decision counts, session health.
+- **Spec frontmatter** — `shipped_impact` (none/minor/major) and `shipped_changed` (one line, in
+  plain words) on every spec claiming `shipped`. Enforced by the suite, so it cannot be skipped.
+- **`stats`** — the cross-run dashboard: verdicts, decision counts, session health, and the
+  shipped-features roll-up read off that frontmatter.
 - **`findings.json` + verifier verdicts** (R1) — structured, so the verifier's behavior is
   directly countable: confirm/unconfirm/uncertain rates, net confidence shift.
 - **`reviewer-concerns.md`** — the artifact trail from the forge editor.
-- **The outcomes ledger** — every run (rated or not) auto-appended to a central ledger.
+
 
 ### The per-mechanism scorecard
 
@@ -129,8 +133,9 @@ like, and the trigger that makes us tune or revert it.
 Underneath the per-mechanism detail, the aggregate "did borrowing from gstack make Studio better?"
 comes down to three numbers from `stats`, tracked forward against the pre-2026-07-16 baseline:
 
-1. **Human rating trend** (`rate`, 1–5). The bottom line. Are runs rated at least as useful as
-   before, once we have enough post-borrow runs to compare?
+1. **Shipped-feature trend** (spec frontmatter). The bottom line, and the honest replacement for
+   the human 1-5 rating this plan originally named: are runs still leading to specs that reach
+   `shipped`, and does `shipped_changed` describe something worth having?
 2. **Outcome quality** (shipped rate + impact). Are more runs leading to something that actually
    ships, and with major rather than minor impact?
 3. **Cost per unit of quality** (tokens/cost per run vs. rating). The verifier and the extra
@@ -140,7 +145,7 @@ comes down to three numbers from `stats`, tracked forward against the pre-2026-0
 ### Cadence and the honest exit
 
 - **Review every ~10 rated runs, or monthly**, whichever comes first — run `stats`, read the
-  alerts, skim the outcomes ledger.
+  alerts, skim the shipped-features block in `stats`.
 - **The exit rule:** a borrowing that trips its trigger and doesn't recover after one tuning pass
   gets reverted. We took two of gstack's ideas by *refusing* or *reshaping* them; keeping that
   honesty means being willing to pull a shipped one back out if the numbers say so. A mechanism

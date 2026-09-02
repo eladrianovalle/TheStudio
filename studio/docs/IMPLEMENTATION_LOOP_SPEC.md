@@ -12,7 +12,7 @@
 
 Studio already runs an advocate/contrarian debate at the **planning** level: the advocate piles
 on, and the contrarian-as-editor carves the proposal down to its essence (`CONTRARIAN_MANDATE`,
-`studio/scopes.py:27`). That writer→editor dynamic is the thing that produces tight output.
+`studio/scopes.py:32`). That writer→editor dynamic is the thing that produces tight output.
 
 Implementation has no equivalent. Code is written in one pass by one agent, and whatever sprawl,
 duplication, or dead scaffolding accumulates ships as-is. This spec brings the same cadence to
@@ -190,7 +190,7 @@ calling it "non-negotiable" would still overstate it.
 Authored the same way personas and roles already are: shipped defaults that a project-local file
 shallow-merges over (mirrors `persona_overrides.py` and `role_overrides.py`).
 
-- **Editor mandate** = the existing `CONTRARIAN_MANDATE` (`studio/scopes.py:27`), pointed at code:
+- **Editor mandate** = the existing `CONTRARIAN_MANDATE` (`studio/scopes.py:32`), pointed at code:
   default to deletion, name the specific cut (not "this is complex"), collapse rather than
   accumulate, guard the essence. With one code-specific bound, **behavior preservation**: the
   editor may restructure and delete freely *as long as tests stay green*, and may not touch a
@@ -423,7 +423,7 @@ One Product + Engineering role iteration applied to the first draft:
 
 ## References
 
-- `studio/scopes.py:27`: `CONTRARIAN_MANDATE` (the editor mandate, reused verbatim).
+- `studio/scopes.py:32`: `CONTRARIAN_MANDATE` (the editor mandate, reused verbatim).
 - `studio/validators/code_validator.py`: `CodeValidator.validate_implementation()` returns
   `List[CheckResult]`; `run_pytest` is `pytest -v` + path, `run_ruff` is `ruff check .`,
   `run_mypy` is `mypy . --strict`. Gate reuses the runner + ruff/pytest; aggregation is net-new.
