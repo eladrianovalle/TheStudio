@@ -47,10 +47,6 @@ When `[slack].enabled` or `[n8n].enabled` is true, `finalize` posts the digest
 automatically after writing `run.json`. It is **soft-fail**: a webhook error is
 printed but never breaks finalize. With no target enabled, finalize is unchanged.
 
-The same `.studio/integrations.toml` also carries an optional `[outcomes]`
-`ledger_path` key (a different, unrelated feature): when set, finalize appends the
-run's record to that local outcomes ledger. See `studio/docs/API.md` for details.
-
 ## Payloads
 
 - **Slack**: a Block Kit message with a header, a two-column field section

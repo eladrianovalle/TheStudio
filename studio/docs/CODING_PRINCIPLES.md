@@ -106,7 +106,8 @@ Building without a spec means the architecture gets decided implicitly, one comm
 - If the feature is **prompt-shaped** — its behavior lives in an agent's prompt, where no test can
   tell you it broke — the spec also writes down how you would know it works: a pass criterion agreed
   before the build, and a results file beside the spec that has to be filled in before anyone calls
-  the feature done.
+  the feature done — with a `verification_due` date 30 days out, so the promise of evidence cannot
+  sit unkept forever.
 - This is for features and meaningful changes, not every task. A one-line fix or an obvious tweak doesn't need a spec — use judgment, the same as everywhere else.
 
 The test: if someone asked "what are we building and why is it shaped this way?", is there an approved document that answers it — or does the answer only exist in your head and the diff?

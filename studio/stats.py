@@ -26,8 +26,9 @@ def parse_frontmatter(text: str) -> Dict[str, str]:
     back stripped.
 
     This is the one reader of spec frontmatter. ``tests/test_spec_verification.py``
-    calls it today and the dashboard below is next, so the two can never disagree about
-    what a spec says. It takes a string rather than a path to keep this module free of
+    calls it, and so does ``run_phase._shipped_spec_records``, which feeds the stats
+    dashboard — so the gate that demands these lines and the dashboard that prints them
+    can never disagree about what a spec says. It takes a string rather than a path to keep this module free of
     I/O — opening the file stays with the caller.
     """
     block = re.match(r"---\n(.*?)\n---", text, re.DOTALL)

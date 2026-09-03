@@ -237,8 +237,9 @@ def _violations(
     status = frontmatter.get("status", "")
     promised_evidence = _has_verification_section(spec_text)
 
-    # Rule 1: known status. A typo (`Shipped`, `ship`, `done`) would otherwise switch
-    # the two rules below off forever while the suite stayed green.
+    # Rule 1: known status. Every rule below branches on it, so a typo (`Shipped`,
+    # `ship`, `done`) would otherwise switch the rest of this convention off forever
+    # while the suite stayed green.
     if status not in _STATUSES:
         problems.append(
             f"specs/{spec_name} has `status: {status or '(missing)'}`, which is not one of "

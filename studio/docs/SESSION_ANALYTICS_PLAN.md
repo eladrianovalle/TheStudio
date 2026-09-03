@@ -160,8 +160,8 @@ Lowest-ceremony approach, added once a month of session records exists:
 ## Recommended first slice (when built)
 
 1. `session.json` at finalize (convergence, decisions, clarity delta).
-2. Ledger auto-append via `[outcomes] ledger_path`, soft-fail.
+2. Ledger auto-append via `[outcomes] ledger_path`, soft-fail. *(Retired — see the header.)*
 3. `stats` session-health block with the trends and the assumed-P0 nag.
 
 Defer: the `studio outcome` command and `--from-run` linking, any correlation
-analytics, all semantic/LLM-judged measures. `rate` stays exactly as-is.
+analytics, all semantic/LLM-judged measures. `rate` stays exactly as-is. *(`rate` has since been retired — see the header.)*

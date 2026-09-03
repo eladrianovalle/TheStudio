@@ -98,15 +98,19 @@ back out" trigger** so a bad one doesn't just quietly stay.
 
 ### The instruments we already have
 
-We don't need to build measurement — Studio ships it:
+Studio ships most of this, though two instruments named in the original plan have since been
+retired — `rate` and the outcomes ledger both depended on someone volunteering a score after every
+run, and nobody did. What replaced them is the `shipped_impact` / `shipped_changed` pair on a spec's
+frontmatter, which costs nothing extra because flipping a spec to `shipped` already demands it:
 
-- **`rate`** — a human 1–5 score per run, plus outcome capture (shipped yes/no, impact
-  major/minor, what it changed). This is the ground truth signal.
-- **`stats`** — the cross-run dashboard: verdicts, ratings, decision counts, session health.
+- **Spec frontmatter** — `shipped_impact` (none/minor/major) and `shipped_changed` (one line, in
+  plain words) on every spec claiming `shipped`. Enforced by the suite, so it cannot be skipped.
+- **`stats`** — the cross-run dashboard: verdicts, decision counts, session health, and the
+  shipped-features roll-up read off that frontmatter.
 - **`findings.json` + verifier verdicts** (R1) — structured, so the verifier's behavior is
   directly countable: confirm/unconfirm/uncertain rates, net confidence shift.
 - **`reviewer-concerns.md`** — the artifact trail from the forge editor.
-- **The outcomes ledger** — every run (rated or not) auto-appended to a central ledger.
+
 
 ### The per-mechanism scorecard
 
@@ -122,25 +126,28 @@ like, and the trigger that makes us tune or revert it.
 | Delta-trend alerts (R4, retired) | Alert fire rate vs. real regressions | Alerts fire when quality actually slips, and are quiet otherwise | Alert fatigue (fires on noise) or silence during a real slide | False-positive alerts 2 runs running → widen the persistence window or threshold |
 | Lone-critical override (R5) | How often it fires; whether the surfaced concern was real | Rescues a real serious concern the synthesis would've buried | Fires on non-critical findings and clutters the verdict | Human marks a lone-critical surfaced item as "not actually critical" repeatedly → tighten the critical bar |
 | Design slop-blacklist (R6) | Blacklist-hit count in design runs; human rating of design output | Design outputs read less generic; fewer blacklist phrases over time | Real, useful phrasing gets rejected as "slop" (false positives) | Human overrides a blacklist rejection as wrong → prune that entry |
-| Goodwill Reservoir (R7) | Score distribution; correlation of low scores with human dislike | Low scores land on outputs humans also dislike; the ledger explains why | Score is theater — uncorrelated with human judgment | Score and human rating diverge across ~10 design runs → the heuristic is mis-calibrated |
+| Goodwill Reservoir (R7) | Score distribution against the run's verdict and the spec's `shipped_impact` (`stats`) | Low scores land on design runs that get REJECTED or ship at `none`/`minor` impact; the ledger explains why | Score is theater — flat across the runs that ship well and the ones that don't | Score and the verdict / `shipped_impact` split diverge across ~10 design runs → the heuristic is mis-calibrated |
 
 ### The three top-line questions
 
 Underneath the per-mechanism detail, the aggregate "did borrowing from gstack make Studio better?"
 comes down to three numbers from `stats`, tracked forward against the pre-2026-07-16 baseline:
 
-1. **Human rating trend** (`rate`, 1–5). The bottom line. Are runs rated at least as useful as
-   before, once we have enough post-borrow runs to compare?
+1. **Shipped-feature trend** (spec frontmatter). The bottom line, and the honest replacement for
+   the human 1-5 rating this plan originally named: are runs still leading to specs that reach
+   `shipped`, and does `shipped_changed` describe something worth having?
 2. **Outcome quality** (shipped rate + impact). Are more runs leading to something that actually
    ships, and with major rather than minor impact?
-3. **Cost per unit of quality** (tokens/cost per run vs. rating). The verifier and the extra
-   discipline *add* work. That's only worth it if quality rises enough to justify the spend. If
-   cost climbs and ratings don't, a borrowing is a tax, not an upgrade.
+3. **Cost per unit of quality** (run volume and convergence vs. shipped impact). The verifier and
+   the extra discipline *add* work — visible as more runs, and as a higher median
+   iterations-to-verdict and rejection rate in `stats`'s session-health block. That's only worth it
+   if quality rises enough to justify the spend. If those climb while `shipped_impact` doesn't move
+   toward `major`, a borrowing is a tax, not an upgrade.
 
 ### Cadence and the honest exit
 
-- **Review every ~10 rated runs, or monthly**, whichever comes first — run `stats`, read the
-  alerts, skim the outcomes ledger.
+- **Review every ~10 recorded runs, or monthly**, whichever comes first — run `stats`, read the
+  verdict split and the session-health signals, skim the shipped-features block.
 - **The exit rule:** a borrowing that trips its trigger and doesn't recover after one tuning pass
   gets reverted. We took two of gstack's ideas by *refusing* or *reshaping* them; keeping that
   honesty means being willing to pull a shipped one back out if the numbers say so. A mechanism

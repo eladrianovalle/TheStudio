@@ -5,6 +5,9 @@ Configuration for the implementation writer/editor loop.
 Mirrors the ScopeConfig / load_scopes_config() pattern in scopes.py: a dataclass
 for the shipped config tables plus a loader with the tomllib/tomli fallback and a
 resolution chain (explicit path → .studio/ override → shipped default → defaults).
+The [gate] table is the exception: its commands come from the repo's detected stack
+profile, never from a shipped default, and load_loop_config refuses rather than falling
+back when nothing supplies a runnable test command.
 
 See studio/docs/IMPLEMENTATION_LOOP_SPEC.md §4 for the table shape.
 """

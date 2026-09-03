@@ -113,7 +113,7 @@ const WRITER_HANDOFF = {
         exit_code: { type: 'integer' },
       },
     },
-    static_ok: { type: 'boolean', description: 'ruff (or configured static check) clean' },
+    static_ok: { type: 'boolean', description: 'true only if every configured static_checks command is clean — the AND across them' },
     mvi_claimed: { type: 'boolean', description: 'writer\'s DECLARATION it finished a complete thought — a trigger, not a verdict' },
     mutation_check: {
       type: 'object',
