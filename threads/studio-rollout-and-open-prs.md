@@ -25,7 +25,7 @@ rollout to the two consuming repos still carrying a stale config — and Studio'
   `find-before-you-grep` (evidence unfilled).
 
 **In flight**
-- **PR #147** — the `/unstale` pass. 18 files, CI green, MERGEABLE, not merged as of 2026-09-02.
+- **PR #147** — the `/unstale` pass. 19 files, CI green, MERGEABLE, not merged as of 2026-09-02.
   Branch `chore/unstale-2026-09-02`, in the worktree at `/Users/orcpunk/Repos/_TheGameStudio-wt-static-checks`.
 
 **Next action**
