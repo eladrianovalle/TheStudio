@@ -56,6 +56,8 @@ const runDir = (u) => `.studio/output/impl_loop/${u.unit_id}`
 // from destruction on 2026-09-04. Here the file is merely untracked, so it shows in `git status`
 // and a plain `git worktree remove` refuses until someone has dealt with it.
 // Keep both of these ONE-LINERS: the JS test loader extracts consts with a single-line regex.
+// concernsDir must also stay ABOVE concernsPath: the loader prepends deps in the order the test
+// lists them, so a reordered deps array fails with a ReferenceError rather than a clear assertion.
 const concernsDir = 'reviewer-concerns'
 const concernsPath = (u) => `${concernsDir}/${u.unit_id}.md`
 
@@ -479,7 +481,9 @@ function collectReviewerConcerns(editor) {
 }
 const reviewerConcerns = collectReviewerConcerns(editor)
 if (reviewerConcerns.length) {
-  log(`Editor logged ${reviewerConcerns.length} unresolved concern(s) → ${concernsPath(unit)}`)
+  // Resolve the work dir here: the path the editor writes is relative to the tree it worked in,
+  // and this line is printed from wherever the workflow runs.
+  log(`Editor logged ${reviewerConcerns.length} unresolved concern(s) → ${unit.work_dir ? unit.work_dir + '/' : ''}${concernsPath(unit)}`)
 }
 if (unconfirmed.length) {
   // Name them: this is the reason the unit ships flagged. Each verdict and its evidence ride out in
