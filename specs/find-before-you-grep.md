@@ -2,7 +2,7 @@
 feature: Find before you grep — locate code with an index, quote it from the file
 slug: find-before-you-grep
 ticket: none
-status: approved
+status: shipped
 verification_due: 2026-09-30   # 30 days from approval
 studio_run: studio/output/tech/run_tech_20260821_191716
 # Leave the two below EMPTY until this spec flips to `shipped`, and keep their notes on
@@ -11,8 +11,8 @@ studio_run: studio/output/tech/run_tech_20260821_191716
 # satisfy the gate having edited nothing.
 # shipped_impact: one of none | minor | major — how much it changed downstream
 # shipped_changed: one line, in plain words, on what this actually changed
-shipped_impact:
-shipped_changed:
+shipped_impact: minor
+shipped_changed: Agents in a repo with a code index now look code up in it before grepping, and quote from the file at the address it returns rather than from the index's own summary.
 ---
 
 # Find Before You Grep — Architecture Spec
