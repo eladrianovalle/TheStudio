@@ -299,6 +299,10 @@ Summarize the same things in chat, in plain words, so the user can decide withou
 
   The baseline row should read "no". If the criterion was already met with the feature off, stop and
   say so: a feature that fixes a problem you could never trigger has not been shown to do anything.
+  **Before trusting either row, read `find-before-you-grep-eval-results.md`.** Four of its five runs
+  were void, and both failure modes generalise: a baseline is only a baseline if the behaviour under
+  test cannot reach the agent by another route (a skill, a hook, an MCP server, CLAUDE.md), and a
+  treatment is only a treatment if the file carrying it actually loads.
 
   ## What this doesn't prove
   Required — this section is the point of the file.
