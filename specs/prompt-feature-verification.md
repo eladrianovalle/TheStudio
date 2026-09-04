@@ -146,6 +146,12 @@ suite once this spec says `status: shipped` — every heading here needs an answ
 The baseline row should read "no". If the criterion was already met with the feature off, stop and
 say so: a feature that fixes a problem you could never trigger has not been shown to do anything.
 
+**Before trusting either row, check that neither arm was void.** Four of the six runs behind
+`specs/find-before-you-grep-eval-results.md` (in the Studio repo) were, and both failure modes
+generalise: a baseline is only a baseline if the behaviour under test cannot reach the agent by
+another route (a skill, a hook, an MCP server, CLAUDE.md), and a treatment is only a treatment if
+the file carrying it actually loads.
+
 ## What this doesn't prove
 Required — this section is the point of the file.
 - Did the criterion pass *as written*, un-rewritten after the fact? Name every number that moved the
