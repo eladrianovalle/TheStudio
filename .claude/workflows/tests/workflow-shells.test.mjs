@@ -71,7 +71,7 @@ test('collectReviewerConcerns defaults safely on a non-array field (never crashe
 // ---------------------------------------------------------------------------
 const unitCriteria = loadFunction('../implementation-loop.js', 'unitCriteria')
 const writerPrompt = loadFunction('../implementation-loop.js', 'writerPrompt', ['unitCriteria', 'staticCheckCommands', 'runDir', 'gitIn', 'workDirPreamble'])
-const editorPrompt = loadFunction('../implementation-loop.js', 'editorPrompt', ['unitCriteria', 'runDir', 'concernsPath', 'gitIn', 'workDirPreamble'])
+const editorPrompt = loadFunction('../implementation-loop.js', 'editorPrompt', ['unitCriteria', 'runDir', 'concernsDir', 'concernsPath', 'gitIn', 'workDirPreamble'])
 
 // A unit with no acceptance_criteria key at all — the shape every run had before this feature.
 const UNIT = {

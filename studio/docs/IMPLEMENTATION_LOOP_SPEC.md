@@ -229,6 +229,13 @@ shallow-merges over (mirrors `persona_overrides.py` and `role_overrides.py`).
   persist the unresolved issue into the artifact so a human (or the next unit) sees it. It keeps the
   loop one-way without throwing away the second agent's most valuable output.
 
+  One consequence of being untracked rather than gitignored: in a shared checkout (no `work_dir`),
+  a later unit's writer runs `git add -A`, so a concerns file left behind by an earlier unit gets
+  swept into that unit's commit. Nothing is lost — the file survives, which is the goal — but it
+  lands *committed*, where the editor's own `git commit -am` deliberately leaves it uncommitted so
+  it stays surfaced rather than buried. Deal with a concerns file before starting the next unit in
+  the same tree. A per-unit worktree does not have this problem: each unit gets its own tree.
+
 ### 4. Config: `implementation_loop.toml`
 
 Follows the `scopes.toml` + `ScopeConfig` pattern: same `[table]` shape, same
