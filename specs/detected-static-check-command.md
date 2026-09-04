@@ -261,7 +261,15 @@ snapshot still carries `static_checks = ["ruff"]`. `_Alfred` (`["make lint"]`) a
 The refusal is doing its job — the point is that nobody should meet it by surprise, mid-`/forge`, in
 a repo they did not know was stale. Studio's own shipped `config/implementation_loop.toml` has no
 `static_checks` line at all, so a plain `update` replaces the stale snapshot and detection supplies
-the command; no hand-editing is needed.
+the command.
+
+**"No hand-editing is needed" holds for one of the two repos, not both** (measured 2026-09-03, after
+units 1 and 2 shipped). `update` only rewrites a snapshot file it recorded itself: it refuses to
+clobber any installed file whose on-disk content has drifted from the SHA written at install time.
+`OrcPunk-biz`'s config has not drifted, so a plain `update` rewrites it and the refusal clears.
+`_Cerebro`'s has, along with eleven other installed files, so `update` returns BLOCKED there and
+`--force` is the only way through — which overwrites all twelve. Clearing `_Cerebro` therefore costs
+a review of what those local edits are, not just an `update`.
 
 **Acceptance criteria:**
 - [ ] Running `update` against a repo whose snapshot carries `static_checks = ["ruff"]` leaves a tree where `load_loop_config` returns `["ruff check {paths}"]` and raises nothing.

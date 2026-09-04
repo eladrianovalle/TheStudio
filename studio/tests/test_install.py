@@ -1277,3 +1277,30 @@ class TestRetiredCommandRemoval:
         assert "already up to date" not in out
         assert "Removed: 1 file(s)" in out
         assert "smoke.md" in out
+
+
+class TestLocalEditsDisplayPath:
+    """The clobber preview names the path a file actually sits at.
+
+    Source files live under `.studio/source/`, but the verbatim `.claude/`
+    commands and workflows install at the repo root — printing the source
+    prefix for those named a path that does not exist.
+    """
+
+    def test_source_file_gets_the_snapshot_prefix(self):
+        from run_phase import _installed_display_path
+
+        assert _installed_display_path("config/scopes.toml") == ".studio/source/config/scopes.toml"
+
+    def test_claude_command_keeps_its_repo_root_path(self):
+        from run_phase import _installed_display_path
+
+        assert _installed_display_path(".claude/commands/run-phase.md") == ".claude/commands/run-phase.md"
+
+    def test_display_path_matches_where_the_guard_looked(self, tmp_path):
+        """The label and the file the guard hashed must agree, or the message misleads."""
+        from install import _manifest_installed_path
+        from run_phase import _installed_display_path
+
+        for rel in ("config/scopes.toml", ".claude/commands/run-phase.md"):
+            assert _manifest_installed_path(tmp_path, rel) == tmp_path / _installed_display_path(rel)
