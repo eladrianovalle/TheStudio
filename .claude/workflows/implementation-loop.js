@@ -61,6 +61,13 @@ const runDir = (u) => `.studio/output/impl_loop/${u.unit_id}`
 const concernsDir = 'reviewer-concerns'
 const concernsPath = (u) => `${concernsDir}/${u.unit_id}.md`
 
+// concernsPath is relative to the tree the editor worked in; the loop logs it from wherever the
+// workflow itself runs, so a --work-dir run has to say which checkout that is. NOTE: a named
+// function, not an inline expression, so the JS shell tests can load and exercise both branches.
+function concernsDisplayPath(u) {
+  return `${u.work_dir ? u.work_dir + '/' : ''}${concernsPath(u)}`
+}
+
 // Every git command in this file is text an agent runs wherever its shell happens to be. When the
 // unit names a work_dir, pin git to it. The path is quoted so a directory with spaces survives.
 // Keep this a ONE-LINER: the JS test loader extracts consts with a single-line regex, and a
@@ -481,9 +488,7 @@ function collectReviewerConcerns(editor) {
 }
 const reviewerConcerns = collectReviewerConcerns(editor)
 if (reviewerConcerns.length) {
-  // Resolve the work dir here: the path the editor writes is relative to the tree it worked in,
-  // and this line is printed from wherever the workflow runs.
-  log(`Editor logged ${reviewerConcerns.length} unresolved concern(s) → ${unit.work_dir ? unit.work_dir + '/' : ''}${concernsPath(unit)}`)
+  log(`Editor logged ${reviewerConcerns.length} unresolved concern(s) → ${concernsDisplayPath(unit)}`)
 }
 if (unconfirmed.length) {
   // Name them: this is the reason the unit ships flagged. Each verdict and its evidence ride out in

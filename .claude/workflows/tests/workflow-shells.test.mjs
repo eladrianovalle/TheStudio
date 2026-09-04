@@ -65,6 +65,20 @@ test('collectReviewerConcerns defaults safely on a non-array field (never crashe
   assert.deepEqual(collectReviewerConcerns({ unresolved_concerns: 42 }), [])
 })
 
+// The path the loop PRINTS for those concerns. The editor writes it relative to the tree it worked
+// in, so the log line has to resolve the work dir or it points at the wrong checkout.
+const concernsDisplayPath = loadFunction('../implementation-loop.js', 'concernsDisplayPath', ['concernsDir', 'concernsPath'])
+
+test('concernsDisplayPath names the checkout when the unit ran in a work dir', () => {
+  assert.equal(concernsDisplayPath({ unit_id: 'unit_demo', work_dir: '/tmp/wt/unit_demo' }),
+    '/tmp/wt/unit_demo/reviewer-concerns/unit_demo.md')
+})
+
+test('concernsDisplayPath stays a bare relative path without a work dir', () => {
+  assert.equal(concernsDisplayPath({ unit_id: 'unit_demo' }), 'reviewer-concerns/unit_demo.md')
+  assert.equal(concernsDisplayPath({ unit_id: 'unit_demo', work_dir: undefined }), 'reviewer-concerns/unit_demo.md')
+})
+
 // ---------------------------------------------------------------------------
 // implementation-loop.js — acceptance criteria: the unit carries a list of checkable statements
 // and the editor grades each one. A spec-less run carries none and must behave exactly as before.
