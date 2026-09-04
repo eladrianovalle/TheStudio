@@ -113,7 +113,8 @@ below doesn't close it early — the spec file you write uses a normal three-bac
 feature: <human title>
 slug: <slug>
 ticket: <id-or-url, or "none">
-status: draft            # draft → approved (human approved it) → shipped (built AND verified)
+# status: draft → approved (a human approved it) → shipped (built AND verified)
+status: draft
 studio_run: <run_dir>    # the debate this spec came from
 # verification_due: the date the evidence is due (YYYY-MM-DD). Required once this spec is
 # `approved`, and only if it carries a `## Verification` section — no section, no deadline.
