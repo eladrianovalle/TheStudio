@@ -2674,6 +2674,19 @@ def _do_init(args: argparse.Namespace) -> None:
     print("NOTE: Start a NEW Claude Code session (not just /clear) to discover the commands.")
 
 
+def _installed_display_path(rel: str) -> str:
+    """Where a manifest key actually sits in the target repo, for display.
+
+    Mirrors install._manifest_installed_path: source files live under
+    ``.studio/source/``, but the verbatim ``.claude/`` commands and workflows
+    install at the repo root. Printing the source prefix for those named a path
+    that does not exist.
+    """
+    if rel.startswith(".claude/"):
+        return rel
+    return f".studio/source/{rel}"
+
+
 def _print_local_edits_preview(locally_modified: list) -> None:
     """Print the clobber preview: installed files the user edited that an update
     would overwrite. No-op when there are none. Shared so the preview shows in
@@ -2682,7 +2695,7 @@ def _print_local_edits_preview(locally_modified: list) -> None:
         return
     print(f"\n⚠️  {len(locally_modified)} installed file(s) have LOCAL EDITS that update would overwrite:")
     for rel in locally_modified:
-        print(f"   - .studio/source/{rel}")
+        print(f"   - {_installed_display_path(rel)}")
     print("   If any is project config, move it to <repo>/.studio/<name>.toml (update never")
     print("   touches that). update will refuse to clobber these unless run with --force.")
 
@@ -2831,7 +2844,7 @@ def _do_update(args: argparse.Namespace) -> None:
         mods = result["locally_modified"]
         print(f"Update BLOCKED: {len(mods)} installed file(s) have local edits that would be overwritten:")
         for rel in mods:
-            print(f"   - .studio/source/{rel}")
+            print(f"   - {_installed_display_path(rel)}")
         print("\nThese are edits to the Studio snapshot (it gets replaced on update). If any is")
         print("project config, move it to <repo>/.studio/<name>.toml — the project-override location")
         print(f"update never touches. To overwrite anyway: {_entrypoint()} update --target {target} --force")
