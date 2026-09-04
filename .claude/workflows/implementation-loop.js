@@ -50,6 +50,12 @@ const DEFAULT_UNIT = {
 }
 
 const runDir = (u) => `.studio/output/impl_loop/${u.unit_id}`
+// Reviewer concerns deliberately do NOT live under runDir. That path is gitignored and, for a unit
+// built in a per-unit worktree, it is deleted with the worktree — so the loop's one mechanism for
+// not losing critique lost it by default. Six concerns files were found one `git worktree remove`
+// from destruction on 2026-09-04. Here the file is merely untracked, so it shows in `git status`
+// and a plain `git worktree remove` refuses until someone has dealt with it.
+const concernsPath = (u) => `reviewer-concerns/${u.unit_id}.md`
 
 // Every git command in this file is text an agent runs wherever its shell happens to be. When the
 // unit names a work_dir, pin git to it. The path is quoted so a directory with spaces survives.
@@ -289,7 +295,9 @@ function editorPrompt(u, writer) {
     `(breaks_green | load_bearing | out_of_unit_scope), and the smallest suggested_followup that would resolve`,
     `it. This loop does not hand work back and forth, so this list is the ONLY place a valid-but-unactionable`,
     `critique survives. Leave it empty if there is genuinely nothing. If it is non-empty, also write it as a`,
-    `readable checklist to ${runDir(u)}/reviewer-concerns.md (one item per section: concern, why, follow-up).`,
+    `readable checklist to ${concernsPath(u)} (one item per section: concern, why, follow-up), creating the`,
+    `directory if needed. That path is deliberately outside the gitignored run directory so the file survives`,
+    `a worktree being removed.`,
     ``,
     ...(criteria.length ? [
       `Then render the verdict against the ACCEPTANCE CRITERIA from the approved spec — the definition of`,
@@ -469,7 +477,7 @@ function collectReviewerConcerns(editor) {
 }
 const reviewerConcerns = collectReviewerConcerns(editor)
 if (reviewerConcerns.length) {
-  log(`Editor logged ${reviewerConcerns.length} unresolved concern(s) → ${runDir(unit)}/reviewer-concerns.md`)
+  log(`Editor logged ${reviewerConcerns.length} unresolved concern(s) → ${concernsPath(unit)}`)
 }
 if (unconfirmed.length) {
   // Name them: this is the reason the unit ships flagged. Each verdict and its evidence ride out in

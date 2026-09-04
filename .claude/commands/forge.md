@@ -306,7 +306,8 @@ Summarize for the user:
 - **Reviewer concerns** (`reviewerConcerns`): if non-empty, list them — these are real problems the
   editor found but couldn't fix this pass (would break green, is load-bearing, or out of unit scope).
   They are NOT blockers on delivery, but they are the loop's most useful output when the editor had
-  to revert. Point at `.studio/output/impl_loop/<unit_id>/reviewer-concerns.md`.
+  to revert. Point at `reviewer-concerns/<unit_id>.md` — kept outside the gitignored run directory
+  so it survives the worktree being removed, and so it shows up in `git status` rather than silently.
 - Point to the handoff records under `.studio/output/impl_loop/<unit_id>/`.
 
 If `flagged` is true, make clear the unit did NOT pass the full gate (delivered for inspection,

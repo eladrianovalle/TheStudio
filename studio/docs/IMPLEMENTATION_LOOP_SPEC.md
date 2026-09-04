@@ -219,7 +219,12 @@ shallow-merges over (mirrors `persona_overrides.py` and `role_overrides.py`).
   `load_bearing` item, or falls outside the unit) would simply vanish on revert. So the editor
   records each such critique in `unresolved_concerns` — the concern (quoting what it's about), why
   it couldn't be resolved (`breaks_green` | `load_bearing` | `out_of_unit_scope`), and the smallest
-  follow-up that would — and writes them to `reviewer-concerns.md` in the run directory. This is the
+  follow-up that would — and writes them to `reviewer-concerns/<unit_id>.md`, deliberately **outside**
+  the gitignored run directory. That path was `.studio/output/impl_loop/<unit_id>/` until 2026-09-04,
+  which meant the loop's one mechanism for not losing critique was itself gitignored and, for a unit
+  built in a per-unit worktree, deleted with the worktree. Six concerns files were found one
+  `git worktree remove` from destruction. Untracked is the point: the file shows in `git status` and
+  a plain `git worktree remove` now refuses until someone has dealt with it. This is the
   same move gstack's plan-review loop makes when a writer/editor pair deadlocks: stop looping,
   persist the unresolved issue into the artifact so a human (or the next unit) sees it. It keeps the
   loop one-way without throwing away the second agent's most valuable output.
