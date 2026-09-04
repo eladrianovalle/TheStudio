@@ -46,7 +46,7 @@ Baseline swept with grep and never touched the index; treatment reached for it o
 opened files at the addresses it returned. Both criterion halves are met in treatment and (a) fails
 in baseline, which is what the criterion asks for.
 
-The three earlier rows are void and kept only so the record shows what was tried. The first pair had
+The four earlier rows are void and kept only so the record shows what was tried. The first pair had
 no working baseline: subagents inherit the session's skills rather than the working directory's, so
 this repo's graft skill — whose description is Studio's clause in different words — was in scope for
 both arms. The second pair had no working treatment: the clause lives in files that load only when
