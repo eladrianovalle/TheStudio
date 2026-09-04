@@ -262,4 +262,3 @@ loop's config chain, not to the wizard step.
 **Follow-up:** in `_project_artifact_root`, add the Studio-source-repo case the same way the
 installed case is handled — when the root is a package directory named `studio` whose parent holds
 the repo, return the parent — and cover it with a test in `test_impl_loop.py`.
-
