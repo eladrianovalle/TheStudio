@@ -1,5 +1,11 @@
 # Reviewer concerns — board_conversation
 
+> **Both concerns below were fixed in commit `5e214af`, in this same PR.** They are kept as written
+> because they are the editor pass doing its job — and because the first one is the more interesting
+> half: the vendor-name guard had a hole in the exact position a vendor name lands, and criterion 2
+> had already been graded `pass` against it. Read them as a record of what the loop caught, not as
+> open work.
+
 Two real problems the editor pass could not safely fix. Both were checked against the
 files, not inferred.
 
