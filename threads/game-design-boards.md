@@ -43,12 +43,16 @@ direction and file it under art. Eventually an instance watches each board and k
 **Done**
 - Tech run `run_tech_20260904_151044` complete; both contrarian passes returned REJECTED and both were
   acted on rather than argued with. `specs/game-design-board.md` merged in #148 and is **`approved`**
-  (#153), `verification_due: 2026-10-04`, evidence skeleton created empty beside it.
+  (#153), `verification_due: 2026-10-04`, evidence skeleton created empty beside it. #148 also fixed
+  the `/spec` template's own `status:` line, whose inline comment the spec-convention test read as the
+  value — until then every spec written from the template failed the suite on arrival.
 - **Unit 1 `board_conversation` is built — [PR #154](https://github.com/eladrianovalle/TheStudio/pull/154), 6/6 criteria pass, not flagged.** Ships
   `studio/docs/DESIGN_BOARD.md` + a 3-line conditional pointer in `CODING_PRINCIPLES.md` + one
   `SOURCE_FILES` entry. 1007 tests. Built in the worktree at
   `_TheGameStudio-wt/board-conversation` — **archive `reviewer-concerns/` and any `.studio/output/`
-  before removing it**, per [[feedback_worktree_removal_eats_run_artifacts]].
+  before removing it**, per the `feedback_worktree_removal_eats_run_artifacts` note in Claude's local
+  project memory for this repo (`~/.claude/projects/<TheGameStudio path>/memory/`) — not a file in this
+  repo.
 - The editor raised two concerns and **both were fixed in the same PR**, not deferred. The first is
   worth remembering: the vendor-name guard scanned line by line and skipped each line's first word as
   a sentence opener, but the docs are hard-wrapped, so a product name at the start of a wrapped line
