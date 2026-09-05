@@ -13,10 +13,8 @@ Two rules hold the rest up. **The board is the only place that says what the gam
 keeps a copy, a cache, a mirror or an index, because a copy starts lying the moment someone moves an
 item. And **the agent never claims anything about the game that it did not just read.**
 
-The repository names the actual tool, the board itself, and the destinations for writes, in its own
-`CLAUDE.md`. This document names none of them, the same way the find-before-you-grep rule leaves the
-naming of a code index to the repository that has one. Nothing parses that declaration; it is prose
-the agent reads.
+The repository names the actual tool, the board itself, and the destinations for writes in that same
+`CLAUDE.md`. Nothing parses that declaration; it is prose the agent reads.
 
 ## The order of operations
 

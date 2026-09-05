@@ -96,7 +96,7 @@ class TestDesignBoardDiscipline:
             "sequence, not a checklist"
         )
 
-    def test_the_structural_call_comes_before_any_content_read(self):
+    def test_locating_is_the_cheap_call_and_returns_only_addresses(self):
         """Locating is the free call; the content read is the one that costs."""
         text = _flat(_DESIGN_BOARD.read_text(encoding="utf-8"))
         assert "structural listing" in text
