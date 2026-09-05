@@ -41,16 +41,28 @@ direction and file it under art. Eventually an instance watches each board and k
   the watcher is scoped out of the first spec and should be built last.
 
 **Done**
-- Tech run `run_tech_20260904_151044` complete. Both scopes ran; both contrarian passes returned
-  REJECTED and both were acted on rather than argued with — the spec is written to their cuts.
-- **`specs/game-design-board.md` is up as draft PR #148.** Merging it is the approval; the flip to
-  `approved` lands after the merge, not in that PR. Two units: `board_conversation` ships first
-  (the whole discipline in a new `studio/docs/DESIGN_BOARD.md` plus a pointer and one `SOURCE_FILES`
-  entry), then `board_cited_spec`.
-- The `/spec` template's own `status:` line carried an inline comment the spec-convention test reads
-  as the value, so every spec written from it failed the suite on arrival. Fixed in #148.
-- An earlier run (`run_tech_20260904_144331`) was prepared with the wrong framing (read-only,
-  writing out of scope) and deleted before any agent ran.
+- Tech run `run_tech_20260904_151044` complete; both contrarian passes returned REJECTED and both were
+  acted on rather than argued with. `specs/game-design-board.md` merged in #148 and is **`approved`**
+  (#153), `verification_due: 2026-10-04`, evidence skeleton created empty beside it.
+- **Unit 1 `board_conversation` is built — [PR #154](https://github.com/eladrianovalle/TheStudio/pull/154), 6/6 criteria pass, not flagged.** Ships
+  `studio/docs/DESIGN_BOARD.md` + a 3-line conditional pointer in `CODING_PRINCIPLES.md` + one
+  `SOURCE_FILES` entry. 1007 tests. Built in the worktree at
+  `_TheGameStudio-wt/board-conversation` — **archive `reviewer-concerns/` and any `.studio/output/`
+  before removing it**, per [[feedback_worktree_removal_eats_run_artifacts]].
+- The editor raised two concerns and **both were fixed in the same PR**, not deferred. The first is
+  worth remembering: the vendor-name guard scanned line by line and skipped each line's first word as
+  a sentence opener, but the docs are hard-wrapped, so a product name at the start of a wrapped line
+  passed the only guard Studio has — and criterion 2 had already been graded `pass` against it. Now
+  scans blocks. The second: the pointer shipped to every consuming repo's CLAUDE.md while this repo's
+  own never gained it, invisible to the doc-parity mirror because that test only reads *numbered*
+  principles.
+
+**Next**
+- Merge #154, then unit 2 `board_cited_spec` (the `/spec` citation clause — small, depends on unit 1).
+- **Adriano: connect a board.** `claude mcp add --transport http miro https://mcp.miro.com/ --scope user`.
+  Everything shipped is inert until a repo declares one. The 2026-10-04 evidence deadline needs a real
+  board with real content, most likely in whichever repo holds the game — not this one, which has no
+  game design board.
 
 ## Settled by the alignment pass (2026-09-04)
 - **No cached structural map.** Cut. Its contents are exactly what Miro's `context_explore` returns,
