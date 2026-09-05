@@ -25,11 +25,14 @@ _VENDOR_UI_NOUNS = ("sticky", "stickies", "frame", "frames", "widget", "widgets"
 # and all-caps are in the pattern because board products are named that way as often
 # as not, and a pattern that only saw Capitalized would miss them.
 _PROPER_NOUN = re.compile(r"^[A-Z][A-Za-z]{2,}$")
-# A name in prose carries a possessive or heads a compound as readily as it stands
-# alone, and stripping only reaches the ends of a token, so cut the token at its
-# first apostrophe or hyphen before matching — otherwise a possessive and a
-# hyphenated compound both go unseen.
-_NAME_TAIL = re.compile(r"['‘’-].*$")
+# A name in prose carries a possessive or sits anywhere in a compound as readily as
+# it stands alone, and stripping only reaches the ends of a token, so split the token
+# on the separators that join words and match each part — cutting at the first
+# separator instead would only ever see the head, so `cross-Vendorname` would pass.
+# The cost is deliberate: an ordinary hyphenated term with a capitalized part will
+# trip the guard too. The assertion prints the token, so such a failure reads as
+# what it is rather than as a vendor name having shipped.
+_NAME_PARTS = re.compile(r"['‘’\-—–/]")
 _LEADING_MARKUP = re.compile(r"^[#>\-*\s0-9.)]+")
 # What starts a new block: a heading, a bullet, or a numbered item. Deliberately
 # narrower than _LEADING_MARKUP, which would also match a wrapped line that merely
@@ -90,9 +93,9 @@ def _mid_sentence_capitalized_words(text: str) -> list[str]:
             words = sentence.split()
             for word in words[1:]:
                 bare = word.strip("*_`\"'“”‘’(),.:;!?—–-")
-                bare = _NAME_TAIL.sub("", bare)
-                if _PROPER_NOUN.match(bare) and bare not in _ALLOWED_CAPITALIZED:
-                    found.append(bare)
+                for part in _NAME_PARTS.split(bare):
+                    if _PROPER_NOUN.match(part) and part not in _ALLOWED_CAPITALIZED:
+                        found.append(part)
     return found
 
 
@@ -207,6 +210,22 @@ class TestDesignBoardDiscipline:
             "and no Othername-style board changes that.\n"
         )
         assert _mid_sentence_capitalized_words(text) == ["Vendorname", "Othername"]
+
+    def test_the_guard_sees_a_name_anywhere_in_a_compound(self):
+        """A name is as likely to be the tail of a compound as its head, and it can be
+        joined by a slash or an em dash rather than a hyphen. Cutting the token at its
+        first separator only ever saw the head, so `cross-Vendorname` read as `cross`
+        and passed — the mirror image of the possessive miss."""
+        text = (
+            "The listing is the cheap call and no cross-Vendorname board changes that,\n"
+            "which is what Othername/Thirdname boards and a Fourthname—style one share.\n"
+        )
+        assert _mid_sentence_capitalized_words(text) == [
+            "Vendorname",
+            "Othername",
+            "Thirdname",
+            "Fourthname",
+        ]
 
     def test_the_guard_sees_a_vendor_name_in_a_wrapped_heading(self):
         """A heading wraps like anything else does. Emitting its first line as a block
