@@ -131,6 +131,17 @@ class TestInstallStudio:
         install_studio(target_dir, studio_dir)
         assert (target_dir / ".studio" / "source" / "docs" / "SCOPES_GUIDE.md").is_file()
 
+    def test_ships_design_board_discipline(self, target_dir, studio_dir):
+        """DESIGN_BOARD.md ships so the coding-principles pointer resolves in a
+        consuming repo, and it is checksummed so the clobber guard sees local edits."""
+        install_studio(target_dir, studio_dir)
+        installed = target_dir / ".studio" / "source" / "docs" / "DESIGN_BOARD.md"
+        assert installed.is_file()
+        manifest = json.loads((target_dir / ".studio" / "MANIFEST.json").read_text())
+        assert "docs/DESIGN_BOARD.md" in manifest
+        import hashlib
+        assert manifest["docs/DESIGN_BOARD.md"] == hashlib.sha256(installed.read_bytes()).hexdigest()
+
     def test_ships_implementation_loop(self, target_dir, studio_dir):
         """Install ships the writer/editor loop: source, config, command, workflow."""
         install_studio(target_dir, studio_dir)
