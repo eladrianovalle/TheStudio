@@ -32,13 +32,11 @@ decide an installed file must not be overwritten"), and asked to report its tool
 | Treatment, in-session subagent | clauses intact, graft skill in scope | 1 | yes | `graft_find_code` → `graft_find_all` → targeted `sed`. One blind `grep`, its only failed call. |
 | Baseline, clean room | clauses stripped, no skill/hooks/MCP | 1 | **no** | 13 calls, every one Bash. `ls`, then a broad `grep -rn` sweep, then `sed`. Never touched the index. |
 | Treatment, clean room | clauses *not loaded* — see below | 1 | **no** | 12 calls, every one Bash. `ls`, `grep -n "update"`, `grep -n "^def "`, then `sed`. Never touched the index. |
-
 | Baseline, clean room, `/spec` | clauses stripped, no skill/hooks/MCP, clause loaded via `/spec` | 1 | **no** | 7 calls, every one Bash. `ls`, a broad `grep -n` sweep of `install.py`, then `sed` at guessed line ranges. Never touched the index. |
+| Treatment, clean room, `/spec` | clauses intact, no skill/hooks/MCP, clause loaded via `/spec` | 1 | **yes** | 16 calls. Call 1 `ls` to orient, **call 2 `graft ask "…" --source`** — before any grep and before opening any file — then `sed`/`grep` at the spans it returned. Quotes taken from the files, not from the index output. |
 
 Tool-call orders were read off the session transcripts on disk, not taken from any session's own
 account of itself.
-
-| Treatment, clean room, `/spec` | clauses intact, no skill/hooks/MCP, clause loaded via `/spec` | 1 | **yes** | 16 calls. Call 1 `ls` to orient, **call 2 `graft ask "…" --source`** — before any grep and before opening any file — then `sed`/`grep` at the spans it returned. Quotes taken from the files, not from the index output. |
 
 **The last two rows are the measurement.** Same clean room, same question, same index, same
 `CLAUDE.md` naming the tool. The only difference between the two directories is the three clauses.
@@ -46,7 +44,7 @@ Baseline swept with grep and never touched the index; treatment reached for it o
 opened files at the addresses it returned. Both criterion halves are met in treatment and (a) fails
 in baseline, which is what the criterion asks for.
 
-The three earlier rows are void and kept only so the record shows what was tried. The first pair had
+The four earlier rows are void and kept only so the record shows what was tried. The first pair had
 no working baseline: subagents inherit the session's skills rather than the working directory's, so
 this repo's graft skill — whose description is Studio's clause in different words — was in scope for
 both arms. The second pair had no working treatment: the clause lives in files that load only when
