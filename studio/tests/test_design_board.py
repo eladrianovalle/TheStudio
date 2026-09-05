@@ -30,6 +30,36 @@ _SENTENCE_SPLIT = re.compile(r"(?<=[.:!?])\s+")
 _ALLOWED_CAPITALIZED = {"Studio"}
 
 
+def _prose_blocks(text: str) -> list[str]:
+    """The text as blocks, so a hard-wrapped sentence is scanned as one sentence.
+
+    Headings and bullets are each their own block; a paragraph is its wrapped lines
+    joined back into one. Scanning line by line instead would exempt the first word
+    of every wrapped line as if it opened a sentence, and since these docs are
+    hard-wrapped that is most lines — a product name landing there would pass the
+    only guard Studio has against naming a tool in shipped text.
+    """
+    blocks: list[str] = []
+    paragraph: list[str] = []
+
+    def flush() -> None:
+        if paragraph:
+            blocks.append(" ".join(paragraph))
+            paragraph.clear()
+
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            flush()
+        elif _LEADING_MARKUP.match(stripped):
+            flush()
+            blocks.append(stripped)
+        else:
+            paragraph.append(stripped)
+    flush()
+    return blocks
+
+
 def _mid_sentence_capitalized_words(text: str) -> list[str]:
     """Capitalized words that are not the first word of a sentence, heading or bullet.
 
@@ -37,8 +67,8 @@ def _mid_sentence_capitalized_words(text: str) -> list[str]:
     openers are skipped because every sentence starts with a capital.
     """
     found = []
-    for raw_line in text.splitlines():
-        line = _LEADING_MARKUP.sub("", raw_line.strip())
+    for block in _prose_blocks(text):
+        line = _LEADING_MARKUP.sub("", block)
         for sentence in _SENTENCE_SPLIT.split(line):
             words = sentence.split()
             for word in words[1:]:
@@ -108,6 +138,22 @@ class TestDesignBoardDiscipline:
         opening = _flat(_DESIGN_BOARD.read_text(encoding="utf-8").split("\n\n")[1])
         assert "applies only if this repository names a design board" in opening
         assert "inert" in opening
+
+    def test_the_guard_sees_a_vendor_name_at_the_start_of_a_wrapped_line(self):
+        """The shipped docs are hard-wrapped, so that position is the common one.
+
+        Scanning line by line exempted the first word of every line as a sentence
+        opener, which let a product name through exactly where it was most likely
+        to land. Pinned with a name Studio does not ship, so the fixture carries the
+        vendor and the tree does not.
+        """
+        wrapped = (
+            "Working against a design board\n"
+            "\n"
+            "Every turn that touches the board opens with the structural listing, which\n"
+            "Vendorname returns for free, before any content read is made.\n"
+        )
+        assert _mid_sentence_capitalized_words(wrapped) == ["Vendorname"]
 
     def test_names_no_board_vendor(self):
         """Studio's shipped text says 'a design board'; the consuming repo names the
