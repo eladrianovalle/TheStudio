@@ -25,6 +25,11 @@ _VENDOR_UI_NOUNS = ("sticky", "stickies", "frame", "frames", "widget", "widgets"
 # and all-caps are in the pattern because board products are named that way as often
 # as not, and a pattern that only saw Capitalized would miss them.
 _PROPER_NOUN = re.compile(r"^[A-Z][A-Za-z]{2,}$")
+# A name in prose carries a possessive or heads a compound as readily as it stands
+# alone, and stripping only reaches the ends of a token, so cut the token at its
+# first apostrophe or hyphen before matching — otherwise a possessive and a
+# hyphenated compound both go unseen.
+_NAME_TAIL = re.compile(r"['‘’-].*$")
 _LEADING_MARKUP = re.compile(r"^[#>\-*\s0-9.)]+")
 # What starts a new block: a heading, a bullet, or a numbered item. Deliberately
 # narrower than _LEADING_MARKUP, which would also match a wrapped line that merely
@@ -41,8 +46,8 @@ _ALLOWED_CAPITALIZED = {"Studio"}
 def _prose_blocks(text: str) -> list[str]:
     """The text as blocks, so a hard-wrapped sentence is scanned as one sentence.
 
-    A heading is its own block. A bullet or numbered item opens a block that its own
-    wrapped lines join, and a paragraph is its wrapped lines joined back into one.
+    A heading, a bullet or a numbered item each opens a block that its own wrapped
+    lines join, and a paragraph is its wrapped lines joined back into one.
     Scanning line by line instead would exempt the first word of every wrapped line
     as if it opened a sentence, and since these docs are hard-wrapped that is most
     lines — a product name landing there would pass the only guard Studio has
@@ -62,7 +67,7 @@ def _prose_blocks(text: str) -> list[str]:
             flush()
         elif _HEADING.match(stripped):
             flush()
-            blocks.append(stripped)
+            block.append(stripped)
         elif _BLOCK_START.match(stripped):
             flush()
             block.append(stripped)
@@ -85,6 +90,7 @@ def _mid_sentence_capitalized_words(text: str) -> list[str]:
             words = sentence.split()
             for word in words[1:]:
                 bare = word.strip("*_`\"'“”‘’(),.:;!?—–-")
+                bare = _NAME_TAIL.sub("", bare)
                 if _PROPER_NOUN.match(bare) and bare not in _ALLOWED_CAPITALIZED:
                     found.append(bare)
     return found
@@ -190,6 +196,27 @@ class TestDesignBoardDiscipline:
             "VendorName and VENDORNAME both have to be seen here.\n"
         )
         assert _mid_sentence_capitalized_words(text) == ["VendorName", "VENDORNAME"]
+
+    def test_the_guard_sees_a_name_carrying_a_possessive_or_heading_a_compound(self):
+        """Writing a product name as "the board's" or "board-style" is ordinary prose,
+        and stripping only reaches the ends of a token, so the name kept its tail and
+        failed the match — the same class of miss as a name that is not plainly
+        capitalized."""
+        text = (
+            "The listing is the cheap call, which is what Vendorname's model returns,\n"
+            "and no Othername-style board changes that.\n"
+        )
+        assert _mid_sentence_capitalized_words(text) == ["Vendorname", "Othername"]
+
+    def test_the_guard_sees_a_vendor_name_in_a_wrapped_heading(self):
+        """A heading wraps like anything else does. Emitting its first line as a block
+        on its own left the continuation to open a fresh paragraph, so its first word
+        got the sentence-opener exemption — the hole the bullets just lost."""
+        heading = (
+            "## Every turn opens with the structural listing that\n"
+            "Vendorname returns for free\n"
+        )
+        assert _mid_sentence_capitalized_words(heading) == ["Vendorname"]
 
     def test_names_no_board_vendor(self):
         """Studio's shipped text says 'a design board'; the consuming repo names the

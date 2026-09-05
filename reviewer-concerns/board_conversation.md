@@ -1,6 +1,8 @@
 # Reviewer concerns — board_conversation
 
-> **Both concerns below were fixed in commit `5e214af`, in this same PR.** They are kept as written
+> **Both concerns below are fixed in this PR.** Concern 2 was fixed in `5e214af`; concern 1 was
+> started there and finished across the later commits on this branch, as review passes found more of
+> the guard's edge cases. Diffing `5e214af` alone shows only half of it. They are kept as written
 > because they are the editor pass doing its job — and because the first one is the more interesting
 > half: the vendor-name guard had a hole in the exact position a vendor name lands, and criterion 2
 > had already been graded `pass` against it. Read them as a record of what the loop caught, not as
@@ -31,10 +33,11 @@ this unit, and the obvious fix — join the paragraph's lines before scanning �
 headings and bullets are fed to the same function, which is where the deliberate
 "title-case heading trips the scan" signal lives.
 
-**How it was fixed.** The text is split into blocks first — a heading is its own block, a
-bullet or numbered item opens a block its own wrapped lines join, and a paragraph is its
-lines joined by a space — and the existing per-sentence scan runs over each block. That
-closes the wrapped-line hole and leaves the heading behavior exactly as it is today.
+**How it was fixed.** The text is split into blocks first — a heading, a bullet or a numbered
+item each opens a block its own wrapped lines join, and a paragraph is its lines joined by a
+space — and the existing per-sentence scan runs over each block. That closes the wrapped-line
+hole and leaves a standalone heading fed to the scan exactly as it is today, so the
+title-case signal is unchanged.
 
 ## 2. Studio ships the pointer to other repos but never carries it itself
 
