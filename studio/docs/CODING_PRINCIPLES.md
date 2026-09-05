@@ -115,8 +115,8 @@ The test: if someone asked "what are we building and why is it shaped this way?"
 ## Design board
 
 If this repository keeps a design board, the discipline for reading from it and writing to it lives in
-`DESIGN_BOARD.md`: locate before you read, source every claim to a region you read this turn, and
-propose the exact item and destination before you write. A repository with no board can ignore it.
+`.studio/source/docs/DESIGN_BOARD.md`: locate before you read, source every claim to a region you read
+this turn, and propose the exact item and destination before you write. A repository with no board can ignore it.
 
 ---
 

@@ -12,6 +12,7 @@ from pathlib import Path
 _DOCS = Path(__file__).resolve().parent.parent / "docs"
 _DESIGN_BOARD = _DOCS / "DESIGN_BOARD.md"
 _CODING_PRINCIPLES = _DOCS / "CODING_PRINCIPLES.md"
+_DOCS_INDEX = _DOCS / "INDEX.md"
 
 # Nouns that belong to a particular board product's model rather than to boards in
 # general. Naming the tool is the consuming repo's job, so a shipped Studio doc that
@@ -20,9 +21,16 @@ _VENDOR_UI_NOUNS = ("sticky", "stickies", "frame", "frames", "widget", "widgets"
 
 # A product name is a proper noun, so look for proper nouns rather than for any
 # particular product — a test that hardcoded the vendor it forbids would name the
-# vendor in Studio's own tree, which is the thing being avoided.
-_PROPER_NOUN = re.compile(r"^[A-Z][a-z]{2,}$")
+# vendor in Studio's own tree, which is the thing being avoided. Internal capitals
+# and all-caps are in the pattern because board products are named that way as often
+# as not, and a pattern that only saw Capitalized would miss them.
+_PROPER_NOUN = re.compile(r"^[A-Z][A-Za-z]{2,}$")
 _LEADING_MARKUP = re.compile(r"^[#>\-*\s0-9.)]+")
+# What starts a new block: a heading, a bullet, or a numbered item. Deliberately
+# narrower than _LEADING_MARKUP, which would also match a wrapped line that merely
+# happens to begin with a digit and so would break that paragraph in two.
+_HEADING = re.compile(r"^#{1,6}\s")
+_BLOCK_START = re.compile(r"^([-*>]\s|\d+[.)]\s)")
 _SENTENCE_SPLIT = re.compile(r"(?<=[.:!?])\s+")
 
 # Capitalized words the shipped text is allowed to use mid-sentence: they name this
@@ -33,29 +41,33 @@ _ALLOWED_CAPITALIZED = {"Studio"}
 def _prose_blocks(text: str) -> list[str]:
     """The text as blocks, so a hard-wrapped sentence is scanned as one sentence.
 
-    Headings and bullets are each their own block; a paragraph is its wrapped lines
-    joined back into one. Scanning line by line instead would exempt the first word
-    of every wrapped line as if it opened a sentence, and since these docs are
-    hard-wrapped that is most lines — a product name landing there would pass the
-    only guard Studio has against naming a tool in shipped text.
+    A heading is its own block. A bullet or numbered item opens a block that its own
+    wrapped lines join, and a paragraph is its wrapped lines joined back into one.
+    Scanning line by line instead would exempt the first word of every wrapped line
+    as if it opened a sentence, and since these docs are hard-wrapped that is most
+    lines — a product name landing there would pass the only guard Studio has
+    against naming a tool in shipped text.
     """
     blocks: list[str] = []
-    paragraph: list[str] = []
+    block: list[str] = []
 
     def flush() -> None:
-        if paragraph:
-            blocks.append(" ".join(paragraph))
-            paragraph.clear()
+        if block:
+            blocks.append(" ".join(block))
+            block.clear()
 
     for raw_line in text.splitlines():
         stripped = raw_line.strip()
         if not stripped:
             flush()
-        elif _LEADING_MARKUP.match(stripped):
+        elif _HEADING.match(stripped):
             flush()
             blocks.append(stripped)
+        elif _BLOCK_START.match(stripped):
+            flush()
+            block.append(stripped)
         else:
-            paragraph.append(stripped)
+            block.append(stripped)
     flush()
     return blocks
 
@@ -155,11 +167,36 @@ class TestDesignBoardDiscipline:
         )
         assert _mid_sentence_capitalized_words(wrapped) == ["Vendorname"]
 
+    def test_the_guard_sees_a_vendor_name_in_a_wrapped_bullet(self):
+        """A bullet wraps like a paragraph does, so its continuation lines need the
+        same treatment — giving the bullet's first line its own block left the first
+        word of every continuation line exempt, which is the same hole one level in.
+        A paragraph line that merely opens with a digit is not a new block either."""
+        bullet = (
+            "- Every turn that touches the board opens with the structural listing,\n"
+            "  which Vendorname returns for free, before any content read.\n"
+            "\n"
+            "The listing is the cheap call and one read costs more than ten listings,\n"
+            "10 of which Othername still returns for free.\n"
+        )
+        assert _mid_sentence_capitalized_words(bullet) == ["Vendorname", "Othername"]
+
+    def test_the_guard_sees_a_name_that_is_not_plainly_capitalized(self):
+        """Board products are as often named with an internal capital or in all caps
+        as they are with a single leading capital, and a pattern that only saw the
+        last of those would let the other two ship."""
+        text = (
+            "The board is the only place that says what the game is, which is why\n"
+            "VendorName and VENDORNAME both have to be seen here.\n"
+        )
+        assert _mid_sentence_capitalized_words(text) == ["VendorName", "VENDORNAME"]
+
     def test_names_no_board_vendor(self):
         """Studio's shipped text says 'a design board'; the consuming repo names the
         tool in its own CLAUDE.md. This asserts the absence of the *category* — any
-        proper noun, plus the UI nouns that belong to one product's model — so the
-        test never has to write the vendor name it is forbidding."""
+        capitalized word standing mid-sentence, which is the shape a product name
+        takes, plus the UI nouns that belong to one product's model — so the test
+        never has to write the vendor name it is forbidding."""
         text = _DESIGN_BOARD.read_text(encoding="utf-8")
         lowered = text.lower()
         for noun in _VENDOR_UI_NOUNS:
@@ -170,6 +207,11 @@ class TestDesignBoardDiscipline:
             "DESIGN_BOARD.md carries a proper noun mid-sentence, which is how a "
             f"product name gets in: {_mid_sentence_capitalized_words(text)}"
         )
+
+    def test_is_listed_in_the_docs_index(self):
+        """INDEX.md is how someone finds a doc they don't already know about, so a
+        shipped doc missing from it is a doc nobody reads."""
+        assert "DESIGN_BOARD.md" in _DOCS_INDEX.read_text(encoding="utf-8")
 
     def test_writes_land_where_the_repo_designates(self):
         text = _flat(_DESIGN_BOARD.read_text(encoding="utf-8"))

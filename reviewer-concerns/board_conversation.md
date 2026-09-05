@@ -26,15 +26,15 @@ word gets the same exemption. A board vendor's name that happens to land at the 
 a wrapped line is not seen. That is roughly one word position in twelve going unchecked
 in the only guard Studio has against naming a tool in shipped text.
 
-**Why it is unresolved.** `_mid_sentence_capitalized_words()` is a load_bearing item for
+**Why the editor pass left it.** `_mid_sentence_capitalized_words()` is a load_bearing item for
 this unit, and the obvious fix — join the paragraph's lines before scanning — changes how
 headings and bullets are fed to the same function, which is where the deliberate
 "title-case heading trips the scan" signal lives.
 
-**Follow-up.** Split the text into blocks first (a heading or bullet is its own block, a
-paragraph is its lines joined by a space), then run the existing per-sentence scan over
-each block. That closes the wrapped-line hole and leaves the heading behavior exactly as
-it is today.
+**How it was fixed.** The text is split into blocks first — a heading is its own block, a
+bullet or numbered item opens a block its own wrapped lines join, and a paragraph is its
+lines joined by a space — and the existing per-sentence scan runs over each block. That
+closes the wrapped-line hole and leaves the heading behavior exactly as it is today.
 
 ## 2. Studio ships the pointer to other repos but never carries it itself
 
@@ -47,10 +47,9 @@ matching `^#{2,3} (\d+\. .+)$`, and the pointer is deliberately not numbered. Th
 exact drift the mirror test's own docstring warns about: "Studio starts telling other
 repos something it doesn't tell itself."
 
-**Why it is unresolved.** Out of this unit's scope — the fix is a change to the repo's
+**Why the editor pass left it.** Out of this unit's scope — the fix is a change to the repo's
 `CLAUDE.md`, which is not a file this unit touches, and the pointer's placement outside
 the numbered principles is a load_bearing decision that keeps the parity test green.
 
-**Follow-up.** Add the same three-line pointer to this repo's `CLAUDE.md` after principle
-7, or add one sentence to `TestCodingPrinciplesMirror`'s docstring saying that only the
-numbered principles are mirrored and unnumbered sections are shipped one way on purpose.
+**How it was fixed.** The same three-line pointer was added to this repo's `CLAUDE.md`
+after principle 7, so the invariant stays true rather than gaining a documented exception.
