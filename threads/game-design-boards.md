@@ -61,12 +61,30 @@ direction and file it under art. Eventually an instance watches each board and k
   own never gained it, invisible to the doc-parity mirror because that test only reads *numbered*
   principles.
 
+- **Unit 2 `board_cited_spec` is built and folded into the same PR.** Six lines in
+  `.claude/commands/spec.md`: name the board region you scoped against, never copy what you could
+  cite, and `/spec` never writes to the board. 4/4 criteria, no reviewer concerns, 1018 tests.
+- **The Build Plan is complete.** Both units in one PR. The spec stays `approved` until the evidence
+  file is filled, which needs a live board.
+
+Two things verified by hand rather than trusted, because a green test can lie: the vendor guard is
+*reused* (exactly one definition of `_mid_sentence_capitalized_words` in the tree, not a second weaker
+copy), and it actually bites on the new clause — poisoned the clause with a real vendor name, watched
+the test red, restored.
+
+**One PR per unit of work, no stacking.** Unit 2 was briefly opened as a PR targeting unit 1's branch,
+with a third PR for this note. That is how work gets orphaned: if the base PR is closed or rebased, the
+stacked one is stranded. Both were folded into the single PR and closed. Fix a PR *on* that PR.
+
 **Next**
-- Merge #154, then unit 2 `board_cited_spec` (the `/spec` citation clause — small, depends on unit 1).
+- **Merge the one open PR.** Everything else waits on it.
 - **Adriano: connect a board.** `claude mcp add --transport http miro https://mcp.miro.com/ --scope user`.
-  Everything shipped is inert until a repo declares one. The 2026-10-04 evidence deadline needs a real
-  board with real content, most likely in whichever repo holds the game — not this one, which has no
-  game design board.
+  Both units ship inert until a repo declares one, and the **2026-10-04** evidence deadline needs a real
+  board with real content — in whichever repo holds the game, not this one. If that is not realistic by
+  then, say so and the date moves rather than the suite going red on someone mid-push.
+- Worktrees still holding artifacts: `_TheGameStudio-wt/board-conversation` and
+  `_TheGameStudio-wt/board-cited-spec`. Check `git -C <wt> status --porcelain --ignored | grep '^!!'`
+  before removing either, per [[feedback_worktree_removal_eats_run_artifacts]].
 
 ## Settled by the alignment pass (2026-09-04)
 - **No cached structural map.** Cut. Its contents are exactly what Miro's `context_explore` returns,
