@@ -75,8 +75,13 @@ weaker copy), and it actually bites on the new clause — poisoned the clause wi
 watched the test red, restored.
 
 **Next**
-- **Merge #154, then #156.** Everything is blocked behind #154, which has been green and idle since
-  2026-09-05 with no review comments after the disposition posted that day.
+- **Merge #154 — but not #156 yet.** #154 has been green and idle since 2026-09-05 with no review
+  comments after the disposition posted that day. #156 was **rejected** at `27d9159`: its `/spec`
+  clause sends readers to `studio/docs/DESIGN_BOARD.md`, a path that only exists in this source
+  checkout, so an installed run is told to read a discipline it cannot open. It needs the installed
+  `.studio/source/docs/` path — and a test asserting *that* path, since the current one locks in the
+  source-repo path and passes while the command stays broken for consumers — before merge order
+  matters again.
 - **Adriano: connect a board.** `claude mcp add --transport http miro https://mcp.miro.com/ --scope user`.
   Both units ship inert until a repo declares one, and the **2026-10-04** evidence deadline needs a real
   board with real content — in whichever repo holds the game, not this one.
