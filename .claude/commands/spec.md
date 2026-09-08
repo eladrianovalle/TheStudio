@@ -52,6 +52,12 @@ discovery and throughout the debate, before grepping or opening files blind. It 
 what — open the file at the returned `file:line` and quote what you read there. An index summary or
 an inlined source excerpt is not evidence, however sufficient the tool says it is.
 
+**Scoping against a design board:** if this repo names a design board, name the board region you
+scoped the feature against, and never copy board content the spec could cite instead — the board is
+the only place that says what the game is, so a copy becomes a second source that goes stale the
+moment the board moves, while a citation stays true. `/spec` never writes to the board: scoping is
+read-only. The discipline the reads follow is `studio/docs/DESIGN_BOARD.md`.
+
 ### Step 1: Resolve the spec's identity
 
 Before running anything, settle where this spec lives and what it's tied to:

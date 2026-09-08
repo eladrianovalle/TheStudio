@@ -3,8 +3,9 @@
 The discipline is prompt-shaped: no test can tell us an agent actually locates
 before it reads. What a test *can* hold is the shape of the shipped text — that
 the six rules are present and in order, that the discipline stays conditional,
-that it names no board vendor, and that the pointer in the coding principles
-stays a pointer instead of growing into a section.
+that it names no board vendor, that the pointer in the coding principles stays a
+pointer instead of growing into a section, and that the board-citation clause in
+`/spec` tells a spec to cite a board region rather than copy it.
 """
 import re
 from pathlib import Path
@@ -13,6 +14,15 @@ _DOCS = Path(__file__).resolve().parent.parent / "docs"
 _DESIGN_BOARD = _DOCS / "DESIGN_BOARD.md"
 _CODING_PRINCIPLES = _DOCS / "CODING_PRINCIPLES.md"
 _DOCS_INDEX = _DOCS / "INDEX.md"
+
+# CI runs pytest from studio/, so the command file is reached from the repo root.
+_SPEC_COMMAND = Path(__file__).resolve().parents[2] / ".claude" / "commands" / "spec.md"
+
+# The bold label opening the board-citation clause, and the one opening the clause
+# it was modelled on. Both paragraphs are found by label rather than by position, so
+# reordering the Instructions section does not break these tests.
+_BOARD_CLAUSE_LABEL = "**Scoping against a design board:**"
+_CODE_INDEX_CLAUSE_LABEL = "**Finding code:**"
 
 # Nouns that belong to a particular board product's model rather than to boards in
 # general. Naming the tool is the consuming repo's job, so a shipped Studio doc that
@@ -106,6 +116,25 @@ def _flat(text: str) -> str:
     line break. Collapsing first makes the assertions about wording, not wrapping.
     """
     return re.sub(r"\s+", " ", text)
+
+
+def _spec_command_paragraph(label: str) -> str:
+    """The one paragraph of `.claude/commands/spec.md` that opens with ``label``.
+
+    Scoped to a single paragraph on purpose: spec.md names Studio's own machinery
+    from top to bottom, so running the vendor guard over the whole file would say
+    nothing about the clause this unit ships.
+    """
+    paragraphs = [
+        block
+        for block in _SPEC_COMMAND.read_text(encoding="utf-8").split("\n\n")
+        if block.lstrip().startswith(label)
+    ]
+    assert len(paragraphs) == 1, (
+        f"expected exactly one paragraph opening with {label!r} in spec.md, "
+        f"found {len(paragraphs)}"
+    )
+    return paragraphs[0].strip()
 
 
 def _pointer_lines() -> list[str]:
@@ -302,3 +331,61 @@ class TestCodingPrinciplesPointer:
         text = _CODING_PRINCIPLES.read_text(encoding="utf-8")
         assert text.index("## 7. Spec Before Build") < text.index("## Design board")
         assert not re.search(r"^## \d+\. Design board", text, re.M)
+
+
+class TestSpecBoardCitationClause:
+    """.claude/commands/spec.md — what /spec does when the repo has a board."""
+
+    def test_names_the_region_and_never_copies_what_it_could_cite(self):
+        """The board is the only place that says what the game is, so a copy inside a
+        spec is a second source that starts lying as soon as the board moves."""
+        clause = _flat(_spec_command_paragraph(_BOARD_CLAUSE_LABEL))
+        assert "name the board region you scoped the feature against" in clause
+        assert "never copy board content the spec could cite instead" in clause
+        assert "a citation stays true" in clause
+
+    def test_says_spec_never_writes_to_the_board(self):
+        """Scoping is a read. Writing to the board is a different capability, and a
+        spec run that quietly wrote to it would put unproposed items on the board."""
+        clause = _flat(_spec_command_paragraph(_BOARD_CLAUSE_LABEL))
+        assert "`/spec` never writes to the board" in clause
+        assert "read-only" in clause
+
+    def test_is_conditional_like_the_clause_it_was_modelled_on(self):
+        """A repo that declares no board has to run exactly as it does today, so the
+        clause opens with the same 'if this repo' test the code-index clause uses."""
+        clause = _flat(_spec_command_paragraph(_BOARD_CLAUSE_LABEL))
+        code_index = _flat(_spec_command_paragraph(_CODE_INDEX_CLAUSE_LABEL))
+        assert code_index.startswith(f"{_CODE_INDEX_CLAUSE_LABEL} if this repo "), (
+            "the code-index clause no longer opens conditionally, so the board clause "
+            "has nothing to match — check both"
+        )
+        assert clause.startswith(f"{_BOARD_CLAUSE_LABEL} if this repo names a design board,"), (
+            "the board clause reads as an unconditional instruction; a repo with no "
+            "board would follow it anyway"
+        )
+
+    def test_names_no_board_vendor(self):
+        """Same guard the shipped doc gets: the consuming repo names the tool in its
+        own CLAUDE.md, and Studio's text says 'a design board'."""
+        clause = _spec_command_paragraph(_BOARD_CLAUSE_LABEL)
+        lowered = clause.lower()
+        for noun in _VENDOR_UI_NOUNS:
+            assert not re.search(rf"\b{noun}\b", lowered), (
+                f"the /spec board clause uses {noun!r}, a noun from one board "
+                "product's model"
+            )
+        assert not _mid_sentence_capitalized_words(clause), (
+            "the /spec board clause carries a proper noun mid-sentence, which is how "
+            f"a product name gets in: {_mid_sentence_capitalized_words(clause)}"
+        )
+
+    def test_points_at_the_discipline_instead_of_restating_it(self):
+        """The six rules live in one place. A clause that grew its own copy of them
+        would be the second source this whole design exists to prevent."""
+        clause = _spec_command_paragraph(_BOARD_CLAUSE_LABEL)
+        assert "studio/docs/DESIGN_BOARD.md" in clause
+        assert len(clause.splitlines()) <= 6, (
+            "the /spec board clause has grown past six lines; the discipline belongs "
+            "in DESIGN_BOARD.md, not in the command"
+        )
