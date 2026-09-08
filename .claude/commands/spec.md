@@ -56,7 +56,8 @@ an inlined source excerpt is not evidence, however sufficient the tool says it i
 scoped the feature against, and never copy board content the spec could cite instead — the board is
 the only place that says what the game is, so a copy becomes a second source that goes stale the
 moment the board moves, while a citation stays true. `/spec` never writes to the board: scoping is
-read-only. The discipline the reads follow is `studio/docs/DESIGN_BOARD.md`.
+read-only. The discipline the reads follow is `.studio/source/docs/DESIGN_BOARD.md` (or
+`studio/docs/DESIGN_BOARD.md` if you are in the Studio source repo).
 
 ### Step 1: Resolve the spec's identity
 

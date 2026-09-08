@@ -378,7 +378,12 @@ class TestSpecBoardCitationClause:
         """The six rules live in one place. A clause that grew its own copy of them
         would be the second source this whole design exists to prevent."""
         clause = _spec_command_paragraph(_BOARD_CLAUSE_LABEL)
-        assert "studio/docs/DESIGN_BOARD.md" in clause
+        # The installed path first: this command is copied verbatim into consuming
+        # repos, where Studio's docs live under `.studio/source/docs/` and the source
+        # tree's own `studio/docs/` does not exist. Asserting only the source-repo
+        # path would go green here while an installed `/spec` had nothing to read.
+        assert ".studio/source/docs/DESIGN_BOARD.md" in clause
+        assert "`studio/docs/DESIGN_BOARD.md`" in clause
         assert len(clause.splitlines()) <= 6, (
             "the /spec board clause has grown past six lines; the discipline belongs "
             "in DESIGN_BOARD.md, not in the command"
