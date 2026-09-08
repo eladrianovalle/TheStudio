@@ -18,11 +18,10 @@ _DOCS_INDEX = _DOCS / "INDEX.md"
 # CI runs pytest from studio/, so the command file is reached from the repo root.
 _SPEC_COMMAND = Path(__file__).resolve().parents[2] / ".claude" / "commands" / "spec.md"
 
-# The bold label opening the board-citation clause, and the one opening the clause
-# it was modelled on. Both paragraphs are found by label rather than by position, so
-# reordering the Instructions section does not break these tests.
+# The bold label opening the board-citation clause. The paragraph is found by its
+# label rather than by position, so reordering the Instructions section does not
+# break these tests.
 _BOARD_CLAUSE_LABEL = "**Scoping against a design board:**"
-_CODE_INDEX_CLAUSE_LABEL = "**Finding code:**"
 
 # Nouns that belong to a particular board product's model rather than to boards in
 # general. Naming the tool is the consuming repo's job, so a shipped Studio doc that
@@ -351,15 +350,10 @@ class TestSpecBoardCitationClause:
         assert "`/spec` never writes to the board" in clause
         assert "read-only" in clause
 
-    def test_is_conditional_like_the_clause_it_was_modelled_on(self):
+    def test_is_conditional_on_the_repo_having_a_board(self):
         """A repo that declares no board has to run exactly as it does today, so the
-        clause opens with the same 'if this repo' test the code-index clause uses."""
+        clause opens with an 'if this repo' test rather than a flat instruction."""
         clause = _flat(_spec_command_paragraph(_BOARD_CLAUSE_LABEL))
-        code_index = _flat(_spec_command_paragraph(_CODE_INDEX_CLAUSE_LABEL))
-        assert code_index.startswith(f"{_CODE_INDEX_CLAUSE_LABEL} if this repo "), (
-            "the code-index clause no longer opens conditionally, so the board clause "
-            "has nothing to match — check both"
-        )
         assert clause.startswith(f"{_BOARD_CLAUSE_LABEL} if this repo names a design board,"), (
             "the board clause reads as an unconditional instruction; a repo with no "
             "board would follow it anyway"
