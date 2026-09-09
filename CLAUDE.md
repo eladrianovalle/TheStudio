@@ -116,6 +116,12 @@ Building without a spec means the architecture gets decided implicitly, one comm
 
 The test: if someone asked "what are we building and why is it shaped this way?", is there an approved document that answers it — or does the answer only exist in your head and the diff?
 
+### Design board
+
+If this repository keeps a design board, the discipline for reading from it and writing to it lives in
+`studio/docs/DESIGN_BOARD.md`: locate before you read, source every claim to a region you read this turn,
+and propose the exact item and destination before you write. A repository with no board can ignore it.
+
 ---
 
 *Adapted from [Andrej Karpathy's coding principles](https://github.com/forrestchang/andrej-karpathy-skills).*

@@ -67,6 +67,7 @@ SOURCE_FILES = [
     "config/implementation_loop.toml",
     "docs/STUDIO_BRIDGE_TEMPLATE.md",
     "docs/CODING_PRINCIPLES.md",
+    "docs/DESIGN_BOARD.md",
     "docs/SCOPES_GUIDE.md",
 ]
 

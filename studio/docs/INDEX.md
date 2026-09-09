@@ -8,6 +8,7 @@
 - **[AGENTS_REFERENCE.md](./AGENTS_REFERENCE.md)** - Agent roles and personas
 - **[API.md](./API.md)** - CLI reference for `run_phase.py`
 - **[CODING_PRINCIPLES.md](./CODING_PRINCIPLES.md)** - Karpathy-inspired coding principles (injected into target CLAUDE.md on install)
+- **[DESIGN_BOARD.md](./DESIGN_BOARD.md)** - Working against a design board: locate before you read, source every claim to a region read this turn (shipped to consuming repos; inert in a repo that names no board)
 - **[RUN_PHASE_SPLIT_PLAN.md](./RUN_PHASE_SPLIT_PLAN.md)** - Deferred plan for decomposing `run_phase.py` (config_loading + stats already extracted)
 - **[SESSION_ANALYTICS_PLAN.md](./SESSION_ANALYTICS_PLAN.md)** - Auto session-health metrics: design + status (first slice shipped: `session.json` at finalize and the `stats` session-health block; `studio outcome` + session linking still deferred)
 - **[GSTACK_COMPARISON.md](./GSTACK_COMPARISON.md)** - Study of garrytan/gstack: what Studio borrowed, why, and the (completed) roadmap
