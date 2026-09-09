@@ -158,6 +158,9 @@ Follow the diagram with a short prose walk-through of what it shows.
 
 ## How It Works (Technical)
 The precise detail an engineer builds from:
+- **Scoped from** — when this feature was scoped against a design board, name the board region it
+  came from, so a reader can go back to the source. Cite it; never copy what the board already says.
+  Omit this line entirely when there was no board.
 - **Components / modules** and each one's responsibility.
 - **Data flow** — the path of a request/event through the system.
 - **Interfaces & contracts** — key APIs, function signatures, message/event shapes.

@@ -41,7 +41,7 @@ _PROPER_NOUN = re.compile(r"^[A-Z][A-Za-z]{2,}$")
 # The cost is deliberate: an ordinary hyphenated term with a capitalized part will
 # trip the guard too. The assertion prints the token, so such a failure reads as
 # what it is rather than as a vendor name having shipped.
-_NAME_PARTS = re.compile(r"['‘’\-—–/]")
+_NAME_PARTS = re.compile(r"['‘’\-—–/._+]")
 _LEADING_MARKUP = re.compile(r"^[#>\-*\s0-9.)]+")
 # What starts a new block: a heading, a bullet, or a numbered item. Deliberately
 # narrower than _LEADING_MARKUP, which would also match a wrapped line that merely
@@ -53,6 +53,36 @@ _SENTENCE_SPLIT = re.compile(r"(?<=[.:!?])\s+")
 # Capitalized words the shipped text is allowed to use mid-sentence: they name this
 # project and its own documents, not a third-party product.
 _ALLOWED_CAPITALIZED = {"Studio"}
+
+
+_CODE_SPAN = re.compile(r"`[^`]*`")
+
+
+def _without_code_spans(text: str) -> str:
+    """The text with inline code spans blanked out.
+
+    A backticked token is a path or an identifier the docs name on purpose —
+    `DESIGN_BOARD.md`, `CLAUDE.md`. Splitting a name on `.` and `_` (which is what
+    catches a product named by its domain) would otherwise report every one of them.
+    Prose is where a product name actually shows up, so prose is what gets scanned.
+    """
+    return _CODE_SPAN.sub(" ", text)
+
+
+def _code_span_names(text: str) -> list[str]:
+    """Proper nouns standing alone inside a code span.
+
+    Blanking code spans keeps a path like `DESIGN_BOARD.md` from being split into
+    parts and reported, but it would also hide a vendor name someone backticked. So
+    each span is matched WHOLE, without splitting: a path carries a `.` or a `_` and
+    cannot match, while a bare product name can.
+    """
+    found = []
+    for span in _CODE_SPAN.findall(text):
+        bare = span.strip("`").strip()
+        if _PROPER_NOUN.match(bare) and bare not in _ALLOWED_CAPITALIZED:
+            found.append(bare)
+    return found
 
 
 def _prose_blocks(text: str) -> list[str]:
@@ -95,8 +125,8 @@ def _mid_sentence_capitalized_words(text: str) -> list[str]:
     A capital in that position is how a product name shows up in prose. Sentence
     openers are skipped because every sentence starts with a capital.
     """
-    found = []
-    for block in _prose_blocks(text):
+    found = _code_span_names(text)
+    for block in _prose_blocks(_without_code_spans(text)):
         line = _LEADING_MARKUP.sub("", block)
         for sentence in _SENTENCE_SPLIT.split(line):
             words = sentence.split()
@@ -238,6 +268,37 @@ class TestDesignBoardDiscipline:
             "and no Othername-style board changes that.\n"
         )
         assert _mid_sentence_capitalized_words(text) == ["Vendorname", "Othername"]
+
+    def test_the_guard_sees_a_backticked_name_but_not_a_backticked_path(self):
+        """Excluding code spans closed a false-positive; this keeps it from opening a hole.
+
+        Splitting on `.` and `_` reports the parts of every path these docs name, so
+        code spans are excluded from the split. A span is still matched WHOLE, which a
+        path cannot pass (it carries the separator) and a bare product name can.
+        """
+        assert _mid_sentence_capitalized_words(
+            "The discipline lives in `DESIGN_BOARD.md` here"
+        ) == []
+        assert _mid_sentence_capitalized_words(
+            "The tool is `Vendorname` here"
+        ) == ["Vendorname"]
+
+    def test_the_guard_sees_a_name_joined_by_a_dot_underscore_or_plus(self):
+        """A board product named by its domain is a natural way to write it in prose.
+
+        Three review passes flagged this class one separator at a time. `.` `_` and
+        `+` are in the split now, so a name joined by any of them is seen whole
+        rather than hidden by the character next to it. Fixture names only.
+        """
+        assert _mid_sentence_capitalized_words(
+            "The board tool Vendorname.com is named here"
+        ) == ["Vendorname"]
+        assert _mid_sentence_capitalized_words(
+            "A Vendorname_board sits here"
+        ) == ["Vendorname"]
+        assert _mid_sentence_capitalized_words(
+            "Use Vendorname+Othername here"
+        ) == ["Vendorname", "Othername"]
 
     def test_the_guard_sees_a_name_anywhere_in_a_compound(self):
         """A name is as likely to be the tail of a compound as its head, and it can be
@@ -384,7 +445,10 @@ class TestSpecBoardCitationClause:
         # path would go green here while an installed `/spec` had nothing to read.
         assert ".studio/source/docs/DESIGN_BOARD.md" in clause
         assert "`studio/docs/DESIGN_BOARD.md`" in clause
-        assert len(clause.splitlines()) <= 6, (
-            "the /spec board clause has grown past six lines; the discipline belongs "
-            "in DESIGN_BOARD.md, not in the command"
+        # A word budget, not a line count: nothing enforces this file's wrap, so
+        # rewrapping the identical text at a different width would fail a line bound
+        # while saying the clause had grown. Words track what is actually meant.
+        assert len(clause.split()) <= 110, (
+            f"the /spec board clause is {len(clause.split())} words; the discipline "
+            "belongs in DESIGN_BOARD.md, not in the command"
         )

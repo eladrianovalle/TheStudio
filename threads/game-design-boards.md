@@ -48,7 +48,7 @@ direction and file it under art. Eventually an instance watches each board and k
   value — until then every spec written from the template failed the suite on arrival.
 - **Unit 1 `board_conversation` is built — [PR #154](https://github.com/eladrianovalle/TheStudio/pull/154), 6/6 criteria pass, not flagged.** Ships
   `studio/docs/DESIGN_BOARD.md` + a 3-line conditional pointer in `CODING_PRINCIPLES.md` + one
-  `SOURCE_FILES` entry. 1007 tests. Built in the worktree at
+  `SOURCE_FILES` entry. Built in the worktree at
   `_TheGameStudio-wt/board-conversation` — **archive `reviewer-concerns/` and any `.studio/output/`
   before removing it**, per the `feedback_worktree_removal_eats_run_artifacts` note in Claude's local
   project memory for this repo (`~/.claude/projects/<TheGameStudio path>/memory/`) — not a file in this
@@ -63,7 +63,7 @@ direction and file it under art. Eventually an instance watches each board and k
 
 - **Unit 2 `board_cited_spec` is built and folded into the same PR.** Six lines in
   `.claude/commands/spec.md`: name the board region you scoped against, never copy what you could
-  cite, and `/spec` never writes to the board. 4/4 criteria, no reviewer concerns, 1018 tests.
+  cite, and `/spec` never writes to the board. 4/4 criteria, no reviewer concerns. Suite at 1018 when both units landed.
 - **The Build Plan is complete.** Both units in one PR. The spec stays `approved` until the evidence
   file is filled, which needs a live board.
 
@@ -84,7 +84,7 @@ stacked one is stranded. Both were folded into the single PR and closed. Fix a P
   then, say so and the date moves rather than the suite going red on someone mid-push.
 - Worktrees still holding artifacts: `_TheGameStudio-wt/board-conversation` and
   `_TheGameStudio-wt/board-cited-spec`. Check `git -C <wt> status --porcelain --ignored | grep '^!!'`
-  before removing either, per [[feedback_worktree_removal_eats_run_artifacts]].
+  before removing either, per `feedback_worktree_removal_eats_run_artifacts` (Claude's local project memory, not a file in this repo).
 
 ## Settled by the alignment pass (2026-09-04)
 - **No cached structural map.** Cut. Its contents are exactly what Miro's `context_explore` returns,
