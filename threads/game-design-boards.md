@@ -1,9 +1,9 @@
 ---
 type: thread
-status: active
+status: done
 slug: game-design-boards
 created: 2026-09-04
-updated: 2026-09-04
+updated: 2026-09-09
 ---
 
 # Game Design Boards: make the GDB Studio's live working surface
@@ -76,15 +76,23 @@ the test red, restored.
 with a third PR for this note. That is how work gets orphaned: if the base PR is closed or rebased, the
 stacked one is stranded. Both were folded into the single PR and closed. Fix a PR *on* that PR.
 
-**Next**
-- **Merge the one open PR.** Everything else waits on it.
-- **Adriano: connect a board.** `claude mcp add --transport http miro https://mcp.miro.com/ --scope user`.
-  Both units ship inert until a repo declares one, and the **2026-10-04** evidence deadline needs a real
-  board with real content — in whichever repo holds the game, not this one. If that is not realistic by
-  then, say so and the date moves rather than the suite going red on someone mid-push.
-- Worktrees still holding artifacts: `_TheGameStudio-wt/board-conversation` and
-  `_TheGameStudio-wt/board-cited-spec`. Check `git -C <wt> status --porcelain --ignored | grep '^!!'`
-  before removing either, per `feedback_worktree_removal_eats_run_artifacts` (Claude's local project memory, not a file in this repo).
+**Merged 2026-09-09 in #154.** Main at `46135cb`, 1020 tests, ruff clean. Both worktrees removed and
+their writer/editor handoffs archived to `~/studio-archive/` first.
+
+**The feature is built but NOT shipped, and that is correct.** `specs/game-design-board.md` stays
+`approved` with `verification_due: 2026-10-04`. Everything ships inert until a repo declares a board,
+so the capability has never been exercised — a green suite says nothing about a prompt-shaped feature.
+
+**The only remaining work needs a live board**, and nobody can do it from this repo:
+1. `claude mcp add --transport http miro https://mcp.miro.com/ --scope user`
+2. Declare the board in whichever repo holds the game — the tool, where agent writes land, and how an
+   open question is marked. Studio itself has no game design board and never will.
+3. Run the evidence against the pass criterion in `specs/game-design-board-eval-results.md` and fill it
+   in. Read `specs/find-before-you-grep-eval-results.md` first: four of its five runs were void, and
+   both failure modes apply here — a baseline is only a baseline if the behaviour under test cannot
+   reach the agent by another route, and a treatment is only a treatment if the file carrying it loads.
+4. If a real board is not realistic by 2026-10-04, move the date rather than let the suite go red on
+   whoever pushes next. That is the honest form of "not yet" and the rule accepts it.
 
 ## Settled by the alignment pass (2026-09-04)
 - **No cached structural map.** Cut. Its contents are exactly what Miro's `context_explore` returns,
