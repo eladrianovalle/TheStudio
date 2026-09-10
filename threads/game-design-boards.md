@@ -1,98 +1,84 @@
 ---
 type: thread
-status: done
+status: active
 slug: game-design-boards
 created: 2026-09-04
-updated: 2026-09-09
+updated: 2026-09-10
 ---
 
 # Game Design Boards: make the GDB Studio's live working surface
 
 ## Goal
-A designer keeps a Game Design Board — a visual, living game design document, Miro as the reference
-implementation — and works with Claude against it conversationally: what's still open, scope this
-updated feature into the game, write this feature onto the board, go research a mechanic or an art
-direction and file it under art. Eventually an instance watches each board and keeps building.
+`specs/game-design-board.md` reaches `status: shipped` — which needs its evidence file filled from a
+real board, not more code. Both build units are merged; the feature has never run once.
 
 ## Where this stands
 
-**Settled by Adriano, do not re-litigate**
-- **The GDB is the only source of truth for what the game is** — mechanics, feel, art direction,
-  what's designed and what's open.
-- **`specs/` stays the only source of truth for how a feature's code is shaped.** A spec cites the
-  board rather than copying it. Adriano agreed to this after initially saying "one source of truth
-  only: the GDB"; the argument that moved it was that PR review and the test-enforced verification
-  gates only exist for files in git, and they matter most when an agent builds unattended.
-- **Studio must not hardcode a vendor.** Shipped prompt text says "a design board" as a category;
-  the consuming repo names the tool. This is the `find-before-you-grep` precedent — see that spec's
-  "Naming the tool is the repo's job" and "What Studio does *not* do".
-- **Reading and writing the board are one capability used differently.** An earlier four-way split
-  (read / comment / write / watch) was wrong — it decomposed by mechanism, and with the board
-  connected all four are the same thing.
+**Done and verified (2026-09-10)**
+- Both units merged in Studio #154. Main at `660e806`, **1020 tests**, ruff clean, **zero open PRs**.
+  `studio/docs/DESIGN_BOARD.md` ships to consumers via `SOURCE_FILES`; `/spec` carries the citation
+  clause and a **Scoped from** template slot.
+- Miro MCP is connected at **user level** (`~/.claude.json`, beside `unityMCP`), health-checks
+  `✔ Connected`. Every repo on this machine sees it. **It is NOT visible to a session that was already
+  running when it was added** — MCP tools bind at session start.
+- The board exists: **Orkid Garden**, <https://miro.com/app/board/uXjVHo5kUA0=/>, declared in that
+  repo's `CLAUDE.md` (its #103) with named write destinations — new undecided items to the **Design
+  Questions** frame under *Open Questions & Decisions*; settled things to the frame owning the subject
+  with the reason in **Decided, and Why**; the **ARCHIVE** frames far right are the previous version,
+  read-only.
+- Studio #159 moved `verification_due` to **2026-11-15** and rechecked the spec against Miro's canvas
+  migration. Studio #160 fixed the specs-path sentence in both copies.
 
-**Verified about the tooling (2026-09-04)**
-- Official Miro MCP server: OAuth 2.1, remote-hosted, ~32 tools. Reads `context_explore`,
-  `context_get` (costs AI credits), `board_list_items`. Writes docs, tables (`sync_rows` is a
-  key-based upsert), mermaid diagrams, images, sticky notes, frames, shapes, cards. Comments:
-  `comment_list_comments` / `comment_reply` / `comment_resolve` — a working ask-and-answer loop that
-  already exists and does not need building.
-- **Miro retired webhooks 2025-12-05 with no replacement.** Nothing can watch a board. Any watcher
-  must poll and diff, and an autonomous writer cannot know a human just edited something. This is why
-  the watcher is scoped out of the first spec and should be built last.
+**In flight**
+- **OrkidGarden-Game PR #108** — open. Installs the discipline that repo's declaration depends on.
 
-**Done**
-- Tech run `run_tech_20260904_151044` complete; both contrarian passes returned REJECTED and both were
-  acted on rather than argued with. `specs/game-design-board.md` merged in #148 and is **`approved`**
-  (#153), `verification_due: 2026-10-04`, evidence skeleton created empty beside it. #148 also fixed
-  the `/spec` template's own `status:` line, whose inline comment the spec-convention test read as the
-  value — until then every spec written from the template failed the suite on arrival.
-- **Unit 1 `board_conversation` is built — [PR #154](https://github.com/eladrianovalle/TheStudio/pull/154), 6/6 criteria pass, not flagged.** Ships
-  `studio/docs/DESIGN_BOARD.md` + a 3-line conditional pointer in `CODING_PRINCIPLES.md` + one
-  `SOURCE_FILES` entry. Built in the worktree at
-  `_TheGameStudio-wt/board-conversation` — **archive `reviewer-concerns/` and any `.studio/output/`
-  before removing it**, per the `feedback_worktree_removal_eats_run_artifacts` note in Claude's local
-  project memory for this repo (`~/.claude/projects/<TheGameStudio path>/memory/`) — not a file in this
-  repo.
-- The editor raised two concerns and **both were fixed in the same PR**, not deferred. The first is
-  worth remembering: the vendor-name guard scanned line by line and skipped each line's first word as
-  a sentence opener, but the docs are hard-wrapped, so a product name at the start of a wrapped line
-  passed the only guard Studio has — and criterion 2 had already been graded `pass` against it. Now
-  scans blocks. The second: the pointer shipped to every consuming repo's CLAUDE.md while this repo's
-  own never gained it, invisible to the doc-parity mirror because that test only reads *numbered*
-  principles.
+**Next action**
+Merge OrkidGarden-Game #108. Then run the two eval arms from sessions **rooted in Orkid Garden**
+(never from the Studio repo — that session carries skills and hooks the arms must not share), and fill
+`specs/game-design-board-eval-results.md` (4 `FILL_ME` remain).
 
-- **Unit 2 `board_cited_spec` is built and folded into the same PR.** Six lines in
-  `.claude/commands/spec.md`: name the board region you scoped against, never copy what you could
-  cite, and `/spec` never writes to the board. 4/4 criteria, no reviewer concerns. Suite at 1018 when both units landed.
-- **The Build Plan is complete.** Both units in one PR. The spec stays `approved` until the evidence
-  file is filled, which needs a live board.
+## Decisions made
+- **The board owns what the game is; `specs/` owns how the code is shaped.** A spec cites the board,
+  never copies it. Settled by Adriano after initially wanting one source of truth globally.
+- **Reading and writing the board are one capability**, not separate features. An early four-way split
+  (read/comment/write/watch) decomposed by mechanism and was wrong.
+- **`verification_due` moved to 2026-11-15** because evidence gathered before 2026-09-14 would measure
+  calls that stop working that day. Moving the date is the exit the rule was built to accept.
+- **The autonomous board watcher stays out of scope.** Miro retired webhooks 2025-12-05 with no
+  replacement, so it must poll and diff. Adriano has asked about repo agents finding work from the
+  board on a cron — that is this feature, it needs its own `/spec`, and it should wait until the
+  discipline has been verified once.
 
-Two things verified by hand rather than trusted, because a green test can lie: the vendor guard is
-*reused* (exactly one definition of `_mid_sentence_capitalized_words` in the tree, not a second weaker
-copy), and it actually bites on the new clause — poisoned the clause with a real vendor name, watched
-the test red, restored.
+## Blocked on
+**Adriano — merge OrkidGarden-Game #108.** Nothing else moves until the discipline is installed in the
+repo whose declaration names it.
 
-**One PR per unit of work, no stacking.** Unit 2 was briefly opened as a PR targeting unit 1's branch,
-with a third PR for this note. That is how work gets orphaned: if the base PR is closed or rebased, the
-stacked one is stranded. Both were folded into the single PR and closed. Fix a PR *on* that PR.
+## Landmines
+- **`.studio/` is TRACKED in Orkid Garden.** Running `update` there without committing leaves nothing
+  once the tree is reset — that is exactly how the discipline went missing between 2026-09-09 and
+  2026-09-10 while the declaration sat pointing at it. Always commit an update in that repo.
+- **Miro deprecates `context_*`, `doc_*`, `table_*`, `diagram_*`, `layout_*` and `board_list_items` on
+  2026-09-14**, replaced by four `canvas_*` SVG tools. The server is NOT being sunset — comments,
+  images, boards, prototypes, code widgets are untouched. The discipline survives because Studio names
+  no tool. **`table_sync_rows`' key-based upsert is the one real loss**; recheck any upsert-shaped
+  design against `canvas_*`.
+- **A prompt eval needs both arms real.** Four of six runs proving `find-before-you-grep` were void.
+  A baseline is only a baseline if the behaviour cannot reach the agent another way (a skill, a hook,
+  an MCP server, CLAUDE.md); a treatment is only a treatment if the file carrying it actually loads.
+  **Checked already: Miro's tool descriptions do NOT teach explore-before-read**, so that confound is
+  absent and a baseline should genuinely fail.
+- **The board declaration must stay BELOW the `STUDIO:CODING_PRINCIPLES:END` marker.** Everything
+  above it is regenerated by `/studio-update`. It is currently at line 129, marker at 127.
+- **Do not stack PRs.** One PR, one merge; a second unit built while the first is unmerged goes on the
+  same branch.
 
-**Merged 2026-09-09 in #154.** Main at `46135cb`, 1020 tests, ruff clean. Both worktrees removed and
-their writer/editor handoffs archived to `~/studio-archive/` first.
-
-**The feature is built but NOT shipped, and that is correct.** `specs/game-design-board.md` stays
-`approved` with `verification_due: 2026-10-04`. Everything ships inert until a repo declares a board,
-so the capability has never been exercised — a green suite says nothing about a prompt-shaped feature.
-
-**The only remaining work needs a live board**, and nobody can do it from this repo:
-1. `claude mcp add --transport http miro https://mcp.miro.com/ --scope user`
-2. Declare the board in whichever repo holds the game — the tool, where agent writes land, and how an
-   open question is marked. Studio itself has no game design board and never will.
-3. Run the evidence against the pass criterion in `specs/game-design-board-eval-results.md` and fill it
-   in. Read `specs/find-before-you-grep-eval-results.md` first: four of its five runs were void, and
-   both failure modes apply here — a baseline is only a baseline if the behaviour under test cannot
-   reach the agent by another route, and a treatment is only a treatment if the file carrying it loads.
-4. If a real board is not realistic by 2026-10-04, move the date rather than let the suite go red on
-   whoever pushes next. That is the honest form of "not yet" and the rule accepts it.
+## Files & artifacts
+- Spec: `specs/game-design-board.md` (`approved`, `verification_due: 2026-11-15`) and
+  `specs/game-design-board-eval-results.md` (4 `FILL_ME`).
+- Debate: `studio/output/tech/run_tech_20260904_151044`, archived to `~/studio-archive/`.
+- Orkid Garden: `CLAUDE.md:129+` (declaration), `.studio/source/docs/DESIGN_BOARD.md` (4,344 bytes,
+  arrives with #108).
+- Studio PRs merged: #148 #153 #154 #155 #156 #158 #159 #160. Open elsewhere: OrkidGarden-Game #108.
 
 ## Settled by the alignment pass (2026-09-04)
 - **No cached structural map.** Cut. Its contents are exactly what Miro's `context_explore` returns,

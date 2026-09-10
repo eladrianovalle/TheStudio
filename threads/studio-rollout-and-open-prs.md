@@ -3,7 +3,7 @@ type: thread
 status: active
 slug: studio-rollout-and-open-prs
 created: 2026-09-02
-updated: 2026-09-04
+updated: 2026-09-10
 ---
 
 # Studio: land the open PRs and get the static-check change to the consuming repos
@@ -24,37 +24,19 @@ rollout to the two consuming repos still carrying a stale config — and Studio'
 - Two specs remain at `approved`: `detected-static-check-command` (unit 3 undone) and
   `find-before-you-grep` (evidence unfilled).
 
-**In flight**
-- PR #147 (the `/unstale` pass) MERGED 2026-09-04. Main is now `c2cd45d`, **995 tests**, ruff clean.
-- **Unit 3 is two-thirds verified (2026-09-04).** Criterion 1 proved on a faithful replica of a stale
-  install: `update` rewrites the snapshot and `load_loop_config` returns `['ruff check {paths}']`.
-  Criterion 3 proved against the real repos: `_Alfred` still loads `['make lint']`, `Orkid Garden`
-  still `[]`. Only criterion 2 is left and it needs the consumer PRs merged.
-- **The spec's cost estimate was wrong and is corrected in place.** It claimed a plain `update`
-  clears both stale repos with no hand-editing. True for `OrcPunk-biz`. False for `_Cerebro`: twelve
-  of its installed files have drifted from the SHAs recorded at install, so `update` returns BLOCKED
-  and only `--force` gets through, overwriting all twelve. Clearing it means reviewing those edits
-  first. That paragraph is edited in the working tree, uncommitted.
-- **`find-before-you-grep` is SHIPPED (2026-09-04). The 2026-10-01 fuse is defused.** It took five
-  runs to get one valid comparison. The result: in two clean-room clones differing only in the three
-  clauses, the arm carrying them called the code index on its **second** tool call — before any grep,
-  before opening any file — then read the files at the addresses returned. The arm without them swept
-  with grep across 7 calls and never touched the index, despite its CLAUDE.md naming the tool with
-  usage examples. Criterion met at n=1, with the sample size named plainly in the results file.
-  Two instrument errors had to be found first, and the lesson generalises: **a baseline is only a
-  baseline if the behaviour under test cannot reach the agent by another route (a graft *skill*
-  supplied the clause's instruction to both arms of the first pair), and a treatment is only a
-  treatment if the file carrying it is actually loaded (the clause lives in `spec.md` and the
-  workflow prompts, which load only under `/spec` or `/forge` — a bare pasted prompt left it off).**
-  Rig kept at `~/fbyg-eval/`; re-clone before repeating, the treatment clone is no longer pristine.
-- **Display-path bug fixed (uncommitted).** Both local-edits printers hardcoded a `.studio/source/`
-  prefix, but `.claude/` manifest keys install at the repo root — so an edited slash command printed
-  a path that does not exist. `_installed_display_path` in `run_phase.py` now mirrors
-  `install._manifest_installed_path`, with a test pinning the label against the file the guard hashed.
-
-**Next action**
-Merge #147. Then do unit 3: run Studio `update` against `OrcPunk-biz`, and verify afterwards by
-running `load_loop_config` against it and confirming it returns a command rather than a bare name.
+**In flight (verified 2026-09-10)**
+- **Studio has zero open PRs.** Main at `660e806`, 1020 tests, ruff clean. Everything the old
+  version of this note listed as in-flight has merged: #143 #145 #146 #147 #148 #150 #151 #152 #153
+  #154 #155 #156 #158 #159 #160.
+- **Unit 3 (the consumer rollout) is the only thing left, and the trap is still armed.** Re-checked
+  today: `OrcPunk-biz` and `_Cerebro` both still load `static_checks = ['ruff']` — they load rather
+  than refuse only because their installed Studio predates the refusal. **Their next `update`
+  delivers the refusal alongside the stale config and breaks `/forge` in both.** The shipped config
+  names no gate keys, so the update itself clears it — the update just has to happen.
+- **`_Cerebro` is the expensive one.** Twelve of its installed files have drifted from the SHAs
+  recorded at install, so `update` returns BLOCKED and only `--force` gets through, overwriting all
+  twelve. Clearing it means reviewing those edits first, not running a command.
+- `find-before-you-grep` is **shipped** (2026-09-04) on real evidence; that fuse is gone.
 
 ## Decisions made
 - **The rollout is a spec unit, not a follow-up issue.** Added as unit 3 of
