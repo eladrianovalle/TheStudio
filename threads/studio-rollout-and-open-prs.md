@@ -14,20 +14,20 @@ rollout to the two consuming repos still carrying a stale config — and Studio'
 
 ## Where this stands
 
-**Done and verified**
+**Done and verified (2026-09-02)**
 - Main at `ed6b670`, clean, **992 tests passing**, `ruff` clean, 40/40 workflow shell tests.
 - PR #143 merged: `static_checks` holds commands (`ruff check {paths}`), not tool names. A bare
   `ruff`/`eslint`/`mypy` is refused at load. Closed issue #131.
 - PR #145 merged: rule 6 — an `approved` spec that promised evidence must carry a live
   `verification_due`, and the suite reds once it passes. Six rules now.
 - PR #146 merged 2026-09-02: `specs/verification-due-date.md` is `shipped`.
-- Two specs remain at `approved`: `detected-static-check-command` (unit 3 undone) and
-  `find-before-you-grep` (evidence unfilled).
+- `detected-static-check-command` remains at `approved`, its unit 3 undone.
 
 **In flight (verified 2026-09-10)**
 - **Studio has zero open PRs.** Main at `660e806`, 1020 tests, ruff clean. Everything the old
-  version of this note listed as in-flight has merged: #143 #145 #146 #147 #148 #150 #151 #152 #153
-  #154 #155 #156 #158 #159 #160.
+  version of this note listed as in-flight has merged: #143 #145 #146 #147 #148 #149 #150 #151 #152
+  #153 #154 #155 #156 #158 #159 #160. #157 is the one that did not: closed unmerged, folded into #154
+  because a thread note belongs in the PR that carries the work it describes.
 - **Unit 3 (the consumer rollout) is the only thing left, and the trap is still armed.** Re-checked
   today: `OrcPunk-biz` and `_Cerebro` both still load `static_checks = ['ruff']` — they load rather
   than refuse only because their installed Studio predates the refusal. **Their next `update`
@@ -73,11 +73,6 @@ rollout to the two consuming repos still carrying a stale config — and Studio'
   They break on the *next* `update`, which delivers the refusal alongside the stale config. Fix the
   config in the same pass — Studio's shipped `studio/config/implementation_loop.toml` names no gate
   keys, so the update alone clears it.
-- **Dated fuse: 2026-10-01.** `specs/find-before-you-grep.md` carries `verification_due: 2026-09-30`
-  and its evidence file still has 4 `FILL_ME`s. That day the suite reds for whoever pushes next,
-  whatever they touched. It is the only real spec rule 6 can fire on. Two exits: fill the evidence and
-  flip to `shipped`, or move the date. **The blocker on the honest exit is that nobody has run the
-  baseline with the feature off.**
 - **Studio's shipped loop config is `studio/config/implementation_loop.toml`**, not `config/` at the
   repo root. Checking the wrong path returns "file missing" and looks like a different problem.
 - **Do not park a feature branch in the main checkout.** Consuming repos read Studio from this working
@@ -92,7 +87,6 @@ rollout to the two consuming repos still carrying a stale config — and Studio'
 - Repo: `/Users/orcpunk/Repos/_TheGameStudio`, main `ed6b670`.
 - Worktree: `/Users/orcpunk/Repos/_TheGameStudio-wt-static-checks` (branch `chore/unstale-2026-09-02`).
   Keep it — `.studio/output/impl_loop/` handoff records are gitignored and die with the worktree.
-- Specs: `specs/detected-static-check-command.md` (unit 3 pending), `specs/find-before-you-grep.md` +
-  its `-eval-results.md` (4 `FILL_ME`).
+- Specs: `specs/detected-static-check-command.md` (unit 3 pending).
 - Open: TheStudio PR #147. `_Cerebro` #224/#225, `OrcPunk-biz` #19, `OrcPunk-dotcom` #82.
 - Issue: #133 (open, half-stale, comment posted).
