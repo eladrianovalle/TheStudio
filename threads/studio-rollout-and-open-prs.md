@@ -84,9 +84,9 @@ rollout to the two consuming repos still carrying a stale config — and Studio'
   and plaintext at rest on this machine; the encryption protects the remote only.
 
 ## Files & artifacts
-- Repo: `/Users/orcpunk/Repos/_TheGameStudio`, main `ed6b670`.
+- Repo: `/Users/orcpunk/Repos/_TheGameStudio`, main `660e806`.
 - Worktree: `/Users/orcpunk/Repos/_TheGameStudio-wt-static-checks` (branch `chore/unstale-2026-09-02`).
   Keep it — `.studio/output/impl_loop/` handoff records are gitignored and die with the worktree.
 - Specs: `specs/detected-static-check-command.md` (unit 3 pending).
-- Open: TheStudio PR #147. `_Cerebro` #224/#225, `OrcPunk-biz` #19, `OrcPunk-dotcom` #82.
+- Open: `_Cerebro` #224/#225, `OrcPunk-biz` #19, `OrcPunk-dotcom` #82. TheStudio has none.
 - Issue: #133 (open, half-stale, comment posted).
