@@ -102,7 +102,7 @@ Building without a spec means the architecture gets decided implicitly, one comm
 
 - Before implementing a real feature, write (or ask for) a spec — the `/spec` command runs the discovery + advocate/contrarian pass and produces one. It explains the feature in plain language *and* build-ready technical detail, with a diagram.
 - The spec is the source of truth only once a human approves it. Then the build follows it; changes to the architecture go back through the spec, not around it.
-- Track the spec with its feature: commit it under `specs/` and link it to the ticket/issue it belongs to, so the design and the work stay tied together.
+- Track the spec with its feature: commit it under the specs directory — `.studio/specs/` in a repo that installed Studio, `specs/` in the Studio source repo itself — and link it to the ticket/issue it belongs to, so the design and the work stay tied together.
 - If the feature is **prompt-shaped** — its behavior lives in an agent's prompt, where no test can
   tell you it broke — the spec also writes down how you would know it works: a pass criterion agreed
   before the build, and a results file beside the spec that has to be filled in before anyone calls
