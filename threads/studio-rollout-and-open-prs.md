@@ -67,7 +67,7 @@ rollout to the two consuming repos still carrying a stale config — and Studio'
 
 ## Landmines
 
-- **Armed trap, verified still armed on 2026-09-02.** `_Cerebro` and `OrcPunk-biz` both carry
+- **Armed trap, verified still armed on 2026-09-10.** `_Cerebro` and `OrcPunk-biz` both carry
   `static_checks = ["ruff"]` in `.studio/source/config/implementation_loop.toml`, and neither has the
   refusal installed yet (`grep -c LEGACY_STATIC_CHECK` returns 0 in both). **Nothing is broken today.**
   They break on the *next* `update`, which delivers the refusal alongside the stale config. Fix the
