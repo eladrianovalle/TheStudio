@@ -7,7 +7,7 @@ status: approved
 studio_run: studio/output/tech/run_tech_20260904_151044
 # verification_due: the date the evidence is due (YYYY-MM-DD). Required once this spec is
 # `approved`, and only if it carries a `## Verification` section — no section, no deadline.
-verification_due: 2026-10-04
+verification_due: 2026-11-15
 # Leave the two below EMPTY until this spec flips to `shipped`, and keep their notes on
 # comment lines like these. An inline `# ...` after the colon is read as the VALUE, and
 # `shipped_changed` has no vocabulary check to catch it — so a spec could otherwise
@@ -122,6 +122,22 @@ is a spec that *cites* a board region by name.
 
 - A board tool the agent can call, exposing a structural listing and a content read. Miro's MCP
   server is the reference implementation and the only one tested.
+
+  **Its content surface is migrating, and this is the first real test of the vendor-neutrality rule.**
+  Verified 2026-09-10 against Miro's changelog entry ["Legacy MCP Board tools to be deprecated —
+  Migrate by Sept 14"](https://developers.miro.com/changelog/20-legacy-mcp-board-tools-to-be-deprecated-migrate-by-sept-14)
+  and its [MCP tools reference](https://developers.miro.com/docs/miro-mcp-tools), which carries the same
+  date: Miro deprecates `context_*`, `doc_*`, `table_*`, `diagram_*`, `layout_*` and
+  `board_list_items` on **2026-09-14**, replacing them with `canvas_*` tools that read and write
+  board regions as SVG with stable ids. The server is not being sunset — comments, images, boards,
+  prototypes and code widgets are untouched, and Miro describes the replacement as adding
+  functionality. Because nothing in Studio's shipped text names a tool, the discipline itself is
+  unaffected: `canvas_search` has an overview mode, so locate-before-read still maps, and
+  `canvas_read_as_svg` returns stable ids, so "structure gives addresses, never content" still holds.
+  Re-read-before-write arguably improves, since `canvas_update_from_svg` applies a diff rather than
+  writing blind. **What genuinely changes is the write primitive:** `table_sync_rows`' key-based
+  upsert is going away, and an SVG diff is a different model. Any design that leaned on upsert
+  semantics needs rechecking against `canvas_*` before evidence is gathered.
 - Nothing else. No new Python module, no import, no subprocess, no wizard step, no config file Studio
   writes or parses.
 
@@ -150,7 +166,9 @@ differently, and splitting them would have produced units that each ship half a 
 
 **No cached structural map.** The first design had the agent keep a cheap map of regions and ids and
 pay only for targeted reads. It was cut on a verified fact: Miro's structural call consumes no AI
-credits and only the content call does. The cache saved free calls while its own failure mode — a
+credits and only the content call does (measured against the `context_*` surface; recheck the free/paid
+boundary against `canvas_*`, though the argument holds for any tool split that way). The cache saved
+free calls while its own failure mode — a
 lookup at a stale id — was the paid one. It cached the wrong side of the cost boundary, and with
 change notifications retired it could never be invalidated anyway. Deleting it also removed two
 open questions that existed only to support it.
