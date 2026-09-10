@@ -124,8 +124,11 @@ is a spec that *cites* a board region by name.
   server is the reference implementation and the only one tested.
 
   **Its content surface is migrating, and this is the first real test of the vendor-neutrality rule.**
-  Verified 2026-09-10: Miro deprecates `context_*`, `doc_*`, `table_*`, `diagram_*`, `layout_*` and
-  `board_list_items` on **2026-09-14**, replacing them with four `canvas_*` tools that read and write
+  Verified 2026-09-10 against Miro's changelog entry ["Legacy MCP Board tools to be deprecated —
+  Migrate by Sept 14"](https://developers.miro.com/changelog/20-legacy-mcp-board-tools-to-be-deprecated-migrate-by-sept-14)
+  and its [MCP tools reference](https://developers.miro.com/docs/miro-mcp-tools), which carries the same
+  date: Miro deprecates `context_*`, `doc_*`, `table_*`, `diagram_*`, `layout_*` and
+  `board_list_items` on **2026-09-14**, replacing them with `canvas_*` tools that read and write
   board regions as SVG with stable ids. The server is not being sunset — comments, images, boards,
   prototypes and code widgets are untouched, and Miro describes the replacement as adding
   functionality. Because nothing in Studio's shipped text names a tool, the discipline itself is
