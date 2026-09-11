@@ -3,7 +3,7 @@ type: thread
 status: active
 slug: studio-rollout-and-open-prs
 created: 2026-09-02
-updated: 2026-09-04
+updated: 2026-09-10
 ---
 
 # Studio: land the open PRs and get the static-check change to the consuming repos
@@ -14,47 +14,29 @@ rollout to the two consuming repos still carrying a stale config — and Studio'
 
 ## Where this stands
 
-**Done and verified**
+**Done and verified (2026-09-02)**
 - Main at `ed6b670`, clean, **992 tests passing**, `ruff` clean, 40/40 workflow shell tests.
 - PR #143 merged: `static_checks` holds commands (`ruff check {paths}`), not tool names. A bare
   `ruff`/`eslint`/`mypy` is refused at load. Closed issue #131.
 - PR #145 merged: rule 6 — an `approved` spec that promised evidence must carry a live
   `verification_due`, and the suite reds once it passes. Six rules now.
 - PR #146 merged 2026-09-02: `specs/verification-due-date.md` is `shipped`.
-- Two specs remain at `approved`: `detected-static-check-command` (unit 3 undone) and
-  `find-before-you-grep` (evidence unfilled).
+- `detected-static-check-command` remains at `approved`, its unit 3 undone.
 
-**In flight**
-- PR #147 (the `/unstale` pass) MERGED 2026-09-04. Main is now `c2cd45d`, **995 tests**, ruff clean.
-- **Unit 3 is two-thirds verified (2026-09-04).** Criterion 1 proved on a faithful replica of a stale
-  install: `update` rewrites the snapshot and `load_loop_config` returns `['ruff check {paths}']`.
-  Criterion 3 proved against the real repos: `_Alfred` still loads `['make lint']`, `Orkid Garden`
-  still `[]`. Only criterion 2 is left and it needs the consumer PRs merged.
-- **The spec's cost estimate was wrong and is corrected in place.** It claimed a plain `update`
-  clears both stale repos with no hand-editing. True for `OrcPunk-biz`. False for `_Cerebro`: twelve
-  of its installed files have drifted from the SHAs recorded at install, so `update` returns BLOCKED
-  and only `--force` gets through, overwriting all twelve. Clearing it means reviewing those edits
-  first. That paragraph is edited in the working tree, uncommitted.
-- **`find-before-you-grep` is SHIPPED (2026-09-04). The 2026-10-01 fuse is defused.** It took five
-  runs to get one valid comparison. The result: in two clean-room clones differing only in the three
-  clauses, the arm carrying them called the code index on its **second** tool call — before any grep,
-  before opening any file — then read the files at the addresses returned. The arm without them swept
-  with grep across 7 calls and never touched the index, despite its CLAUDE.md naming the tool with
-  usage examples. Criterion met at n=1, with the sample size named plainly in the results file.
-  Two instrument errors had to be found first, and the lesson generalises: **a baseline is only a
-  baseline if the behaviour under test cannot reach the agent by another route (a graft *skill*
-  supplied the clause's instruction to both arms of the first pair), and a treatment is only a
-  treatment if the file carrying it is actually loaded (the clause lives in `spec.md` and the
-  workflow prompts, which load only under `/spec` or `/forge` — a bare pasted prompt left it off).**
-  Rig kept at `~/fbyg-eval/`; re-clone before repeating, the treatment clone is no longer pristine.
-- **Display-path bug fixed (uncommitted).** Both local-edits printers hardcoded a `.studio/source/`
-  prefix, but `.claude/` manifest keys install at the repo root — so an edited slash command printed
-  a path that does not exist. `_installed_display_path` in `run_phase.py` now mirrors
-  `install._manifest_installed_path`, with a test pinning the label against the file the guard hashed.
-
-**Next action**
-Merge #147. Then do unit 3: run Studio `update` against `OrcPunk-biz`, and verify afterwards by
-running `load_loop_config` against it and confirming it returns a command rather than a bare name.
+**In flight (verified 2026-09-10)**
+- **Studio has zero open PRs.** Main at `660e806`, 1020 tests, ruff clean. Everything the old
+  version of this note listed as in-flight has merged: #143 #145 #146 #147 #148 #149 #150 #151 #152
+  #153 #154 #155 #156 #158 #159 #160. #157 is the one that did not: closed unmerged, folded into #154
+  because a thread note belongs in the PR that carries the work it describes.
+- **Unit 3 (the consumer rollout) is the only thing left, and the trap is still armed.** Re-checked
+  today: `OrcPunk-biz` and `_Cerebro` both still load `static_checks = ['ruff']` — they load rather
+  than refuse only because their installed Studio predates the refusal. **Their next `update`
+  delivers the refusal alongside the stale config and breaks `/forge` in both.** The shipped config
+  names no gate keys, so the update itself clears it — the update just has to happen.
+- **`_Cerebro` is the expensive one.** Twelve of its installed files have drifted from the SHAs
+  recorded at install, so `update` returns BLOCKED and only `--force` gets through, overwriting all
+  twelve. Clearing it means reviewing those edits first, not running a command.
+- `find-before-you-grep` is **shipped** (2026-09-04) on real evidence; that fuse is gone.
 
 ## Decisions made
 - **The rollout is a spec unit, not a follow-up issue.** Added as unit 3 of
@@ -85,17 +67,12 @@ running `load_loop_config` against it and confirming it returns a command rather
 
 ## Landmines
 
-- **Armed trap, verified still armed on 2026-09-02.** `_Cerebro` and `OrcPunk-biz` both carry
+- **Armed trap, verified still armed on 2026-09-10.** `_Cerebro` and `OrcPunk-biz` both carry
   `static_checks = ["ruff"]` in `.studio/source/config/implementation_loop.toml`, and neither has the
   refusal installed yet (`grep -c LEGACY_STATIC_CHECK` returns 0 in both). **Nothing is broken today.**
   They break on the *next* `update`, which delivers the refusal alongside the stale config. Fix the
   config in the same pass — Studio's shipped `studio/config/implementation_loop.toml` names no gate
   keys, so the update alone clears it.
-- **Dated fuse: 2026-10-01.** `specs/find-before-you-grep.md` carries `verification_due: 2026-09-30`
-  and its evidence file still has 4 `FILL_ME`s. That day the suite reds for whoever pushes next,
-  whatever they touched. It is the only real spec rule 6 can fire on. Two exits: fill the evidence and
-  flip to `shipped`, or move the date. **The blocker on the honest exit is that nobody has run the
-  baseline with the feature off.**
 - **Studio's shipped loop config is `studio/config/implementation_loop.toml`**, not `config/` at the
   repo root. Checking the wrong path returns "file missing" and looks like a different problem.
 - **Do not park a feature branch in the main checkout.** Consuming repos read Studio from this working
@@ -107,10 +84,9 @@ running `load_loop_config` against it and confirming it returns a command rather
   and plaintext at rest on this machine; the encryption protects the remote only.
 
 ## Files & artifacts
-- Repo: `/Users/orcpunk/Repos/_TheGameStudio`, main `ed6b670`.
+- Repo: `/Users/orcpunk/Repos/_TheGameStudio`, main `660e806`.
 - Worktree: `/Users/orcpunk/Repos/_TheGameStudio-wt-static-checks` (branch `chore/unstale-2026-09-02`).
   Keep it — `.studio/output/impl_loop/` handoff records are gitignored and die with the worktree.
-- Specs: `specs/detected-static-check-command.md` (unit 3 pending), `specs/find-before-you-grep.md` +
-  its `-eval-results.md` (4 `FILL_ME`).
-- Open: TheStudio PR #147. `_Cerebro` #224/#225, `OrcPunk-biz` #19, `OrcPunk-dotcom` #82.
+- Specs: `specs/detected-static-check-command.md` (unit 3 pending).
+- Open: `_Cerebro` #224/#225, `OrcPunk-biz` #19, `OrcPunk-dotcom` #82. TheStudio has none.
 - Issue: #133 (open, half-stale, comment posted).
