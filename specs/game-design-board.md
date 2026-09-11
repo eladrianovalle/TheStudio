@@ -271,16 +271,19 @@ discipline — the instructions about how to read and how to write. In the decla
 `CLAUDE.md`, remove the injected design-board paragraph and, in the repository's own section, the
 paragraph carrying the locate-first and source-every-claim rules, the sentence requiring a written
 proposal before a write, and the pointer to the vendored long form; then remove the vendored file
-itself. Cut both arms from the same commit and save that `CLAUDE.md` edit as a diff into the results
-file — a later run reproduces the baseline from the diff instead of re-deriving it from this
-paragraph and getting a different arm.
+itself. Cut both arms from the same commit and save that `CLAUDE.md` edit as a diff into
+`specs/game-design-board-eval-results.md` — a later run reproduces the baseline from the diff
+instead of re-deriving it from this paragraph and getting a different arm.
 
 Before trusting either arm, ask the board for its structural listing once and confirm it answers; a
-restart that cost an arm its board makes everything measured after it worthless. Then search the
-whole repository for the words that carry the discipline — `DESIGN_BOARD`, `locate`,
-`structural listing`, `sourced`, `propose` — and confirm nothing else is still saying them. The
-treatment arm is the same files untouched — confirm the vendored file is on disk, or the arm is void
-and measures nothing.
+restart that cost an arm its board makes everything measured after it worthless. The remaining
+checks are per-arm. In the baseline, search what actually reaches the agent's context — `CLAUDE.md`,
+the files it points at, and `.claude/` — for the words that carry the discipline, and confirm nothing
+there is still saying them: `DESIGN_BOARD` and `structural listing` are distinctive enough to settle
+by grep, while `locate`, `sourced` and `propose` are ordinary English and need reading rather than
+counting. Hits anywhere else — code, comments, docs the agent never loads — are not part of the
+prompt and do not count. The treatment arm is the same files untouched — confirm the vendored file is
+on disk, or the arm is void and measures nothing.
 
 **Ask both sessions the same thing**, phrased so it needs a real read and then a write: what is
 still undecided about some part of the game, what has already been settled about it, and then add a
