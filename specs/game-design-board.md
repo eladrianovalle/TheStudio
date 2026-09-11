@@ -259,9 +259,11 @@ before reading files, and the first half of the pass criterion is an index-befor
 the board; a habit primed on code can carry over. Leaving it on in both arms does not fix this — it
 risks the baseline passing part (a) on its own, and a baseline that passes is not evidence the
 feature works, it is a finding that the problem could not be triggered. Move
-`.claude/skills/graft/` and `.claude/settings.json` aside for the duration, and put them back after.
-Restarting the agent is what makes any of this take effect: skills, hooks and tool servers all bind
-when a session starts.
+`.claude/skills/graft/` aside for the duration, and in `.claude/settings.json` take out only the
+keys that carry the index — its hooks, and its MCP server entry if it has one. Do not park the whole
+file: the board is reached through an MCP server too, and that file is commonly what enables it, so
+parking it takes the board out along with the index. Restarting the agent is what makes any of this
+take effect: skills, hooks and tool servers all bind when a session starts. Put both back afterwards.
 
 **Both arms keep the board**: the connection to it, its name and address, and the map of which
 region holds what. Without those there is no conversation to have. What the baseline loses is the
@@ -269,9 +271,16 @@ discipline — the instructions about how to read and how to write. In the decla
 `CLAUDE.md`, remove the injected design-board paragraph and, in the repository's own section, the
 paragraph carrying the locate-first and source-every-claim rules, the sentence requiring a written
 proposal before a write, and the pointer to the vendored long form; then remove the vendored file
-itself. Before trusting the arm, search the whole repository for the words that carry the discipline
-and confirm nothing else is still saying them. The treatment arm is the same files untouched —
-confirm the vendored file is on disk, or the arm is void and measures nothing.
+itself. Cut both arms from the same commit and save that `CLAUDE.md` edit as a diff into the results
+file — a later run reproduces the baseline from the diff instead of re-deriving it from this
+paragraph and getting a different arm.
+
+Before trusting either arm, ask the board for its structural listing once and confirm it answers; a
+restart that cost an arm its board makes everything measured after it worthless. Then search the
+whole repository for the words that carry the discipline — `DESIGN_BOARD`, `locate`,
+`structural listing`, `sourced`, `propose` — and confirm nothing else is still saying them. The
+treatment arm is the same files untouched — confirm the vendored file is on disk, or the arm is void
+and measures nothing.
 
 **Ask both sessions the same thing**, phrased so it needs a real read and then a write: what is
 still undecided about some part of the game, what has already been settled about it, and then add a
