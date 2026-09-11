@@ -249,6 +249,40 @@ reason that applies here: a baseline arm is only a baseline if the behavior unde
 the agent by another route. Check what else in the session is telling the agent to read the board
 before trusting the comparison.
 
+### How to run it
+
+Run both arms from the repository that declares the board, never from the Studio repo — a Studio
+session carries skills, hooks and an always-loaded memory index the arms must not share.
+
+**Turn the code index off in both arms first.** Graft's skill tells the agent to query an index
+before reading files, and the first half of the pass criterion is an index-before-read behaviour on
+the board; a habit primed on code can carry over. Leaving it on in both arms does not fix this — it
+risks the baseline passing part (a) on its own, and a baseline that passes is not evidence the
+feature works, it is a finding that the problem could not be triggered. Move
+`.claude/skills/graft/` and `.claude/settings.json` aside for the duration, and put them back after.
+Restarting the agent is what makes any of this take effect: skills, hooks and tool servers all bind
+when a session starts.
+
+**Both arms keep the board**: the connection to it, its name and address, and the map of which
+region holds what. Without those there is no conversation to have. What the baseline loses is the
+discipline — the instructions about how to read and how to write. In the declaring repository's
+`CLAUDE.md`, remove the injected design-board paragraph and, in the repository's own section, the
+paragraph carrying the locate-first and source-every-claim rules, the sentence requiring a written
+proposal before a write, and the pointer to the vendored long form; then remove the vendored file
+itself. Before trusting the arm, search the whole repository for the words that carry the discipline
+and confirm nothing else is still saying them. The treatment arm is the same files untouched —
+confirm the vendored file is on disk, or the arm is void and measures nothing.
+
+**Ask both sessions the same thing**, phrased so it needs a real read and then a write: what is
+still undecided about some part of the game, what has already been settled about it, and then add a
+new question to the board.
+
+**Score the three parts separately**; they come apart. (a) was the first call the structural one,
+and did it name the region before opening it — a content read as the opening move is a fail. (b) is
+every claim traceable to a region opened that turn — answering from a region's title is the fail to
+watch for. (c) did it re-read the destination in the same turn, and did the designer see the exact
+item and destination proposed first.
+
 ## Build Plan
 
 Two units. The five-unit plan from the debate was cut: four of them edited the same block of prose,
