@@ -3,7 +3,7 @@ type: thread
 status: active
 slug: game-design-boards
 created: 2026-09-04
-updated: 2026-09-10
+updated: 2026-09-11
 ---
 
 # Game Design Boards: make the GDB Studio's live working surface
@@ -15,7 +15,7 @@ real board, not more code. Both build units are merged; the feature has never ru
 ## Where this stands
 
 **Done and verified (2026-09-10)**
-- Both units merged in Studio #154. Main at `660e806`, **1020 tests**, ruff clean, **zero open PRs**.
+- Both units merged in Studio #154. Main at `b55ab23`, **1020 tests**, ruff clean, **zero open PRs**.
   `studio/docs/DESIGN_BOARD.md` ships to consumers via `SOURCE_FILES`; `/spec` carries the citation
   clause and a **Scoped from** template slot.
 - Miro MCP is connected at **user level** (`~/.claude.json`, beside `unityMCP`), health-checks
@@ -30,12 +30,14 @@ real board, not more code. Both build units are merged; the feature has never ru
   migration. Studio #160 fixed the specs-path sentence in both copies.
 
 **In flight**
-- **OrkidGarden-Game PR #108** — open. Installs the discipline that repo's declaration depends on.
+- Nothing. **OrkidGarden-Game #108 merged 2026-09-11** — the discipline doc is on that repo's
+  `master` at `.studio/source/docs/DESIGN_BOARD.md`, so its `CLAUDE.md` declaration now resolves.
+  Verified 2026-09-11; that repo's `master` is `daf3bc73`.
 
 **Next action**
-Merge OrkidGarden-Game #108. Then run the two eval arms from sessions **rooted in Orkid Garden**
-(never from the Studio repo — that session carries skills and hooks the arms must not share), and fill
-`specs/game-design-board-eval-results.md` (4 `FILL_ME` remain).
+Run the two eval arms from sessions **rooted in Orkid Garden** (never from the Studio repo — that
+session carries skills and hooks the arms must not share), and fill
+`specs/game-design-board-eval-results.md` (4 `FILL_ME` remain). Nothing else stands in the way.
 
 ## Decisions made
 - **The board owns what the game is; `specs/` owns how the code is shaped.** A spec cites the board,
@@ -54,8 +56,7 @@ Merge OrkidGarden-Game #108. Then run the two eval arms from sessions **rooted i
   discipline has been verified once.
 
 ## Blocked on
-**Adriano — merge OrkidGarden-Game #108.** Nothing else moves until the discipline is installed in the
-repo whose declaration names it.
+Nothing. The eval is the work, and it can start now.
 
 ## Landmines
 - **`.studio/` is TRACKED in Orkid Garden.** Running `update` there without committing leaves nothing
@@ -85,10 +86,12 @@ repo whose declaration names it.
   `specs/game-design-board-eval-results.md` (4 `FILL_ME`).
 - Debate: `studio/output/tech/run_tech_20260904_151044`, archived to `~/studio-archive/`.
 - Orkid Garden: `CLAUDE.md:129+` (declaration), `.studio/source/docs/DESIGN_BOARD.md` (4,344 bytes,
-  arrives with #108).
-- Studio PRs merged: #148 #153 #154 #155 #156 #158 #159 #160. #157 was closed unmerged and folded
-  into #154 — a thread note belongs in the PR that carries the work it describes. Open elsewhere:
-  OrkidGarden-Game #108.
+  arrived with #108).
+- Studio PRs merged: #148 #153 #154 #155 #156 #158 #159 #160 #161. #157 was closed unmerged and
+  folded into #154 — a thread note belongs in the PR that carries the work it describes.
+  OrkidGarden-Game #108 merged 2026-09-11.
+- Orkid Garden keeps its own note on the other half of this work,
+  `.studio/threads/design-board-and-doc-truth.md`. Its standing next action is closing its issue #98.
 
 ## Settled by the alignment pass (2026-09-04)
 - **No cached structural map.** Cut. Its contents are exactly what Miro's `context_explore` returns,
