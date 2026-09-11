@@ -275,15 +275,20 @@ itself. Cut both arms from the same commit and save that `CLAUDE.md` edit as a d
 `specs/game-design-board-eval-results.md` — a later run reproduces the baseline from the diff
 instead of re-deriving it from this paragraph and getting a different arm.
 
-Before trusting either arm, ask the board for its structural listing once and confirm it answers; a
-restart that cost an arm its board makes everything measured after it worthless. The remaining
-checks are per-arm. In the baseline, search what actually reaches the agent's context — `CLAUDE.md`,
-the files it points at, and `.claude/` — for the words that carry the discipline, and confirm nothing
-there is still saying them: `DESIGN_BOARD` and `structural listing` are distinctive enough to settle
-by grep, while `locate`, `sourced` and `propose` are ordinary English and need reading rather than
-counting. Hits anywhere else — code, comments, docs the agent never loads — are not part of the
-prompt and do not count. The treatment arm is the same files untouched — confirm the vendored file is
-on disk, or the arm is void and measures nothing.
+Before trusting either arm, call the board for its structural listing once yourself, outside the
+session — not as the agent's opening turn, which would hand it criterion (a) — and confirm it
+answers; a restart that cost an arm its board makes everything measured after it worthless. The
+remaining checks are per-arm. In the baseline, search what actually reaches the agent's context —
+the repository's `CLAUDE.md`, the files it points at, `.claude/`, and the memory files that reach
+the session from outside the checkout: the user-level `~/.claude/CLAUDE.md` and any `CLAUDE.md` in a
+parent directory of it. Those last two are exactly the other route the warning above is about — a
+locate-first habit living in a personal memory file survives the cut to the repository's own files
+and voids the arm quietly. Confirm nothing in any of them is still saying the words that carry the
+discipline: `DESIGN_BOARD` and `structural listing` are distinctive enough to settle by grep, while
+`locate`, `sourced` and `propose` are ordinary English and need reading rather than counting. Hits
+anywhere else — code, comments, docs the agent never loads — are not part of the prompt and do not
+count. The treatment arm is the same files untouched — confirm the vendored file is on disk, or the
+arm is void and measures nothing.
 
 **Ask both sessions the same thing**, phrased so it needs a real read and then a write: what is
 still undecided about some part of the game, what has already been settled about it, and then add a
