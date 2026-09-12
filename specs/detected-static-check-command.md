@@ -166,7 +166,9 @@ Two installed repos (`_Cerebro`, `OrcPunk-biz`) *do* carry a bare `ruff`, in the
 snapshot at `.studio/source/config/implementation_loop.toml`. That is harmless and needs no shim:
 `impl_loop.py` and the shipped config are both in `SOURCE_FILES` (`install.py:67`), so they update in
 lockstep and no repo can get the new semantics without the new config. Stated here so nobody builds
-a migration for a split-brain that cannot happen.
+a migration for a split-brain that cannot happen. "Harmless" is about that split-brain only, not a
+claim the snapshot stays in step with its tracked checksums — unit 3 found that drift, a separate
+problem.
 
 ### Docstrings that will be wrong the moment this ships
 
