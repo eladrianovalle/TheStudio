@@ -202,7 +202,10 @@ current design. It gets a line saying this spec supersedes that reasoning — no
 - Making the scoping accurate — `{paths}` inherits today's prediction accuracy and this spec does not
   claim to improve it.
 - Auto-upgrading a leftover name, or editing any consuming repo's config.
-- A migration shim for `.studio/source` snapshot skew, which cannot desynchronise.
+- A migration shim for `impl_loop.py` drifting from the shipped config it reads, which cannot
+  desynchronise — both are in `SOURCE_FILES` and move together. This is not the skew unit 3 found
+  (an ignored `.studio/source/` snapshot against a tracked `MANIFEST.json`), which is a different
+  axis and still has no shim.
 - `mypy` gaining a profile. It appears only in the refusal list, as a name Studio once documented.
 
 ## Risks & Open Questions
@@ -268,12 +271,15 @@ the command.
 on-disk content has drifted from the checksum written at install. `OrcPunk-biz`'s config had not
 drifted, so a plain `update` rewrote it.
 
-`_Cerebro` looked like the expensive case — `update` returned BLOCKED over seventeen files — but the
-drift was not local edits. Its `.studio/source/` snapshot is **gitignored**; only `MANIFEST.json`,
-`VERSION` and `CLAUDE.md` are tracked. The snapshot had moved while the tracked record of it stayed
-behind, so every file was flagged against a stale checksum. Each one was byte-identical to its
-install, verified by diffing them against the commit that wrote them. Regenerating the record cleared
-the block with nothing reviewed and nothing lost.
+`_Cerebro` looked like the expensive case — `update` returned BLOCKED over seventeen files, up from
+twelve on 2026-09-03 — but the drift was not local edits. Its `.studio/source/` snapshot is
+**gitignored**; only `MANIFEST.json`, `VERSION` and `CLAUDE.md` are tracked. The snapshot had moved
+while the tracked record of it stayed behind, so every file was flagged against a stale checksum.
+Each one was byte-identical to its install, verified by diffing them against the commit that wrote
+them. Regenerating the record cleared the block with nothing reviewed and nothing lost. The count
+grew between the two readings for that same reason rather than because anything new was edited: the
+record had not been committed since the 2026-07-08 install, so every Studio change in the nine days
+between them put one more file out of step with it.
 
 **The lesson generalises past this spec:** where a snapshot is ignored by git and its checksum file
 is tracked, the two drift apart silently, and the drift presents as "someone hand-edited Studio's
@@ -292,4 +298,6 @@ reaching for — but rewriting a criterion after measuring against it is how a c
 anything, so it is recorded as half met and left for a human to rule on.
 
 **Out of scope:** any further change to detection, the refusal, or the wizard. `_Cerebro` is not
-blocked after all — PR #226 there supersedes its stale #224/#225, which should be closed.
+blocked after all — `eladrianovalle/cerebro#226` supersedes its stale
+`eladrianovalle/cerebro#224` and `eladrianovalle/cerebro#225`, which should be closed. Repo-qualified
+because a bare `#NNN` here auto-links to TheStudio.
