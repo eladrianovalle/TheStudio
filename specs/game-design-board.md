@@ -249,6 +249,57 @@ reason that applies here: a baseline arm is only a baseline if the behavior unde
 the agent by another route. Check what else in the session is telling the agent to read the board
 before trusting the comparison.
 
+### How to run it
+
+Run both arms from the repository that declares the board, never from the Studio repo — a Studio
+session carries skills, hooks and an always-loaded memory index the arms must not share.
+
+**Turn the code index off in both arms first.** Graft's skill tells the agent to query an index
+before reading files, and the first half of the pass criterion is an index-before-read behaviour on
+the board; a habit primed on code can carry over. Leaving it on in both arms does not fix this — it
+risks the baseline passing part (a) on its own, and a baseline that passes is not evidence the
+feature works, it is a finding that the problem could not be triggered. Move
+`.claude/skills/graft/` aside for the duration, and in `.claude/settings.json` take out only the
+keys that carry the index — its hooks, and its MCP server entry if it has one. Do not park the whole
+file: the board is reached through an MCP server too, and that file is commonly what enables it, so
+parking it takes the board out along with the index. Restarting the agent is what makes any of this
+take effect: skills, hooks and tool servers all bind when a session starts. Put both back afterwards.
+
+**Both arms keep the board**: the connection to it, its name and address, and the map of which
+region holds what. Without those there is no conversation to have. What the baseline loses is the
+discipline — the instructions about how to read and how to write. In the declaring repository's
+`CLAUDE.md`, remove the injected design-board paragraph and, in the repository's own section, the
+paragraph carrying the locate-first and source-every-claim rules, the sentence requiring a written
+proposal before a write, and the pointer to the vendored long form; then remove the vendored file
+itself. Cut both arms from the same commit and save that `CLAUDE.md` edit as a diff into
+`specs/game-design-board-eval-results.md` — a later run reproduces the baseline from the diff
+instead of re-deriving it from this paragraph and getting a different arm.
+
+Before trusting either arm, call the board for its structural listing once yourself, outside the
+session — not as the agent's opening turn, which would hand it criterion (a) — and confirm it
+answers; a restart that cost an arm its board makes everything measured after it worthless. The
+remaining checks are per-arm. In the baseline, search what actually reaches the agent's context —
+the repository's `CLAUDE.md`, the files it points at, `.claude/`, and the memory files that reach
+the session from outside the checkout: the user-level `~/.claude/CLAUDE.md` and any `CLAUDE.md` in a
+parent directory of it. Those last two are exactly the other route the warning above is about — a
+locate-first habit living in a personal memory file survives the cut to the repository's own files
+and voids the arm quietly. Confirm nothing in any of them is still saying the words that carry the
+discipline: `DESIGN_BOARD` and `structural listing` are distinctive enough to settle by grep, while
+`locate`, `sourced` and `propose` are ordinary English and need reading rather than counting. Hits
+anywhere else — code, comments, docs the agent never loads — are not part of the prompt and do not
+count. The treatment arm is the same files untouched — confirm the vendored file is on disk, or the
+arm is void and measures nothing.
+
+**Ask both sessions the same thing**, phrased so it needs a real read and then a write: what is
+still undecided about some part of the game, what has already been settled about it, and then add a
+new question to the board.
+
+**Score the three parts separately**; they come apart. (a) was the first call the structural one,
+and did it name the region before opening it — a content read as the opening move is a fail. (b) is
+every claim traceable to a region opened that turn — answering from a region's title is the fail to
+watch for. (c) did it re-read the destination in the same turn, and did the designer see the exact
+item and destination proposed first.
+
 ## Build Plan
 
 Two units. The five-unit plan from the debate was cut: four of them edited the same block of prose,
