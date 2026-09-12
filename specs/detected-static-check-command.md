@@ -202,7 +202,7 @@ current design. It gets a line saying this spec supersedes that reasoning — no
 - Making the scoping accurate — `{paths}` inherits today's prediction accuracy and this spec does not
   claim to improve it.
 - Auto-upgrading a leftover name, or editing any consuming repo's config.
-- A migration shim for `impl_loop.py` drifting from the shipped config it reads, which cannot
+- A migration shim for `impl_loop.py` and the shipped config it reads drifting apart. That pair cannot
   desynchronise — both are in `SOURCE_FILES` and move together. This is not the skew unit 3 found
   (an ignored `.studio/source/` snapshot against a tracked `MANIFEST.json`), which is a different
   axis and still has no shim.
@@ -278,8 +278,8 @@ while the tracked record of it stayed behind, so every file was flagged against 
 Each one was byte-identical to its install, verified by diffing them against the commit that wrote
 them. Regenerating the record cleared the block with nothing reviewed and nothing lost. The count
 grew between the two readings for that same reason rather than because anything new was edited: the
-record had not been committed since the 2026-07-08 install, so every Studio change in the nine days
-between them put one more file out of step with it.
+record had not been committed since the 2026-07-08 install, so each Studio change in the nine days
+between them added to the set of files out of step with it.
 
 **The lesson generalises past this spec:** where a snapshot is ignored by git and its checksum file
 is tracked, the two drift apart silently, and the drift presents as "someone hand-edited Studio's
@@ -299,5 +299,5 @@ anything, so it is recorded as half met and left for a human to rule on.
 
 **Out of scope:** any further change to detection, the refusal, or the wizard. `_Cerebro` is not
 blocked after all — `eladrianovalle/cerebro#226` supersedes its stale
-`eladrianovalle/cerebro#224` and `eladrianovalle/cerebro#225`, which should be closed. Repo-qualified
+`eladrianovalle/cerebro#224` and `eladrianovalle/cerebro#225`, both now closed. Repo-qualified
 because a bare `#NNN` here auto-links to TheStudio.
