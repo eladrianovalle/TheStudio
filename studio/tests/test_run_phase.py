@@ -1574,6 +1574,18 @@ def test_finalize_does_not_renag_about_findings_already_verified(studio_root, ca
     assert "second opinion" not in capsys.readouterr().out
 
 
+def test_finalize_survives_a_findings_json_that_is_not_a_list_of_findings(studio_root, capsys):
+    """A hand-edited findings.json is not worth failing finalize over — the nudge just skips."""
+    run_id, run_dir = _run_with_contrarian_text(studio_root, CONTRARIAN_WITH_FINDINGS)
+    findings_path = run_dir / "findings.json"
+
+    for content in ({"confidence": "medium"}, ["medium", None]):
+        findings_path.write_text(json.dumps(content), encoding="utf-8")
+        run_phase.finalize_run(make_finalize_args(run_id=run_id))
+
+    assert "second opinion" not in capsys.readouterr().out
+
+
 def test_finalize_leaves_an_existing_findings_json_alone(studio_root):
     """Re-finalizing must not clobber the verifier's adjusted confidences."""
     run_id, run_dir = _run_with_contrarian_text(studio_root, CONTRARIAN_WITH_FINDINGS)

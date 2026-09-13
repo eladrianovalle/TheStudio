@@ -37,7 +37,11 @@ class RunRecord:
     created_at: datetime
     size_bytes: int
     finalized: bool = False
-    """Whether ``finalize`` ran on this run, i.e. somebody recorded a verdict for it.
+    """Whether ``finalize`` ran on this run, i.e. its status is no longer ``PENDING``.
+
+    Any status ``finalize`` recorded counts — ``FAILED`` or ``ABORTED`` as much as
+    ``COMPLETED`` — since ``--status`` is free text and a failed debate still left
+    a transcript behind.
 
     Cleanup never deletes a finalized run. An unfinalized one is a prepare nobody
     finished — cheap to throw away and cheap to re-issue. A finalized one is the

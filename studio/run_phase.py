@@ -1637,10 +1637,13 @@ def _report_unverified_findings(findings_path: Path, run_dir: Path) -> None:
         rows = json.loads(findings_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return  # a findings file we cannot read is not worth failing finalize over
+    if not isinstance(rows, list):
+        return  # nor is one that parses but was hand-edited into something else
 
     unverified = [
         row for row in rows
-        if str(row.get("confidence", "")).lower() == "medium"
+        if isinstance(row, dict)
+        and str(row.get("confidence", "")).lower() == "medium"
         and row.get("verified_confidence") is None
     ]
     if not unverified:
@@ -1652,6 +1655,7 @@ def _report_unverified_findings(findings_path: Path, run_dir: Path) -> None:
     print("   A fresh agent re-checks each one from its quote alone, never the")
     print("   contrarian's reasoning, and writes an adjusted confidence back:")
     print(f"\n     /finding-verifier {run_dir}\n")
+
 
 def _maybe_notify(run_dir: Path) -> None:
     """Auto-fire the run digest on finalize if a webhook target is enabled.
