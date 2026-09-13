@@ -3,7 +3,7 @@ type: thread
 status: active
 slug: reviewer-concerns-rescued
 created: 2026-09-04
-updated: 2026-09-04
+updated: 2026-09-13
 ---
 
 # Reviewer concerns rescued from worktrees
@@ -16,15 +16,23 @@ of them was a single `git worktree remove` from being destroyed, and six had acc
 Copied here verbatim on 2026-09-04, during a branch cleanup that would otherwise have deleted them.
 Status notes are mine; the concern text is the editor's, unedited.
 
-**The lesson, worth acting on separately:** a `/forge` concern that survives its own unit has nowhere
-durable to live. Landing it in a gitignored directory inside a disposable worktree means the loop's
-one mechanism for not losing critique loses it by default.
+**The lesson has since been acted on, and is fixed.** A `/forge` concern now lands in
+`reviewer-concerns/<unit_id>.md` (`.claude/workflows/implementation-loop.js:61`), deliberately
+outside the gitignored run directory, so it survives the worktree that produced it. What follows is
+the six that were rescued by hand before that existed; nothing new arrives here.
+
+**Where this stands (2026-09-13): four resolved, one done pending merges, one waiting on Adriano.**
+This note closes when the two rollout pull requests merge and issue #133 is ruled on.
 
 ---
 
 ## From `_TheGameStudio-wt-static-checks/.studio/output/impl_loop/wizard_writes_static_commands/reviewer-concerns.md`
 
-**Status 2026-09-04: still live.** This is unit 3 of `specs/detected-static-check-command.md`. Criteria 1 and 3 are verified; criterion 2 needs the two stale consumer repos updated.
+**Status 2026-09-13: done, pending merges.** This is unit 3 of `specs/detected-static-check-command.md`.
+Both stale consumer repos are updated — `OrcPunk-biz` #19 and `cerebro` #226, both open. Criteria 1
+and 3 are met; criterion 2 is half met, because `OrcPunk-biz` still raises on a missing test command
+(it has no tests and no stack marker), which is not the refusal this unit is about. Studio #164
+records the measurements and recommends narrowing that criterion; Adriano has not ruled yet.
 
 ### Reviewer Concerns — wizard_writes_static_commands
 
@@ -94,7 +102,11 @@ diff somebody can question.
 
 ## From `_TheGameStudio-wt/impl-findings/.studio/output/impl_loop/findings_extracted_at_finalize/reviewer-concerns.md`
 
-**Status 2026-09-04: unverified.** The claim is that `specs/contrarian-finding-verifier.md` promises a `finding_id` no code writes. Check `save_findings_json`'s keys before acting.
+**Status 2026-09-13: RESOLVED.** Checked. `save_findings_json` (`studio/findings.py:173`) writes
+seven keys and `finding_id` is not among them — and the spec no longer claims it: line 88 now says
+outright that the line used to promise one and nothing ever wrote or read it. The verifier keys each
+verdict to its finding by the loop's `item.index` instead (`.claude/workflows/finding-verifier.js:40`).
+Code, spec and verifier agree. Nothing to do.
 
 ### Reviewer Concerns — findings_extracted_at_finalize
 
@@ -133,7 +145,10 @@ round-trips." If a stable id is genuinely wanted later, that is its own spec pas
 
 ## From `_TheGameStudio-wt/impl-gates/.studio/output/impl_loop/detected_gate_defaults/reviewer-concerns.md`
 
-**Status 2026-09-04: likely resolved by PR #143**, which made `static_checks` hold commands rather than names — the concern was that the detected linter's name was computed then thrown away. Worth confirming.
+**Status 2026-09-13: RESOLVED, confirmed.** PR #143 did fix it, and it is now visible in a real
+repo rather than inferred: loading `cerebro`'s config today yields `static_checks =
+['ruff check {paths}']`. The detected linter's name is turned into a command instead of being
+computed and discarded.
 
 ### Reviewer concerns — detected_gate_defaults
 
