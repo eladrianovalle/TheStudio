@@ -166,7 +166,9 @@ Two installed repos (`_Cerebro`, `OrcPunk-biz`) *do* carry a bare `ruff`, in the
 snapshot at `.studio/source/config/implementation_loop.toml`. That is harmless and needs no shim:
 `impl_loop.py` and the shipped config are both in `SOURCE_FILES` (`install.py:67`), so they update in
 lockstep and no repo can get the new semantics without the new config. Stated here so nobody builds
-a migration for a split-brain that cannot happen.
+a migration for a split-brain that cannot happen. "Harmless" is about that split-brain only, not a
+claim the snapshot stays in step with its tracked checksums — unit 3 found that drift, a separate
+problem.
 
 ### Docstrings that will be wrong the moment this ships
 
@@ -202,7 +204,10 @@ current design. It gets a line saying this spec supersedes that reasoning — no
 - Making the scoping accurate — `{paths}` inherits today's prediction accuracy and this spec does not
   claim to improve it.
 - Auto-upgrading a leftover name, or editing any consuming repo's config.
-- A migration shim for `.studio/source` snapshot skew, which cannot desynchronise.
+- A migration shim for `impl_loop.py` and the shipped config it reads drifting apart. That pair cannot
+  desynchronise — both are in `SOURCE_FILES` and move together. This is not the skew unit 3 found
+  (an ignored `.studio/source/` snapshot against a tracked `MANIFEST.json`), which is a different
+  axis and still has no shim.
 - `mypy` gaining a profile. It appears only in the refusal list, as a name Studio once documented.
 
 ## Risks & Open Questions
@@ -263,18 +268,38 @@ a repo they did not know was stale. Studio's own shipped `config/implementation_
 `static_checks` line at all, so a plain `update` replaces the stale snapshot and detection supplies
 the command.
 
-**"No hand-editing is needed" holds for one of the two repos, not both** (measured 2026-09-03, after
-units 1 and 2 shipped). `update` only rewrites a snapshot file it recorded itself: it refuses to
-clobber any installed file whose on-disk content has drifted from the SHA written at install time.
-`OrcPunk-biz`'s config has not drifted, so a plain `update` rewrites it and the refusal clears.
-`_Cerebro`'s has, along with eleven other installed files, so `update` returns BLOCKED there and
-`--force` is the only way through — which overwrites all twelve. Clearing `_Cerebro` therefore costs
-a review of what those local edits are, not just an `update`.
+**"No hand-editing is needed" holds for both repos** (measured 2026-09-12; an earlier reading of
+2026-09-03 said otherwise and was wrong). `update` refuses to clobber any installed file whose
+on-disk content has drifted from the checksum written at install. `OrcPunk-biz`'s config had not
+drifted, so a plain `update` rewrote it.
+
+`_Cerebro` looked like the expensive case — `update` returned BLOCKED over seventeen files, up from
+twelve on 2026-09-03 — but the drift was not local edits. Its `.studio/source/` snapshot is
+**gitignored**; only `MANIFEST.json`, `VERSION` and `CLAUDE.md` are tracked. The snapshot had moved
+while the tracked record of it stayed behind, so every file was flagged against a stale checksum.
+Each one was byte-identical to its install, verified by diffing them against the commit that wrote
+them. Regenerating the record cleared the block with nothing reviewed and nothing lost. The count
+grew between the two readings for that same reason rather than because anything new was edited: the
+record had not been committed since the 2026-07-08 install, so each Studio change in the nine days
+between them added to the set of files out of step with it.
+
+**The lesson generalises past this spec:** where a snapshot is ignored by git and its checksum file
+is tracked, the two drift apart silently, and the drift presents as "someone hand-edited Studio's
+files". Diff the flagged files against the install commit before believing that report.
 
 **Acceptance criteria:**
-- [ ] Running `update` against a repo whose snapshot carries `static_checks = ["ruff"]` leaves a tree where `load_loop_config` returns `["ruff check {paths}"]` and raises nothing.
-- [ ] `_Cerebro` and `OrcPunk-biz` both load without raising, verified by running `load_loop_config` against each after the update.
-- [ ] `_Alfred` and `Orkid Garden` still load to `["make lint"]` and `[]` respectively — an update must not overwrite a project's own override.
+- [x] Running `update` against a repo whose snapshot carries `static_checks = ["ruff"]` leaves a tree where `load_loop_config` returns `["ruff check {paths}"]` and raises nothing. **Met** — `_Cerebro`, measured 2026-09-12, returns exactly that.
+- [ ] `_Cerebro` and `OrcPunk-biz` both load without raising, verified by running `load_loop_config` against each after the update. **Half met.** `_Cerebro` loads. `OrcPunk-biz` still raises, but not the stale-config refusal this unit is about: it has no tests and no marker file identifying its stack, so no test command can be detected and the loop refuses to invent one. That refusal predates this unit and this unit cannot clear it. See the note below.
+- [x] `_Alfred` and `Orkid Garden` still load to `["make lint"]` and `[]` respectively — an update must not overwrite a project's own override. **Met**, measured 2026-09-12.
 
-**Out of scope:** any further change to detection, the refusal, or the wizard. `_Cerebro` is blocked
-on its own stale PRs (#224/#225) and a tracked `.studio/`, so it may have to lag the other repo.
+**On the half-met criterion.** It was written assuming the only reason either repo could raise was
+the stale setting. `OrcPunk-biz` is a notes repository with no test suite, so it raises for a reason
+that has nothing to do with this unit and that no update can fix. Narrowing the criterion to "neither
+raises the stale-config refusal" would make it pass, and that is the behaviour it was actually
+reaching for — but rewriting a criterion after measuring against it is how a criterion stops meaning
+anything, so it is recorded as half met and left for a human to rule on.
+
+**Out of scope:** any further change to detection, the refusal, or the wizard. `_Cerebro` is not
+blocked after all — `eladrianovalle/cerebro#226` supersedes its stale
+`eladrianovalle/cerebro#224` and `eladrianovalle/cerebro#225`, both now closed. Repo-qualified
+because a bare `#NNN` here auto-links to TheStudio.
