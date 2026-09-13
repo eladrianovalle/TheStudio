@@ -36,6 +36,14 @@ class RunRecord:
     path: Path
     created_at: datetime
     size_bytes: int
+    finalized: bool = False
+    """Whether ``finalize`` ran on this run, i.e. somebody recorded a verdict for it.
+
+    Cleanup never deletes a finalized run. An unfinalized one is a prepare nobody
+    finished — cheap to throw away and cheap to re-issue. A finalized one is the
+    debate itself: the transcript, the decisions that came out of it, and the
+    findings. None of that is reproducible, so age is not a reason to destroy it.
+    """
 
     @property
     def identifier(self) -> str:
@@ -56,6 +64,13 @@ class CleanupReport:
     deletions: List[DeletionRecord]
     dry_run: bool
     errors: List[str]
+    over_budget_mb: float = 0.0
+    """How far over the size limit the finalized runs left us, if cleanup could not get under it.
+
+    Zero means the budget was met. Anything else is a report, not a failure: cleanup
+    will not delete a finalized run to hit a disk target, so it says how much it could
+    not free and leaves the choice of what to archive to a person.
+    """
 
     @property
     def freed_bytes(self) -> int:
@@ -128,6 +143,8 @@ def cleanup_runs(
 
     if settings.ttl_days > 0:
         for record in run_records:
+            if record.finalized:
+                continue
             if record.created_at < cutoff:
                 to_delete.append(DeletionRecord(run=record, reason="ttl"))
 
@@ -136,12 +153,20 @@ def cleanup_runs(
 
     size_limit = settings.size_limit_bytes
     if size_limit and remaining_size > size_limit:
-        sorted_remaining = sorted(remaining, key=lambda rec: rec.created_at)
+        # Oldest first, and finalized runs are not candidates — the budget is a disk
+        # convenience and the debates are the product, so the budget yields.
+        sorted_remaining = sorted(
+            (rec for rec in remaining if not rec.finalized),
+            key=lambda rec: rec.created_at,
+        )
         for record in sorted_remaining:
             if remaining_size <= size_limit:
                 break
             to_delete.append(DeletionRecord(run=record, reason="budget"))
             remaining_size -= record.size_bytes
+        if remaining_size > size_limit:
+            over_mb = (remaining_size - size_limit) / (1024 * 1024)
+            report.over_budget_mb = round(over_mb, 1)
 
     seen_paths = set()
     final_deletions: List[DeletionRecord] = []
@@ -250,12 +275,17 @@ def _build_run_record(phase: str, run_dir: Path) -> Optional[RunRecord]:
     run_id = run_dir.name
     meta_path = run_dir / "run.json"
     created_at = None
+    finalized = False
     if meta_path.exists():
         try:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
             created_iso = meta.get("created_iso")
             if created_iso:
                 created_at = datetime.fromisoformat(created_iso)
+            # prepare writes PENDING; finalize overwrites it with the run's outcome. An
+            # unreadable run.json leaves this False, which is the safe way round: the
+            # run is treated as unfinished and stays eligible, exactly as before.
+            finalized = str(meta.get("status", "PENDING")).upper() != "PENDING"
         except Exception:
             created_at = None
     if created_at is None:
@@ -268,6 +298,7 @@ def _build_run_record(phase: str, run_dir: Path) -> Optional[RunRecord]:
         path=run_dir,
         created_at=created_at,
         size_bytes=size_bytes,
+        finalized=finalized,
     )
 
 

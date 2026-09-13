@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Tests for TTL and budget-based cleanup of run artifacts."""
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -69,6 +70,75 @@ def test_cleanup_runs_enforces_ttl_and_size_budget(tmp_path):
     assert not old_run.exists()
     assert not mid_run.exists()
     assert newest_run.exists()
+
+
+def _write_finalized_run(output_root, phase, run_id, created_iso, size_bytes, verdict="APPROVED"):
+    """A run that finalize has been through — status is no longer PENDING."""
+    return _write_run(
+        output_root, phase, run_id, created_iso, size_bytes,
+        run_json_content=(
+            f'{{"run_id":"{run_id}","phase":"{phase}","created_iso":"{created_iso}",'
+            f'"status":"COMPLETED","verdict":"{verdict}"}}'
+        ),
+    )
+
+
+def test_a_finalized_run_survives_the_ttl_forever(tmp_path):
+    """The debate is the product and it cannot be reproduced; age is no reason to destroy it.
+
+    Cleanup runs automatically on every prepare, so before this an approved debate with
+    its transcript, decisions and findings was deleted on its 31st day exactly like an
+    abandoned prepare. Thirty-one consumer runs went that way.
+    """
+    old = (datetime.now(timezone.utc) - timedelta(days=400)).isoformat()
+    _write_finalized_run(tmp_path, "tech", "run_tech_ancient", old, 10)
+
+    report = cleanup_runs(tmp_path, CleanupSettings(ttl_days=30, size_limit_mb=0))
+
+    assert report.deletions == []
+    assert (tmp_path / "tech" / "run_tech_ancient").exists()
+
+
+def test_an_unfinished_prepare_is_still_deleted_on_age(tmp_path):
+    """The other half: a prepare nobody finished is cheap to throw away and re-issue."""
+    old = (datetime.now(timezone.utc) - timedelta(days=400)).isoformat()
+    _write_run(tmp_path, "tech", "run_tech_abandoned", old, 10)
+
+    report = cleanup_runs(tmp_path, CleanupSettings(ttl_days=30, size_limit_mb=0))
+
+    assert [d.run.run_id for d in report.deletions] == ["run_tech_abandoned"]
+
+
+def test_the_size_budget_yields_to_finalized_runs_and_says_by_how_much(tmp_path):
+    """The budget is a disk convenience; it never buys space by destroying a debate."""
+    recent = datetime.now(timezone.utc).isoformat()
+    _write_finalized_run(tmp_path, "tech", "run_tech_big", recent, 3 * 1024 * 1024)
+
+    report = cleanup_runs(tmp_path, CleanupSettings(ttl_days=0, size_limit_mb=1))
+
+    assert report.deletions == []
+    assert report.over_budget_mb > 0
+    assert (tmp_path / "tech" / "run_tech_big").exists()
+
+
+def test_a_run_whose_metadata_cannot_be_read_is_treated_as_unfinished(tmp_path):
+    """Unreadable metadata must not silently make a run undeletable and immortal.
+
+    With no parseable run.json there is no status to read, so "finalized" stays False and
+    the run keeps its old behaviour — it ages out on the directory's own timestamp, which
+    is the fallback this code already used for its date.
+    """
+    stamp = datetime.now(timezone.utc) - timedelta(days=400)
+    run_dir = _write_run(
+        tmp_path, "tech", "run_tech_corrupt", stamp.isoformat(), 10,
+        run_json_content="{not json",
+    )
+    old_epoch = stamp.timestamp()
+    os.utime(run_dir, (old_epoch, old_epoch))
+
+    report = cleanup_runs(tmp_path, CleanupSettings(ttl_days=30, size_limit_mb=0))
+
+    assert [d.run.run_id for d in report.deletions] == ["run_tech_corrupt"]
 
 
 def test_cleanup_runs_dry_run_does_not_delete(tmp_path):

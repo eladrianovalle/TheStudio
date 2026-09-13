@@ -480,6 +480,13 @@ def _log_cleanup_report(report) -> None:
         )
     else:
         print("- No deletions required.")
+    if getattr(report, "over_budget_mb", 0):
+        print(
+            f"- Still {report.over_budget_mb} MB over the size limit, and every run left "
+            "is one somebody finished. Those are kept: the transcript, the decisions and "
+            "the findings cannot be regenerated. Move some somewhere else, or raise "
+            "cleanup.size_limit_mb."
+        )
     if report.errors:
         for msg in report.errors:
             print(f"- Cleanup warning: {msg}")
