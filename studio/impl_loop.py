@@ -313,6 +313,12 @@ def _no_test_command_message(profile: StackProfile, root: Path) -> str:
         '    test_command = "<the command that runs this repo\'s tests>"',
         "",
         "Or run /studio-setup, which writes that file for you.",
+        *([] if profile.stacks else [
+            "",
+            "If this repository has no tests at all, that is the real answer and there is",
+            "nothing to set: /forge is for code you can prove still works. Use /spec to",
+            "settle the design and build it the ordinary way.",
+        ]),
     ])
 
 
