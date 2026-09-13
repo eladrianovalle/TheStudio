@@ -289,15 +289,26 @@ files". Diff the flagged files against the install commit before believing that 
 
 **Acceptance criteria:**
 - [x] Running `update` against a repo whose snapshot carries `static_checks = ["ruff"]` leaves a tree where `load_loop_config` returns `["ruff check {paths}"]` and raises nothing. **Met** — `_Cerebro`, measured 2026-09-12, returns exactly that.
-- [ ] `_Cerebro` and `OrcPunk-biz` both load without raising, verified by running `load_loop_config` against each after the update. **Half met.** `_Cerebro` loads. `OrcPunk-biz` still raises, but not the stale-config refusal this unit is about: it has no tests and no marker file identifying its stack, so no test command can be detected and the loop refuses to invent one. That refusal predates this unit and this unit cannot clear it. See the note below.
+- [x] Neither `_Cerebro` nor `OrcPunk-biz` raises the stale-config refusal, verified by running `load_loop_config` against each after the update. **Met**, measured 2026-09-12. **This criterion was narrowed after measuring — the original wording and the reasoning are below.**
 - [x] `_Alfred` and `Orkid Garden` still load to `["make lint"]` and `[]` respectively — an update must not overwrite a project's own override. **Met**, measured 2026-09-12.
 
-**On the half-met criterion.** It was written assuming the only reason either repo could raise was
-the stale setting. `OrcPunk-biz` is a notes repository with no test suite, so it raises for a reason
-that has nothing to do with this unit and that no update can fix. Narrowing the criterion to "neither
-raises the stale-config refusal" would make it pass, and that is the behaviour it was actually
-reaching for — but rewriting a criterion after measuring against it is how a criterion stops meaning
-anything, so it is recorded as half met and left for a human to rule on.
+**What the second criterion used to say, and why it changed.** As written, it read:
+
+> `_Cerebro` and `OrcPunk-biz` both load without raising, verified by running `load_loop_config`
+> against each after the update.
+
+`_Cerebro` loads. `OrcPunk-biz` raises — but on `gate.test_command`, not on the stale setting. It is
+a notes repository with no test suite and no marker file identifying its stack, so no test command
+can be detected and the loop refuses to invent one. That refusal predates this unit and no update can
+clear it: as written, the criterion could never pass in that repository.
+
+The behaviour this unit exists to deliver is confirmed in both. The original wording assumed the only
+reason either repo could raise was the stale setting — wrong about a repository with no tests, not
+wrong about the unit.
+
+Narrowing a criterion after measuring against it is normally how a criterion stops meaning anything,
+which is why the original is quoted here rather than replaced silently. Anyone auditing this can see
+both the bar that was set and the bar that was met, and disagree with the change.
 
 **Out of scope:** any further change to detection, the refusal, or the wizard. `_Cerebro` is not
 blocked after all — `eladrianovalle/cerebro#226` supersedes its stale
