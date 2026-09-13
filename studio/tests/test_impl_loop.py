@@ -14,10 +14,10 @@ import pytest
 from config_loading import tomllib
 from impl_loop import (
     LoopConfig,
-    StackProfile,
     LoopConfigError,
     PROFILES,
     STACK_MARKERS,
+    StackProfile,
     STUDIO_ROOT,
     VALID_MANDATES,
     VALID_READ_SCOPES,
@@ -1150,7 +1150,7 @@ def test_a_repo_with_no_stack_is_told_that_having_no_tests_is_an_answer(tmp_path
 
 def test_a_recognised_stack_is_not_told_it_might_have_no_tests(tmp_path):
     """A repo Studio recognised has a suite to point at; the extra paragraph is noise."""
-    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'x'\n", encoding="utf-8")
+    (tmp_path / "Cargo.toml").write_text("[package]\nname = 'x'\n", encoding="utf-8")
     message = _no_test_command_message(resolve_profile(tmp_path), tmp_path)
 
     assert "no tests at all" not in message
