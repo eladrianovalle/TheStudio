@@ -3,14 +3,15 @@ type: thread
 status: active
 slug: studio-rollout-and-open-prs
 created: 2026-09-02
-updated: 2026-09-10
+updated: 2026-09-13
 ---
 
 # Studio: land the open PRs and get the static-check change to the consuming repos
 
 ## Goal
-`specs/detected-static-check-command.md` reaches `status: shipped` — which needs its unit 3, the
-rollout to the two consuming repos still carrying a stale config — and Studio's open PRs are merged.
+`specs/detected-static-check-command.md` reaches `status: shipped`. Unit 3 — the rollout to the two
+consuming repos that carried a stale config — is built and measured; the spec flips when
+`OrcPunk-biz` #19 and `cerebro` #226 merge. Studio's own PRs are all merged.
 
 ## Where this stands
 
@@ -23,20 +24,28 @@ rollout to the two consuming repos still carrying a stale config — and Studio'
 - PR #146 merged 2026-09-02: `specs/verification-due-date.md` is `shipped`.
 - `detected-static-check-command` remains at `approved`, its unit 3 undone.
 
-**In flight (verified 2026-09-10)**
-- **Studio has zero open PRs.** Main at `660e806`, 1020 tests, ruff clean. Everything the old
-  version of this note listed as in-flight has merged: #143 #145 #146 #147 #148 #149 #150 #151 #152
-  #153 #154 #155 #156 #158 #159 #160. #157 is the one that did not: closed unmerged, folded into #154
-  because a thread note belongs in the PR that carries the work it describes.
-- **Unit 3 (the consumer rollout) is the only thing left, and the trap is still armed.** Re-checked
-  today: `OrcPunk-biz` and `_Cerebro` both still load `static_checks = ['ruff']` — they load rather
-  than refuse only because their installed Studio predates the refusal. **Their next `update`
-  delivers the refusal alongside the stale config and breaks `/forge` in both.** The shipped config
-  names no gate keys, so the update itself clears it — the update just has to happen.
-- **`_Cerebro` is the expensive one.** Twelve of its installed files have drifted from the SHAs
-  recorded at install, so `update` returns BLOCKED and only `--force` gets through, overwriting all
-  twelve. Clearing it means reviewing those edits first, not running a command.
-- `find-before-you-grep` is **shipped** (2026-09-04) on real evidence; that fuse is gone.
+**In flight (verified 2026-09-13)**
+- **Studio has zero open PRs.** Main at `eeea628`, 1020 tests, ruff clean. Merged since the last
+  update of this note: #162 #163 #164 #165 #166.
+- **Unit 3 is built and measured; it is waiting on two merges, not on work.** `OrcPunk-biz` #19 and
+  `cerebro` #226 carry the rollout. All three of unit 3's acceptance criteria are met — criterion 2
+  was narrowed in #166 to "neither raises the stale-config refusal", with the original wording quoted
+  in the spec, because `OrcPunk-biz` has no tests and no stack marker and so raises on
+  `gate.test_command` no matter what any update does.
+- **The spec flips to `shipped` the moment those two merge.** Nothing else gates it; it carries no
+  `## Verification` section, so no evidence file is owed.
+- **The armed trap is gone from both repos.** Neither `_Cerebro` nor `OrcPunk-biz` still carries
+  `static_checks = ["ruff"]`, and both now have the refusal installed. Re-measured 2026-09-12 by
+  loading each repo's config: `_Cerebro` gives `['ruff check {paths}']`, `_Alfred` `['make lint']`,
+  `Orkid Garden` `[]`.
+- **`_Cerebro` was never actually blocked.** Its `.studio/source/` is gitignored while
+  `MANIFEST.json` and `VERSION` are tracked, so the snapshot moved while the record of it stayed put
+  and `check-install` reported 17 phantom "local edits". Every flagged file was byte-identical to its
+  install. #226 regenerates the record; its stale #224 and #225 are closed as superseded.
+- **The cross-repo sweep is done** (2026-09-13). Every consumer is current or has exactly one open PR
+  that makes it so: `_Alfred` #270, `cerebro` #226, `cemetery-security` #721, `Multica`/orc-review
+  #102, `OrcPunk-biz` #19, `OrcPunk-dotcom` #82. `miresu` needed no PR — its `CLAUDE.md` is
+  gitignored, so its snapshot was delivered in place. `Orkid Garden` was already current.
 
 ## Decisions made
 - **The rollout is a spec unit, not a follow-up issue.** Added as unit 3 of
@@ -53,26 +62,23 @@ rollout to the two consuming repos still carrying a stale config — and Studio'
   doesn't ship") would sweep up the project's own hand-written commands.
 
 ## Blocked on
-- **Adriano — issue #133.** Its body is half-wrong: concern 1 (the wizard wrote its config where
-  `/forge` never read it) shipped in PR #139, and the issue's own suggested fix was rejected on merit.
-  Concern 2 (a wizard-written file is indistinguishable from a hand-written one) is fully intact at
-  `studio/setup.py:721` and `:949`. A status comment with the evidence is posted. **He needs to say
-  whether to narrow the issue body to concern 2.** Do not close it.
-- **Adriano — `_Cerebro` PRs #224 and #225.** 185 commits behind; nothing Studio-related can reach
-  that repo until they merge. An earlier attempt to merge them was refused by the permission
-  classifier, and that refusal was not routed around.
-- **Adriano — two consumer PRs that should merge.** `OrcPunk-biz` #19 (it *deletes* the stale
-  `static_checks = ["ruff"]` line, so merging it defuses the trap below) and `OrcPunk-dotcom` #82
-  (verified 2026-09-01: the §5 draft-vs-ready text it carries is genuinely absent from that repo).
+- **Adriano — merge `OrcPunk-biz` #19 and `cerebro` #226.** That is the whole remaining path to
+  `shipped`. The other four sweep PRs are independent and can go in any order.
+- **Adriano — issue #133.** Unchanged and still a decision rather than work: concern 1 shipped in
+  #139 and the issue's own suggested fix was rejected on merit; concern 2 is fully intact at
+  `studio/setup.py:721` and `:949`. Narrow the body to concern 2. Do not close it. The evidence
+  comment is already posted.
 
 ## Landmines
 
-- **Armed trap, verified still armed on 2026-09-10.** `_Cerebro` and `OrcPunk-biz` both carry
-  `static_checks = ["ruff"]` in `.studio/source/config/implementation_loop.toml`, and neither has the
-  refusal installed yet (`grep -c LEGACY_STATIC_CHECK` returns 0 in both). **Nothing is broken today.**
-  They break on the *next* `update`, which delivers the refusal alongside the stale config. Fix the
-  config in the same pass — Studio's shipped `studio/config/implementation_loop.toml` names no gate
-  keys, so the update alone clears it.
+- **The armed trap is defused** (2026-09-12); it is kept here only so nobody re-arms it. It worked
+  like this: the refusal and the stale config had to arrive in either order, and the wrong order
+  broke `/forge`. Studio's shipped `studio/config/implementation_loop.toml` names no gate keys, so an
+  update clears the config in the same pass that delivers the refusal — which is why a plain update
+  was always the fix and hand-editing never was.
+- **A gitignored snapshot beside a tracked checksum file drifts silently**, and the drift reports
+  itself as "someone hand-edited Studio's files". Diff the flagged files against the commit that
+  installed them before believing it. This cost `_Cerebro` a month of stuck PRs.
 - **Studio's shipped loop config is `studio/config/implementation_loop.toml`**, not `config/` at the
   repo root. Checking the wrong path returns "file missing" and looks like a different problem.
 - **Do not park a feature branch in the main checkout.** Consuming repos read Studio from this working
@@ -82,11 +88,21 @@ rollout to the two consuming repos still carrying a stale config — and Studio'
   backfilling. Re-check a waiting spec's named symbols against the tree before forging it.
 - **Subagents dispatched into `_Alfred` must be told `Vault/Private/` is off-limits.** It is decrypted
   and plaintext at rest on this machine; the encryption protects the remote only.
+- **`_Alfred` cannot take a plain worktree.** `git worktree add` dies with
+  `smudge filter git-crypt failed` before checking anything out, because a worktree has no key. Use
+  a sparse checkout that never materialises the vault: `git worktree add --no-checkout`, then
+  `git sparse-checkout init --no-cone`, `git sparse-checkout set '/*' '!/Vault/'`, then `git checkout`.
+- **Seeding a worktree's `.studio/` with `cp -R` silently no-ops** when the repo tracks any file
+  under `.studio/`, because the destination already exists — `update` then says "Studio not
+  installed". Copy the pieces (`source`, `VERSION`, `MANIFEST.json`), not the directory.
 
 ## Files & artifacts
-- Repo: `/Users/orcpunk/Repos/_TheGameStudio`, main `660e806`.
+- Repo: `/Users/orcpunk/Repos/_TheGameStudio`, main `eeea628`.
 - Worktree: `/Users/orcpunk/Repos/_TheGameStudio-wt-static-checks` (branch `chore/unstale-2026-09-02`).
   Keep it — `.studio/output/impl_loop/` handoff records are gitignored and die with the worktree.
-- Specs: `specs/detected-static-check-command.md` (unit 3 pending).
-- Open: `_Cerebro` #224/#225, `OrcPunk-biz` #19, `OrcPunk-dotcom` #82. TheStudio has none.
+- Spec: `specs/detected-static-check-command.md` — all three unit 3 criteria met, `approved` until
+  the two rollout PRs merge.
+- Open PRs, all mine, all ready: `OrcPunk-biz` #19, `cerebro` #226, `OrcPunk-dotcom` #82,
+  `_Alfred` #270, `cemetery-security` #721, `Multica`/orc-review #102. TheStudio has none.
+  `cerebro` #224 and #225 are closed as superseded by #226.
 - Issue: #133 (open, half-stale, comment posted).
