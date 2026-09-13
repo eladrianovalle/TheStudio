@@ -1521,6 +1521,59 @@ def test_finalize_writes_no_findings_json_when_there_are_no_findings(studio_root
     assert not (run_dir / "findings.json").exists()
 
 
+def test_finalize_names_the_verification_step_for_medium_findings(studio_root, capsys):
+    """The second opinion existed only in a doc, so it was never once taken.
+
+    Every finding in every run across every installed repo carried a null verified
+    confidence — an entire verifier shipped and did nothing, because nothing in the
+    run path ever named it. Studio cannot run the agent itself, so finalize says the
+    command instead.
+    """
+    run_id, run_dir = _run_with_contrarian_text(studio_root, CONTRARIAN_WITH_FINDINGS)
+
+    run_phase.finalize_run(make_finalize_args(run_id=run_id))
+
+    out = capsys.readouterr().out
+    assert "medium-confidence finding(s) have had no second opinion" in out
+    assert f"/finding-verifier {run_dir}" in out
+
+
+def test_finalize_stays_quiet_when_no_finding_needs_a_second_opinion(studio_root, capsys):
+    """High needs no second voice and low is already discounted.
+
+    A line printed after every run is a line people learn to skip, which is how the
+    step got ignored the first time.
+    """
+    run_id, _ = _run_with_contrarian_text(
+        studio_root,
+        "> **FINDING [confidence: high]:** The lobby has no cap on players.\n"
+        "> **Quote:** \"players join freely\"\n"
+        "> **Impact:** unbounded growth\n",
+    )
+
+    run_phase.finalize_run(make_finalize_args(run_id=run_id))
+
+    assert "second opinion" not in capsys.readouterr().out
+
+
+def test_finalize_does_not_renag_about_findings_already_verified(studio_root, capsys):
+    """Once a verdict is written back, the step is done and must stop being offered."""
+    run_id, run_dir = _run_with_contrarian_text(studio_root, CONTRARIAN_WITH_FINDINGS)
+    run_phase.finalize_run(make_finalize_args(run_id=run_id))
+    capsys.readouterr()  # drop the first finalize's output; the second one is the subject
+
+    findings_path = run_dir / "findings.json"
+    records = json.loads(findings_path.read_text(encoding="utf-8"))
+    for record in records:
+        record["verdict"] = "confirmed"
+        record["verified_confidence"] = "high"
+    findings_path.write_text(json.dumps(records), encoding="utf-8")
+
+    run_phase.finalize_run(make_finalize_args(run_id=run_id))
+
+    assert "second opinion" not in capsys.readouterr().out
+
+
 def test_finalize_leaves_an_existing_findings_json_alone(studio_root):
     """Re-finalizing must not clobber the verifier's adjusted confidences."""
     run_id, run_dir = _run_with_contrarian_text(studio_root, CONTRARIAN_WITH_FINDINGS)
