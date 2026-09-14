@@ -480,6 +480,13 @@ def _log_cleanup_report(report) -> None:
         )
     else:
         print("- No deletions required.")
+    if getattr(report, "over_budget_mb", 0):
+        print(
+            f"- Still {report.over_budget_mb} MB over the size limit, and every run left "
+            "is one somebody finished. Those are kept: the transcript, the decisions and "
+            "the findings cannot be regenerated. Move some somewhere else, or raise "
+            "cleanup.size_limit_mb."
+        )
     if report.errors:
         for msg in report.errors:
             print(f"- Cleanup warning: {msg}")
@@ -1583,6 +1590,7 @@ def finalize_run(args: argparse.Namespace) -> None:
         if findings:
             save_findings_json(run_dir, findings)
             print(f"Generated {findings_path.name} with {len(findings)} finding(s)")
+    _report_unverified_findings(findings_path, run_dir)
 
     # Auto-write the judgment-free session health record (additive, soft-fail).
     _write_session_record(
@@ -1609,6 +1617,44 @@ def finalize_run(args: argparse.Namespace) -> None:
         print("   1. Review rejection reasons in contrarian files")
         print("   2. Prepare a rerun with revised approach")
         print("   3. Rerun will automatically inject failure context")
+
+
+def _report_unverified_findings(findings_path: Path, run_dir: Path) -> None:
+    """Name the verification step, because nobody was ever going to remember it.
+
+    The verifier is a separate agent and Studio cannot run agents — it writes the
+    instructions somebody else executes. That left the step existing only in a doc,
+    and it was never once taken: every finding in every run across every repo carried
+    a null verified confidence, so an entire second opinion shipped and did nothing.
+
+    Medium is the confidence the verifier is for. High needs no second voice and low
+    is already discounted, so a run with neither says nothing at all rather than
+    training people to skip a line they see every time.
+    """
+    if not findings_path.exists():
+        return
+    try:
+        rows = json.loads(findings_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return  # a findings file we cannot read is not worth failing finalize over
+    if not isinstance(rows, list):
+        return  # nor is one that parses but was hand-edited into something else
+
+    unverified = [
+        row for row in rows
+        if isinstance(row, dict)
+        and str(row.get("confidence", "")).lower() == "medium"
+        and row.get("verified_confidence") is None
+    ]
+    if not unverified:
+        return
+
+    print(
+        f"\n⚖️  {len(unverified)} medium-confidence finding(s) have had no second opinion."
+    )
+    print("   A fresh agent re-checks each one from its quote alone, never the")
+    print("   contrarian's reasoning, and writes an adjusted confidence back:")
+    print(f"\n     /finding-verifier {run_dir}\n")
 
 
 def _maybe_notify(run_dir: Path) -> None:
