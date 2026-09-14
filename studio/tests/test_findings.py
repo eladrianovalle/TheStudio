@@ -248,7 +248,8 @@ def test_what_save_writes_is_what_load_reads(tmp_path):
 
 def test_a_findings_file_edited_into_nonsense_reads_as_empty(tmp_path):
     """Junk in the file must not crash a caller; it reads as nothing to verify."""
-    for junk in ('"just a string"', '{"findings": "not a list"}', '[1, 2, 3]'):
+    for junk in ('"just a string"', '{"findings": "not a list"}', '[1, 2, 3]',
+                 '[{"confidence": "medium", "flaw": "truncated before quote"}]'):
         (tmp_path / "findings.json").write_text(junk, encoding="utf-8")
         assert load_findings_json(tmp_path) == []
 

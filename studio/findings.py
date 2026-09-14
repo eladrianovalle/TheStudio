@@ -175,6 +175,9 @@ def extract_findings_from_run(run_dir: Path) -> list[Finding]:
 # shape, so an old run directory stays readable forever.
 FINDINGS_SCHEMA_VERSION = 1
 
+# The row fields load_findings_json indexes directly; a row missing any of them is skipped.
+_REQUIRED_FINDING_KEYS = ("confidence", "flaw", "quote", "impact")
+
 
 def save_findings_json(run_dir: Path | str, findings: list[Finding]) -> Path:
     """Save findings to findings.json in the run directory. Returns the path.
@@ -218,7 +221,8 @@ def load_findings_json(run_dir: Path | str) -> list[Finding]:
         return []
     # A bare list is the unversioned original; the versioned shape carries its rows
     # under a key. Anything else is a hand-edited or truncated file, and rows that are
-    # not records are skipped rather than crashing finalize.
+    # not records, or are missing a field a Finding needs, are skipped rather than
+    # crashing finalize.
     if isinstance(data, list):
         rows = data
     elif isinstance(data, dict):
@@ -238,5 +242,5 @@ def load_findings_json(run_dir: Path | str) -> list[Finding]:
             verified_confidence=d.get("verified_confidence"),
         )
         for d in rows
-        if isinstance(d, dict) and "confidence" in d and "flaw" in d
+        if isinstance(d, dict) and all(key in d for key in _REQUIRED_FINDING_KEYS)
     ]
