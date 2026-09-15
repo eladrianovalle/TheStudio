@@ -3,7 +3,7 @@ type: thread
 status: active
 slug: studio-rollout-and-open-prs
 created: 2026-09-02
-updated: 2026-09-13
+updated: 2026-09-15
 ---
 
 # Studio: land the open PRs and get the static-check change to the consuming repos
@@ -103,6 +103,7 @@ consuming repos that carried a stale config — is built and measured; the spec 
 - Spec: `specs/detected-static-check-command.md` — all three unit 3 criteria met, `approved` until
   the two rollout PRs merge.
 - Open PRs, all mine, all ready: `OrcPunk-biz` #19, `cerebro` #226, `OrcPunk-dotcom` #82,
-  `_Alfred` #270, `cemetery-security` #721, `Multica`/orc-review #102. TheStudio has none.
+  `cemetery-security` #721. `_Alfred` #270 and `Multica`/orc-review #102 merged 2026-09-14.
+  TheStudio's only open PR is #172, which belongs to the `studio-improvements-from-evidence` thread.
   `cerebro` #224 and #225 are closed as superseded by #226.
 - Issue: #133 (open, half-stale, comment posted).
