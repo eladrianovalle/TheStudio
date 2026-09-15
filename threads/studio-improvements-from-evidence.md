@@ -33,7 +33,7 @@ anyone hand-writing a config file.
   of advising a test command it can never have.
 
 **In flight**
-- **PR #172 — `specs/first-class-forge-gates.md`, draft, on branch `spec/first-class-forge-gates`.**
+- **PR #172 — `specs/first-class-forge-gates.md`, ready for review, on branch `spec/first-class-forge-gates`.**
   The debate behind it is `studio/output/tech/run_tech_20260915_015039`, finalized APPROVED, with
   `decisions.md`, `findings.json` (verified) and `summary.md` all present.
 
@@ -62,7 +62,7 @@ then build unit 1 with `/forge --spec first-class-forge-gates --unit wizard_writ
   consuming repo's `CLAUDE.md`, which is our only vector. Revisit at a third prompt-shaped feature.
 
 ## Blocked on
-- **Adriano — merge PR #172.** It is a draft on purpose; merging is the approval.
+- **Adriano — merge PR #172.** It is open and ready for review; merging is the approval.
 - **Adriano — four consumer PRs still open**, contrary to what an earlier note in this repo implied:
   `OrcPunk-biz` #19, `cerebro` #226, `OrcPunk-dotcom` #82, `cemetery-security` #721. The first two
   are what `specs/detected-static-check-command.md` needs to reach `shipped`; its three acceptance
@@ -104,7 +104,7 @@ then build unit 1 with `/forge --spec first-class-forge-gates --unit wizard_writ
 
 ## Files & artifacts
 - Repo: `/Users/orcpunk/Repos/_TheGameStudio`, main `0db3647`.
-- Spec: `specs/first-class-forge-gates.md` on branch `spec/first-class-forge-gates` (PR #172, draft).
+- Spec: `specs/first-class-forge-gates.md` on branch `spec/first-class-forge-gates` (PR #172, open).
 - Debate: `studio/output/tech/run_tech_20260915_015039` — instructions, decisions, both advocate and
   contrarian rounds, verified `findings.json`, summary. Survives cleanup now that #169 shipped.
 - Ticket: [#133](https://github.com/eladrianovalle/TheStudio/issues/133), which #172 supersedes.
