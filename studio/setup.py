@@ -17,9 +17,13 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from config_loading import tomllib
 
 # ---------------------------------------------------------------------------
 # Version & step registry
@@ -631,21 +635,64 @@ def apply_smoke_config(
         save_setup_state(target, state)
 
 
-def _format_loop_toml(profile: Any) -> str:
+# The line the wizard signs its own work with, so a later run can tell the template it
+# wrote from a file a person has since written or edited. One plain comment line on
+# purpose: no version, no hash. Nothing needs to know more than "we wrote this".
+WIZARD_STAMP = "# Written by /studio-setup on {date}. Edit freely — setup never overwrites this file."
+
+# The same line matched by shape rather than by today's date — a template written last
+# month is still the wizard's untouched template.
+_WIZARD_STAMP_PATTERN = re.compile(
+    r"^# Written by /studio-setup on \d{4}-\d{2}-\d{2}\. "
+    r"Edit freely — setup never overwrites this file\.$"
+)
+
+
+def _comment_lines(text: str, width: int = 90) -> List[str]:
+    """*text* as ``#``-prefixed comment lines, wrapped so the file stays readable."""
+    return ["# " + line for line in textwrap.wrap(text, width=width - 2)]
+
+
+def _format_loop_toml(profile: Any, root: Path) -> str:
     """Format an ``impl_loop.StackProfile`` as ``.studio/implementation_loop.toml`` content.
 
     Writes all four ``[gate]`` keys, including the empty ones, so the file shows the whole
     shape of what can be set here rather than only the parts this repo's stack answered.
+    When the profile has no command at all, that is the *whole* file: every key blank, and
+    a note saying that filling in ``test_command`` is what makes ``/forge`` work here.
+
+    The first line is the stamp, and it is first so ``is_wizard_template`` can read one
+    line to recognise it.
+
+    When there is no command, the ``Detected:`` line comes from
+    ``impl_loop._detected_line`` rather than a second copy of its sentences. That text is
+    the only place a Unity repo is told why Studio ships no command for it, and the loop's
+    refusal and this file have to say the same thing — a paraphrase here is the copy that
+    goes stale. It is refusal text, though, so a repo whose commands *are* filled in gets
+    the plain "detected from this repo's stack" line instead.
 
     ``static_checks`` is written straight out of the profile, so it holds *commands*
     (``ruff check {paths}``, ``npm run lint``) — the values the loader expects, not the
     bare tool names it refuses. The comment block says what ``{paths}`` does, so someone
     hand-editing the file is not left guessing whether the token is literal.
     """
+    import impl_loop
+
     checks = ", ".join(_toml_quote(check) for check in profile.static_checks)
-    stacks = ", ".join(profile.stacks)
-    return "\n".join([
-        f"# /forge gate commands, detected from this repo's stack ({stacks}) by the setup wizard.",
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if profile.test_command:
+        found = [
+            f"# /forge gate commands, detected from this repo's stack "
+            f"({', '.join(profile.stacks)}) by the setup wizard."
+        ]
+    else:
+        # _detected_line is refusal text — it explains why what was found is no help —
+        # so it goes in the file only when there is nothing to run. On a stack Studio
+        # does serve it would say the opposite of the command sitting under it.
+        found = _comment_lines(f"Detected: {impl_loop._detected_line(profile, root)}")
+    lines = [
+        WIZARD_STAMP.format(date=today),
+        *found,
         "#",
         "# Edit anything here. /forge reads this file *instead of* Studio's shipped",
         "# config/implementation_loop.toml: a [gate] key you delete falls back to what detection",
@@ -653,14 +700,60 @@ def _format_loop_toml(profile: Any) -> str:
         "#",
         "# static_checks holds commands: /forge replaces {paths} with the files this unit is",
         "# scoped to, and a command with no {paths} in it runs exactly as written.",
+    ]
+    if not profile.test_command:
+        lines += [
+            "#",
+            *_comment_lines(
+                "Nothing below is filled in, because Studio has no command it can honestly "
+                "run here. Writing test_command is what makes /forge work in this repo: "
+                "until it is set, /forge refuses to start."
+            ),
+        ]
+        fill_in = "  # ← the command that runs this repo's tests"
+    else:
+        fill_in = ""
+    lines += [
         "",
         "[gate]",
-        f"test_command = {_toml_quote(profile.test_command)}",
+        f"test_command = {_toml_quote(profile.test_command or '')}{fill_in}",
         f"static_checks = [{checks}]",
         f"require_mutation_check = {str(profile.require_mutation_check).lower()}",
         f"mutation_command = {_toml_quote(profile.mutation_command or '')}",
         "",
-    ])
+    ]
+    return "\n".join(lines)
+
+
+def is_wizard_template(path: Path) -> bool:
+    """Is *path* the wizard's own template, with nobody having filled it in yet?
+
+    Two questions, and the answer is yes only to both: did the wizard write this file (its
+    stamp is the first line), and is ``gate.test_command`` still blank. A file someone has
+    edited into working order answers the second one no, which is the only state worth
+    telling apart — so there is no content hash and no version number here, and the stamp
+    is matched by its shape rather than against today's date.
+
+    An unreadable or unparseable file is not the wizard's template, because the wizard has
+    never written one that does not parse.
+    """
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+    first_line = text.split("\n", 1)[0].strip()
+    if not _WIZARD_STAMP_PATTERN.match(first_line):
+        return False
+
+    try:
+        data = tomllib.loads(text)
+    except ValueError:
+        return False
+    gate = data.get("gate")
+    if not isinstance(gate, dict):
+        gate = {}
+    return not str(gate.get("test_command") or "").strip()
 
 
 def apply_implementation_loop_config(
@@ -668,21 +761,22 @@ def apply_implementation_loop_config(
     state: Optional[Dict[str, Any]] = None,
     _save: bool = True,
 ) -> None:
-    """Write ``.studio/implementation_loop.toml`` with this repo's detected gate commands.
+    """Leave every repo with a ``.studio/implementation_loop.toml`` it can edit.
 
     The step asks nothing, and it works nothing out for itself: the commands come from
     ``impl_loop.resolve_profile``, the same call ``/forge`` resolves its own gate with. One
     function, two callers, so the file you can edit and the commands the loop actually runs
     cannot drift apart.
 
-    Three outcomes, and only one of them writes a file:
+    Three outcomes, and two of them write a file:
 
     - **A file is already there:** left exactly as it is. A hand-written override is the only
       thing making ``/forge`` work in a repo Studio cannot identify, and this step must never
       eat one.
     - **Detection has no test command** (nothing recognised, two stacks at once, or a stack
-      Studio ships no command for): nothing is written, and the refusal ``/forge`` would print
-      is printed here instead — it already names the file and the lines to write by hand.
+      Studio ships no command for): a blank template is written, stamped, with every key
+      present and a note saying which one to fill in. Writing nothing here is what used to
+      send people off to author this file from scratch; a template turns that into one edit.
     - **Otherwise:** the detected commands are written out for the user to edit.
 
     The file goes where ``target``'s own ``/forge`` will look for it, which
@@ -723,17 +817,19 @@ def apply_implementation_loop_config(
         outcome = {"status": "kept"}
     else:
         profile = impl_loop.resolve_profile(target)
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(_format_loop_toml(profile, target), encoding="utf-8")
         if profile.test_command:
-            config_path.parent.mkdir(parents=True, exist_ok=True)
-            config_path.write_text(_format_loop_toml(profile), encoding="utf-8")
             print(f"Wrote {config_path}: test_command = {profile.test_command}")
             outcome = {"status": "written", "test_command": profile.test_command}
         else:
-            # The loader's own refusal, word for word rather than paraphrased: the two
-            # messages have to name the same file and the same lines, and a copy here
-            # would be the one that goes stale.
-            print(impl_loop._no_test_command_message(profile, target))
-            outcome = {"status": "undetected"}
+            # Say what actually happened. The loader's refusal ("nothing was written")
+            # would be a lie here, and the file it tells you to create now exists.
+            print(
+                f"Wrote {config_path} as a blank template: Studio has no command it can "
+                "run here. Fill in gate.test_command — /forge refuses until you do."
+            )
+            outcome = {"status": "template"}
 
     if state is None:
         state = load_setup_state(target)
@@ -947,10 +1043,10 @@ def show_status(target: Path) -> str:
         )
     elif gate_status == "kept":
         lines.append("  Forge gates: your own .studio/implementation_loop.toml (left alone)")
-    elif gate_status == "undetected":
+    elif gate_status == "template":
         lines.append(
-            "  Forge gates: none detected — /forge refuses until you write "
-            ".studio/implementation_loop.toml"
+            "  Forge gates: none detected — blank template written, fill in test_command "
+            "in .studio/implementation_loop.toml"
         )
     else:
         lines.append("  Forge gates: not configured")
