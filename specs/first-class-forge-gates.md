@@ -190,6 +190,10 @@ harness has none and adding one for a single assertion is not worth a dependency
   is why the sweep is called out as deployment rather than assumed.
 - **The build order is load-bearing, not cosmetic.** See the Build Plan: the loader unit cannot go
   first without leaving the tree red.
+- **The refusal's discriminator is easy to get wrong**, and the debate's first draft did. Branching on
+  "is this the project override" rather than "does this file exist" mis-reports an explicitly passed
+  file with a blank key as a missing file. An independent verifier promoted that finding to high
+  confidence after the spec was drafted; unit 2's criteria now pin the correct discriminator.
 - **Open (P2):** whether detection eventually moves to `setup.py`. Not decided, not urgent.
 
 ## Build Plan
@@ -227,7 +231,8 @@ config paragraph.
   - [ ] `Orkid Garden`'s and `_Alfred`'s exact files load to the values they write, raising nothing.
   - [ ] With `resolve_profile` patched to raise, a repo with no marker files and a filled config still loads — proving the loader never calls it.
   - [ ] A `LoopConfig()` built with no arguments is refused rather than gating on the old literals.
-  - [ ] The refusal for a blank `test_command` names that file and says the key is blank; with no file it says the path does not exist; neither mentions what was detected.
+  - [ ] The refusal chooses its wording from **whether the file exists**, not from which resolution branch supplied the path: a blank `test_command` in a file passed explicitly to `load_loop_config(path=...)` says that file's key is blank, not that the path does not exist.
+  - [ ] With no file at all, the refusal says the path does not exist; neither wording mentions what was detected.
   - [ ] `git ls-files studio/.studio/implementation_loop.toml` returns the file — checked with `git ls-files`, not `git check-ignore`, whose output on a negated pattern reads as a match either way.
 - **Out of scope:** the wizard, which already writes complete files by now.
 
