@@ -648,9 +648,9 @@ _WIZARD_STAMP_PATTERN = re.compile(
 )
 
 
-def _comment_lines(text: str, width: int = 90) -> List[str]:
+def _comment_lines(text: str) -> List[str]:
     """*text* as ``#``-prefixed comment lines, wrapped so the file stays readable."""
-    return ["# " + line for line in textwrap.wrap(text, width=width - 2)]
+    return ["# " + line for line in textwrap.wrap(text, width=88)]
 
 
 def _format_loop_toml(profile: Any, root: Path) -> str:
@@ -663,13 +663,6 @@ def _format_loop_toml(profile: Any, root: Path) -> str:
 
     The first line is the stamp, and it is first so ``is_wizard_template`` can read one
     line to recognise it.
-
-    When there is no command, the ``Detected:`` line comes from
-    ``impl_loop._detected_line`` rather than a second copy of its sentences. That text is
-    the only place a Unity repo is told why Studio ships no command for it, and the loop's
-    refusal and this file have to say the same thing — a paraphrase here is the copy that
-    goes stale. It is refusal text, though, so a repo whose commands *are* filled in gets
-    the plain "detected from this repo's stack" line instead.
 
     ``static_checks`` is written straight out of the profile, so it holds *commands*
     (``ruff check {paths}``, ``npm run lint``) — the values the loader expects, not the
@@ -688,7 +681,9 @@ def _format_loop_toml(profile: Any, root: Path) -> str:
     else:
         # _detected_line is refusal text — it explains why what was found is no help —
         # so it goes in the file only when there is nothing to run. On a stack Studio
-        # does serve it would say the opposite of the command sitting under it.
+        # does serve it would say the opposite of the command sitting under it. It is
+        # reused word for word rather than paraphrased: a second copy of the Unity
+        # warning here is the one that would go stale.
         found = _comment_lines(f"Detected: {impl_loop._detected_line(profile, root)}")
     lines = [
         WIZARD_STAMP.format(date=today),
@@ -739,7 +734,7 @@ def is_wizard_template(path: Path) -> bool:
     """
     try:
         text = Path(path).read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return False
 
     first_line = text.split("\n", 1)[0].strip()
