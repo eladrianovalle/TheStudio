@@ -72,8 +72,8 @@ Landmines.
   consuming repo's `CLAUDE.md`, which is our only vector. Revisit at a third prompt-shaped feature.
 
 ## Blocked on
-- **Adriano — merge PR #173**, this note's own pull request. Until it does, this note exists only on
-  branch `chore/handoff-2026-09-15`, not on main.
+- **Adriano — merge PR #174**, this note's own pull request. Until it does, this update exists only on
+  branch `chore/thread-note-unit-1`, not on main.
 - **Adriano — four consumer PRs still open**, contrary to what an earlier note in this repo implied:
   `OrcPunk-biz` #19, `cerebro` #226, `OrcPunk-dotcom` #82, `cemetery-security` #721. The first two
   are what `specs/detected-static-check-command.md` needs to reach `shipped`; its three acceptance
