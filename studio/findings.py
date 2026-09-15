@@ -170,10 +170,24 @@ def extract_findings_from_run(run_dir: Path) -> list[Finding]:
     return results
 
 
+# The shape findings.json is written in today. Bump this when the row fields change
+# in a way a reader has to know about; load_findings_json still accepts every older
+# shape, so an old run directory stays readable forever.
+FINDINGS_SCHEMA_VERSION = 1
+
+# The row fields load_findings_json indexes directly; a row missing any of them is skipped.
+_REQUIRED_FINDING_KEYS = ("confidence", "flaw", "quote", "impact")
+
+
 def save_findings_json(run_dir: Path | str, findings: list[Finding]) -> Path:
-    """Save findings to findings.json in the run directory. Returns the path."""
+    """Save findings to findings.json in the run directory. Returns the path.
+
+    The file says which shape it is. It is read by a separate Workflow and by a
+    future Studio that may not be this one, and it already went unparsed for months
+    once — a reader that cannot tell which shape it is holding has no way to notice.
+    """
     run_dir = Path(run_dir)  # accept a str path too (the Workflow shell passes sys.argv[1])
-    data = [
+    rows = [
         {
             "confidence": f.confidence,
             "flaw": f.flaw,
@@ -185,18 +199,37 @@ def save_findings_json(run_dir: Path | str, findings: list[Finding]) -> Path:
         }
         for f in findings
     ]
+    data = {"schema_version": FINDINGS_SCHEMA_VERSION, "findings": rows}
     path = run_dir / "findings.json"
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
     return path
 
 
 def load_findings_json(run_dir: Path | str) -> list[Finding]:
-    """Load findings from findings.json. Returns empty list if file missing."""
+    """Load findings from findings.json. Returns empty list if file missing.
+
+    Reads both shapes. Files written before versioning are a bare list of rows; files
+    written since are an object carrying ``schema_version`` and ``findings``. Every run
+    directory already on disk is the older shape, and those runs are not reproducible,
+    so dropping them was never an option.
+    """
     run_dir = Path(run_dir)  # accept a str path too (the Workflow shell passes sys.argv[1])
     path = run_dir / "findings.json"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
+        return []
+    # A bare list is the unversioned original; the versioned shape carries its rows
+    # under a key. Anything else is a hand-edited or truncated file, and rows that are
+    # not records, or are missing a field a Finding needs, are skipped rather than
+    # crashing finalize.
+    if isinstance(data, list):
+        rows = data
+    elif isinstance(data, dict):
+        rows = data.get("findings", [])
+    else:
+        return []
+    if not isinstance(rows, list):
         return []
     return [
         Finding(
@@ -208,5 +241,6 @@ def load_findings_json(run_dir: Path | str) -> list[Finding]:
             verdict=d.get("verdict"),
             verified_confidence=d.get("verified_confidence"),
         )
-        for d in data
+        for d in rows
+        if isinstance(d, dict) and all(key in d for key in _REQUIRED_FINDING_KEYS)
     ]

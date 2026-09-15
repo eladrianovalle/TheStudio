@@ -64,6 +64,7 @@ from decision_points import (
 )
 from findings import (
     extract_findings_from_run,
+    load_findings_json,
     save_findings_json,
 )
 from question_mode import (
@@ -1634,17 +1635,16 @@ def _report_unverified_findings(findings_path: Path, run_dir: Path) -> None:
     if not findings_path.exists():
         return
     try:
-        rows = json.loads(findings_path.read_text(encoding="utf-8"))
+        # Through the loader rather than a raw read: it is the thing that knows the
+        # file's shape, and two shapes exist on disk. Reading it here by hand is how
+        # this would quietly start reporting nothing the day the shape changed.
+        findings = load_findings_json(run_dir)
     except (OSError, ValueError):
         return  # a findings file we cannot read is not worth failing finalize over
-    if not isinstance(rows, list):
-        return  # nor is one that parses but was hand-edited into something else
 
     unverified = [
-        row for row in rows
-        if isinstance(row, dict)
-        and str(row.get("confidence", "")).lower() == "medium"
-        and row.get("verified_confidence") is None
+        f for f in findings
+        if str(f.confidence).lower() == "medium" and f.verified_confidence is None
     ]
     if not unverified:
         return

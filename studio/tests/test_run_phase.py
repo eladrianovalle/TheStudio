@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import findings
 import run_phase
 from integrations.slack_digest import INTEGRATIONS_FILENAME, load_integrations_config
 from conftest import make_prepare_args, make_finalize_args
@@ -1501,7 +1502,9 @@ def test_finalize_writes_findings_json_from_contrarian_output(studio_root):
 
     run_phase.finalize_run(make_finalize_args(run_id=run_id))
 
-    records = json.loads((run_dir / "findings.json").read_text(encoding="utf-8"))
+    payload = json.loads((run_dir / "findings.json").read_text(encoding="utf-8"))
+    assert payload["schema_version"] == findings.FINDINGS_SCHEMA_VERSION
+    records = payload["findings"]
     assert len(records) == 2
     assert records[0]["confidence"] == "medium"
     assert records[0]["flaw"] == "The retry loop never backs off between attempts."
@@ -1563,11 +1566,11 @@ def test_finalize_does_not_renag_about_findings_already_verified(studio_root, ca
     capsys.readouterr()  # drop the first finalize's output; the second one is the subject
 
     findings_path = run_dir / "findings.json"
-    records = json.loads(findings_path.read_text(encoding="utf-8"))
-    for record in records:
+    payload = json.loads(findings_path.read_text(encoding="utf-8"))
+    for record in payload["findings"]:
         record["verdict"] = "confirmed"
         record["verified_confidence"] = "high"
-    findings_path.write_text(json.dumps(records), encoding="utf-8")
+    findings_path.write_text(json.dumps(payload), encoding="utf-8")
 
     run_phase.finalize_run(make_finalize_args(run_id=run_id))
 
@@ -1593,17 +1596,17 @@ def test_finalize_leaves_an_existing_findings_json_alone(studio_root):
 
     # Stand in for the verifier: rewrite the file with a verdict and a bumped confidence.
     findings_path = run_dir / "findings.json"
-    verified = json.loads(findings_path.read_text(encoding="utf-8"))
-    verified[0]["confidence"] = "high"
-    verified[0]["verdict"] = "confirmed"
-    verified[0]["verified_confidence"] = "high"
-    findings_path.write_text(json.dumps(verified, indent=2), encoding="utf-8")
+    payload = json.loads(findings_path.read_text(encoding="utf-8"))
+    payload["findings"][0]["confidence"] = "high"
+    payload["findings"][0]["verdict"] = "confirmed"
+    payload["findings"][0]["verified_confidence"] = "high"
+    findings_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     before = findings_path.read_bytes()
 
     run_phase.finalize_run(make_finalize_args(run_id=run_id))
 
     assert findings_path.read_bytes() == before
-    survivor = json.loads(findings_path.read_text(encoding="utf-8"))[0]
+    survivor = json.loads(findings_path.read_text(encoding="utf-8"))["findings"][0]
     assert survivor["confidence"] == "high"
     assert survivor["verdict"] == "confirmed"
     assert survivor["verified_confidence"] == "high"

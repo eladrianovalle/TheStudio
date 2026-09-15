@@ -8,7 +8,10 @@ Tests cover:
   - extract_findings_from_run: contrarian-only scanning
   - CONTRARIAN_MANDATE carries the FINDING emit instruction
 """
+import json
+
 from findings import (
+    FINDINGS_SCHEMA_VERSION,
     FINDING_BLOCK_EXAMPLE,
     FINDING_BLOCK_TEMPLATE,
     Finding,
@@ -210,6 +213,46 @@ class TestFormatFinding:
 # ---------------------------------------------------------------------------
 # Canonical contract guard: emit format and parse format share one definition.
 # ---------------------------------------------------------------------------
+
+
+def test_an_unversioned_findings_file_still_loads(tmp_path):
+    """Every findings.json already on disk is the old bare-list shape.
+
+    Those runs are debates nobody can reproduce, so refusing to read them was never an
+    option — the version field exists to help a reader, not to orphan the archive.
+    """
+    (tmp_path / "findings.json").write_text(json.dumps([
+        {"confidence": "medium", "flaw": "the retry loop never backs off",
+         "quote": "q", "impact": "i", "source_file": "contrarian_1.md",
+         "verdict": None, "verified_confidence": None},
+    ]), encoding="utf-8")
+
+    loaded = load_findings_json(tmp_path)
+
+    assert len(loaded) == 1
+    assert loaded[0].flaw == "the retry loop never backs off"
+
+
+def test_what_save_writes_is_what_load_reads(tmp_path):
+    """The round trip is the contract; the version field must not break it."""
+    original = [Finding(confidence="medium", flaw="f", quote="q", impact="i",
+                        source_file="contrarian_1.md")]
+
+    save_findings_json(tmp_path, original)
+    loaded = load_findings_json(tmp_path)
+
+    assert [f.flaw for f in loaded] == ["f"]
+    payload = json.loads((tmp_path / "findings.json").read_text(encoding="utf-8"))
+    assert payload["schema_version"] == FINDINGS_SCHEMA_VERSION
+
+
+def test_a_findings_file_edited_into_nonsense_reads_as_empty(tmp_path):
+    """Junk in the file must not crash a caller; it reads as nothing to verify."""
+    for junk in ('"just a string"', '{"findings": "not a list"}', '[1, 2, 3]',
+                 '[{"confidence": "medium", "flaw": "truncated before quote"}]'):
+        (tmp_path / "findings.json").write_text(junk, encoding="utf-8")
+        assert load_findings_json(tmp_path) == []
+
 
 def test_canonical_example_parses():
     """The shared FINDING_BLOCK_EXAMPLE must parse into exactly one finding."""
