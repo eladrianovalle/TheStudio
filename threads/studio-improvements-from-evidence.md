@@ -16,7 +16,7 @@ anyone hand-writing a config file.
 ## Where this stands
 
 **Done and verified (2026-09-15)**
-- Main at `0db3647`, **1033 tests**, ruff clean.
+- Main at `fcb14ed`, **1033 tests**, ruff clean (1043 on unit 1's branch).
 - **#169 — cleanup no longer eats finished work.** `cleanup_runs` deleted on age and size alone and
   never checked status; a finalized APPROVED debate died at 30 days like an abandoned prepare. 31+
   consumer runs were already lost. Finalized runs are now never deleted by either rule; unfinished
@@ -37,16 +37,18 @@ anyone hand-writing a config file.
   `studio/output/tech/run_tech_20260915_015039`, finalized APPROVED, with `decisions.md`,
   `findings.json` (verified) and `summary.md` all present.
 
+- **Unit 1, `wizard_writes_stamped_template`, is built and open at PR #175.** Delivered unflagged:
+  all five acceptance criteria graded `pass` with evidence, editor edited without reverting, 1043
+  tests green (10 new), ruff clean, mutation check caught all four mutations. Worktree
+  `/Users/orcpunk/Repos/_TheGameStudio-wt-forge-gates`, branch `impl/wizard_writes_stamped_template`.
+
 **In flight**
-- **Unit 1, `wizard_writes_stamped_template`, is building** in the `/forge` loop — worktree
-  `/Users/orcpunk/Repos/_TheGameStudio-wt-forge-gates`, branch `impl/wizard_writes_stamped_template`,
-  base `13e689a` with 1033 tests green. Graded against the spec's five criteria verbatim. Records land
-  in that worktree's `.studio/output/impl_loop/wizard_writes_stamped_template/`.
+- **PR #175 awaiting review.** Its `reviewer-concerns/wizard_writes_stamped_template.md` carries the
+  two things the editor found and could not fix in the pass — see Blocked on, and Landmines.
 
 **Next action**
-When the loop reports: read its criteria verdicts, push the branch, open its PR. Then unit 2,
-`gate_keys_resolve_to_none`. **Unit order is a correctness constraint, not a preference** — see
-Landmines.
+After #175 merges: unit 2, `gate_keys_resolve_to_none`. **Unit order is a correctness constraint, not
+a preference** — see Landmines.
 
 ## Decisions made
 - **Detection is demoted, not improved.** It becomes the setup wizard's opening guess and leaves the
@@ -72,8 +74,16 @@ Landmines.
   consuming repo's `CLAUDE.md`, which is our only vector. Revisit at a third prompt-shaped feature.
 
 ## Blocked on
-- **Adriano — merge PR #174**, this note's own pull request. Until it does, this update exists only on
-  branch `chore/thread-note-unit-1`, not on main.
+- **Adriano — `is_wizard_template` has no reader, and only a spec change can give it one.** Unit 1
+  built it because criterion 5 asks for it, but nothing in shipped code calls it: the wizard decides
+  with `if config_path.exists()` and keeps any existing file, stamped or not. So the distinction the
+  spec says the stamp exists for is never actually made. Either give it a reader — the cross-repo
+  sweep, or `update` refreshing its own untouched template while still refusing to touch a
+  hand-written file — or drop the function and let the stamp be provenance a person reads. **The
+  sweep is the likelier answer**: it is the one place that wants to rewrite ten repos' templates
+  without touching anyone's edits.
+- **Adriano — merge PR #175** (unit 1) and **#174** (this note, which until then exists only on
+  branch `chore/thread-note-unit-1`).
 - **Adriano — four consumer PRs still open**, contrary to what an earlier note in this repo implied:
   `OrcPunk-biz` #19, `cerebro` #226, `OrcPunk-dotcom` #82, `cemetery-security` #721. The first two
   are what `specs/detected-static-check-command.md` needs to reach `shipped`; its three acceptance
@@ -86,6 +96,11 @@ Landmines.
   *because* it consults `resolve_profile`. `Multica`'s config sets only `test_command`, so it would
   fall through to them. Verified: the only production constructions are inside `load_loop_config`
   itself (`impl_loop.py:551`, `:576`).
+- **Unit 2 must also kill the refusal's last line.** It still ends "Or run /studio-setup, which writes
+  that file for you." After unit 1 that sentence tells someone who just ran the wizard to run it
+  again, at a file that already exists with the `[gate]` block in it. Unit 2 already owns rewording
+  the refusal around whether the file exists; drop the sentence from the file-exists branch and point
+  at the blank `test_command` line instead.
 - **Unit order is load-bearing.** The loader unit changes `_no_test_command_message`'s signature
   while `setup.py` still calls the old one, and deletes refusal text `test_setup.py` asserts on.
   Build the wizard unit first.
