@@ -32,15 +32,21 @@ anyone hand-writing a config file.
 - **#168 — the `/forge` refusal tells a repo with no tests that having none is the answer**, instead
   of advising a test command it can never have.
 
+- **#172 merged 2026-09-15**, so `specs/first-class-forge-gates.md` is on main and its frontmatter is
+  `status: approved` (commit `8f68a33`, on the unit-1 branch). The debate behind it is
+  `studio/output/tech/run_tech_20260915_015039`, finalized APPROVED, with `decisions.md`,
+  `findings.json` (verified) and `summary.md` all present.
+
 **In flight**
-- **PR #172 — `specs/first-class-forge-gates.md`, ready for review, on branch `spec/first-class-forge-gates`.**
-  The debate behind it is `studio/output/tech/run_tech_20260915_015039`, finalized APPROVED, with
-  `decisions.md`, `findings.json` (verified) and `summary.md` all present.
+- **Unit 1, `wizard_writes_stamped_template`, is building** in the `/forge` loop — worktree
+  `/Users/orcpunk/Repos/_TheGameStudio-wt-forge-gates`, branch `impl/wizard_writes_stamped_template`,
+  base `13e689a` with 1033 tests green. Graded against the spec's five criteria verbatim. Records land
+  in that worktree's `.studio/output/impl_loop/wizard_writes_stamped_template/`.
 
 **Next action**
-Merge #172 (that is the approval), then flip its frontmatter to `status: approved` as its own commit,
-then build unit 1 with `/forge --spec first-class-forge-gates --unit wizard_writes_stamped_template`.
-**Unit order is a correctness constraint, not a preference** — see Landmines.
+When the loop reports: read its criteria verdicts, push the branch, open its PR. Then unit 2,
+`gate_keys_resolve_to_none`. **Unit order is a correctness constraint, not a preference** — see
+Landmines.
 
 ## Decisions made
 - **Detection is demoted, not improved.** It becomes the setup wizard's opening guess and leaves the
@@ -53,6 +59,10 @@ then build unit 1 with `/forge --spec first-class-forge-gates --unit wizard_writ
   so that issue no longer needs narrowing to concern 2.
 - **The config file is authoritative; a missing `[gate]` key is empty, not a default.** Inseparable
   from deleting `LoopConfig`'s gate literals — see Landmines.
+- **`is_wizard_template` means stamped AND `test_command` still blank.** Unit 1's fifth criterion says
+  "a file the wizard wrote and untouched", which read literally would also cover a pre-filled Python
+  file; the spec's own reasoning says the blank command beside the stamp is the only state that
+  matters. The narrower reading is what unit 1 was built against.
 - **A human fills a blank template, not an agent.** The wizard's Python step cannot ask, and a
   proposed value waved through by a tired reader reintroduces the guessing this removes.
 - **This spec gets no `## Verification` section.** Everything in it is catchable by a failing test,
@@ -62,7 +72,8 @@ then build unit 1 with `/forge --spec first-class-forge-gates --unit wizard_writ
   consuming repo's `CLAUDE.md`, which is our only vector. Revisit at a third prompt-shaped feature.
 
 ## Blocked on
-- **Adriano — merge PR #172.** It is open and ready for review; merging is the approval.
+- **Adriano — merge PR #173**, this note's own pull request. Until it does, this note exists only on
+  branch `chore/handoff-2026-09-15`, not on main.
 - **Adriano — four consumer PRs still open**, contrary to what an earlier note in this repo implied:
   `OrcPunk-biz` #19, `cerebro` #226, `OrcPunk-dotcom` #82, `cemetery-security` #721. The first two
   are what `specs/detected-static-check-command.md` needs to reach `shipped`; its three acceptance
@@ -103,8 +114,11 @@ then build unit 1 with `/forge --spec first-class-forge-gates --unit wizard_writ
   mistake it for live work.
 
 ## Files & artifacts
-- Repo: `/Users/orcpunk/Repos/_TheGameStudio`, main `0db3647`.
-- Spec: `specs/first-class-forge-gates.md` on branch `spec/first-class-forge-gates` (PR #172, open).
+- Repo: `/Users/orcpunk/Repos/_TheGameStudio`, main `13e689a`.
+- Spec: `specs/first-class-forge-gates.md`, on main and `approved`.
+- Unit 1's tree: `/Users/orcpunk/Repos/_TheGameStudio-wt-forge-gates`, branch
+  `impl/wizard_writes_stamped_template`. Remove the worktree only after its PR is open — a
+  `git worktree remove` destroys the run's gitignored records.
 - Debate: `studio/output/tech/run_tech_20260915_015039` — instructions, decisions, both advocate and
   contrarian rounds, verified `findings.json`, summary. Survives cleanup now that #169 shipped.
 - Ticket: [#133](https://github.com/eladrianovalle/TheStudio/issues/133), which #172 supersedes.
