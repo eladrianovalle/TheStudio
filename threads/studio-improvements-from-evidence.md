@@ -39,18 +39,37 @@ anyone hand-writing a config file.
 
 - **#174 merged 2026-09-15**, so this note is on main.
 
-- **Unit 1, `wizard_writes_stamped_template`, is built and open at PR #175.** Delivered unflagged:
-  all five acceptance criteria graded `pass` with evidence, editor edited without reverting, 1043
-  tests green (10 new), ruff clean, mutation check caught all four mutations. Worktree
-  `/Users/orcpunk/Repos/_TheGameStudio-wt-forge-gates`, branch `impl/wizard_writes_stamped_template`.
+- **All three units of `first-class-forge-gates` are built.** Unit 1 merged (#175). Unit 2
+  `gate_keys_resolve_to_none` is open at **#176** — seven criteria pass, 1048 tests. Unit 3
+  `mutation_skip_reason_recorded` is open at **#178** — four criteria pass, plus one fix beyond them:
+  the schema requires `performed` but cannot demand a `reason` when it is false, so
+  `{"performed": false}` still validated. That rule now lives in the orchestration.
+
+- **The gate-config sweep is done, and it tested the wizard rather than bypassing it.** #176 would
+  have broken `/forge` in four installs the moment it merged. All four were configured by running
+  `/studio-setup`, which exercised both of unit 1's paths: pre-filled and stamped in
+  `Arkadium/solitaire-game`, `_Cerebro` and `OrcPunk-dotcom`; the blank stamped template with the
+  "no marker file Studio recognises" line in `CREA`, and `miresu` pre-filled. cemetery-security and
+  OrcPunk-biz still have none, but they already refused, so they are not regressions. **#176 is
+  unblocked.**
+
+- **`specs/completion-ledger.md` is specced and open at #177.** Two advocate passes, two contrarian
+  passes, both rejections accepted rather than argued down, eighteen recorded decisions. Debate:
+  `studio/output/tech/run_tech_20260916_162723`, finalized APPROVED.
+
+- **The stranded-concern sweep is closed.** 146 concerns recovered from old editor records; most
+  load-bearing ones were already fixed or were recorded decisions. Two PRs came out of it:
+  cemetery-security #722 and OrkidGarden-Game #133. See [[feedback_stranded_concerns_go_stale]].
 
 **In flight**
-- **PR #175 awaiting review.** Its `reviewer-concerns/wizard_writes_stamped_template.md` carries the
-  two things the editor found and could not fix in the pass — see Blocked on, and Landmines.
+- **Four Studio PRs awaiting review: #176, #177, #178**, plus three open issues filed today —
+  **#179** (`setup --defaults` resets every prior choice, and `--status` recommends it),
+  **#180** (per-scope `model` in `scopes.toml`), **#181** (measure whether the contrarian's
+  confidence ratings are calibrated).
 
 **Next action**
-After #175 merges: unit 2, `gate_keys_resolve_to_none`. **Unit order is a correctness constraint, not
-a preference** — see Landmines.
+Merge #176 and #178 to finish `first-class-forge-gates`, then flip that spec to `shipped`. The
+ledger's unit 1 (`build_plan_one_shape`) follows once #177 merges.
 
 ## Decisions made
 - **Detection is demoted, not improved.** It becomes the setup wizard's opening guess and leaves the
@@ -63,6 +82,9 @@ a preference** — see Landmines.
   so that issue no longer needs narrowing to concern 2.
 - **The config file is authoritative; a missing `[gate]` key is empty, not a default.** Inseparable
   from deleting `LoopConfig`'s gate literals — see Landmines.
+- **The gate-config sweep runs the wizard, never a hand-written file.** Hand-writing a config tests
+  nothing: the wizard is what unit 1 changed, and it is the only path that exercises the stamp and
+  the blank-template text. Doing it that way also caught #179.
 - **`is_wizard_template` means stamped AND `test_command` still blank.** Unit 1's fifth criterion says
   "a file the wizard wrote and untouched", which read literally would also cover a pre-filled Python
   file; the spec's own reasoning says the blank command beside the stamp is the only state that
@@ -97,6 +119,12 @@ a preference** — see Landmines.
   *because* it consults `resolve_profile`. `Multica`'s config sets only `test_command`, so it would
   fall through to them. Verified: the only production constructions are inside `load_loop_config`
   itself (`impl_loop.py:551`, `:576`).
+- **`setup --defaults` resets every prior choice** (#179), and `--status` recommends it right after
+  saying one step is pending. `_Cerebro` lost its role pack and five customizations this way; the
+  config files on disk survive, so restoring `SETUP.json` and adding just the new step puts it right.
+- **A template the wizard already wrote is never corrected.** The five written on 2026-09-16 carry a
+  comment saying a missing `[gate]` key falls back to detection — true until #176 merges, false after.
+  setup never overwrites, so the sweep has to fix them.
 - **Unit 2 must also kill the refusal's last line.** It still ends "Or run /studio-setup, which writes
   that file for you." After unit 1 that sentence tells someone who just ran the wizard to run it
   again, at a file that already exists with the `[gate]` block in it. Unit 2 already owns rewording
