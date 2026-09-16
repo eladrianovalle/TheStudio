@@ -110,8 +110,8 @@ From `$ARGUMENTS`, construct the workflow `args`:
   - Rust (`Cargo.toml`): `cargo test`.
   - Unity / other: ask if you cannot infer a runnable command.
   - If you cannot infer one, fall back to the config knob `test_command` from the knobs JSON (Step 5).
-- `static_checks`: take the list from the knobs JSON (Step 5) — it is detected from this repo, so
-  do not invent a linter here. Before passing it on, replace every `{paths}` token with the paths
+- `static_checks`: take the list from the knobs JSON (Step 5) — it is what this repo's own config
+  file says to run, so do not invent a linter here. Before passing it on, replace every `{paths}` token with the paths
   this unit is expected to touch, space-separated and each double-quoted
   (`ruff check "studio/impl_loop.py" "studio/tests/test_impl_loop.py"`). A command with no token
   goes through as written. If you cannot name any paths, **drop that command** rather than
@@ -208,10 +208,10 @@ If `--plan`, stop here.
 **Studio path:** use `.studio/source/impl_loop.py` for the command below. If that file does not
 exist but `studio/impl_loop.py` does, use that instead (you are in the Studio source repo).
 
-Read the loop config knobs. Resolution finds a project override at the repo root
+Read the loop config knobs. Resolution finds this repo's own config at the repo root
 (`.studio/implementation_loop.toml`) automatically, falling back to the shipped default, so no
-path argument is needed. The gate commands are detected from this repo's own stack; anything the
-override sets merges over that:
+path argument is needed. That file is the only thing that says how this repo is gated — a `[gate]`
+key it leaves out is empty, and nothing is detected here:
 
 ```bash
 python .studio/source/impl_loop.py
@@ -221,10 +221,11 @@ python .studio/source/impl_loop.py
 If `--work-dir` was given you already ran this in Step 3 (with the flag) and it produced the same
 JSON. Reuse that output; don't run it a second time.
 
-**If this command exits non-zero, STOP — do not run the loop.** It means Studio has no test command
-for this repository (it recognised no stack, or two at once). Its message already names the file and
-the exact lines to write; print it as-is and let the user fix it. Do not invent a test command and
-carry on: the writer would run it, and the gate would believe whatever came back.
+**If this command exits non-zero, STOP — do not run the loop.** It means this repository's config
+has no test command: either the file is not there, or its `test_command` is blank. Its message
+already says which, names the file, and gives the exact lines to write; print it as-is and let the
+user fix it (running `/studio-setup` writes the file when there is none). Do not invent a test
+command and carry on: the writer would run it, and the gate would believe whatever came back.
 
 **If you resolved criteria in Step 1 and `editor_enabled` is `false`, STOP here — do not run the
 loop.** The editor is the only thing that grades criteria, so this pair asks for a graded run and
@@ -263,7 +264,7 @@ runs render exactly as they always have.
 How the workflow consumes each knob: `editor_enabled=false` → skip the editor pass;
 `read_scope`/`output_budget` → shape the editor prompt; `require_mutation_check=false` → writer
 skips the mutation check; `mutation_command` → the command the writer runs for the mutation check
-(detected per repo — `mutmut run` in a Python one); `static_checks` → the lint **commands** the
+(whatever this repo's config names — `mutmut run` in a Python one); `static_checks` → the lint **commands** the
 writer runs, all of them, with `static_ok` the AND across the lot (`[]` → writer skips the static
 check and the entry gate doesn't require it). So passing all knobs makes
 `implementation_loop.toml` fully live.

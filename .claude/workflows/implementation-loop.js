@@ -27,7 +27,7 @@ const DEFAULT_UNIT = {
   title: 'Studio can load implementation_loop.toml into a LoopConfig (with project-local override)',
   // Run from repo root; tests live under studio/.
   test_command: 'cd studio && python -m pytest tests/test_impl_loop.py -q',
-  // The lint commands to run, straight from the config (impl_loop.py detects them per repo)
+  // The lint commands to run, straight from the repo's own config file (read by impl_loop.py)
   // with any {paths} token already substituted by /forge. An empty list skips the check.
   static_checks: ['cd studio && ruff check impl_loop.py'],
   mutation_command: 'cd studio && mutmut run',

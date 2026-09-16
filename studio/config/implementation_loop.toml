@@ -8,11 +8,12 @@
 # built-in defaults exactly, which is the only reason that is harmless today; a test
 # holds them to it.)
 #
-# There is deliberately no [gate] table here. The gate commands are detected from your
-# repo's own stack (see impl_loop.STACK_MARKERS), and a [gate] table in your project file
-# merges *over* what was detected — so setting only test_command leaves the rest as your
-# stack's, rather than inheriting another language's tools. When Studio cannot identify
-# the repo, or finds two stacks at once, it refuses to start and says what to write.
+# There is deliberately no [gate] table here. Your repo's own
+# .studio/implementation_loop.toml is the only thing that says how /forge gates it — a
+# [gate] key you leave out of that file is empty, not a default, so setting only
+# test_command means no lint command and no mutation check rather than another language's
+# tools. Without that file, or with a blank test_command in it, /forge refuses to start
+# and says which of the two it is and what to write. /studio-setup writes the file for you.
 
 [loop]
 # if the writer can't reach green, deliver flagged (uncommitted) rather than spin. One exception: a
