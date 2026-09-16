@@ -415,6 +415,20 @@ class TestMutationSkipReasonRecorded:
     def _loop_source(self):
         return (_WORKFLOW_DIR / "implementation-loop.js").read_text()
 
+    def test_a_skipped_check_with_no_reason_is_caught_after_the_handoff_lands(self):
+        """The schema requires ``performed``; it cannot require a reason *when* that is false.
+
+        JSON Schema says that only through ``if``/``then``, which this shell does not use, so
+        ``{"performed": false}`` still validates — the exact shape of the 81 records the field
+        replaced. The rule therefore lives in the orchestration, where the handoff has already
+        landed, and this pins that it is there and reads the three enum values back.
+        """
+        src = self._loop_source()
+        assert "writer.mutation_check.performed === false && !writer.mutation_check.reason" in src
+        guard = src.split("writer.mutation_check.performed === false", 1)[1][:400]
+        for value in ("not_configured", "nothing_to_mutate", "not_reached"):
+            assert value in guard
+
     def _writer_prompt(self, src):
         return src[src.index("function writerPrompt"):src.index("function editorPrompt")]
 

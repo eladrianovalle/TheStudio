@@ -392,6 +392,14 @@ const entryGate = passesEntryGate(writer, staticRequired)
 if (writer.stuck) {
   log(`Writer escalated (stopped deliberately): ${writer.stuck}`)
 }
+// A skipped mutation check has to say why. The schema can require `performed`, but it cannot say
+// "and when that is false, a reason is required" — JSON Schema expresses that only through if/then,
+// which this shell does not use. So the rule lives here, where the handoff has already landed.
+// `{"performed": false}` with no reason is the exact shape of the 81 records this field exists to
+// replace, and catching it here beats asking for a reason twice in prompt text.
+if (writer.mutation_check && writer.mutation_check.performed === false && !writer.mutation_check.reason) {
+  log('Writer skipped the mutation check and recorded no reason — one of not_configured, nothing_to_mutate, not_reached was required.')
+}
 if (!entryGate) {
   // deliver_on_gate_fail: do not spin. Leave the writer's state, flag it.
   log(`Entry gate failed (mvi_claimed=${writer.mvi_claimed}, tests.passed=${writer.tests?.passed}). Delivering flagged, no editor pass.`)
