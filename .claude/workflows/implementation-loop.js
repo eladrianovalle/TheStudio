@@ -113,7 +113,7 @@ function unitCriteria(u) {
 // ---------------------------------------------------------------------------
 const WRITER_HANDOFF = {
   type: 'object',
-  required: ['unit_id', 'writer_sha', 'files_touched', 'tests', 'mvi_claimed', 'stage'],
+  required: ['unit_id', 'writer_sha', 'files_touched', 'tests', 'mvi_claimed', 'mutation_check', 'stage'],
   additionalProperties: false,
   properties: {
     unit_id: { type: 'string' },
@@ -132,11 +132,19 @@ const WRITER_HANDOFF = {
     },
     static_ok: { type: 'boolean', description: 'true only if every configured static_checks command is clean — the AND across them' },
     mvi_claimed: { type: 'boolean', description: 'writer\'s DECLARATION it finished a complete thought — a trigger, not a verdict' },
+    // Required, not optional: a handoff that simply omits this object is how 31 records
+    // ended up saying nothing at all about the mutation check, and another 81 said
+    // `performed: false` without ever saying why. `reason` is what closes that.
     mutation_check: {
       type: 'object',
+      required: ['performed'],
       additionalProperties: false,
       properties: {
         performed: { type: 'boolean' },
+        // The three honest ways a mutation check does not happen: the repo never
+        // configured one, there was no production code to mutate, or the writer
+        // escalated before it got that far.
+        reason: { type: 'string', enum: ['not_configured', 'nothing_to_mutate', 'not_reached'], description: 'why the check did not run; omit it when performed is true' },
         // Counts changes made to the PRODUCTION code, not to assertions. Breaking an
         // assertion fails its test by construction, so counting those measured nothing.
         mutations_introduced: { type: 'integer', description: 'how many production-code changes were made to check the tests notice' },
@@ -243,7 +251,7 @@ function writerPrompt(u) {
     ``,
     `Discipline:`,
     `- Build a usable interaction, not a partial component (MVI). No speculative scope beyond the unit.`,
-    `- Hold AI-TDD: write the tests and run them.${u.require_mutation_check === false ? ' (Mutation check disabled by config: require_mutation_check=false.)' : ` Then run the configured mutation check on the code you touched: \`${u.mutation_command}\` (scope + runner live in studio/setup.cfg), and report the outcome in mutation_check. If mutmut isn't installed, fall back to hand-mutating — change 2-3 things in the PRODUCTION code the tests cover (flip a comparison, drop a guard clause, return a constant), confirm the tests FAIL, then restore. Mutate the code, never the assertions: breaking an assertion fails its test by construction and tells you nothing about whether that test would catch a real bug.`}`,
+    `- Hold AI-TDD: write the tests and run them.${u.require_mutation_check === false ? ' (Mutation check disabled by config: require_mutation_check=false — record it as {"performed": false, "reason": "not_configured"}.)' : ` Then run the configured mutation check on the code you touched: \`${u.mutation_command}\` (scope + runner live in studio/setup.cfg), and report the outcome in mutation_check. If mutmut isn't installed, fall back to hand-mutating — change 2-3 things in the PRODUCTION code the tests cover (flip a comparison, drop a guard clause, return a constant), confirm the tests FAIL, then restore. Mutate the code, never the assertions: breaking an assertion fails its test by construction and tells you nothing about whether that test would catch a real bug. If the unit changed no production code to mutate, say so: {"performed": false, "reason": "nothing_to_mutate"}.`}`,
     `- Run the unit tests: \`${u.test_command}\`${staticClause}`,
     `- When (and only when) tests pass, COMMIT the passing state on the current branch (one exception: escalation, below).`,
     `  (\`${gitIn(u)} add -A && ${gitIn(u)} commit -m "writer: ${u.unit_id}"\`) and capture the short SHA — that is writer_sha.`,
@@ -264,6 +272,8 @@ function writerPrompt(u) {
     `  \`passed\` matching it, even when a suite you never got to influence comes back green. Do NOT report a red`,
     `  suite to signal that you are stuck; \`stuck\` is what says that. Set mvi_claimed=false, and put the blocker`,
     `  in \`stuck\` — the specific thing you got stuck on, quoting the file, test, or interface it is about.`,
+    `  If you stopped before the mutation check ever ran, record {"performed": false, "reason": "not_reached"} —`,
+    `  mutation_check is required, so an honest "never got there" beats leaving it out.`,
     `  Persist the handoff JSON either way.`,
     `Return the writer handoff object.`,
   ].join('\n')
