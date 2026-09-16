@@ -136,10 +136,14 @@ also gets a stable GitHub anchor to link from a ticket.
 Rule 7 checks three things and nothing else, and only on an approved spec:
 
 - A `## Build Plan` section that exists must open every unit with `### N. ` + a backticked
-  `[a-z][a-z0-9_]*` id + an em dash + a non-empty title.
+  `[a-z][a-z0-9_]{2,}` id + an em dash + a non-empty title. The id pattern is the reader's, bound
+  for bound: an id rule 7 accepts but the reader cannot see (`` `ui` ``) would be silently dropped.
 - Every unit entry holds at least one `- [ ]` (or `- [x]`) acceptance criterion, unless it carries a
   `Dropped:` line.
-- No two specs in the directory plan the same `unit_id`.
+- No two specs in the directory plan the same `unit_id`. Ids are collected from every spec at every
+  status with the tolerant reader below, because the built set is flat and a shipped spec's id
+  silences an approved spec's just as well; the test fails only when at least one of the colliding
+  specs is `approved`, so a draft can reuse an id mid-argument and is caught at its approval commit.
 
 What it must **not** reject, each deliberately: a spec with no `## Build Plan` at all (not every
 document has units); either acceptance-criteria indentation in use today, since the heading already
@@ -169,6 +173,11 @@ installs on this machine: the strict shape-A regex finds **zero units in 23 of t
 is indistinguishable from "nothing is unfinished" — the exact silence this feature exists to end. The
 tolerant opener finds **61 units instead of 9**. Orkid Garden goes from 0 to 45, hand-checked and all
 real handles. The cost is roughly 3 percent false positives (see Risks).
+
+Under either opener an entry runs from its opener to the next unit opener of either form, or the next
+`##`/`###` heading, whichever comes first. That one boundary is what attributes a `Dropped:` line or an
+acceptance criterion to its unit, so a list-form plan in a consuming repo is bounded the same way a
+heading-form plan is, with no indentation arithmetic.
 
 The `snake_case` demand is load-bearing and is not a style preference: it is what stops the reader
 emitting `/forge --spec doc-parity-tests --unit studio/tests/test_doc_parity.py`, a command that
@@ -230,7 +239,9 @@ make — `commit --allow-empty -m "writer(stuck): <unit_id>"` — and it means t
 purpose rather than fake a finish. Counting it as built would delete from the report the one case
 where a fresh agent most needs to be told there is unfinished work. It is collected into its own set
 and the unit is reported in its own state: **started and escalated**, distinct from a unit nobody has
-opened.
+opened. Built wins: a unit with both a `writer(stuck):` commit and a `writer:` or `editor:` commit is
+built, whatever their order, because the writer only commits a passing state. The two sets carry no
+order, so "stuck, then finished" is decided by membership and never by commit time.
 
 ### Dropped on purpose
 
@@ -241,8 +252,11 @@ A line inside the unit's own Build Plan entry, carrying a date and a non-empty r
 ```
 
 ```python
-DROPPED = re.compile(r"^\s*-\s+\*\*Dropped:\*\*\s+(\d{4}-\d{2}-\d{2})\s+—\s+(\S.+)$", re.M)
+DROPPED = re.compile(r"^\s*-\s+\*\*Dropped:\*\*\s+(\d{4}-\d{2}-\d{2})\s+(?:—|--|-)\s+(\S.+)$", re.M)
 ```
+
+The separator accepts `—`, `--` or `-`. The em dash is what the template writes, but a hand-typed
+hyphen that silently failed to match would leave the unit nagging with no hint why.
 
 Both halves are required, for the same reason `verification_due` demands a date: a bare "dropped" is
 a way to make the nudge stop without deciding anything. A unit carrying a valid line is neither
@@ -268,7 +282,7 @@ class PlannedUnit:
 @dataclass(frozen=True)
 class UnitLedger:
     unbuilt: tuple[PlannedUnit, ...]    # approved, planned, not built, not dropped
-    escalated: tuple[PlannedUnit, ...]  # a writer(stuck): commit and nothing after it
+    escalated: tuple[PlannedUnit, ...]  # a writer(stuck): commit and no writer:/editor: commit
     dropped: tuple[PlannedUnit, ...]    # closed on purpose
     unplanned: tuple[str, ...]          # built ids no spec ever mentions, sorted
 ```
@@ -442,7 +456,8 @@ added.
   in every up-to-date install, which is all ten of them.
 - **`unit_id` is unique repo-wide**, and `spec.md`'s "unique within this spec" sentence is corrected
   as part of unit 1. A commit subject carries no slug, so same-id units in two specs cannot be told
-  apart. Studio's own 32 ids have no collisions, so enforcing it costs nothing here.
+  apart. Studio's own 34 ids, read with the tolerant reader across every status, have no collisions,
+  so enforcing it costs nothing here.
 - **Two `try` blocks in the hook path, not one**, so a ledger failure can never silence the update
   nudge.
 
@@ -562,9 +577,9 @@ with the ledger block wired into the `stats` dashboard.
 **Acceptance criteria:**
 - [ ] `python studio/run_phase.py stats` prints a ledger block listing planned-and-unbuilt units by spec, any started-and-escalated units under their own label, a dropped count, and a built-but-never-planned count carrying the caveat that ids from before `/forge` read this way too — and prints a single "nothing unfinished" line rather than an empty block when there is nothing to report.
 - [ ] `parse_build_plan` accepts both the `` ### N. `id` — `` and `` N. **`id`** — `` entry openers, rejects an entry opener whose backticked token is not `snake_case`, returns units in document order, and returns `[]` for a spec with no `## Build Plan`.
-- [ ] `built_unit_ids` returns `writer:` and `editor:` ids from both subjects and bodies in its built set and `writer(stuck):` ids in a separate escalated set, with the escalated ids absent from the built set; a log containing only `writer(stuck): foo` yields an empty built set.
+- [ ] `built_unit_ids` returns `writer:` and `editor:` ids from both subjects and bodies in its built set and `writer(stuck):` ids in a separate escalated set, with the escalated ids absent from the built set; a log containing only `writer(stuck): foo` yields an empty built set, and a log with both `writer(stuck): foo` and `writer: foo` puts `foo` in the built set and not the escalated one.
 - [ ] `parse_build_plan` records a unit as dropped only when the line carries both a `YYYY-MM-DD` date and a non-empty reason; a `Dropped:` line missing either is not a drop, and `reconcile_units` classifies every planned unit as exactly one of unbuilt, escalated, built or dropped.
-- [ ] A built id that appears as a backticked mention in any spec at any status is absent from `unplanned`; against this repo's real tree the reported built-but-never-planned count is at most 20, pinned by a fixture test.
+- [ ] A built id that appears as a backticked mention in any spec at any status is absent from `unplanned`; against a `git log` output captured from this repo into a test fixture, the reported built-but-never-planned count is at most 20. The test reads the fixture, never the live tree: CI checks out at `fetch-depth: 1`, where `_built_unit_ids` returns `None`, and a live count would move with every commit.
 - [ ] `_built_unit_ids` returns `None` — not an empty set — when the target is not a git work tree, when git is unavailable, and when `git rev-parse --is-shallow-repository` says true, and the ledger then reports no unbuilt units rather than reporting every unit as unbuilt.
 
 **Out of scope:** the session-start surface, decision points of any kind, and any duplicate-`unit_id` ambiguity guard.
