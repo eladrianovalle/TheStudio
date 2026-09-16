@@ -11,7 +11,8 @@ updated: 2026-09-15
 ## Goal
 `specs/detected-static-check-command.md` reaches `status: shipped`. Unit 3 — the rollout to the two
 consuming repos that carried a stale config — is built and measured; the spec flips when
-`OrcPunk-biz` #19 and `cerebro` #226 merge. Studio's own PRs are all merged.
+`OrcPunk-biz` #19 and `cerebro` #226 merge. This thread's own Studio PRs are all merged;
+TheStudio's one open PR, #175, belongs to the `studio-improvements-from-evidence` thread.
 
 ## Where this stands
 
