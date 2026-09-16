@@ -21,16 +21,6 @@ and this change is exactly why it must have run everywhere first.
 
 ## 2. Nothing in the suite would notice if the committed gate config stopped being tracked
 
-**Concern.** `test_studios_own_gate_config_is_committed_and_loads` asserts
-`own_config.is_file()`, which is true of any file sitting in the working tree — tracked or
-not. What the acceptance criterion actually asks for is that `git ls-files
-studio/.studio/implementation_loop.toml` returns it, and that depends on three `.gitignore`
-lines in a specific order that the file's own comment calls out as fragile. I confirmed it
-by hand; a future edit to those lines would untrack the file and leave the suite green.
-
-**Why unresolved.** Out of this unit's scope: closing it means adding a test that shells out
-to `git`, with a skip for a checkout that has no git — new machinery, which is not what an
-editor pass is for.
-
-**Follow-up.** Add one test that runs `git ls-files` on the path and asserts it comes back
-non-empty, skipping when `git rev-parse --show-toplevel` fails.
+**Resolved.** `test_studios_own_gate_config_is_committed_and_loads` now runs
+`git ls-files --error-unmatch` on the path and fails if the file is on disk but untracked,
+skipping the check outside a git checkout. No follow-up needed.
