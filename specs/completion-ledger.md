@@ -240,8 +240,9 @@ purpose rather than fake a finish. Counting it as built would delete from the re
 where a fresh agent most needs to be told there is unfinished work. It is collected into its own set
 and the unit is reported in its own state: **started and escalated**, distinct from a unit nobody has
 opened. Built wins: a unit with both a `writer(stuck):` commit and a `writer:` or `editor:` commit is
-built, whatever their order, because the writer only commits a passing state. The two sets carry no
-order, so "stuck, then finished" is decided by membership and never by commit time.
+built, because the writer only commits a passing state. The two sets carry no order, so "stuck, then
+finished" is decided by membership and never by commit time — and so is the reverse: a unit built,
+reopened for rework and then stuck reads built and never escalates (see Risks).
 
 ### Dropped on purpose
 
@@ -519,6 +520,10 @@ added.
 - **Squash merges that replace the body with a PR description make built units read unbuilt,
   permanently.** The only escape is the `Dropped:` line, which is the wrong word for work that was
   actually finished. Unresolved; not worth engineering around until a repo hits it.
+
+- **A built unit that is reopened and gets stuck never escalates.** Membership ignores order, so
+  `writer: foo` followed by `writer(stuck): foo` reads built. Rework on a finished unit should be rare
+  enough to accept for v1, but the brief will not surface it.
 
 - **Rule 7 will land red in consuming repos that do run Studio's suite.** None do today, which is why
   the writing standard cannot normalise anything outside this repo — the same fact that forced the
