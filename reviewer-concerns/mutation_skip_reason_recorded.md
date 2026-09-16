@@ -2,8 +2,8 @@
 
 **Status: partly resolved in the same PR — logged, not flagged.** `skippedMutationCheckWithoutReason`
 in `.claude/workflows/implementation-loop.js` now logs a reasonless skip right after the writer
-handoff lands. It does not flag the unit or record anything in the returned result; that half of the
-follow-up below is still open.
+handoff lands. It does not flag the unit: `mutation_check` still reaches the result wherever the raw
+handoff is returned, but it is not surfaced as a flag. That half of the follow-up below is still open.
 
 ## 1. Nothing forces a reason when `performed` is false
 
