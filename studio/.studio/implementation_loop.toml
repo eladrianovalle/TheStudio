@@ -2,7 +2,7 @@
 #
 # It lives under studio/ rather than at the repo root because that is where /forge looks
 # in a Studio source checkout: the package directory is this repo's artifact root (see
-# impl_loop.project_config_root). The .gitignore takes two lines to let this one file
+# impl_loop.project_config_root). The .gitignore takes three lines to let this one file
 # through, since the directory around it is ignored.
 #
 # Nothing is detected any more — a [gate] key left out of this file is empty, not a

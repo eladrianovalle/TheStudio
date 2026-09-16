@@ -451,6 +451,16 @@ def test_studios_own_gate_config_is_committed_and_loads():
     """
     own_config = STUDIO_ROOT / ".studio" / "implementation_loop.toml"
     assert own_config.is_file(), f"{own_config} is missing"
+    in_git = subprocess.run(
+        ["git", "rev-parse", "--is-inside-work-tree"], cwd=STUDIO_ROOT, capture_output=True
+    )
+    if in_git.returncode == 0:
+        tracked = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", str(own_config)],
+            cwd=STUDIO_ROOT,
+            capture_output=True,
+        )
+        assert tracked.returncode == 0, f"{own_config} is on disk but not tracked by git"
 
     config = load_loop_config(own_config)
     assert "pytest" in config.test_command
@@ -1253,7 +1263,7 @@ def test_the_refusal_wording_turns_on_whether_the_file_is_there(tmp_path):
     blank.write_text('[gate]\ntest_command = ""\n', encoding="utf-8")
 
     there = _no_test_command_message(blank)
-    assert "gate.test_command in it is blank" in there
+    assert "gate.test_command in it is blank or missing" in there
     assert str(blank) in there
     assert "no file at that path" not in there
     # The wizard writes a file on every path now, so pointing at /studio-setup here is a
@@ -1297,7 +1307,7 @@ def test_an_explicit_path_with_a_blank_key_is_not_reported_as_missing(tmp_path):
 
     message = str(excinfo.value)
     assert str(explicit) in message
-    assert "gate.test_command in it is blank" in message
+    assert "gate.test_command in it is blank or missing" in message
     assert "no file at that path" not in message
 
 

@@ -311,7 +311,7 @@ def _no_test_command_message(config_path: Path) -> str:
     has been: the file is the only thing that decides how a repo is gated.
     """
     if config_path.exists():
-        found = "the file is there, but gate.test_command in it is blank."
+        found = "the file is there, but gate.test_command in it is blank or missing."
         fix = [
             f"Fill in the test_command line in {config_path}:",
             "",
@@ -474,9 +474,8 @@ class LoopConfig:
 def project_artifact_root(studio_root: Path) -> Path:
     """The consuming repo root where project-local config lives.
 
-    Public because ``setup.py`` asks it where ``/forge`` will look, the same way it asks
-    ``resolve_profile`` what ``/forge`` will run: one function, two callers, so the two
-    answers cannot drift.
+    Public because ``setup.py`` asks it where ``/forge`` will look: one function, two
+    callers, so the wizard cannot write a file the loader never reads.
 
     Mirrors run_phase.get_artifact_root's installed-layout detection WITHOUT importing
     run_phase (impl_loop ships standalone to .studio/source/): honor STUDIO_ARTIFACT_ROOT,
@@ -591,7 +590,7 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
     gate_file = _gate_config_path(path, repo_root)
 
     config_path = _resolve_config_path(path, root)
-    if config_path is None or not config_path.exists():
+    if config_path is None:
         raise LoopConfigError(_no_test_command_message(gate_file))
 
     try:
