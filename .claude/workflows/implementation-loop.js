@@ -141,10 +141,7 @@ const WRITER_HANDOFF = {
       additionalProperties: false,
       properties: {
         performed: { type: 'boolean' },
-        // The three honest ways a mutation check does not happen: the repo never
-        // configured one, there was no production code to mutate, or the writer
-        // escalated before it got that far.
-        reason: { type: 'string', enum: ['not_configured', 'nothing_to_mutate', 'not_reached'], description: 'why the check did not run; omit it when performed is true' },
+        reason: { type: 'string', enum: ['not_configured', 'nothing_to_mutate', 'not_reached'], description: 'why the check did not run — the repo configures no mutation command, there was no production code to mutate, or you escalated before getting that far; omit it when performed is true' },
         // Counts changes made to the PRODUCTION code, not to assertions. Breaking an
         // assertion fails its test by construction, so counting those measured nothing.
         mutations_introduced: { type: 'integer', description: 'how many production-code changes were made to check the tests notice' },

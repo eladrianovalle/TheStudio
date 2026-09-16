@@ -433,13 +433,12 @@ class TestMutationSkipReasonRecorded:
         assert sep, "the ternary's two arms are no longer separable"
         return disabled, enabled
 
-    def test_handoff_requires_mutation_check_with_performed_and_three_reasons(self):
+    def test_mutation_check_requires_performed_and_exactly_three_reasons(self):
+        # That `mutation_check` is in the handoff's own required list is pinned by
+        # TestWriterEscalationChannel, which asserts that list exactly. This is the
+        # shape of the object it now insists on.
         src = self._loop_source()
         handoff = src[src.index("const WRITER_HANDOFF"):src.index("const EDITOR_HANDOFF")]
-        top_level_required = re.search(r"required: \[([^\]]*)\]", handoff).group(1)
-        assert "mutation_check" in top_level_required, (
-            "the mutation check is optional again — omitting it is how 31 records said nothing"
-        )
         block = handoff[handoff.index("mutation_check: {"):handoff.index("load_bearing:")]
         assert "required: ['performed']" in block, (
             "mutation_check no longer requires `performed`, so the object can be present and empty"
