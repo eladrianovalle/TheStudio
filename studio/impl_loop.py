@@ -88,7 +88,7 @@ class LoopConfigError(ValueError):
 # holding a `*` is globbed; every other pattern is an exact path test.
 #
 # `rust` is recognised but unserved: Studio ships no gate commands for it, which is how
-# the loader says "I know what this is and still have no command for it" instead of
+# the wizard says "I know what this is and still have no command for it" instead of
 # guessing. It is load-bearing. Without the row, a Rust game whose package.json only
 # describes CI tooling matches node alone and gets handed `npm test`, which passes while
 # testing none of the game — a wrong-reason *pass*, worse than the wrong-reason failure
@@ -537,9 +537,11 @@ def _gate_config_path(path: Path | None, repo_root: Path) -> Path:
     "there is no file at that path" is the useful half of the refusal for a repo that
     has never written one.
 
-    Never Studio's shipped ``config/implementation_loop.toml``. That file carries no
-    [gate] table at all, so it is never what gates a repository, and sending someone to
-    edit it would send them to a copy the next update overwrites.
+    The resolution chain must never land here on Studio's shipped
+    ``config/implementation_loop.toml``. That file carries no [gate] table at all, so it is
+    never what gates a repository, and sending someone to edit it would send them to a copy
+    the next update overwrites. Ask for it by name and the refusal does name it — you are
+    holding that file, and being told about a different one would be the confusing answer.
     """
     if path is not None:
         return Path(path)
@@ -574,7 +576,7 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
             dir). Exposed for testing.
 
     Returns:
-        LoopConfig with parsed values merged over the detected profile.
+        LoopConfig with the file's values, and nothing where it named nothing.
 
     Raises:
         FileNotFoundError: If an explicit ``path`` is given but does not exist.

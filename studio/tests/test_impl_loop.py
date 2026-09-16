@@ -874,23 +874,6 @@ def test_any_one_python_marker_is_enough_on_its_own(tmp_path, marker, contents):
     assert resolve_profile(tmp_path).test_command == "pytest -q"
 
 
-def test_a_unity_file_naming_only_its_test_command_inherits_nothing(tmp_path):
-    """A file setting only test_command gets nothing else — not even from its own stack.
-
-    Unity is the case that proves the merge base is empty rather than merely non-Python:
-    the marker files are right there at the root, and the resolved config still carries
-    no static check and no mutation gate, because the file did not ask for any.
-    """
-    root = _unity_repo(tmp_path)
-    _override(root, '[gate]\ntest_command = "./scripts/run-editmode-tests.sh"\n')
-
-    config = load_loop_config(studio_root=root)
-
-    assert config.test_command == "./scripts/run-editmode-tests.sh"
-    assert config.static_checks == []
-    assert config.require_mutation_check is False
-
-
 def test_orkid_gardens_own_override_still_resolves_and_raises_nothing(tmp_path):
     """The repo that reported this bug keeps working, byte-for-byte as it is today.
 

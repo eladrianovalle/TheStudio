@@ -760,9 +760,9 @@ def apply_implementation_loop_config(
     """Leave every repo with a ``.studio/implementation_loop.toml`` it can edit.
 
     The step asks nothing, and it works nothing out for itself: the commands come from
-    ``impl_loop.resolve_profile``, the same call ``/forge`` resolves its own gate with. One
-    function, two callers, so the file you can edit and the commands the loop actually runs
-    cannot drift apart.
+    ``impl_loop.resolve_profile``, which is now this wizard's alone — ``/forge`` reads the
+    file this step writes and detects nothing of its own. So the guess happens once, here,
+    where a wrong one costs an edit rather than a mis-gated build.
 
     Three outcomes, and two of them write a file:
 
