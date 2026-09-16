@@ -37,6 +37,8 @@ anyone hand-writing a config file.
   `studio/output/tech/run_tech_20260915_015039`, finalized APPROVED, with `decisions.md`,
   `findings.json` (verified) and `summary.md` all present.
 
+- **#174 merged 2026-09-15**, so this note is on main.
+
 - **Unit 1, `wizard_writes_stamped_template`, is built and open at PR #175.** Delivered unflagged:
   all five acceptance criteria graded `pass` with evidence, editor edited without reverting, 1043
   tests green (10 new), ruff clean, mutation check caught all four mutations. Worktree
@@ -82,8 +84,7 @@ a preference** — see Landmines.
   hand-written file — or drop the function and let the stamp be provenance a person reads. **The
   sweep is the likelier answer**: it is the one place that wants to rewrite ten repos' templates
   without touching anyone's edits.
-- **Adriano — merge PR #175** (unit 1) and **#174** (this note, which until then exists only on
-  branch `chore/thread-note-unit-1`).
+- **Adriano — merge PR #175** (unit 1).
 - **Adriano — four consumer PRs still open**, contrary to what an earlier note in this repo implied:
   `OrcPunk-biz` #19, `cerebro` #226, `OrcPunk-dotcom` #82, `cemetery-security` #721. The first two
   are what `specs/detected-static-check-command.md` needs to reach `shipped`; its three acceptance

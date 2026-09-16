@@ -181,9 +181,11 @@ python ".studio/source/run_phase.py" setup --target . --answers '<json with smok
 ### Step 6.75: Forge Gate Commands (no questions)
 
 `/forge` checks every unit it builds by running this repo's tests, its linter and its mutation
-tool. It works those commands out from the marker files at the repo root. This step writes what it
-found into `.studio/implementation_loop.toml`, so the commands are in a file you can read and edit
-instead of being invisible.
+tool. This step always leaves `.studio/implementation_loop.toml` behind, so those commands are in a
+file you can read and edit instead of being invisible. It guesses a starting point from the marker
+files at the repo root: when it recognises the stack the file arrives filled in, and when it does
+not it arrives blank, with every key present and a note saying which one to write. Either way the
+first line says setup wrote it, and setup never touches a file that is already there.
 
 Ask nothing here. Just run it:
 
@@ -193,12 +195,12 @@ python ".studio/source/run_phase.py" setup --target . --answers '{"implementatio
 
 Then relay what it printed:
 
-- **It wrote the file.** Tell the user which test command it detected and that they can edit the
-  file if it's wrong.
-- **It printed a refusal** ("gate.test_command is not set…"). Studio recognised nothing at this
-  root, or two stacks at once. Nothing was written on purpose. Show the message as-is — it names
-  the file and the exact lines to write — and offer to write them once the user says what runs this
-  repo's tests. `/forge` will refuse to start until that file exists.
+- **It wrote the file filled in.** Tell the user which test command it detected and that they can
+  edit the file if it's wrong.
+- **It wrote a blank template** ("Wrote … as a blank template"). Studio recognised nothing at this
+  root, or two stacks at once, so it wrote the file with every key empty. The file itself says what
+  was found and why it is no help. Offer to fill in `gate.test_command` once the user says what
+  runs this repo's tests; `/forge` refuses to start until that line has a command in it.
 - **It kept an existing file.** The user already has an override; setup never overwrites one.
 
 ### Step 7: Cleanup Settings
