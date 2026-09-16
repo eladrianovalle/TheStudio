@@ -1,7 +1,7 @@
 # Reviewer concerns — gate_keys_resolve_to_none
 
-Two things I could not act on in the editor pass. Both are real; neither is a reason to
-hold the unit.
+Two things raised in the editor pass. #1 is still open and is not a reason to hold the
+unit; #2 is resolved.
 
 ## 1. Every installed repo without its own config file loses /forge until a sweep runs
 
@@ -21,6 +21,6 @@ and this change is exactly why it must have run everywhere first.
 
 ## 2. Nothing in the suite would notice if the committed gate config stopped being tracked
 
-**Resolved.** `test_studios_own_gate_config_is_committed_and_loads` now runs
+**Resolved.** `test_studios_own_gate_config_is_committed_and_loads` already runs
 `git ls-files --error-unmatch` on the path and fails if the file is on disk but untracked,
 skipping the check outside a git checkout. No follow-up needed.
