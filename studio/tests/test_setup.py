@@ -933,6 +933,31 @@ def python_project(project: Path) -> Path:
     return project
 
 
+@pytest.fixture
+def unity_project(project: Path) -> Path:
+    """A ``project`` that Unity's own version file makes detectable as Unity."""
+    (project / "ProjectSettings").mkdir()
+    (project / "ProjectSettings" / "ProjectVersion.txt").write_text(
+        "m_EditorVersion: 6000.0.23f1\n", encoding="utf-8"
+    )
+    _install_shipped_loop_config(project)
+    return project
+
+
+def _comment_prose(content: str) -> str:
+    """The file's comment lines read back as prose, with the wrapping undone.
+
+    The written file wraps its explanations at a readable width, so a sentence about why
+    Studio ships no Unity command is spread over three lines with a ``#`` on each. Tests
+    care about the sentence, not where it happened to break.
+    """
+    words = []
+    for line in content.splitlines():
+        if line.startswith("#"):
+            words.extend(line.lstrip("#").split())
+    return " ".join(words)
+
+
 class TestFormatLoopToml:
     """What the wizard writes *above* gate.static_checks.
 
@@ -955,7 +980,8 @@ class TestFormatLoopToml:
         (repo / "pyproject.toml").write_text('[project]\nname = "fixture"\n', encoding="utf-8")
 
         comments = [
-            line for line in setup._format_loop_toml(impl_loop.resolve_profile(repo)).splitlines()
+            line
+            for line in setup._format_loop_toml(impl_loop.resolve_profile(repo), repo).splitlines()
             if line.startswith("#")
         ]
         explanation = " ".join(comments)
@@ -1052,43 +1078,119 @@ class TestApplyImplementationLoopConfig:
         # that regressed to writing one turns this line into a LoopConfigError.
         assert _resolved_gate(target).static_checks == expected_checks
 
-    def test_marker_less_repo_writes_nothing_and_prints_the_refusal(
+    def test_marker_less_repo_gets_a_stamped_blank_template(
         self, project: Path, capsys: pytest.CaptureFixture
     ) -> None:
-        from impl_loop import LoopConfigError
+        """The repo Studio cannot identify is the one that most needs the file to exist.
 
+        Writing nothing here is what sent three people off to author this file from
+        scratch. The template turns that into one edit, so every key is present and
+        blank rather than only the ones detection could answer.
+        """
         _install_shipped_loop_config(project)
+        config_path = project / ".studio" / "implementation_loop.toml"
 
         setup.apply_implementation_loop_config(project)
 
-        assert not (project / ".studio" / "implementation_loop.toml").exists()
-        printed = capsys.readouterr().out
-        assert "gate.test_command is not set" in printed
-        assert "no marker file Studio recognises is present here" in printed
-        assert str(project / ".studio" / "implementation_loop.toml") in printed
-        with pytest.raises(LoopConfigError):
-            _resolved_gate(project)
-        state = setup.load_setup_state(project)
-        assert state["choices"]["implementation_loop_config"] == {"status": "undetected"}
+        content = config_path.read_text(encoding="utf-8")
+        first_line = content.splitlines()[0]
+        assert first_line.startswith("# Written by /studio-setup on ")
+        assert first_line.endswith(". Edit freely — setup never overwrites this file.")
+        assert "[gate]" in content
+        assert 'test_command = ""' in content
+        assert "static_checks = []" in content
+        assert "require_mutation_check = false" in content
+        assert 'mutation_command = ""' in content
+        # The one thing a person has to do with this file, said in the file itself.
+        assert "Writing test_command is what makes /forge work in this repo" in (
+            _comment_prose(content)
+        )
 
-    def test_ambiguous_repo_writes_nothing_and_names_both_markers(
-        self, project: Path, capsys: pytest.CaptureFixture
+        printed = capsys.readouterr().out
+        assert f"Wrote {config_path} as a blank template" in printed
+        assert "Fill in gate.test_command" in printed
+        # Not the loader's refusal any more: that one says nothing was written, and
+        # something was.
+        assert "gate.test_command is not set" not in printed
+        state = setup.load_setup_state(project)
+        assert state["choices"]["implementation_loop_config"] == {"status": "template"}
+
+    def test_the_written_template_still_refuses_and_names_itself(
+        self, project: Path
     ) -> None:
+        """A template is not a working gate — /forge still stops, pointing at this file.
+
+        The whole point of always writing is that the refusal now names a file that
+        exists and a line to fill in, instead of a file somebody has to create.
+        """
         from impl_loop import LoopConfigError
 
+        _install_shipped_loop_config(project)
+        config_path = project / ".studio" / "implementation_loop.toml"
+
+        setup.apply_implementation_loop_config(project)
+
+        with pytest.raises(LoopConfigError) as refusal:
+            _resolved_gate(project)
+        assert str(config_path) in str(refusal.value)
+
+    def test_ambiguous_repo_names_both_markers_in_the_file(
+        self, project: Path
+    ) -> None:
+        """Two stacks at once is still a refusal, and the template says which two.
+
+        A Rust game whose package.json only describes CI tooling is the real case:
+        whoever fills this in has to know what Studio saw to understand why it will not
+        guess.
+        """
         _install_shipped_loop_config(project)
         (project / "Cargo.toml").write_text("[package]", encoding="utf-8")
         (project / "package.json").write_text(
             json.dumps({"scripts": {"test": "vitest run"}}), encoding="utf-8"
         )
+        config_path = project / ".studio" / "implementation_loop.toml"
 
         setup.apply_implementation_loop_config(project)
 
-        assert not (project / ".studio" / "implementation_loop.toml").exists()
-        printed = capsys.readouterr().out
-        assert "rust (Cargo.toml) and node (package.json) both match" in printed
-        with pytest.raises(LoopConfigError):
-            _resolved_gate(project)
+        assert "rust (Cargo.toml) and node (package.json) both match" in _comment_prose(
+            config_path.read_text(encoding="utf-8")
+        )
+        assert 'test_command = ""' in config_path.read_text(encoding="utf-8")
+
+    def test_unity_template_carries_the_reason_studio_ships_no_command(
+        self, unity_project: Path
+    ) -> None:
+        """Unity's warning belongs in the file being edited, not in a refusal seen once.
+
+        Word for word out of ``impl_loop._detected_line``, never paraphrased here: the
+        loop's refusal and this file have to say the same thing.
+        """
+        config_path = unity_project / ".studio" / "implementation_loop.toml"
+
+        setup.apply_implementation_loop_config(unity_project)
+
+        prose = _comment_prose(config_path.read_text(encoding="utf-8"))
+        assert "unity (ProjectSettings/ProjectVersion.txt)" in prose
+        assert (
+            "Unity reports success even when it discovered no tests at all" in prose
+        )
+
+    def test_a_python_repo_is_pre_filled_and_loads_back(
+        self, python_project: Path
+    ) -> None:
+        """Detection's useful half survives: a recognised repo starts filled in."""
+        setup.apply_implementation_loop_config(python_project)
+
+        assert _resolved_gate(python_project).test_command == "pytest -q"
+        # The "why this is no help" sentences are refusal text. Beside a command that
+        # does run, they would say the opposite of the line under them.
+        prose = _comment_prose(
+            (python_project / ".studio" / "implementation_loop.toml").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert "detected from this repo's stack (python)" in prose
+        assert "Studio ships no test command" not in prose
 
     def test_never_overwrites_orkid_gardens_own_file(
         self, project: Path, capsys: pytest.CaptureFixture
@@ -1106,6 +1208,29 @@ class TestApplyImplementationLoopConfig:
         )
         state = setup.load_setup_state(project)
         assert state["choices"]["implementation_loop_config"] == {"status": "kept"}
+
+    def test_never_overwrites_its_own_blank_template(
+        self, project: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Always writing is only safe because the second run leaves the first alone.
+
+        The blank template is the file most likely to be half-edited when setup runs
+        again, so it gets the same protection a hand-written one does — byte for byte,
+        stamp and all.
+        """
+        _install_shipped_loop_config(project)
+        config_path = project / ".studio" / "implementation_loop.toml"
+
+        setup.apply_implementation_loop_config(project)
+        written = config_path.read_bytes()
+        capsys.readouterr()
+
+        setup.apply_implementation_loop_config(project)
+
+        assert config_path.read_bytes() == written
+        assert capsys.readouterr().out == (
+            f"Kept the existing {config_path} — setup never overwrites one.\n"
+        )
 
     def test_never_overwrites_even_when_detection_has_an_answer(
         self, node_project: Path
@@ -1197,8 +1322,8 @@ class TestApplyImplementationLoopConfig:
         state = setup.apply_defaults(project)
         assert state["completed_steps"]["implementation_loop_config"] == 5
         assert setup.pending_steps(state) == []
-        # Nothing detectable at this fixture's root, so nothing is written.
-        assert not (project / ".studio" / "implementation_loop.toml").exists()
+        # Nothing detectable at this fixture's root, so what lands is the blank template.
+        assert setup.is_wizard_template(project / ".studio" / "implementation_loop.toml")
 
     def test_status_row_names_the_detected_command(self, node_project: Path) -> None:
         setup.apply_defaults(node_project)
@@ -1212,8 +1337,8 @@ class TestApplyImplementationLoopConfig:
     def test_status_row_says_when_nothing_was_detected(self, project: Path) -> None:
         setup.apply_defaults(project)
         assert (
-            "  Forge gates: none detected — /forge refuses until you write "
-            ".studio/implementation_loop.toml" in setup.show_status(project).splitlines()
+            "  Forge gates: none detected — blank template written, fill in test_command "
+            "in .studio/implementation_loop.toml" in setup.show_status(project).splitlines()
         )
 
     def test_status_row_says_when_your_own_file_was_kept(self, project: Path) -> None:
@@ -1225,3 +1350,65 @@ class TestApplyImplementationLoopConfig:
             "  Forge gates: your own .studio/implementation_loop.toml (left alone)"
             in setup.show_status(project).splitlines()
         )
+
+
+class TestIsWizardTemplate:
+    """Telling the wizard's own untouched template from a file a person wrote.
+
+    That is the only distinction this answers, and the only one it needs to: a stamp
+    plus a blank test_command identifies a file nobody has filled in. Anything else —
+    a hash, a version number — would be a moving part with no reader.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _no_artifact_root_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("STUDIO_ARTIFACT_ROOT", raising=False)
+
+    def test_true_for_the_template_the_wizard_just_wrote(self, project: Path) -> None:
+        _install_shipped_loop_config(project)
+        setup.apply_implementation_loop_config(project)
+
+        assert setup.is_wizard_template(project / ".studio" / "implementation_loop.toml")
+
+    def test_false_once_someone_fills_in_the_command(self, project: Path) -> None:
+        """The stamp survives an edit; a filled-in command is what ends the template."""
+        _install_shipped_loop_config(project)
+        config_path = project / ".studio" / "implementation_loop.toml"
+        setup.apply_implementation_loop_config(project)
+
+        filled = config_path.read_text(encoding="utf-8").replace(
+            'test_command = ""', 'test_command = "./scripts/run-editmode-tests.sh"'
+        )
+        config_path.write_text(filled, encoding="utf-8")
+
+        assert not setup.is_wizard_template(config_path)
+
+    def test_false_for_a_hand_written_file(self, project: Path) -> None:
+        """Orkid Garden's real file: no stamp, and a command that works."""
+        config_path = project / ".studio" / "implementation_loop.toml"
+        config_path.write_text(ORKID_OVERRIDE, encoding="utf-8")
+
+        assert not setup.is_wizard_template(config_path)
+
+    def test_false_for_a_hand_written_file_with_a_blank_command(
+        self, project: Path
+    ) -> None:
+        """Blank alone is not enough — somebody else's unfinished file is still theirs."""
+        config_path = project / ".studio" / "implementation_loop.toml"
+        config_path.write_text('[gate]\ntest_command = ""\n', encoding="utf-8")
+
+        assert not setup.is_wizard_template(config_path)
+
+    def test_the_stamps_date_does_not_matter(self, project: Path) -> None:
+        """A template written months ago is still an untouched template."""
+        config_path = project / ".studio" / "implementation_loop.toml"
+        config_path.write_text(
+            setup.WIZARD_STAMP.format(date="2024-01-31")
+            + '\n\n[gate]\ntest_command = ""\n',
+            encoding="utf-8",
+        )
+
+        assert setup.is_wizard_template(config_path)
+
+    def test_false_for_a_file_that_is_not_there(self, project: Path) -> None:
+        assert not setup.is_wizard_template(project / ".studio" / "nope.toml")

@@ -3,7 +3,7 @@ feature: First-class /forge gate configuration
 slug: first-class-forge-gates
 ticket: https://github.com/eladrianovalle/TheStudio/issues/133
 # status: draft → approved (a human approved it) → shipped (built AND verified)
-status: draft
+status: approved
 studio_run: studio/output/tech/run_tech_20260915_015039
 # verification_due: the date the evidence is due (YYYY-MM-DD). Required once this spec is
 # `approved`, and only if it carries a `## Verification` section — no section, no deadline.

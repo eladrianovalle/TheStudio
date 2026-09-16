@@ -11,7 +11,8 @@ updated: 2026-09-15
 ## Goal
 `specs/detected-static-check-command.md` reaches `status: shipped`. Unit 3 — the rollout to the two
 consuming repos that carried a stale config — is built and measured; the spec flips when
-`OrcPunk-biz` #19 and `cerebro` #226 merge. Studio's own PRs are all merged.
+`OrcPunk-biz` #19 and `cerebro` #226 merge. This thread's own Studio PRs are all merged;
+TheStudio's one open PR, #175, belongs to the `studio-improvements-from-evidence` thread.
 
 ## Where this stands
 
@@ -104,6 +105,7 @@ consuming repos that carried a stale config — is built and measured; the spec 
   the two rollout PRs merge.
 - Open PRs, all mine, all ready: `OrcPunk-biz` #19, `cerebro` #226, `OrcPunk-dotcom` #82,
   `cemetery-security` #721. `_Alfred` #270 and `Multica`/orc-review #102 merged 2026-09-14.
-  TheStudio's only open PR is #172, which belongs to the `studio-improvements-from-evidence` thread.
+  TheStudio's only open PR is #175, which belongs to the `studio-improvements-from-evidence`
+  thread; #172 merged 2026-09-15.
   `cerebro` #224 and #225 are closed as superseded by #226.
 - Issue: #133 (open, half-stale, comment posted).
