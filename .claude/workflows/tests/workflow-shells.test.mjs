@@ -395,6 +395,18 @@ test('static_ok shuts the entry gate only when it is explicitly false', () => {
   assert.equal(passesEntryGate({ ...GREEN_WRITER, static_ok: false }, false), true)
 })
 
+// implementation-loop.js — a skipped mutation check has to say why. The schema cannot require a
+// reason only when `performed` is false, so this condition is the only thing that notices.
+const skippedMutationCheckWithoutReason = loadFunction('../implementation-loop.js', 'skippedMutationCheckWithoutReason')
+
+test('a skipped mutation check is caught only when it gives no reason', () => {
+  assert.equal(skippedMutationCheckWithoutReason({ mutation_check: { performed: false } }), true)
+  assert.equal(skippedMutationCheckWithoutReason({ mutation_check: { performed: false, reason: 'not_reached' } }), false)
+  assert.equal(skippedMutationCheckWithoutReason({ mutation_check: { performed: true, mutations_introduced: 2, caught: true } }), false)
+  // A handoff with no object at all is the schema's to reject, not this check's.
+  assert.equal(skippedMutationCheckWithoutReason({}), false)
+})
+
 // ---------------------------------------------------------------------------
 // implementation-loop.js — work_dir. The loop can be told which directory to build in (a git
 // worktree), instead of trusting wherever the agent's shell happens to be sitting.

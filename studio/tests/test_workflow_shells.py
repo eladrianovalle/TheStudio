@@ -421,11 +421,14 @@ class TestMutationSkipReasonRecorded:
         JSON Schema says that only through ``if``/``then``, which this shell does not use, so
         ``{"performed": false}`` still validates — the exact shape of the 81 records the field
         replaced. The rule therefore lives in the orchestration, where the handoff has already
-        landed, and this pins that it is there and reads the three enum values back.
+        landed. The condition itself is driven in the node suite; this pins that the orchestration
+        calls it after the abort and reads the three enum values back.
         """
         src = self._loop_source()
-        assert "writer.mutation_check.performed === false && !writer.mutation_check.reason" in src
-        guard = src.split("writer.mutation_check.performed === false", 1)[1][:400]
+        call = "if (skippedMutationCheckWithoutReason(writer)) {"
+        assert call in src
+        assert src.index("if (!writer) {") < src.index(call)
+        guard = src.split(call, 1)[1][:400]
         for value in ("not_configured", "nothing_to_mutate", "not_reached"):
             assert value in guard
 
@@ -469,7 +472,10 @@ class TestMutationSkipReasonRecorded:
         src = self._loop_source()
         disabled, _ = self._mutation_clause_arms(src)
         assert '{"performed": false, "reason": "not_configured"}' in disabled, (
-            "a writer whose repo configures no mutation check is not told what to record"
+            "a writer whose mutation check is disabled by config is not told what to record"
+        )
+        assert "even if you escalate" in disabled, (
+            "a disabled-check writer that escalates has two plausible reasons and no tie-break"
         )
         assert "mutmut" not in disabled
         # And no other line reaches this writer with the tool's name: the only other

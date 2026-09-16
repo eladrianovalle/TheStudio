@@ -1,5 +1,9 @@
 # Reviewer concerns — `mutation_skip_reason_recorded`
 
+**Status: resolved in the same PR.** `skippedMutationCheckWithoutReason` in
+`.claude/workflows/implementation-loop.js` now logs a reasonless skip right after the writer handoff
+lands. It logs only; it does not flag the unit.
+
 ## 1. Nothing forces a reason when `performed` is false
 
 **Concern.** The unit exists because "another 81 said `performed: false` without ever saying why."

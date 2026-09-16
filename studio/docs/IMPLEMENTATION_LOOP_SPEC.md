@@ -78,8 +78,8 @@ persisted to the run directory.
   },
   "mvi_claimed": true,              // writer's DECLARATION that the unit is a complete thought — the handoff trigger
   "mutation_check": { "performed": true, "mutations_introduced": 2, "caught": true },  // REQUIRED; attested; counts PRODUCTION-code changes, never broken assertions
-  // when it did not run, say why: { "performed": false, "reason": "not_configured" } — the repo configures no
-  // mutation command; "nothing_to_mutate" — no production code to change; "not_reached" — the writer stopped first
+  // when it did not run, say why: { "performed": false, "reason": "not_configured" } — the check is disabled by
+  // config, even if the writer escalated; "nothing_to_mutate" — no production code to change; "not_reached" — the writer stopped first
   "load_bearing": ["the retry in save_profile guards a real race; do not cut"],
   "stuck": "…",       // present ONLY when the writer stopped deliberately: the blocker, quoted. Absent normally
   "stage": "writer"   // "writer" | "editor"

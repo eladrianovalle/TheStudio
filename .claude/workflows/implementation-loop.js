@@ -141,7 +141,7 @@ const WRITER_HANDOFF = {
       additionalProperties: false,
       properties: {
         performed: { type: 'boolean' },
-        reason: { type: 'string', enum: ['not_configured', 'nothing_to_mutate', 'not_reached'], description: 'why the check did not run — the repo configures no mutation command, there was no production code to mutate, or you escalated before getting that far; omit it when performed is true' },
+        reason: { type: 'string', enum: ['not_configured', 'nothing_to_mutate', 'not_reached'], description: 'why the check did not run — the check is disabled by config (require_mutation_check=false, which wins even if you escalated), there was no production code to mutate, or you escalated before getting that far; omit it when performed is true' },
         // Counts changes made to the PRODUCTION code, not to assertions. Breaking an
         // assertion fails its test by construction, so counting those measured nothing.
         mutations_introduced: { type: 'integer', description: 'how many production-code changes were made to check the tests notice' },
@@ -248,7 +248,7 @@ function writerPrompt(u) {
     ``,
     `Discipline:`,
     `- Build a usable interaction, not a partial component (MVI). No speculative scope beyond the unit.`,
-    `- Hold AI-TDD: write the tests and run them.${u.require_mutation_check === false ? ' (Mutation check disabled by config: require_mutation_check=false — record it as {"performed": false, "reason": "not_configured"}.)' : ` Then run the configured mutation check on the code you touched: \`${u.mutation_command}\` (scope + runner live in studio/setup.cfg), and report the outcome in mutation_check. If mutmut isn't installed, fall back to hand-mutating — change 2-3 things in the PRODUCTION code the tests cover (flip a comparison, drop a guard clause, return a constant), confirm the tests FAIL, then restore. Mutate the code, never the assertions: breaking an assertion fails its test by construction and tells you nothing about whether that test would catch a real bug. If the unit changed no production code to mutate, say so: {"performed": false, "reason": "nothing_to_mutate"}.`}`,
+    `- Hold AI-TDD: write the tests and run them.${u.require_mutation_check === false ? ' (Mutation check disabled by config: require_mutation_check=false — record it as {"performed": false, "reason": "not_configured"}, and keep that reason even if you escalate.)' : ` Then run the configured mutation check on the code you touched: \`${u.mutation_command}\` (scope + runner live in studio/setup.cfg), and report the outcome in mutation_check. If mutmut isn't installed, fall back to hand-mutating — change 2-3 things in the PRODUCTION code the tests cover (flip a comparison, drop a guard clause, return a constant), confirm the tests FAIL, then restore. Mutate the code, never the assertions: breaking an assertion fails its test by construction and tells you nothing about whether that test would catch a real bug. If the unit changed no production code to mutate, say so: {"performed": false, "reason": "nothing_to_mutate"}.`}`,
     `- Run the unit tests: \`${u.test_command}\`${staticClause}`,
     `- When (and only when) tests pass, COMMIT the passing state on the current branch (one exception: escalation, below).`,
     `  (\`${gitIn(u)} add -A && ${gitIn(u)} commit -m "writer: ${u.unit_id}"\`) and capture the short SHA — that is writer_sha.`,
@@ -380,6 +380,11 @@ function passesEntryGate(writer, staticRequired) {
   return !!(writer.mvi_claimed && writer.tests && writer.tests.passed && (!staticRequired || writer.static_ok !== false))
 }
 
+// Named for the same reason as passesEntryGate: so the JS shell tests can drive it.
+function skippedMutationCheckWithoutReason(writer) {
+  return !!(writer.mutation_check && writer.mutation_check.performed === false && !writer.mutation_check.reason)
+}
+
 if (!writer) {
   log('Writer agent failed to return a handoff — aborting.')
   return { delivered: false, reason: 'writer_failed' }
@@ -394,10 +399,10 @@ if (writer.stuck) {
 }
 // A skipped mutation check has to say why. The schema can require `performed`, but it cannot say
 // "and when that is false, a reason is required" — JSON Schema expresses that only through if/then,
-// which this shell does not use. So the rule lives here, where the handoff has already landed.
+// which this shell does not use. So the check lives here, where the handoff has already landed.
 // `{"performed": false}` with no reason is the exact shape of the 81 records this field exists to
-// replace, and catching it here beats asking for a reason twice in prompt text.
-if (writer.mutation_check && writer.mutation_check.performed === false && !writer.mutation_check.reason) {
+// replace. It is a transcript line only: it does not flag the unit or change the returned result.
+if (skippedMutationCheckWithoutReason(writer)) {
   log('Writer skipped the mutation check and recorded no reason — one of not_configured, nothing_to_mutate, not_reached was required.')
 }
 if (!entryGate) {
