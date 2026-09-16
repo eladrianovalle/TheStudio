@@ -680,10 +680,10 @@ def _format_loop_toml(profile: Any, root: Path) -> str:
         ]
     else:
         # _detected_line explains why what was found is no help, so it goes in the file
-        # only when there is nothing to run. On a stack Studio
-        # does serve it would say the opposite of the command sitting under it. It is
-        # reused word for word rather than paraphrased: a second copy of the Unity
-        # warning here is the one that would go stale.
+        # only when there is nothing to run. On a stack Studio does serve it would say
+        # the opposite of the command sitting under it. It is reused word for word rather
+        # than paraphrased: a second copy of the Unity warning here is the one that would
+        # go stale.
         found = _comment_lines(f"Detected: {impl_loop._detected_line(profile, root)}")
     lines = [
         WIZARD_STAMP.format(date=today),

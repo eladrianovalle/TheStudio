@@ -515,7 +515,7 @@ def _resolve_config_path(path: Path | None, studio_root: Path) -> Path | None:
     explicit ``path`` → ``<artifact-root>/.studio/implementation_loop.toml`` (the project
     override, which lives at the consuming repo root, NOT under the source snapshot) →
     ``<studio-root>/config/implementation_loop.toml`` (the shipped default). Returns None
-    when nothing in the chain exists (caller falls back to built-in defaults).
+    when nothing in the chain exists (caller refuses with ``LoopConfigError``).
     """
     if path is not None:
         return Path(path)
