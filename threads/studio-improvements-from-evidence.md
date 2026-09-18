@@ -3,7 +3,7 @@ type: thread
 status: active
 slug: studio-improvements-from-evidence
 created: 2026-09-15
-updated: 2026-09-15
+updated: 2026-09-18
 ---
 
 # Improving Studio from what its own artifacts say, not from intuition
@@ -16,7 +16,7 @@ anyone hand-writing a config file.
 ## Where this stands
 
 **Done and verified (2026-09-15)**
-- Main at `fcb14ed`, **1033 tests**, ruff clean (1043 on unit 1's branch).
+- Main at `3715caf` after #175, #177 and #178 merged; **1053 tests** with #176's branch merged up, ruff clean.
 - **#169 — cleanup no longer eats finished work.** `cleanup_runs` deleted on age and size alone and
   never checked status; a finalized APPROVED debate died at 30 days like an abandoned prepare. 31+
   consumer runs were already lost. Finalized runs are now never deleted by either rule; unfinished
@@ -46,12 +46,14 @@ anyone hand-writing a config file.
   `{"performed": false}` still validated. That rule now lives in the orchestration.
 
 - **The gate-config sweep is done, and it tested the wizard rather than bypassing it.** #176 would
-  have broken `/forge` in four installs the moment it merged. All four were configured by running
-  `/studio-setup`, which exercised both of unit 1's paths: pre-filled and stamped in
-  `Arkadium/solitaire-game`, `_Cerebro` and `OrcPunk-dotcom`; the blank stamped template with the
-  "no marker file Studio recognises" line in `CREA`, and `miresu` pre-filled. cemetery-security and
-  OrcPunk-biz still have none, but they already refused, so they are not regressions. **#176 is
-  unblocked.**
+  have broken `/forge` in **four** installs the moment it merged — `Arkadium/solitaire-game`,
+  `_Cerebro`, `OrcPunk-dotcom` and `miresu`, each of which worked only because detection guessed a
+  command for it. **Five** repos were configured by running `/studio-setup`, because `CREA` was done
+  in the same pass; it was never a regression, since detection already found nothing there and
+  `/forge` refused before and after. The five exercised both of unit 1's paths: pre-filled and
+  stamped in the four Node/Python repos, and the blank stamped template with the "no marker file
+  Studio recognises" line in `CREA`. cemetery-security and OrcPunk-biz still have no config, and
+  like `CREA` they already refused, so they are not regressions either. **#176 is unblocked.**
 
 - **`specs/completion-ledger.md` is specced and open at #177.** Two advocate passes, two contrarian
   passes, both rejections accepted rather than argued down, eighteen recorded decisions. Debate:
@@ -62,14 +64,17 @@ anyone hand-writing a config file.
   cemetery-security #722 and OrkidGarden-Game #133. See [[feedback_stranded_concerns_go_stale]].
 
 **In flight**
-- **Four Studio PRs awaiting review: #176, #177, #178**, plus three open issues filed today —
+- **#177 and #178 merged 2026-09-16.** Open now: **#176** (approved three times, checks green,
+  brought up to date with main on 2026-09-18) and **#182**, this note's own pull request. Three
+  issues are open from that day's work —
   **#179** (`setup --defaults` resets every prior choice, and `--status` recommends it),
   **#180** (per-scope `model` in `scopes.toml`), **#181** (measure whether the contrarian's
   confidence ratings are calibrated).
 
 **Next action**
-Merge #176 and #178 to finish `first-class-forge-gates`, then flip that spec to `shipped`. The
-ledger's unit 1 (`build_plan_one_shape`) follows once #177 merges.
+Merge #176 — its blocker is cleared and every install that would have regressed now carries a real
+test command — then flip `first-class-forge-gates` to `shipped`. After that, the ledger's unit 1,
+`build_plan_one_shape`, via `/forge --spec completion-ledger --unit build_plan_one_shape`.
 
 ## Decisions made
 - **Detection is demoted, not improved.** It becomes the setup wizard's opening guess and leaves the
@@ -98,15 +103,25 @@ ledger's unit 1 (`build_plan_one_shape`) follows once #177 merges.
   consuming repo's `CLAUDE.md`, which is our only vector. Revisit at a third prompt-shaped feature.
 
 ## Blocked on
-- **Adriano — `is_wizard_template` has no reader, and only a spec change can give it one.** Unit 1
+- **Adriano — `is_wizard_template` still has no reader, and the sweep did not become one.** Unit 1
   built it because criterion 5 asks for it, but nothing in shipped code calls it: the wizard decides
-  with `if config_path.exists()` and keeps any existing file, stamped or not. So the distinction the
-  spec says the stamp exists for is never actually made. Either give it a reader — the cross-repo
-  sweep, or `update` refreshing its own untouched template while still refusing to touch a
-  hand-written file — or drop the function and let the stamp be provenance a person reads. **The
-  sweep is the likelier answer**: it is the one place that wants to rewrite ten repos' templates
-  without touching anyone's edits.
-- **Adriano — merge PR #175** (unit 1).
+  with `if config_path.exists()` and keeps any existing file, stamped or not. The 2026-09-16 sweep
+  was the candidate reader and it turned out not to be — it ran `/studio-setup`, which never calls
+  the function. So the remaining options are `update` refreshing its own untouched template while
+  still refusing to touch a hand-written file, or dropping the function and letting the stamp be
+  provenance a person reads. **`update` is now the likelier answer**, since it is the only thing that
+  revisits a repo after setup has run.
+- **Adriano — World 1 slime placement, in cemetery-security.** Area 4's one Level is both the slimes
+  intro and the World finale, while every other Area gives its enemy an intro plus two Levels of
+  runway. Worse, the spawner picks uniformly from the Area roster, so an un-graduated prototype
+  reaches live play while issue #385 (graduate slimes out of the Gym after a balance pass) is still
+  open. Three sources say the placement is deliberately unmade: the doc comment above the constant,
+  the ladder spec's Risks, and issue #609's Kids → Slimes → Teens ordering. **Recommended: pull
+  slimes out of Area 4 as an interim** — point it at the Kids+Teens roster and give it a plain
+  enemy Level, roughly three lines plus four test updates. That restores gym-first, makes the finale
+  play only enemies the player has been taught, and pre-empts nothing about #609. It costs World 1
+  one enemy type until #385 lands. The alternatives are giving slimes their own Area as part of #609
+  (World 1 goes 9 → 12 Levels and needs a fourth board rung) or leaving it.
 - **Adriano — four consumer PRs still open**, contrary to what an earlier note in this repo implied:
   `OrcPunk-biz` #19, `cerebro` #226, `OrcPunk-dotcom` #82, `cemetery-security` #721. The first two
   are what `specs/detected-static-check-command.md` needs to reach `shipped`; its three acceptance
@@ -124,15 +139,19 @@ ledger's unit 1 (`build_plan_one_shape`) follows once #177 merges.
   config files on disk survive, so restoring `SETUP.json` and adding just the new step puts it right.
 - **A template the wizard already wrote is never corrected.** The five written on 2026-09-16 carry a
   comment saying a missing `[gate]` key falls back to detection — true until #176 merges, false after.
-  setup never overwrites, so the sweep has to fix them.
+  setup never overwrites, so nothing corrects them on its own. **Fix them after #176 merges, not
+  before:** the sentence is still true today, and rewriting it early would make it wrong during the
+  window it is right. The window after the merge is short if the correction rides the sweep that is
+  already planned as that spec's deployment step.
 - **Unit 2 must also kill the refusal's last line.** It still ends "Or run /studio-setup, which writes
   that file for you." After unit 1 that sentence tells someone who just ran the wizard to run it
   again, at a file that already exists with the `[gate]` block in it. Unit 2 already owns rewording
   the refusal around whether the file exists; drop the sentence from the file-exists branch and point
   at the blank `test_command` line instead.
-- **Unit order is load-bearing.** The loader unit changes `_no_test_command_message`'s signature
-  while `setup.py` still calls the old one, and deletes refusal text `test_setup.py` asserts on.
-  Build the wizard unit first.
+- **Unit order was load-bearing, and the order held** (resolved 2026-09-16). The loader unit changes
+  `_no_test_command_message`'s signature while `setup.py` still calls the old one, and deletes refusal
+  text `test_setup.py` asserts on — so the wizard unit had to go first, and did. Kept because the
+  same trap applies to any future unit pair that moves a signature one side of a caller at a time.
 - **Re-including a file under an ignored directory takes TWO `.gitignore` lines.** Git cannot
   re-include a file whose parent directory is excluded, so `studio/.studio/` must become
   `studio/.studio/*` before `!studio/.studio/implementation_loop.toml` does anything. Tested both
