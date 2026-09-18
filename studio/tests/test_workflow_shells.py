@@ -169,12 +169,15 @@ class TestWriterEscalationChannel:
         # and a normal run never sets the field at all.
         top_level_required = re.search(r"required: \[([^\]]*)\]", handoff).group(1)
         declared = re.findall(r"'([^']+)'", top_level_required)
+        # `mutation_check` joined the required list when skip reasons landed; `stuck`
+        # must never join it, and nothing else may drift in unnoticed.
         assert declared == [
             "unit_id",
             "writer_sha",
             "files_touched",
             "tests",
             "mvi_claimed",
+            "mutation_check",
             "stage",
         ], f"the writer handoff's required fields changed: {declared}"
 
@@ -396,6 +399,119 @@ class TestMutationGateTeeth:
         assert "warnings" in editor
         # Routed to the channel that already survives a revert, not left to evaporate.
         assert "Reviewer Concern" in editor
+
+
+class TestMutationSkipReasonRecorded:
+    """Pin that a skipped mutation check is a recorded fact, not a missing field.
+
+    Across every repo, 31 writer records carried no ``mutation_check`` object at all and
+    another 81 carried it with ``performed: false`` and no reason — so a skipped gate was
+    indistinguishable from a forgotten one. The object is required now, and ``reason`` is a
+    closed enum of the three honest ways the check does not run. Like the rest of this file
+    these are prompt and schema text with no runtime behind them, so reading the shell is
+    the only place the words can be checked.
+    """
+
+    def _loop_source(self):
+        return (_WORKFLOW_DIR / "implementation-loop.js").read_text()
+
+    def test_a_skipped_check_with_no_reason_is_caught_after_the_handoff_lands(self):
+        """The schema requires ``performed``; it cannot require a reason *when* that is false.
+
+        JSON Schema says that only through ``if``/``then``, which this shell does not use, so
+        ``{"performed": false}`` still validates — the exact shape of the 81 records the field
+        replaced. The rule therefore lives in the orchestration, where the handoff has already
+        landed. The condition itself is driven in the node suite; this pins that the orchestration
+        calls it after the abort and reads the three enum values back.
+        """
+        src = self._loop_source()
+        call = "if (skippedMutationCheckWithoutReason(writer)) {"
+        assert call in src
+        assert src.index("if (!writer) {") < src.index(call)
+        guard = src.split(call, 1)[1][:400]
+        for value in ("not_configured", "nothing_to_mutate", "not_reached"):
+            assert value in guard
+
+    def _writer_prompt(self, src):
+        return src[src.index("function writerPrompt"):src.index("function editorPrompt")]
+
+    def _mutation_clause_arms(self, src):
+        """Split the `Hold AI-TDD` line into its disabled arm and its enabled arm.
+
+        The clause is one ternary inside a template literal, so the source always holds
+        both arms at once; splitting on the ternary is the only way to ask what a writer
+        is told on one path without the other path's text answering for it.
+        """
+        prompt = self._writer_prompt(src)
+        line = next(ln for ln in prompt.splitlines() if "Hold AI-TDD" in ln)
+        _, branch, rest = line.partition("u.require_mutation_check === false ? ")
+        assert branch, "the require_mutation_check branch in writerPrompt is gone"
+        disabled, sep, enabled = rest.partition(" : ")
+        assert sep, "the ternary's two arms are no longer separable"
+        return disabled, enabled
+
+    def test_mutation_check_requires_performed_and_exactly_three_reasons(self):
+        # That `mutation_check` is in the handoff's own required list is pinned by
+        # TestWriterEscalationChannel, which asserts that list exactly. This is the
+        # shape of the object it now insists on.
+        src = self._loop_source()
+        handoff = src[src.index("const WRITER_HANDOFF"):src.index("const EDITOR_HANDOFF")]
+        block = handoff[handoff.index("mutation_check: {"):handoff.index("load_bearing:")]
+        assert "required: ['performed']" in block, (
+            "mutation_check no longer requires `performed`, so the object can be present and empty"
+        )
+        enum = re.search(r"reason: \{[^}]*enum: \[([^\]]*)\]", block)
+        assert enum, "mutation_check has no `reason` enum"
+        assert re.findall(r"'([^']+)'", enum.group(1)) == [
+            "not_configured",
+            "nothing_to_mutate",
+            "not_reached",
+        ], "the skip reasons are not exactly the three the spec fixed"
+
+    def test_disabled_arm_dictates_the_record_and_never_names_the_tool(self):
+        src = self._loop_source()
+        disabled, _ = self._mutation_clause_arms(src)
+        assert '{"performed": false, "reason": "not_configured"}' in disabled, (
+            "a writer whose mutation check is disabled by config is not told what to record"
+        )
+        assert "even if you escalate" in disabled, (
+            "a disabled-check writer that escalates has two plausible reasons and no tie-break"
+        )
+        assert "mutmut" not in disabled
+        # And no other line reaches this writer with the tool's name: the only other
+        # mention is ${u.mutation_command}, which renders inside the enabled arm alone.
+        elsewhere = "\n".join(
+            ln for ln in self._writer_prompt(src).splitlines() if "Hold AI-TDD" not in ln
+        )
+        assert "mutmut" not in elsewhere and "mutation_command" not in elsewhere, (
+            "the disabled path now names a mutation tool the repo never configured"
+        )
+
+    def test_enabled_arm_names_the_other_two_reasons_and_keeps_its_guidance(self):
+        src = self._loop_source()
+        _, enabled = self._mutation_clause_arms(src)
+        prompt = self._writer_prompt(src)
+        assert "nothing_to_mutate" in enabled, (
+            "a unit with no production code to mutate has no honest value to record"
+        )
+        # `not_reached` belongs to the escalation paragraph, which both arms carry.
+        assert "not_reached" in prompt, (
+            "a writer that escalates before the check still has nothing to record"
+        )
+        # Only added to, never rewritten: the guidance that made this gate mean something.
+        for kept in (
+            "scope + runner live in studio/setup.cfg",
+            "If mutmut isn't installed, fall back to hand-mutating",
+            "Mutate the code, never the assertions",
+        ):
+            assert kept in enabled, f"the enabled arm lost existing guidance: {kept!r}"
+
+    def test_the_loop_spec_example_handoff_shows_reason_and_its_values(self):
+        doc = (_REPO_ROOT / "studio" / "docs" / "IMPLEMENTATION_LOOP_SPEC.md").read_text()
+        example = doc[doc.index('"unit_id": "unit_01"'):doc.index('"stage": "writer"')]
+        assert '"reason"' in example, "the documented handoff still shows no skip reason"
+        for value in ("not_configured", "nothing_to_mutate", "not_reached"):
+            assert value in example, f"the example handoff does not say {value!r} exists"
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
