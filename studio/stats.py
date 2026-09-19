@@ -335,6 +335,10 @@ class PlannedUnit:
     :data:`DROPPED_LINE`). There is no ordinal field: document order is dependency order — the
     Build Plan template has said so since it was written — so order is list position, and a
     second place to record it is a second thing that can disagree.
+
+    ``spec_file`` is the spec that planned the unit, and it is the only field that identifies
+    that spec: rule 7 forbids a duplicate ``unit_id``, not a duplicate slug, so two approved
+    specs can carry the same slug and counting distinct slugs would call them one spec.
     """
 
     slug: str
@@ -342,6 +346,7 @@ class PlannedUnit:
     title: str
     dropped_on: str
     dropped_reason: str
+    spec_file: str = ""
 
 
 @dataclass(frozen=True)
@@ -359,7 +364,7 @@ class UnitLedger:
 
     unbuilt: tuple[PlannedUnit, ...]  # planned in an approved spec, not built, not dropped
     escalated: tuple[PlannedUnit, ...]  # a writer(stuck): commit and no writer:/editor: one
-    dropped: tuple[PlannedUnit, ...]  # closed on purpose, with a date and a reason
+    dropped: tuple[PlannedUnit, ...]  # unbuilt and closed on purpose, with a date and a reason
     unplanned: tuple[str, ...]  # built ids no spec mentions anywhere, sorted
     built_known: bool = True  # False when git could not be read: every tuple above is silence
 
@@ -369,7 +374,7 @@ def _entry_title(tail: str) -> str:
     return _TITLE_LEAD.sub("", tail.strip()).strip().strip("*").strip()
 
 
-def parse_build_plan(spec_text: str, slug: str) -> List[PlannedUnit]:
+def parse_build_plan(spec_text: str, slug: str, spec_file: str = "") -> List[PlannedUnit]:
     """Every unit a spec's Build Plan plans, in document order.
 
     Empty for a spec with no ``## Build Plan`` section, which is the normal state of a document
@@ -408,6 +413,7 @@ def parse_build_plan(spec_text: str, slug: str) -> List[PlannedUnit]:
                 title=_entry_title(match.group(2)),
                 dropped_on=dropped.group(1) if dropped else "",
                 dropped_reason=dropped.group(2).strip() if dropped else "",
+                spec_file=spec_file,
             )
         )
     return units
@@ -463,17 +469,18 @@ def reconcile_units(
     was built" are different answers, and silence beats a lie. The ledger says which answer it
     is carrying in ``built_known``, so a caller cannot read that silence as "everything is
     built". ``escalated`` is only ever read alongside a readable ``built``, so it is a set
-    either way. Drops still count: they are read off the spec and owe git nothing.
+    either way. Drops do not survive it either: a drop is only a drop on a unit git does not
+    say was built, so with no built set there is nothing to say about them either.
 
     A drop line on a unit git says was built is not a drop — the unit was built, and built work
     is reported by nothing. Only an unbuilt unit can be closed on purpose.
     """
-    dropped = tuple(unit for unit in planned if unit.dropped_on and unit.dropped_reason)
     if built is None:
         return UnitLedger(
-            unbuilt=(), escalated=(), dropped=dropped, unplanned=(), built_known=False
+            unbuilt=(), escalated=(), dropped=(), unplanned=(), built_known=False
         )
 
+    dropped = tuple(unit for unit in planned if unit.dropped_on and unit.dropped_reason)
     open_units = [unit for unit in planned if not (unit.dropped_on and unit.dropped_reason)]
     return UnitLedger(
         unbuilt=tuple(
@@ -771,7 +778,7 @@ def format_unit_ledger(ledger: UnitLedger) -> List[str]:
         return lines
 
     if ledger.unbuilt:
-        specs = len({unit.slug for unit in ledger.unbuilt})
+        specs = len({unit.spec_file for unit in ledger.unbuilt})
         lines.append(
             f"  Planned and never built: {format_count(len(ledger.unbuilt))} "
             f"across {format_count(specs, 'approved spec')}"

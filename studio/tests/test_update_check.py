@@ -434,6 +434,8 @@ def test_two_specs_sharing_a_slug_each_keep_their_own_path(tmp_path, capsys):
     assert "`first_owed`" in context
     assert "specs/a-feature.md" in context
     assert "specs/b-feature.md" not in context
+    # And the count reads the files too: counted by slug these two would read as one spec.
+    assert "in 2 approved specs" in context
 
 
 # --- 10. update-only output is byte-identical to what shipped a month ago ---

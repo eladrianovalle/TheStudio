@@ -2483,8 +2483,8 @@ def _approved_spec_units(specs_dir: Optional[Path] = None) -> List[PlannedUnit]:
     """
     return [
         unit
-        for _, slug, spec_text in _approved_specs(specs_dir)
-        for unit in parse_build_plan(spec_text, slug)
+        for spec_path, slug, spec_text in _approved_specs(specs_dir)
+        for unit in parse_build_plan(spec_text, slug, str(spec_path))
     ]
 
 
@@ -2636,7 +2636,8 @@ def show_stats(args: argparse.Namespace) -> None:
     # The completion ledger: what the approved specs planned against what git says was built.
     # Nothing is stored — it is re-derived here every run, which is what keeps it from holding a
     # stale "done" nobody can see is wrong. A `None` built set means git could not be read at
-    # all, and `reconcile_units` reports nothing as unbuilt rather than nagging about every unit.
+    # all: `reconcile_units` reconciles nothing and records that it could not see, and the block
+    # is then left out of the dashboard entirely rather than printed with nothing under it.
     built_ids = _built_unit_ids(root)
     built, escalated = built_ids if built_ids is not None else (None, set())
     unit_ledger = reconcile_units(
@@ -3004,14 +3005,11 @@ def _unfinished_context(target: Path) -> str:
     unit is named every session until somebody builds it or drops it.
     """
     planned: List[PlannedUnit] = []
-    # Keyed by (slug, unit_id), not by slug alone: two approved specs may carry the same slug —
-    # rule 7 forbids a duplicate unit_id, not a duplicate slug — and keying on slug would put
-    # the other spec's path in front of the reader, which is a worse answer than no path.
-    spec_files: Dict[Tuple[str, str], Path] = {}
+    # Every unit carries the file that planned it, rather than a map keyed by slug: two
+    # approved specs may carry the same slug — rule 7 forbids a duplicate unit_id, not a
+    # duplicate slug — and a slug key would put the other spec's path in front of the reader.
     for spec_path, slug, spec_text in _approved_specs(_specs_dir_for(target)):
-        units = parse_build_plan(spec_text, slug)
-        spec_files.update({(slug, unit.unit_id): spec_path for unit in units})
-        planned.extend(units)
+        planned.extend(parse_build_plan(spec_text, slug, str(spec_path)))
     if not planned:
         return ""
 
@@ -3030,12 +3028,12 @@ def _unfinished_context(target: Path) -> str:
         return ""
 
     unit = unbuilt[0]
-    spec_count = len({owed.slug for owed in unbuilt})
+    spec_count = len({owed.spec_file for owed in unbuilt})
     return UNFINISHED_ADDITIONAL_CONTEXT.format(
         units=format_count(len(unbuilt)),
         specs=format_count(spec_count, "approved spec"),
         unit_id=unit.unit_id,
-        spec_file=_spec_display_path(spec_files[(unit.slug, unit.unit_id)], target),
+        spec_file=_spec_display_path(Path(unit.spec_file), target),
         title=f' \u2014 "{unit.title}"' if unit.title else "",
         slug=unit.slug,
         entrypoint=_entrypoint(),

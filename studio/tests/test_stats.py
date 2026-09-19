@@ -308,13 +308,16 @@ def test_prose_that_merely_mentions_a_writer_commit_is_not_a_build():
 # --- reconcile_units -------------------------------------------------------
 
 
-def _planned(unit_id: str, *, slug: str = "a-feature", dropped: bool = False) -> PlannedUnit:
+def _planned(
+    unit_id: str, *, slug: str = "a-feature", dropped: bool = False, spec_file: str = ""
+) -> PlannedUnit:
     return PlannedUnit(
         slug=slug,
         unit_id=unit_id,
         title=f"what {unit_id} is for",
         dropped_on="2026-09-16" if dropped else "",
         dropped_reason="a reason" if dropped else "",
+        spec_file=spec_file or f"specs/{slug}.md",
     )
 
 
@@ -352,8 +355,9 @@ def test_an_unreadable_built_set_reports_nothing_as_unbuilt():
     """`None` is "I cannot see", not "nothing was built", and the two must not print the same.
 
     With no built set every planned unit reads unbuilt, so a repo with approved specs would be
-    told that none of their units was ever built. Silence beats a lie. Drops still count: they
-    are read off the spec and owe git nothing.
+    told that none of their units was ever built. Silence beats a lie — and it is silence on
+    every field, drops included: a drop only counts on a unit git does not say was built, so
+    an unknown built set cannot decide that one either.
     """
     planned = [_planned("one"), _planned("two"), _planned("closed", dropped=True)]
     ledger = reconcile_units(planned, None, None, set())
@@ -361,7 +365,8 @@ def test_an_unreadable_built_set_reports_nothing_as_unbuilt():
     assert ledger.unbuilt == ()
     assert ledger.escalated == ()
     assert ledger.unplanned == ()
-    assert [unit.unit_id for unit in ledger.dropped] == ["closed"]
+    assert ledger.dropped == ()
+    assert ledger.built_known is False
 
 
 def test_a_drop_on_a_built_unit_is_not_a_drop():
@@ -520,6 +525,26 @@ def test_the_counts_read_as_plurals_when_there_is_more_than_one():
     assert "Planned and never built: 2 units across 2 approved specs" in block
     assert "Dropped on purpose: 2 units" in block
     assert "Built but never planned: 2 ids" in block
+
+
+def test_two_specs_sharing_a_slug_are_counted_as_two_specs():
+    """Rule 7 forbids a duplicate `unit_id`, not a duplicate slug.
+
+    Counted by slug, two files that each planned a unit read as one spec, and the line says
+    less work is outstanding in fewer places than actually is.
+    """
+    ledger = UnitLedger(
+        unbuilt=(
+            _planned("first", spec_file="specs/a-feature.md"),
+            _planned("second", spec_file="specs/b-feature.md"),
+        ),
+        escalated=(),
+        dropped=(),
+        unplanned=(),
+    )
+    block = "\n".join(format_unit_ledger(ledger))
+
+    assert "Planned and never built: 2 units across 2 approved specs" in block
 
 
 def test_a_long_title_is_cut_and_a_missing_one_is_left_out():
