@@ -3,7 +3,7 @@ type: thread
 status: active
 slug: studio-improvements-from-evidence
 created: 2026-09-15
-updated: 2026-09-15
+updated: 2026-09-19
 ---
 
 # Improving Studio from what its own artifacts say, not from intuition
@@ -15,8 +15,12 @@ anyone hand-writing a config file.
 
 ## Where this stands
 
-**Done and verified (2026-09-15)**
-- Main at `fcb14ed`, **1033 tests**, ruff clean (1043 on unit 1's branch).
+**Done and verified (2026-09-15 to 2026-09-19)**
+
+*One anchor, stated once: main is the head of this repo's default branch — run `git log -1` for the
+SHA rather than trusting a copy here, which is how three earlier revisions of this note went stale.
+As of 2026-09-19 it carries 1053 tests, ruff clean.*
+
 - **#169 — cleanup no longer eats finished work.** `cleanup_runs` deleted on age and size alone and
   never checked status; a finalized APPROVED debate died at 30 days like an abandoned prepare. 31+
   consumer runs were already lost. Finalized runs are now never deleted by either rule; unfinished
@@ -32,25 +36,69 @@ anyone hand-writing a config file.
 - **#168 — the `/forge` refusal tells a repo with no tests that having none is the answer**, instead
   of advising a test command it can never have.
 
-- **#172 merged 2026-09-15**, so `specs/first-class-forge-gates.md` is on main and its frontmatter is
-  `status: approved` (commit `8f68a33`, on the unit-1 branch). The debate behind it is
-  `studio/output/tech/run_tech_20260915_015039`, finalized APPROVED, with `decisions.md`,
-  `findings.json` (verified) and `summary.md` all present.
+- **`specs/first-class-forge-gates.md` is built end to end — spec and all three units merged.**
+  #172 put the spec on main; #175, #178 and #176 built the wizard, the mutation-check reason and the
+  loader in that order. The repo's own config file is now the only thing that decides how `/forge`
+  gates it: a `[gate]` key the file leaves out is empty rather than a guess, and when the gate cannot
+  run the refusal names the file it read and says whether the key was blank or the file absent.
+  Unit 3 shipped one fix past its criteria — the schema can require `performed` but cannot demand a
+  `reason` when it is false, so `{"performed": false}` still validated; that rule lives in the
+  orchestration now. The debate is `studio/output/tech/run_tech_20260915_015039`, finalized APPROVED.
+  **The spec is flipped to `shipped`** — #183 merged 2026-09-19.
 
-- **#174 merged 2026-09-15**, so this note is on main.
+- **The gate-config sweep is done, and it tested the wizard rather than bypassing it.** Merging the
+  loader unit would have broken `/forge` in **four** installs — `Arkadium/solitaire-game`, `_Cerebro`,
+  `OrcPunk-dotcom` and `miresu`, each of which worked only because detection guessed a command for it.
+  **Five** repos were configured by running `/studio-setup`, because `CREA` was done in the same pass;
+  it was never a regression, since detection already found nothing there and `/forge` refused before
+  and after. The five exercised both of unit 1's paths: pre-filled and stamped in the four Node and
+  Python repos, and the blank stamped template with the "no marker file Studio recognises" line in
+  `CREA`. cemetery-security and OrcPunk-biz still have no config and, like `CREA`, already refused, so
+  they are not regressions either. Running the wizard instead of hand-writing the files is what
+  surfaced issue #179.
 
-- **Unit 1, `wizard_writes_stamped_template`, is built and open at PR #175.** Delivered unflagged:
-  all five acceptance criteria graded `pass` with evidence, editor edited without reverting, 1043
-  tests green (10 new), ruff clean, mutation check caught all four mutations. Worktree
-  `/Users/orcpunk/Repos/_TheGameStudio-wt-forge-gates`, branch `impl/wizard_writes_stamped_template`.
+- **The five templates that sweep wrote are corrected** (2026-09-19). They carried a comment saying a
+  missing `[gate]` key falls back to detection — true when written, false once the loader unit merged.
+  The wizard's own template text was fixed by that unit, so only those five files were affected and
+  they were edited in place on this machine.
+
+- **`specs/completion-ledger.md` is on main** (#177). Two advocate passes, two contrarian passes, both
+  rejections accepted rather than argued down, eighteen recorded decisions. Debate:
+  `studio/output/tech/run_tech_20260916_162723`, finalized APPROVED. Unit 1 is built and merged
+  (#184); units 2 and 3 remain.
+
+- **The stranded-concern sweep is closed.** 146 concerns recovered from old editor records; most
+  load-bearing ones were already fixed or were recorded decisions. Fixes went to the repos that owned
+  them and are tracked there, not here. See [[feedback_stranded_concerns_go_stale]].
+
+- **The completion ledger's unit 1 is merged** (#184, 2026-09-19). Rule 7 holds an `approved` spec's
+  Build Plan to one entry shape, `stats.py` carries the fence-stripping section reader the later
+  units reuse, and no two specs may plan the same `unit_id`. Zero specs were migrated, which is what
+  gating the rule on `approved` alone buys.
+
+- **The completion ledger is built.** Unit 1 merged (#184): rule 7 holds an `approved` spec's Build
+  Plan to one entry shape, with the fence-stripping section reader in `stats.py`. Units 2 and 3 are
+  open together at **#186**: `stats` reports planned-and-never-built and built-but-never-planned, and
+  the SessionStart hook that already runs in every install names one unfinished unit plus the exact
+  `/forge` command. Nothing is stored — every run re-reads the specs and re-derives the built set from
+  git. It found real work the first time it ran: `stale_configs_get_the_new_command`, planned in
+  `detected-static-check-command` and never built.
+
+- **`specs/first-class-forge-gates.md` is `shipped`** (#183), closing issue #133.
 
 **In flight**
-- **PR #175 awaiting review.** Its `reviewer-concerns/wizard_writes_stamped_template.md` carries the
-  two things the editor found and could not fix in the pass — see Blocked on, and Landmines.
+- **#186** (the ledger's last two units), **#185** (three PR conventions written down for the first
+  time), **#182** (this note). For what is open right now read `gh pr list`, not this line — three
+  revisions of this note were rejected for carrying a stale copy of exactly that.
+- Three issues from the 2026-09-16 work are open and unassigned: **#179** (`setup --defaults` resets
+  every prior choice, and `--status` recommends it), **#180** (per-scope `model` in `scopes.toml`),
+  **#181** (measure whether the contrarian's confidence ratings are calibrated). #180 is deliberately
+  blocked on #181.
 
 **Next action**
-After #175 merges: unit 2, `gate_keys_resolve_to_none`. **Unit order is a correctness constraint, not
-a preference** — see Landmines.
+The cross-repo sweep, which carries the ledger and the gate work to the ten installs. The session
+brief needs no installer change — the hook already runs `check-updates --target $CLAUDE_PROJECT_DIR`,
+so `/studio-update` alone is enough.
 
 ## Decisions made
 - **Detection is demoted, not improved.** It becomes the setup wizard's opening guess and leaves the
@@ -63,6 +111,13 @@ a preference** — see Landmines.
   so that issue no longer needs narrowing to concern 2.
 - **The config file is authoritative; a missing `[gate]` key is empty, not a default.** Inseparable
   from deleting `LoopConfig`'s gate literals — see Landmines.
+- **The gate-config sweep runs the wizard, never a hand-written file.** Hand-writing a config tests
+  nothing: the wizard is what unit 1 changed, and it is the only path that exercises the stamp and
+  the blank-template text. Doing it that way also caught #179.
+- **PRs go to main, one per feature, and an agent never merges.** Written down in Studio's coding
+  principles for the first time (#185), after three conventions this project runs on turned out to
+  exist only in Adriano's head: "rejected" is a reviewer's comment verdict rather than a GitHub state,
+  a fix to an open PR is a commit on that branch, and a spec's units travel in one PR.
 - **`is_wizard_template` means stamped AND `test_command` still blank.** Unit 1's fifth criterion says
   "a file the wizard wrote and untouched", which read literally would also cover a pre-filled Python
   file; the spec's own reasoning says the blank command beside the stamp is the only state that
@@ -76,15 +131,14 @@ a preference** — see Landmines.
   consuming repo's `CLAUDE.md`, which is our only vector. Revisit at a third prompt-shaped feature.
 
 ## Blocked on
-- **Adriano — `is_wizard_template` has no reader, and only a spec change can give it one.** Unit 1
+- **Adriano — `is_wizard_template` still has no reader, and the sweep did not become one.** Unit 1
   built it because criterion 5 asks for it, but nothing in shipped code calls it: the wizard decides
-  with `if config_path.exists()` and keeps any existing file, stamped or not. So the distinction the
-  spec says the stamp exists for is never actually made. Either give it a reader — the cross-repo
-  sweep, or `update` refreshing its own untouched template while still refusing to touch a
-  hand-written file — or drop the function and let the stamp be provenance a person reads. **The
-  sweep is the likelier answer**: it is the one place that wants to rewrite ten repos' templates
-  without touching anyone's edits.
-- **Adriano — merge PR #175** (unit 1).
+  with `if config_path.exists()` and keeps any existing file, stamped or not. The 2026-09-16 sweep
+  was the candidate reader and it turned out not to be — it ran `/studio-setup`, which never calls
+  the function. So the remaining options are `update` refreshing its own untouched template while
+  still refusing to touch a hand-written file, or dropping the function and letting the stamp be
+  provenance a person reads. **`update` is now the likelier answer**, since it is the only thing that
+  revisits a repo after setup has run.
 - **Adriano — four consumer PRs still open**, contrary to what an earlier note in this repo implied:
   `OrcPunk-biz` #19, `cerebro` #226, `OrcPunk-dotcom` #82, `cemetery-security` #721. The first two
   are what `specs/detected-static-check-command.md` needs to reach `shipped`; its three acceptance
@@ -97,14 +151,24 @@ a preference** — see Landmines.
   *because* it consults `resolve_profile`. `Multica`'s config sets only `test_command`, so it would
   fall through to them. Verified: the only production constructions are inside `load_loop_config`
   itself (`impl_loop.py:551`, `:576`).
+- **`setup --defaults` resets every prior choice** (#179), and `--status` recommends it right after
+  saying one step is pending. `_Cerebro` lost its role pack and five customizations this way; the
+  config files on disk survive, so restoring `SETUP.json` and adding just the new step puts it right.
+- **A template the wizard already wrote is never corrected.** setup never overwrites an existing
+  file, by design — so when a change makes the template's own comment text wrong, every copy already
+  on disk stays wrong until someone edits it. This fired once: the five templates written 2026-09-16
+  said a missing `[gate]` key falls back to detection, which the loader unit made false. They were
+  corrected in place 2026-09-19. **The lesson is the ordering:** a change to template text leaves a
+  tail of files carrying the old text, and the tail is only findable by knowing when the sweep ran.
 - **Unit 2 must also kill the refusal's last line.** It still ends "Or run /studio-setup, which writes
   that file for you." After unit 1 that sentence tells someone who just ran the wizard to run it
   again, at a file that already exists with the `[gate]` block in it. Unit 2 already owns rewording
   the refusal around whether the file exists; drop the sentence from the file-exists branch and point
   at the blank `test_command` line instead.
-- **Unit order is load-bearing.** The loader unit changes `_no_test_command_message`'s signature
-  while `setup.py` still calls the old one, and deletes refusal text `test_setup.py` asserts on.
-  Build the wizard unit first.
+- **Unit order was load-bearing, and the order held** (resolved 2026-09-16). The loader unit changes
+  `_no_test_command_message`'s signature while `setup.py` still calls the old one, and deletes refusal
+  text `test_setup.py` asserts on — so the wizard unit had to go first, and did. Kept because the
+  same trap applies to any future unit pair that moves a signature one side of a caller at a time.
 - **Re-including a file under an ignored directory takes TWO `.gitignore` lines.** Git cannot
   re-include a file whose parent directory is excluded, so `studio/.studio/` must become
   `studio/.studio/*` before `!studio/.studio/implementation_loop.toml` does anything. Tested both
@@ -130,7 +194,8 @@ a preference** — see Landmines.
   mistake it for live work.
 
 ## Files & artifacts
-- Repo: `/Users/orcpunk/Repos/_TheGameStudio`, main `13e689a`.
+- Repo: `/Users/orcpunk/Repos/_TheGameStudio`. The note deliberately records no main SHA;
+  read it from git.
 - Spec: `specs/first-class-forge-gates.md`, on main and `approved`.
 - Unit 1's tree: `/Users/orcpunk/Repos/_TheGameStudio-wt-forge-gates`, branch
   `impl/wizard_writes_stamped_template`. Remove the worktree only after its PR is open — a
