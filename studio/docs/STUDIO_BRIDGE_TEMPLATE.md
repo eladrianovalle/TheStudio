@@ -79,10 +79,11 @@ If `STUDIO_ROOT` is set, the helper script reads it automatically; otherwise adj
 ## 8. Maintenance
 - Update Studio path info if the repo moves or if `STUDIO_ROOT` changes.
 - Keep the canon table fresh; stale references cause hallucinated guidance.
-- Staying current is automatic: a SessionStart hook nudges you to run `/studio-update` when your
-  installed Studio falls behind upstream (once per update, quiet otherwise). Turn it off with
-  `studio update --no-hook` or an empty `.studio/update-check.off`; add `.studio/update-check.json`
-  to `.gitignore`.
+- Each session opens with a short brief, automatically: a SessionStart hook nudges you to run
+  `/studio-update` when your installed Studio falls behind upstream (once per update), and names one
+  unit an approved spec under `.studio/specs/` planned that nothing ever built, with the `/forge`
+  command that continues it. Quiet when there's neither. Turn it off with `studio update --no-hook`
+  or an empty `.studio/update-check.off`; add `.studio/update-check.json` to `.gitignore`.
 - Studio's specs and their evidence files under `.studio/specs/` are **tracked docs meant to be
   committed** — unlike `.studio/output/` and `.studio/knowledge/`, which must not be. If your
   `.gitignore` ignores `.studio/`, git will silently refuse to track them, and the obvious one-line

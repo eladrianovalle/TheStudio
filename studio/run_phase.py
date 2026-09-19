@@ -91,6 +91,7 @@ from config_loading import tomllib
 from stats import (
     PlannedUnit,
     _parse_usage_log,
+    _units,
     aggregate_stats,
     built_unit_ids,
     format_stats,
@@ -2467,7 +2468,7 @@ def _shipped_spec_records() -> List[Dict]:
     return records
 
 
-def _approved_spec_units() -> List[PlannedUnit]:
+def _approved_spec_units(specs_dir: Optional[Path] = None) -> List[PlannedUnit]:
     """Every unit planned by a spec whose frontmatter says ``status: approved``.
 
     Approved is the whole filter, and it is deliberate on both sides. A draft spec is an
@@ -2479,14 +2480,28 @@ def _approved_spec_units() -> List[PlannedUnit]:
     never run /spec. An unreadable spec is skipped rather than fatal, the same as
     ``_shipped_spec_records`` does.
     """
-    units: List[PlannedUnit] = []
-    for spec_path, spec_text in _readable_specs():
+    return [
+        unit
+        for _, slug, spec_text in _approved_specs(specs_dir)
+        for unit in parse_build_plan(spec_text, slug)
+    ]
+
+
+def _approved_specs(specs_dir: Optional[Path] = None) -> List[Tuple[Path, str, str]]:
+    """Each approved spec as ``(path, slug, text)``, in filename order.
+
+    Both readers of the specs directory go through here, so the dashboard and the session
+    brief can never disagree about which specs still owe work or what a spec's slug is. The
+    brief needs the path as well as the units — it names the file the unit was planned in.
+    """
+    approved: List[Tuple[Path, str, str]] = []
+    for spec_path, spec_text in _readable_specs(specs_dir):
         frontmatter = parse_frontmatter(spec_text)
         if frontmatter.get("status", "").strip() != "approved":
             continue
         slug = frontmatter.get("slug", "").strip() or spec_path.stem
-        units.extend(parse_build_plan(spec_text, slug))
-    return units
+        approved.append((spec_path, slug, spec_text))
+    return approved
 
 
 def _mentioned_unit_ids() -> set:
@@ -2501,13 +2516,18 @@ def _mentioned_unit_ids() -> set:
     return mentioned
 
 
-def _readable_specs() -> List[Tuple[Path, str]]:
+def _readable_specs(specs_dir: Optional[Path] = None) -> List[Tuple[Path, str]]:
     """Each spec in the specs directory with its text, skipping what cannot be read.
 
     Eval-results files are excluded by name, the same as ``_shipped_spec_records`` excludes
     them: they sit beside a spec as its evidence and plan nothing of their own.
+
+    *specs_dir* is handed in by the session brief, which resolves the directory from its
+    ``--target``. Everything else lets it default to ``get_specs_dir()``, which derives the
+    directory from the working directory — no use to a SessionStart hook, which runs from
+    wherever the session happened to open.
     """
-    specs_dir = get_specs_dir()
+    specs_dir = specs_dir or get_specs_dir()
     if not specs_dir.is_dir():
         return []
 
@@ -2933,25 +2953,129 @@ def _do_check_install(args: argparse.Namespace) -> None:
     _print_local_edits_preview(status["locally_modified"])
 
 
-def _do_check_updates(args: argparse.Namespace) -> None:
-    """Print a one-line SessionStart nudge when the installed snapshot is behind.
+UNFINISHED_ADDITIONAL_CONTEXT = (
+    "Unfinished planned work: {units} {preposition} {specs}. The next one is `{unit_id}` in "
+    "{spec_file}{title}. Tell the user they can continue it with: "
+    "/forge --spec {slug} --unit {unit_id}. If it was dropped on purpose, open a PR adding "
+    "`- **Dropped:** YYYY-MM-DD \u2014 <reason>` under that unit's heading in the spec and it "
+    "stops being counted. Built work is read from all branches including unmerged ones, so a "
+    "teammate who has not fetched may see a different count. Run `{entrypoint} stats` for the "
+    "full list, both directions."
+)
 
-    Invoked by the SessionStart hook, so it must NEVER fail the session: every
-    path is wrapped and the process always exits 0. Silent when current, offline,
-    or anything at all goes wrong.
+
+def _specs_dir_for(target: Path) -> Path:
+    """Where *target* keeps its specs: ``.studio/specs`` when installed, ``specs/`` in source.
+
+    Resolved from the target and never from ``get_specs_dir()``, which derives an artifact
+    root from the working directory. The SessionStart hook runs from wherever the session was
+    opened — any subdirectory, or a different project entirely — so the working directory is
+    not evidence of anything here.
     """
+    installed = target / ".studio" / "specs"
+    return installed if installed.is_dir() else target / "specs"
+
+
+def _spec_display_path(spec_path: Path, target: Path) -> str:
+    """The spec's path the way someone reading the brief would type it: from the project root."""
+    try:
+        return spec_path.resolve().relative_to(target.resolve()).as_posix()
+    except (ValueError, OSError):
+        return spec_path.name
+
+
+def _unfinished_context(target: Path) -> str:
+    """One sentence naming the next unfinished unit, or ``""`` when there is nothing to say.
+
+    Silence answers every "cannot tell" — no specs directory, no approved spec, or a built set
+    git would not produce. That last one matters most: with no built set every planned unit
+    reads unbuilt, so the brief would tell a repo that nothing in it was ever built. Silence
+    beats a lie.
+
+    One unit is named, never a list. A list is a status report people skim; a single named
+    action with the command that continues it is what biases a fresh session toward doing the
+    work. Specs sort by slug and units keep their document order inside a spec, so the same
+    unit is named every session until somebody builds it or drops it.
+    """
+    planned: List[PlannedUnit] = []
+    spec_files: Dict[str, Path] = {}
+    for spec_path, slug, spec_text in _approved_specs(_specs_dir_for(target)):
+        spec_files[slug] = spec_path
+        planned.extend(parse_build_plan(spec_text, slug))
+    if not planned:
+        return ""
+
+    built_ids = _built_unit_ids(target)
+    if built_ids is None:
+        return ""
+    built, escalated = built_ids
+
+    # Only the planned-and-unbuilt direction belongs at session start, so the audit direction
+    # is deliberately not computed: `mentioned_ids` is empty and `ledger.unplanned` is never
+    # read. "What was built that no spec ever planned" is a question somebody asks `stats`,
+    # and putting its dozens of lines in front of every session would bury the one action.
+    ledger = reconcile_units(planned, built, escalated, set())
+    unbuilt = sorted(ledger.unbuilt, key=lambda unit: unit.slug)
+    if not unbuilt:
+        return ""
+
+    unit = unbuilt[0]
+    spec_count = len({owed.slug for owed in unbuilt})
+    return UNFINISHED_ADDITIONAL_CONTEXT.format(
+        units=_units(len(unbuilt)),
+        preposition="in" if spec_count == 1 else "across",
+        specs=_units(spec_count, "approved spec"),
+        unit_id=unit.unit_id,
+        spec_file=_spec_display_path(spec_files[unit.slug], target),
+        title=f' \u2014 "{unit.title}"' if unit.title else "",
+        slug=unit.slug,
+        entrypoint=_entrypoint(),
+    )
+
+
+def _do_check_updates(args: argparse.Namespace) -> None:
+    """Print the SessionStart brief: an available update, unfinished planned work, or nothing.
+
+    Two sources of news, and each gets its own ``try``. A single wrapper around both would let
+    one malformed spec or one odd git state silence the update nudge that every installed copy
+    depends on — and worse, ``compute_update_check`` records that it has shown a notice as a
+    side effect of being asked, so a failure between that write and the ``print`` would consume
+    an update notice nobody ever saw.
+
+    The unfinished-work block cannot ride the update block's condition either. That one speaks
+    at most once per new upstream commit and says nothing in a repo that is current, which is
+    every installed copy on a normal day — so a brief that waited for it would be silent from
+    the day it shipped. Each source decides on its own whether it has something to say.
+
+    Invoked by the SessionStart hook, so it must NEVER fail the session: every path is wrapped
+    and the process always exits 0. When neither source has news nothing is printed at all —
+    not an empty object — because a nudge that fires when there is no news is one people learn
+    to skip.
+    """
+    target = Path(args.target).resolve()
+    blocks: List[str] = []
+
     try:
         import install
-        result = install.compute_update_check(Path(args.target).resolve())
-        if result.should_notify:
-            print(json.dumps({
-                "hookSpecificOutput": {
-                    "hookEventName": "SessionStart",
-                    "additionalContext": install.UPDATE_ADDITIONAL_CONTEXT,
-                }
-            }))
+        if install.compute_update_check(target).should_notify:
+            blocks.append(install.UPDATE_ADDITIONAL_CONTEXT)
     except Exception:
         pass
+
+    try:
+        unfinished = _unfinished_context(target)
+        if unfinished:
+            blocks.append(unfinished)
+    except Exception:
+        pass
+
+    if blocks:
+        print(json.dumps({
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": "\n\n".join(blocks),
+            }
+        }))
 
 
 def _do_update(args: argparse.Namespace) -> None:
