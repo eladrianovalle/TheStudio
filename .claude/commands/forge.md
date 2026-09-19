@@ -48,10 +48,11 @@ command already uses** to locate `impl_loop.py` in Step 5 — one detection rule
 - No such install but a root `studio/` dir is present (you are in the Studio source repo):
   `specs/<slug>.md`.
 
-**Find the unit's criteria.** Read the spec's `## Build Plan` section. It is a numbered list of
-units, each entry opening with a backticked `unit_id`. Take the entry whose `unit_id` matches
-`--unit`; if the Build Plan holds exactly one unit, `--unit` may be omitted and that unit is used.
-This unit's criteria are the `- [ ]` bullets under that entry's `**Acceptance criteria:**` line.
+**Find the unit's criteria.** Read the spec's `## Build Plan` section, whose entry shape is the one
+the `/spec` Build Plan template writes — `.claude/commands/spec.md` is where that shape is defined,
+and older specs may open an entry as a numbered list item instead. Take the entry whose backticked
+`unit_id` matches `--unit`; if the Build Plan holds exactly one unit, `--unit` may be omitted and
+that unit is used. This unit's criteria are the `- [ ]` bullets inside that entry.
 
 Copy each criterion **verbatim** into `acceptance_criteria` (Step 2's args block) — the exact
 sentence from the spec, not a paraphrase, a shortening, a softening, or two bullets merged into one.
