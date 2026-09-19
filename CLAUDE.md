@@ -72,6 +72,8 @@ Open a PR as a **draft** when you intend to keep pushing to it. That guards two 
 
 Draft is a signal about the state of the work, not a ceremony every PR passes through. Re-check the call on every push: if you thought a branch was finished and then pushed to it again, it goes back to draft.
 
+**One pull request per feature, not per commit-sized piece.** A pull request should carry a complete MVI unit — something usable on its own — and when a spec's units only make sense together, one pull request carries the whole spec. Splitting a feature across several pull requests makes a reviewer judge half a thing, and it strands the later halves when the earlier ones merge.
+
 **"The PR got rejected" means a review comment, not a GitHub state.**
 
 The loop here is: an agent builds the work and opens a pull request; an agentic reviewer reads the diff and leaves a comment whose verdict is **APPROVED** or **REJECTED**, with its reasoning split into **Must fix** and **Consider**; an agentic responder addresses what it can and pushes to the same branch; a human merges. GitHub has no "rejected" state — the verdict lives in the comment text, so read the comments, not the PR's review status.
