@@ -225,8 +225,8 @@ def _build_plan_problems(spec_name: str, spec_text: str) -> list[str]:
             f"`{heading}`. The heading has to read exactly `## Build Plan` — the readers "
             "match it exactly so a superseded plan kept under a label cannot be mistaken for "
             "the plan in force, which means a renamed heading is not found at all and every "
-            "unit under it is invisible. Rename it, and put whatever the suffix said in a "
-            "line beneath the heading."
+            "unit under it is invisible. Write the heading exactly as above — same case, one "
+            "space, no indentation — and put whatever a suffix said in a line beneath it."
             for heading in near_miss_build_plan_headings(spec_text)
         ]
 
@@ -1956,12 +1956,13 @@ class TestSyntheticSpecs:
         assert near_miss_build_plan_headings(spec) == []
         assert _violations("synthetic.md", spec, "synthetic-eval-results.md", None) == []
 
-    def test_an_indented_build_plan_heading_is_not_a_near_miss(self):
+    def test_a_four_space_indented_build_plan_heading_is_not_a_near_miss(self):
         """The near-miss net compares a normalized line, and normalizing drops the indentation
-        that says the line is quoted. An indented code block is markdown's other way to show a
-        line without meaning it, and the one `strip_fenced_blocks` cannot see — so a spec whose
-        notes quote the format that way would be refused for a heading it does not have, with a
-        sentence saying it has no `## Build Plan` heading but does have `## Build Plan`."""
+        that says the line is quoted. Four spaces make an indented code block — markdown's other
+        way to show a line without meaning it, and the one `strip_fenced_blocks` cannot see — so
+        a spec whose notes quote the format that way would be refused for a heading it does not
+        have, with a sentence saying it has no `## Build Plan` heading but does have
+        `## Build Plan`. Four is the threshold, not one; the case below holds the other side."""
         spec = _synthetic_spec(
             "approved", verification=False,
             build_plan=(
@@ -1974,6 +1975,31 @@ class TestSyntheticSpecs:
         assert near_miss_build_plan_headings(spec) == []
         assert indistinguishable_build_plan_headings(spec) == []
         assert _violations("synthetic.md", spec, "synthetic-eval-results.md", None) == []
+
+    @pytest.mark.parametrize("pad", [" ", "  ", "   "])
+    def test_a_slightly_indented_build_plan_heading_is_still_refused(self, pad):
+        """One, two or three leading spaces is a heading every renderer shows as a heading, and
+        the exactness the readers need is stricter than that. So the plan renders normally, its
+        author has nothing on the page to look at, and `build_plan_section` finds no plan at all
+        — which is rule 7's exemption for a spec that has no units, applied to a spec that has
+        them. Silence there is worse than the refusal: nothing in the file looks wrong.
+
+        The complaint has to keep the indentation it is quoting. Stripped, it asks for the
+        heading it just said the spec already has."""
+        spec = _synthetic_spec(
+            "approved", verification=False,
+            build_plan=(
+                f"{pad}## Build Plan\n\n"
+                "### 1. `synthetic_unit` — it becomes usable\n\n"
+                "- [ ] The synthetic thing happens.\n"
+            ),
+        )
+        assert build_plan_section(spec) is None
+        assert near_miss_build_plan_headings(spec) == [f"{pad}## Build Plan"]
+        problems = _violations("synthetic.md", spec, "synthetic-eval-results.md", None)
+        assert len(problems) == 1
+        assert f"`{pad}## Build Plan`" in problems[0]
+        assert "no indentation" in problems[0]
 
     @pytest.mark.parametrize("twin", ["##  Build Plan", "## Build plan", "## BUILD PLAN"])
     def test_a_heading_differing_only_in_case_or_spacing_is_refused_beside_the_real_one(
@@ -2049,6 +2075,45 @@ class TestSyntheticSpecs:
         assert _duplicate_unit_ids([
             ("shipped.md", shipped),
             ("approved.md", _synthetic_spec("approved", verification=False)),
+        ]) == []
+
+    @pytest.mark.parametrize("following", [
+        "## `stats.py` — what changes",
+        "## 1. Background",
+    ])
+    def test_a_level_two_heading_shaped_like_a_unit_still_ends_the_plan(self, following):
+        """The continuation exception belongs to the depth the plan heading sits at, and only
+        there. A `## Build Plan` has its units a level down, so a level-2 heading after it is a
+        new section whatever it opens with — and plenty of them open with a backticked filename
+        or an ordinal. Tested at every depth, the exception hands the following section's `###`
+        headings to the plan: rule 7 refuses the spec for a missing `- [ ]` on a heading its
+        author never planned, and the collision map takes an id from a section that is not a
+        plan, which is the exact harm the depth bound was added to stop one level down."""
+        spec = _synthetic_spec(
+            "approved", verification=False,
+            build_plan=(
+                "## Build Plan\n\n"
+                "### 1. `synthetic_unit` — it becomes usable\n\n"
+                "- [ ] The synthetic thing happens.\n\n"
+                f"{following}\n\n"
+                "An example of the shape, for reference:\n\n"
+                "### 2. `appendix_example` — what an entry looks like\n\n"
+                "- [ ] Never built.\n"
+            ),
+        )
+        build_plan = build_plan_section(spec)
+        assert [entry.unit_id for entry in _unit_entries(build_plan)] == ["synthetic_unit"]
+        assert _violations("synthetic.md", spec, "synthetic-eval-results.md", None) == []
+        assert _duplicate_unit_ids([
+            ("synthetic.md", spec),
+            ("appendix.md", _synthetic_spec(
+                "approved", verification=False,
+                build_plan=(
+                    "## Build Plan\n\n"
+                    "### 1. `appendix_example` — it becomes usable\n\n"
+                    "- [ ] It happens.\n"
+                ),
+            )),
         ]) == []
 
     def test_a_near_miss_heading_still_hands_its_ids_to_the_collision_check(self):

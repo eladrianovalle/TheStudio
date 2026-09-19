@@ -51,19 +51,28 @@ _FENCE_LINE = re.compile(r"^\s*(`{3,})")
 _BUILD_PLAN_HEADING = "## Build Plan"
 
 # A markdown ATX heading, capturing its hashes so a section can be bounded by its own depth.
-# Anchored at column 0 on purpose: four leading spaces make an indented code block, which is
-# markdown's other way to quote a line and the one `strip_fenced_blocks` cannot see.
-_HEADING_LINE = re.compile(r"^(#{1,6})\s")
+# Up to three leading spaces are allowed because three is markdown's own bound: `  ## Build Plan`
+# renders as a level-2 heading and a reader sees nothing unusual about it, while four spaces make
+# an indented code block — markdown's other way to quote a line, and the one `strip_fenced_blocks`
+# cannot see. Anchoring this at column 0 instead put an indented heading outside every net here:
+# the exact match misses it, so the spec has no plan, and rule 7 leaves a spec with no plan alone.
+_HEADING_LINE = re.compile(r"^ {0,3}(#{1,6})\s")
 
 # How a heading that opens a unit entry starts: an ordinal or a backticked id, either of them
-# possibly wrapped in bold markers. Left unanchored here because its two users need different
-# levels — `_section_from` has to recognize one at whatever level a near-miss plan heading sits
-# at, and rule 7's `_INTENDED_UNIT_HEADING` in `tests/test_spec_verification.py` wants level 3
-# exactly. Shared as one fragment so the bound that decides where a plan ends and the rule that
-# reads the units inside it cannot disagree about what a unit heading looks like.
+# possibly wrapped in bold markers. Left unanchored here because its two users prefix it
+# differently — `_section_from` allows the same leading indentation `_HEADING_LINE` does, and
+# rule 7's `_INTENDED_UNIT_HEADING` in `tests/test_spec_verification.py` sits at column 0.
+# Shared as one fragment so the bound that decides where a plan ends and the rule that reads
+# the units inside it cannot disagree about what a unit heading looks like.
 UNIT_HEADING_SHAPE = r"\**(?:\d+\.|`[^`\n]+`)"
 
-_UNIT_HEADING = re.compile(r"^#{2,}\s+" + UNIT_HEADING_SHAPE)
+# Level 3 exactly, the one depth a unit heading is ever written at. `#{2,}` here let
+# `_section_from`'s continuation exception leak past a level-2 plan heading as well as the
+# level-3 near miss it was written for: ``## `stats.py` — what changes`` and `## 1. Background`
+# both match the shape, so neither ended a `## Build Plan` section and every section after the
+# plan read as more plan. The exception is only ever needed when the plan heading itself sits at
+# unit depth; at level 2 the units are a level down and the depth bound alone is enough.
+_UNIT_HEADING = re.compile(r"^ {0,3}#{3}\s+" + UNIT_HEADING_SHAPE)
 
 
 def _collapsed(line: str) -> str:
@@ -152,6 +161,10 @@ def _section_from(lines: List[str], start: int) -> str:
     stops the depth bound from cutting a ``### Build Plan`` section off before its own first
     unit: the plan heading and the units under it are both level 3 there, so depth alone cannot
     tell ``### 1. `real_unit` `` from ``### Appendix``, and only the second one is a new section.
+    That exception is level 3 only. Tested at every depth it defeats the bound it is part of:
+    under a level-2 plan heading the units sit a level down, so nothing there needs it, and
+    ``## `stats.py` — what changes`` — a section heading that happens to open with a backticked
+    filename — would go on reading as more plan, handing its ids to whatever read the section.
     """
     depth = len(_HEADING_LINE.match(lines[start]).group(1))
     section = [lines[start]]
@@ -187,9 +200,14 @@ def near_miss_build_plan_headings(spec_text: str) -> List[str]:
 
     Fences are stripped first, for the same reason ``build_plan_section`` strips them: a spec
     that quotes the plan format in an example is not carrying that heading.
+
+    Only the trailing whitespace comes off each heading. Stripping the leading whitespace too
+    would leave the indented case quoting a heading identical to the one it is being asked for,
+    and a complaint that says a spec has no ``## Build Plan`` heading but does have
+    ``## Build Plan`` tells its reader nothing about what to change.
     """
     lines = strip_fenced_blocks(spec_text).splitlines()
-    return [lines[index].strip() for index in _near_miss_headings(lines)]
+    return [lines[index].rstrip() for index in _near_miss_headings(lines)]
 
 
 def indistinguishable_build_plan_headings(spec_text: str) -> List[str]:
@@ -206,7 +224,7 @@ def indistinguishable_build_plan_headings(spec_text: str) -> List[str]:
     """
     lines = strip_fenced_blocks(spec_text).splitlines()
     return [
-        line.strip()
+        line.rstrip()
         for line in lines
         if line.rstrip() != _BUILD_PLAN_HEADING
         and _HEADING_LINE.match(line)
