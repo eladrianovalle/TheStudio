@@ -679,19 +679,20 @@ def _format_loop_toml(profile: Any, root: Path) -> str:
             f"({', '.join(profile.stacks)}) by the setup wizard."
         ]
     else:
-        # _detected_line is refusal text — it explains why what was found is no help —
-        # so it goes in the file only when there is nothing to run. On a stack Studio
-        # does serve it would say the opposite of the command sitting under it. It is
-        # reused word for word rather than paraphrased: a second copy of the Unity
-        # warning here is the one that would go stale.
+        # _detected_line explains why what was found is no help, so it goes in the file
+        # only when there is nothing to run. On a stack Studio does serve, it would say
+        # the opposite of the command sitting under it. It is reused word for word rather
+        # than paraphrased: a second copy of the Unity warning here is the one that would
+        # go stale.
         found = _comment_lines(f"Detected: {impl_loop._detected_line(profile, root)}")
     lines = [
         WIZARD_STAMP.format(date=today),
         *found,
         "#",
         "# Edit anything here. /forge reads this file *instead of* Studio's shipped",
-        "# config/implementation_loop.toml: a [gate] key you delete falls back to what detection",
-        "# finds, and [loop]/[editor] keys fall back to Studio's built-in defaults.",
+        "# config/implementation_loop.toml: a [gate] key you delete is empty, not a guess — this",
+        "# file is the only thing that says how /forge gates this repo — while [loop]/[editor]",
+        "# keys you leave out fall back to Studio's built-in defaults.",
         "#",
         "# static_checks holds commands: /forge replaces {paths} with the files this unit is",
         "# scoped to, and a command with no {paths} in it runs exactly as written.",
@@ -759,9 +760,9 @@ def apply_implementation_loop_config(
     """Leave every repo with a ``.studio/implementation_loop.toml`` it can edit.
 
     The step asks nothing, and it works nothing out for itself: the commands come from
-    ``impl_loop.resolve_profile``, the same call ``/forge`` resolves its own gate with. One
-    function, two callers, so the file you can edit and the commands the loop actually runs
-    cannot drift apart.
+    ``impl_loop.resolve_profile``, which is now this wizard's alone — ``/forge`` reads the
+    file this step writes and detects nothing of its own. So the guess happens once, here,
+    where a wrong one costs an edit rather than a mis-gated build.
 
     Three outcomes, and two of them write a file:
 

@@ -17,7 +17,6 @@ from impl_loop import (
     LoopConfigError,
     PROFILES,
     STACK_MARKERS,
-    StackProfile,
     STUDIO_ROOT,
     VALID_MANDATES,
     VALID_READ_SCOPES,
@@ -30,6 +29,7 @@ from impl_loop import (
     _ALLOWED_SUMMARY,
     _KNOWN_BAD,
     _cli,
+    _detected_line,
     _git_common_dir,
     _no_test_command_message,
     detect_stacks,
@@ -45,12 +45,18 @@ from impl_loop import (
 def _ignore_ambient_artifact_root(monkeypatch):
     """Keep a STUDIO_ARTIFACT_ROOT in the developer's shell out of these tests.
 
-    The gate commands are detected from whichever repo the loader resolves to, and that
-    variable moves it. Without this, a machine that happens to export it would run every
-    fixture's detection against an unrelated directory. The one test that is *about* the
-    variable sets it back for itself.
+    The gate comes from the config file of whichever repo the loader resolves to, and that
+    variable moves which repo that is. Without this, a machine that happens to export it
+    would resolve every fixture against an unrelated directory. The one test that is
+    *about* the variable sets it back for itself.
     """
     monkeypatch.delenv("STUDIO_ARTIFACT_ROOT", raising=False)
+
+
+# The one key every config file must carry now that nothing is detected. Tests that are
+# about the resolution chain rather than about the gate prepend it so their fixture files
+# load at all.
+_GATE = '[gate]\ntest_command = "make test"\n\n'
 
 
 def _write_toml(text: str) -> Path:
@@ -62,10 +68,9 @@ def _write_toml(text: str) -> Path:
 def _python_repo(root: Path) -> Path:
     """Make ``root`` look like a Python project, and hand it back.
 
-    The loader now refuses a repository whose stack it cannot identify, so a fixture that
-    only cares about the config resolution chain still has to look like *something*.
-    Python is the cheapest one to write, and it keeps these tests asserting what they
-    always asserted.
+    What ``resolve_profile`` recognises. The loader no longer looks at marker files at
+    all, so where a chain test still uses this it is only standing in for a real
+    repository — the file it writes is what decides the gate.
     """
     root.mkdir(parents=True, exist_ok=True)
     (root / "pyproject.toml").write_text('[project]\nname = "fixture"\n')
@@ -79,14 +84,34 @@ def _node_repo(root: Path, package: dict) -> Path:
     return root
 
 
+def test_a_bare_loop_config_is_refused_rather_than_gating_on_a_literal():
+    """``LoopConfig()`` with no arguments must not build at all.
+
+    It used to carry `pytest -q`, `ruff check {paths}` and `mutmut run` as field
+    defaults. Those were harmless only while the loader passed every gate key in from
+    detection; now that a repo's own file is the only source, a forgotten argument
+    anywhere would quietly gate that repo on Python's tools. Leaving the command out is
+    a mistake, and a mistake is what this raises on. A gate with no command is still
+    sayable — ``test_command=""`` — it just has to be said.
+    """
+    with pytest.raises(TypeError, match="test_command"):
+        LoopConfig()  # type: ignore[call-arg]
+
+    assert LoopConfig(test_command="").test_command == ""
+
+
+def test_loop_config_gate_defaults_are_empty():
+    """The three gate keys that still have defaults default to nothing at all."""
+    config = LoopConfig(test_command="make test")
+    assert config.static_checks == []
+    assert config.require_mutation_check is False
+    assert config.mutation_command == ""
+
+
 def test_loop_config_defaults_match_spec():
-    """A bare LoopConfig carries the shipped defaults from spec §4."""
-    config = LoopConfig()
+    """The [loop] and [editor] defaults are still the shipped values from spec §4."""
+    config = LoopConfig(test_command="make test")
     assert config.deliver_on_gate_fail is True
-    assert config.test_command == "pytest -q"
-    assert config.static_checks == ["ruff check {paths}"]
-    assert config.require_mutation_check is True
-    assert config.mutation_command == "mutmut run"
     assert config.mandate == "contrarian"
     assert config.read_scope == "touched+importers"
     assert config.output_budget == 400
@@ -95,14 +120,14 @@ def test_loop_config_defaults_match_spec():
 
 def test_loop_config_off_mandate_disables_editor():
     """mandate = 'off' disables the editor pass."""
-    config = LoopConfig(mandate="off")
+    config = LoopConfig(test_command="make test", mandate="off")
     assert config.editor_enabled is False
 
 
 def test_loop_config_invalid_mandate():
     """LoopConfig rejects an unknown mandate."""
     with pytest.raises(ValueError, match="mandate"):
-        LoopConfig(mandate="bogus")
+        LoopConfig(test_command="make test", mandate="bogus")
     assert "contrarian" in VALID_MANDATES
     assert "off" in VALID_MANDATES
 
@@ -110,36 +135,36 @@ def test_loop_config_invalid_mandate():
 def test_loop_config_invalid_output_budget_type():
     """output_budget must be an integer (and not a bool)."""
     with pytest.raises(ValueError, match="output_budget"):
-        LoopConfig(output_budget="lots")  # type: ignore[arg-type]
+        LoopConfig(test_command="make test", output_budget="lots")  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="output_budget"):
-        LoopConfig(output_budget=True)  # type: ignore[arg-type]
+        LoopConfig(test_command="make test", output_budget=True)  # type: ignore[arg-type]
 
 
 def test_loop_config_invalid_static_checks_type():
     """static_checks must be a list."""
     with pytest.raises(ValueError, match="static_checks"):
-        LoopConfig(static_checks="ruff")  # type: ignore[arg-type]
+        LoopConfig(test_command="make test", static_checks="ruff")  # type: ignore[arg-type]
 
 
 def test_loop_config_invalid_mutation_command_type():
     """mutation_command must be a string."""
     with pytest.raises(ValueError, match="mutation_command"):
-        LoopConfig(mutation_command=["mutmut"])  # type: ignore[arg-type]
+        LoopConfig(test_command="make test", mutation_command=["mutmut"])  # type: ignore[arg-type]
 
 
 def test_loop_config_invalid_read_scope():
     """read_scope must be one of the known values, not an arbitrary string."""
     with pytest.raises(ValueError, match="read_scope"):
-        LoopConfig(read_scope="everything")
+        LoopConfig(test_command="make test", read_scope="everything")
     assert "touched+importers" in VALID_READ_SCOPES
 
 
 def test_loop_config_invalid_bool_fields():
     """The boolean knobs reject non-bool values (e.g. a stray TOML string)."""
     with pytest.raises(ValueError, match="deliver_on_gate_fail"):
-        LoopConfig(deliver_on_gate_fail="yes")  # type: ignore[arg-type]
+        LoopConfig(test_command="make test", deliver_on_gate_fail="yes")  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="require_mutation_check"):
-        LoopConfig(require_mutation_check="no")  # type: ignore[arg-type]
+        LoopConfig(test_command="make test", require_mutation_check="no")  # type: ignore[arg-type]
 
 
 def test_load_loop_config_valid():
@@ -172,12 +197,16 @@ output_budget = 250
 
 
 def test_load_loop_config_partial_inherits_defaults():
-    """Unspecified keys inherit the defaults (shallow merge).
+    """Unspecified keys inherit the defaults (shallow merge), and the two halves differ.
 
-    The gate half of those defaults is detected from this repo, which is a Python
-    project — the stack-detected gate commands block below covers that on its own.
+    A [loop] or [editor] key left out falls back to LoopConfig's own default. A [gate]
+    key left out falls back to nothing, because the file is the only thing that decides
+    how this repo is gated.
     """
     config_path = _write_toml("""
+[gate]
+test_command = "make test"
+
 [editor]
 output_budget = 999
 """)
@@ -185,11 +214,13 @@ output_budget = 999
         config = load_loop_config(config_path)
         # Overridden
         assert config.output_budget == 999
-        # Inherited defaults
-        assert config.test_command == "pytest -q"
-        assert config.static_checks == ["ruff check {paths}"]
+        # Inherited [loop]/[editor] defaults
         assert config.mandate == "contrarian"
         assert config.deliver_on_gate_fail is True
+        # Gate keys the file left out are empty, not a default
+        assert config.static_checks == []
+        assert config.require_mutation_check is False
+        assert config.mutation_command == ""
     finally:
         config_path.unlink()
 
@@ -204,24 +235,23 @@ def test_load_loop_config_explicit_missing_path_raises():
         load_loop_config(Path("/nonexistent/implementation_loop.toml"))
 
 
-def test_load_loop_config_no_config_and_no_stack_refuses():
-    """A repo Studio can't identify is refused at load, not handed Python's commands.
+def test_load_loop_config_with_no_file_anywhere_refuses():
+    """A repo with no config file is refused at load, not handed Python's commands.
 
     This reverses the contract this test used to state — absence used to yield the
     shipped defaults. Nine of the ten repos that run /forge are not Python projects, so
     that default meant `pytest` failing for a reason that had nothing to do with the
-    unit. The refusal has to name the repo it looked in and the file to write, because
-    for five of those repos it is the only thing they will see.
+    unit. The refusal has to name the file to write, because for five of those repos it
+    is the only thing they will see.
     """
     with tempfile.TemporaryDirectory() as tmp:
-        # Empty studio_root: no marker files, no .studio/ and no config/ files exist.
+        # Empty studio_root: no .studio/ override and no shipped config/ file either.
         with pytest.raises(LoopConfigError) as excinfo:
             load_loop_config(studio_root=Path(tmp))
 
         message = str(excinfo.value)
-        assert tmp in message
-        assert ".studio/implementation_loop.toml" in message
-        assert "Detected:   nothing" in message
+        assert str(Path(tmp) / ".studio" / "implementation_loop.toml") in message
+        assert "there is no file at that path." in message
         # No escape hatch: the only value that would satisfy one is a no-op command.
         assert "skip" not in message.lower()
 
@@ -260,12 +290,12 @@ def test_load_loop_config_plain_source_dir_is_not_an_installed_snapshot(tmp_path
     source = _python_repo(tmp_path / "checkout" / "source")
     (source / ".studio").mkdir(parents=True)
     (source / ".studio" / "implementation_loop.toml").write_text(
-        "[editor]\noutput_budget = 111\n"
+        _GATE + "[editor]\noutput_budget = 111\n"
     )
     # Decoy at the grandparent — where the installed-layout rule would have looked.
     (tmp_path / ".studio").mkdir()
     (tmp_path / ".studio" / "implementation_loop.toml").write_text(
-        "[editor]\noutput_budget = 222\n"
+        _GATE + "[editor]\noutput_budget = 222\n"
     )
 
     assert load_loop_config(studio_root=source).output_budget == 111
@@ -278,10 +308,10 @@ def test_load_loop_config_studio_override_beats_shipped_default():
         (root / ".studio").mkdir()
         (root / "config").mkdir()
         (root / "config" / "implementation_loop.toml").write_text(
-            '[editor]\noutput_budget = 400\n'
+            _GATE + "[editor]\noutput_budget = 400\n"
         )
         (root / ".studio" / "implementation_loop.toml").write_text(
-            '[editor]\noutput_budget = 123\n'
+            _GATE + "[editor]\noutput_budget = 123\n"
         )
         config = load_loop_config(studio_root=root)
         assert config.output_budget == 123
@@ -296,11 +326,11 @@ def test_load_loop_config_installed_override_resolves_at_repo_root(tmp_path, mon
     (snapshot / "config").mkdir(parents=True)
     # shipped default under the snapshot
     (snapshot / "config" / "implementation_loop.toml").write_text(
-        "[editor]\noutput_budget = 400\n"
+        _GATE + "[editor]\noutput_budget = 400\n"
     )
     # project override at the REPO ROOT .studio/ (where the wizard writes it)
     (repo / ".studio" / "implementation_loop.toml").write_text(
-        "[editor]\noutput_budget = 42\n"
+        _GATE + "[editor]\noutput_budget = 42\n"
     )
     config = load_loop_config(studio_root=snapshot)
     assert config.output_budget == 42  # override wins; before the fix this returned 400
@@ -310,7 +340,7 @@ def test_load_loop_config_artifact_root_env_override(tmp_path, monkeypatch):
     """STUDIO_ARTIFACT_ROOT points the project-override lookup at an explicit root."""
     repo = _python_repo(tmp_path / "elsewhere")
     (repo / ".studio").mkdir(parents=True)
-    (repo / ".studio" / "implementation_loop.toml").write_text("[editor]\nmandate = \"off\"\n")
+    (repo / ".studio" / "implementation_loop.toml").write_text(_GATE + '[editor]\nmandate = "off"\n')
     snapshot = tmp_path / "src" / ".studio" / "source"
     snapshot.mkdir(parents=True)
     monkeypatch.setenv("STUDIO_ARTIFACT_ROOT", str(repo))
@@ -324,7 +354,7 @@ def test_load_loop_config_falls_back_to_shipped_default():
         root = _python_repo(Path(tmp))
         (root / "config").mkdir()
         (root / "config" / "implementation_loop.toml").write_text(
-            '[editor]\nmandate = "off"\n'
+            _GATE + '[editor]\nmandate = "off"\n'
         )
         config = load_loop_config(studio_root=root)
         assert config.mandate == "off"
@@ -336,9 +366,9 @@ def test_explicit_path_beats_resolution_chain():
         root = _python_repo(Path(tmp))
         (root / ".studio").mkdir()
         (root / ".studio" / "implementation_loop.toml").write_text(
-            '[editor]\noutput_budget = 50\n'
+            _GATE + "[editor]\noutput_budget = 50\n"
         )
-        explicit = _write_toml('[editor]\noutput_budget = 777\n')
+        explicit = _write_toml(_GATE + "[editor]\noutput_budget = 777\n")
         try:
             config = load_loop_config(explicit, studio_root=root)
             assert config.output_budget == 777
@@ -347,14 +377,18 @@ def test_explicit_path_beats_resolution_chain():
 
 
 def test_runtime_knobs_default_config():
-    """runtime_knobs maps a default LoopConfig to the expected knob dict."""
-    knobs = runtime_knobs(LoopConfig())
+    """runtime_knobs maps a LoopConfig to the expected knob dict.
+
+    The gate half is whatever the config was given, since there are no gate defaults
+    left to fall back on.
+    """
+    knobs = runtime_knobs(LoopConfig(test_command="make test"))
     assert knobs == {
         "editor_enabled": True,
-        "test_command": "pytest -q",
-        "static_checks": ["ruff check {paths}"],
-        "require_mutation_check": True,
-        "mutation_command": "mutmut run",
+        "test_command": "make test",
+        "static_checks": [],
+        "require_mutation_check": False,
+        "mutation_command": "",
         "read_scope": "touched+importers",
         "output_budget": 400,
     }
@@ -382,7 +416,7 @@ def test_runtime_knobs_reflects_loaded_override():
             "test_command": "python -m pytest tests/ -q",
             "static_checks": ["ruff check {paths}", "mypy {paths}"],
             "require_mutation_check": False,
-            "mutation_command": "mutmut run",
+            "mutation_command": "",
             "read_scope": "touched",
             "output_budget": 250,
         }
@@ -391,32 +425,57 @@ def test_runtime_knobs_reflects_loaded_override():
 SHIPPED_CONFIG = Path(__file__).resolve().parents[1] / "config" / "implementation_loop.toml"
 
 
-def test_load_default_loop_config():
-    """The shipped default implementation_loop.toml loads correctly.
+def test_the_shipped_default_is_not_a_gate_on_its_own():
+    """Studio's shipped config carries no gate, so loading it alone refuses.
 
-    The gate half of this config is not in the file — it comes from detecting this
-    repository, which is a Python project, so the values are the ones they always were.
+    This is the whole feature in one assertion: the shipped file supplies [loop] and
+    [editor] and nothing else, so a repository that has written no file of its own has
+    no test command — and is told so rather than handed Python's.
     """
     if not SHIPPED_CONFIG.exists():
         pytest.skip("Default implementation_loop.toml not found")
 
-    config = load_loop_config(SHIPPED_CONFIG)
-    assert config.deliver_on_gate_fail is True
-    assert config.test_command == "pytest -q"
+    with pytest.raises(LoopConfigError) as excinfo:
+        load_loop_config(SHIPPED_CONFIG)
+
+    assert str(SHIPPED_CONFIG) in str(excinfo.value)
+
+
+def test_studios_own_gate_config_is_committed_and_loads():
+    """Studio gates itself with a file like every other repo, and it is in the tree.
+
+    Before this, Studio's own /forge gate came from detecting a pyproject.toml — the
+    same guess every other repo just stopped relying on. The file lives under studio/
+    because that is where this repo's own loader looks (project_config_root), and it is
+    committed past a .gitignore that excludes the directory around it.
+    """
+    own_config = STUDIO_ROOT / ".studio" / "implementation_loop.toml"
+    assert own_config.is_file(), f"{own_config} is missing"
+    in_git = subprocess.run(
+        ["git", "rev-parse", "--is-inside-work-tree"], cwd=STUDIO_ROOT, capture_output=True
+    )
+    if in_git.returncode == 0:
+        tracked = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", str(own_config)],
+            cwd=STUDIO_ROOT,
+            capture_output=True,
+        )
+        assert tracked.returncode == 0, f"{own_config} is on disk but not tracked by git"
+
+    config = load_loop_config(own_config)
+    assert "pytest" in config.test_command
     assert config.static_checks == ["ruff check {paths}"]
     assert config.require_mutation_check is True
-    assert config.mutation_command == "mutmut run"
-    assert config.mandate == "contrarian"
-    assert config.read_scope == "touched+importers"
-    assert config.output_budget == 400
+    assert "mutmut" in config.mutation_command
 
 
 def test_shipped_config_ships_no_gate_table():
-    """The shipped file must define no [gate] table, or detection is dead code.
+    """The shipped file must define no [gate] table, or it gates repos it knows nothing about.
 
     Nine of the ten repos with Studio installed have no config file of their own, so the
-    shipped one is what they resolve to. As long as it hard-sets the gate, it wins over
-    everything detection computes and every one of those repos still runs `pytest`.
+    shipped one is what they resolve to. A [gate] table here would be Studio answering a
+    question only the repository can answer — the guess this whole change removes, moved
+    into a file instead of a lookup table.
     """
     with open(SHIPPED_CONFIG, "rb") as f:
         data = tomllib.load(f)
@@ -434,7 +493,7 @@ def test_shipped_config_matches_dataclass_defaults():
     """
     with open(SHIPPED_CONFIG, "rb") as f:
         data = tomllib.load(f)
-    defaults = LoopConfig()
+    defaults = LoopConfig(test_command="make test")
     assert data["loop"]["deliver_on_gate_fail"] == defaults.deliver_on_gate_fail
     assert data["editor"]["mandate"] == defaults.mandate
     assert data["editor"]["read_scope"] == defaults.read_scope
@@ -469,7 +528,7 @@ def test_cli_explicit_path_reflects_override():
     """
     with tempfile.TemporaryDirectory() as tmp:
         cfg = Path(tmp) / "implementation_loop.toml"
-        cfg.write_text('[editor]\nmandate = "off"\noutput_budget = 99\n')
+        cfg.write_text(_GATE + '[editor]\nmandate = "off"\noutput_budget = 99\n')
         knobs = json.loads(_cli(["impl_loop.py", str(cfg)]))
         assert knobs["editor_enabled"] is False
         assert knobs["output_budget"] == 99
@@ -706,11 +765,14 @@ def test_cli_bad_work_dir_raises_before_any_knobs_are_emitted(tmp_path):
         _cli(["impl_loop.py", "--work-dir", str(absent)])
 
 
-# --- stack-detected gate commands ------------------------------------------
+# --- detection, and the config file that is read instead of it -------------
 #
-# The gate's test command is detected from the repository being built in, not shipped.
-# These fixtures are real directories holding real marker files: detection reads the
-# filesystem, and a mocked one would only prove we can repeat our own assumptions back.
+# Detection no longer runs at load: `resolve_profile` is the setup wizard's opening guess
+# and the loader never calls it, so what it answers is pinned against `resolve_profile`
+# itself. These fixtures are real directories holding real marker files, because
+# detection reads the filesystem and a mocked one would only prove we can repeat our own
+# assumptions back. Everything the *loader* resolves comes from a file written by
+# `_override`.
 
 
 def _unity_repo(root: Path) -> Path:
@@ -727,20 +789,19 @@ def _override(root: Path, text: str) -> Path:
     return root
 
 
-def test_node_repo_with_a_test_script_gets_npm_test(tmp_path):
-    """A Node project resolves to `npm test`, and to no mutation gate.
+def test_node_repo_with_a_test_script_is_offered_npm_test(tmp_path):
+    """A Node project is offered `npm test`, and no mutation gate.
 
-    Three of the ten repos with Studio installed are Node projects, and every /forge run
-    in them used to fail on a `pytest` that was never there. Mutation checking is off
+    This is what the wizard writes into a Node repo's file. Mutation checking is off
     because no mutation tool is wired up for them: a gate that always passes with
     "unavailable" is decoration.
     """
     root = _node_repo(tmp_path, {"scripts": {"test": "vitest run", "lint": "eslint ."}})
 
-    config = load_loop_config(studio_root=root)
+    profile = resolve_profile(root)
 
-    assert config.test_command == "npm test"
-    assert config.require_mutation_check is False
+    assert profile.test_command == "npm test"
+    assert profile.require_mutation_check is False
 
 
 @pytest.mark.parametrize("package, expected_checks", [
@@ -766,7 +827,7 @@ def test_node_static_check_follows_the_signs_of_a_linter(tmp_path, package, expe
     """
     root = _node_repo(tmp_path, package)
 
-    assert load_loop_config(studio_root=root).static_checks == expected_checks
+    assert list(resolve_profile(root).static_checks) == expected_checks
 
 
 @pytest.mark.parametrize("lint_script", ["", "   ", "\t\n"])
@@ -782,25 +843,27 @@ def test_a_blank_lint_script_is_no_lint_script(tmp_path, lint_script):
         "devDependencies": {"eslint": "^9.0.0"},
     }
 
-    assert load_loop_config(studio_root=_node_repo(tmp_path, package)).static_checks == [
-        "npx eslint {paths}"
-    ]
+    assert resolve_profile(_node_repo(tmp_path, package)).static_checks == (
+        "npx eslint {paths}",
+    )
 
     # And with nothing else to fall through to, a blank script means no static check at all.
     bare = {"scripts": {"test": "vitest run", "lint": lint_script}}
-    assert load_loop_config(studio_root=_node_repo(tmp_path / "bare", bare)).static_checks == []
+    assert resolve_profile(_node_repo(tmp_path / "bare", bare)).static_checks == ()
 
 
-def test_python_repo_keeps_pytest_ruff_and_the_mutation_gate(tmp_path):
-    """A Python project resolves to exactly the commands that used to be hard-coded."""
-    root = _python_repo(tmp_path / "py")
+def test_python_repo_is_offered_pytest_ruff_and_the_mutation_gate(tmp_path):
+    """A Python project is offered exactly the commands that used to be hard-coded.
 
-    config = load_loop_config(studio_root=root)
+    Offered, not applied: the wizard puts these in the repo's file, where a person can
+    disagree with them, and the loader reads the file.
+    """
+    profile = resolve_profile(_python_repo(tmp_path / "py"))
 
-    assert config.test_command == "pytest -q"
-    assert config.static_checks == ["ruff check {paths}"]
-    assert config.require_mutation_check is True
-    assert config.mutation_command == "mutmut run"
+    assert profile.test_command == "pytest -q"
+    assert profile.static_checks == ("ruff check {paths}",)
+    assert profile.require_mutation_check is True
+    assert profile.mutation_command == "mutmut run"
 
 
 @pytest.mark.parametrize("marker, contents", [
@@ -818,24 +881,7 @@ def test_any_one_python_marker_is_enough_on_its_own(tmp_path, marker, contents):
     """
     (tmp_path / marker).write_text(contents)
 
-    assert load_loop_config(studio_root=tmp_path).test_command == "pytest -q"
-
-
-def test_unity_override_inherits_nothing_from_python(tmp_path):
-    """An override setting only test_command gets no Python value through the gap.
-
-    This is the same bug one level down: before the merge base became the detected
-    profile, a Unity repo naming only its test wrapper still inherited `ruff` and
-    `mutmut` from the shipped defaults and failed the gate on tools it does not have.
-    """
-    root = _unity_repo(tmp_path)
-    _override(root, '[gate]\ntest_command = "./scripts/run-editmode-tests.sh"\n')
-
-    config = load_loop_config(studio_root=root)
-
-    assert config.test_command == "./scripts/run-editmode-tests.sh"
-    assert config.static_checks == []
-    assert config.require_mutation_check is False
+    assert resolve_profile(tmp_path).test_command == "pytest -q"
 
 
 def test_orkid_gardens_own_override_still_resolves_and_raises_nothing(tmp_path):
@@ -864,25 +910,64 @@ def test_orkid_gardens_own_override_still_resolves_and_raises_nothing(tmp_path):
     assert config.require_mutation_check is False
 
 
-def test_alfreds_own_override_finally_runs_the_lint_it_always_named(tmp_path):
-    """Alfred's config has held a lint *command* since before this field ran anything.
+def test_alfreds_own_file_loads_to_all_four_values_it_writes(tmp_path):
+    """Alfred is the repo that sets every gate key, and each one arrives as written.
 
-    It is the reason the field holds commands now rather than names: the file says
-    `make lint`, and nothing has ever run it. This pins that the file loads untouched —
-    the value reaches the loop as written, with no {paths} appended to it.
+    Its file says `make lint`, which is a command and not a tool name — the reason this
+    field holds commands at all. Nothing at Alfred's root identifies a stack, so under
+    the old loader all four values came from a file merged over an empty profile; now
+    they come from the file alone, and this is the pin that says the result is the same.
     """
     root = tmp_path / "_Alfred"
     root.mkdir()
     _override(root, (
+        "# /forge gate commands for this repo, written by hand.\n"
+        "\n"
         "[gate]\n"
-        'test_command = "make test"\n'
-        'static_checks = ["make lint"]\n'
+        'test_command = "make test"       # scripts/run_tests.py — the stdlib suite\n'
+        'static_checks = ["make lint"]    # scripts/lint.py — the Vault lint\n'
+        "require_mutation_check = false   # no mutation tooling in this repo\n"
+        'mutation_command = ""\n'
     ))
 
     config = load_loop_config(studio_root=root)
 
     assert config.test_command == "make test"
     assert config.static_checks == ["make lint"]
+    assert config.require_mutation_check is False
+    assert config.mutation_command == ""
+
+
+def test_the_loader_never_calls_resolve_profile(tmp_path, monkeypatch):
+    """Detection is not consulted at load, proven by making it fatal to consult.
+
+    A repo with no marker files is the case where calling detection used to be the whole
+    answer, so if any path still reached it this would raise instead of loading. The
+    function stays in this module for the setup wizard; this pins that the loop no longer
+    has an opinion of its own about how a repo is gated.
+    """
+    import impl_loop
+
+    def _explode(root):
+        raise AssertionError(f"load_loop_config must not detect stacks (asked about {root})")
+
+    monkeypatch.setattr(impl_loop, "resolve_profile", _explode)
+
+    root = tmp_path / "mystery"
+    root.mkdir()
+    _override(root, (
+        "[gate]\n"
+        'test_command = "make test"\n'
+        'static_checks = ["make lint"]\n'
+        "require_mutation_check = true\n"
+        'mutation_command = "cosmic-ray exec"\n'
+    ))
+
+    config = load_loop_config(studio_root=root)
+
+    assert config.test_command == "make test"
+    assert config.static_checks == ["make lint"]
+    assert config.mutation_command == "cosmic-ray exec"
 
 
 @pytest.mark.parametrize("name, replacement", [
@@ -898,7 +983,7 @@ def test_a_leftover_tool_name_is_refused_and_the_message_says_what_to_write(tmp_
     ever documented refuse, each pointed at the command that replaces it.
     """
     root = _python_repo(tmp_path / "py")
-    _override(root, f'[gate]\nstatic_checks = ["{name}"]\n')
+    _override(root, f'[gate]\ntest_command = "pytest -q"\nstatic_checks = ["{name}"]\n')
 
     with pytest.raises(LoopConfigError) as excinfo:
         load_loop_config(studio_root=root)
@@ -916,7 +1001,7 @@ def test_a_one_word_command_studio_never_shipped_is_taken_as_written(tmp_path):
     and Studio owes a migration only for what it wrote itself.
     """
     root = _python_repo(tmp_path / "py")
-    _override(root, '[gate]\nstatic_checks = ["pylint"]\n')
+    _override(root, '[gate]\ntest_command = "pytest -q"\nstatic_checks = ["pylint"]\n')
 
     assert load_loop_config(studio_root=root).static_checks == ["pylint"]
 
@@ -934,16 +1019,18 @@ def test_resolve_profile_hands_out_commands_not_tool_names(tmp_path):
     assert resolve_profile(_node_repo(tmp_path / "node-none", {})).static_checks == ()
 
 
-def test_refusal_names_unity_and_why_no_command_ships_for_it(tmp_path):
-    """Unity is recognised and still refused, for a reason that names the trap."""
+def test_the_detected_line_names_unity_and_why_no_command_ships_for_it(tmp_path):
+    """Unity is recognised and still has no command, for a reason that names the trap.
+
+    This sentence is written into the wizard's template now — test_setup.py pins that it
+    arrives there — and this is where the sentence itself is decided.
+    """
     root = _unity_repo(tmp_path)
 
-    with pytest.raises(LoopConfigError) as excinfo:
-        load_loop_config(studio_root=root)
+    line = _detected_line(resolve_profile(root), root)
 
-    message = str(excinfo.value)
-    assert "Detected:   unity (ProjectSettings/ProjectVersion.txt)" in message
-    assert "reports success even when it discovered no tests at all" in message
+    assert line.startswith("unity (ProjectSettings/ProjectVersion.txt)")
+    assert "reports success even when it discovered no tests at all" in line
 
 
 def test_refusal_on_two_stacks_names_both_markers(tmp_path):
@@ -956,24 +1043,19 @@ def test_refusal_on_two_stacks_names_both_markers(tmp_path):
     root = _node_repo(tmp_path, {"scripts": {"test": "npm run ci"}})
     (root / "Cargo.toml").write_text('[package]\nname = "game"\n')
 
-    with pytest.raises(LoopConfigError) as excinfo:
-        load_loop_config(studio_root=root)
+    line = _detected_line(resolve_profile(root), root)
 
-    message = str(excinfo.value)
-    assert "rust (Cargo.toml) and node (package.json) both match" in message
-    assert "npm test" not in message
+    assert "rust (Cargo.toml) and node (package.json) both match" in line
+    assert "npm test" not in line
 
 
-def test_refusal_on_a_recognised_but_unserved_stack(tmp_path):
-    """Rust is recognised on its own and still refused: no command is shipped for it."""
+def test_a_recognised_but_unserved_stack_says_so(tmp_path):
+    """Rust is recognised on its own and still unserved: no command is shipped for it."""
     (tmp_path / "Cargo.toml").write_text('[package]\nname = "game"\n')
 
-    with pytest.raises(LoopConfigError) as excinfo:
-        load_loop_config(studio_root=tmp_path)
+    line = _detected_line(resolve_profile(tmp_path), tmp_path)
 
-    assert "Detected:   rust (Cargo.toml). Studio ships no test command for Rust." in str(
-        excinfo.value
-    )
+    assert line == "rust (Cargo.toml). Studio ships no test command for Rust."
 
 
 def test_refusal_when_package_json_declares_no_test_script(tmp_path):
@@ -984,26 +1066,22 @@ def test_refusal_when_package_json_declares_no_test_script(tmp_path):
     """
     root = _node_repo(tmp_path, {"scripts": {"build": "vite build"}})
 
-    with pytest.raises(LoopConfigError) as excinfo:
-        load_loop_config(studio_root=root)
+    line = _detected_line(resolve_profile(root), root)
 
-    message = str(excinfo.value)
-    assert 'package.json declares no "test" script' in message
-    assert "missing script: test" in message
+    assert 'package.json declares no "test" script' in line
+    assert "missing script: test" in line
 
 
-def test_refusal_message_does_not_enumerate_the_known_stacks(tmp_path):
-    """The no-match message must not list stacks: it knows more than it serves.
+def test_the_detected_line_does_not_enumerate_the_known_stacks(tmp_path):
+    """The no-match line must not list stacks: it knows more than it serves.
 
     Naming three while recognising four reads as a contradiction to whoever is holding
     the fourth.
     """
-    with pytest.raises(LoopConfigError) as excinfo:
-        load_loop_config(studio_root=tmp_path)
+    line = _detected_line(resolve_profile(tmp_path), tmp_path)
 
-    message = str(excinfo.value)
     for stack, _ in STACK_MARKERS:
-        assert stack not in message.lower()
+        assert stack not in line.lower()
 
 
 def test_refusal_when_the_mutation_check_is_on_with_no_command(tmp_path):
@@ -1012,8 +1090,9 @@ def test_refusal_when_the_mutation_check_is_on_with_no_command(tmp_path):
     Only reachable by hand: no profile ships that pair. It exists so the writer is never
     told to run a check that has nothing to run.
     """
-    root = _node_repo(tmp_path, {"scripts": {"test": "vitest run"}})
-    _override(root, "[gate]\nrequire_mutation_check = true\n")
+    root = tmp_path / "repo"
+    root.mkdir()
+    _override(root, '[gate]\ntest_command = "vitest run"\nrequire_mutation_check = true\n')
 
     with pytest.raises(LoopConfigError, match="mutation_command"):
         load_loop_config(studio_root=root)
@@ -1069,17 +1148,16 @@ def test_every_marked_stack_resolves_to_a_profile():
         assert stack == "node" or stack in PROFILES, f"{stack} has no profile"
 
 
-def test_a_profiles_static_checks_cannot_be_mutated_through_a_config(tmp_path):
+def test_a_profiles_static_checks_cannot_be_mutated_by_a_caller(tmp_path):
     """PROFILES is shared module state, so its lists must not be handed out by reference.
 
-    A tuple makes that structural instead of something every caller has to remember.
+    A tuple makes that structural instead of something every caller has to remember. The
+    wizard is the caller that matters now: it serializes a profile into a file, and a
+    profile it could edit in place would change what the next repo is offered.
     """
     assert isinstance(PROFILES["python"].static_checks, tuple)
     with pytest.raises(dataclasses.FrozenInstanceError):
         PROFILES["python"].test_command = "npm test"
-
-    config = load_loop_config(studio_root=_python_repo(tmp_path / "py"))
-    config.static_checks.append("mypy")
 
     assert PROFILES["python"].static_checks == ("ruff check {paths}",)
     assert resolve_profile(_python_repo(tmp_path / "py2")).static_checks == ("ruff check {paths}",)
@@ -1115,52 +1193,129 @@ def test_refusal_on_three_stacks_lists_all_of_them(tmp_path):
     (root / "Cargo.toml").write_text('[package]\nname = "helper"\n')
     (root / "pyproject.toml").write_text('[project]\nname = "tooling"\n')
 
-    with pytest.raises(LoopConfigError) as excinfo:
-        load_loop_config(studio_root=root)
-
     assert (
         "rust (Cargo.toml), python (pyproject.toml) and node (package.json) all match"
-        in str(excinfo.value)
+        in _detected_line(resolve_profile(root), root)
     )
 
 
-def test_an_override_can_replace_the_detected_mutation_command(tmp_path):
-    """Every gate key merges over detection, not just the test command."""
-    root = _python_repo(tmp_path / "py")
-    _override(root, '[gate]\nmutation_command = "cosmic-ray exec"\n')
+# Multica's one gate key, copied out of that repo's own file: three stdlib unittest
+# suites in three directories, chained so any failure fails the whole thing.
+MULTICA_TEST_COMMAND = (
+    "cd pr-gate && python3 -m unittest discover -p 'test_*.py'"
+    " && cd ../api-reviewer && python3 -m unittest discover -p 'test_*.py'"
+    " && cd ../bare-reviewer && python3 -m unittest discover -p 'test_*.py'"
+)
+
+
+def test_multicas_shape_leaves_every_other_gate_key_empty(tmp_path):
+    """A file that sets only test_command gets nothing else — Multica's exact shape.
+
+    Multica is a Python repo by any reasonable reading, and its file names three stdlib
+    unittest suites because there is no other way to run them. Before this, taking
+    detection out of the loader while the dataclass still held Python's literals would
+    have started running `ruff` and `mutmut` there — neither of which is installed. That
+    is the original complaint reappearing through its own fix, so it is pinned here.
+    """
+    root = _python_repo(tmp_path / "multica")
+    _override(root, (
+        "# Loop config for orc-review.\n"
+        "\n"
+        "[gate]\n"
+        f'test_command = "{MULTICA_TEST_COMMAND}"\n'
+    ))
 
     config = load_loop_config(studio_root=root)
 
-    assert config.mutation_command == "cosmic-ray exec"
-    assert config.test_command == "pytest -q"  # the rest still comes from detection
+    assert config.test_command == MULTICA_TEST_COMMAND
+    assert config.static_checks == []
+    assert config.require_mutation_check is False
+    assert config.mutation_command == ""
 
 
-def test_a_repo_with_no_stack_is_told_that_having_no_tests_is_an_answer(tmp_path):
+def test_the_refusal_says_that_having_no_tests_is_an_answer(tmp_path):
     """"Set a test command" is impossible advice in a repo that has no tests.
 
     Half the installed repos reach this message, and some are notes repos that will never
     have a suite. Telling those to go write a command sends them hunting for a setting
-    that cannot help them; naming the real case sends them to /spec instead.
+    that cannot help them; naming the real case sends them to /spec instead. It is said
+    in both wordings, because the loader no longer knows anything about the repo that
+    would let it guess who needs to hear it.
     """
-    message = _no_test_command_message(StackProfile(), tmp_path)
+    absent = tmp_path / ".studio" / "implementation_loop.toml"
+    blank = tmp_path / "written.toml"
+    blank.write_text('[gate]\ntest_command = ""\n', encoding="utf-8")
 
-    assert "no tests at all" in message
-    assert "/spec" in message
-
-
-def test_a_recognised_stack_is_not_told_it_might_have_no_tests(tmp_path):
-    """A repo Studio recognised has a suite to point at; the extra paragraph is noise."""
-    (tmp_path / "Cargo.toml").write_text("[package]\nname = 'x'\n", encoding="utf-8")
-    message = _no_test_command_message(resolve_profile(tmp_path), tmp_path)
-
-    assert "no tests at all" not in message
+    for message in (_no_test_command_message(absent), _no_test_command_message(blank)):
+        assert "no tests at all" in message
+        assert "/spec" in message
 
 
-def test_a_hand_edited_package_json_is_refused_not_crashed(tmp_path):
-    """Malformed JSON, or a `scripts` key that isn't a table, reaches the refusal.
+def test_the_refusal_wording_turns_on_whether_the_file_is_there(tmp_path):
+    """The one discriminator, and the one it must not be.
 
-    package.json is hand-edited constantly. A traceback out of the config loader would
-    be a worse answer than the message that names the file to fix.
+    A file handed to the loader explicitly, with a blank test_command in it, is a blank
+    key — not a missing file. Branching on "did this come from the project override"
+    instead gets that backwards and tells the owner of a file they are looking at that
+    the path does not exist.
+    """
+    blank = tmp_path / "written.toml"
+    blank.write_text('[gate]\ntest_command = ""\n', encoding="utf-8")
+
+    there = _no_test_command_message(blank)
+    assert "gate.test_command in it is blank or missing" in there
+    assert str(blank) in there
+    assert "no file at that path" not in there
+    # The wizard writes a file on every path now, so pointing at /studio-setup here is a
+    # round trip back to the file the reader already has open.
+    assert "/studio-setup" not in there
+
+    missing = _no_test_command_message(tmp_path / ".studio" / "implementation_loop.toml")
+    assert "there is no file at that path." in missing
+    assert "/studio-setup" in missing
+
+
+def test_neither_refusal_wording_mentions_what_was_detected(tmp_path):
+    """Nothing is detected at load, so the refusal cannot claim anything was.
+
+    It used to print a `Detected:` line, which is why this is pinned rather than assumed:
+    the line is gone, and so is every stack name it could have carried.
+    """
+    blank = tmp_path / "written.toml"
+    blank.write_text('[gate]\ntest_command = ""\n', encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n', encoding="utf-8")
+
+    for message in (_no_test_command_message(blank),
+                    _no_test_command_message(tmp_path / "absent.toml")):
+        assert "Detected" not in message
+        for stack, _ in STACK_MARKERS:
+            assert stack not in message.lower()
+
+
+def test_an_explicit_path_with_a_blank_key_is_not_reported_as_missing(tmp_path):
+    """The same discriminator, through the loader this time.
+
+    Every `load_loop_config(path=...)` caller lands here — /forge passes an installed
+    repo's override that way — so the message has to be right at this end too, not only
+    where it is formatted.
+    """
+    explicit = tmp_path / "implementation_loop.toml"
+    explicit.write_text('[gate]\ntest_command = ""\n', encoding="utf-8")
+
+    with pytest.raises(LoopConfigError) as excinfo:
+        load_loop_config(explicit, studio_root=tmp_path / "somewhere-else")
+
+    message = str(excinfo.value)
+    assert str(explicit) in message
+    assert "gate.test_command in it is blank or missing" in message
+    assert "no file at that path" not in message
+
+
+def test_a_hand_edited_package_json_offers_no_command_rather_than_crashing(tmp_path):
+    """Malformed JSON, or a `scripts` key that isn't a table, reaches "no command".
+
+    package.json is hand-edited constantly. A traceback out of the wizard would be a
+    worse answer than a blank template naming the file to fix.
     """
     broken_json = tmp_path / "broken"
     broken_json.mkdir()
@@ -1169,5 +1324,4 @@ def test_a_hand_edited_package_json_is_refused_not_crashed(tmp_path):
     scripts_not_a_table = _node_repo(tmp_path / "odd", {"scripts": "vitest run"})
 
     for root in (broken_json, scripts_not_a_table):
-        with pytest.raises(LoopConfigError, match="gate.test_command is not set"):
-            load_loop_config(studio_root=root)
+        assert resolve_profile(root).test_command is None

@@ -211,7 +211,10 @@ Shipped defaults live in `config/` and `studio.manifest.json`; per-repo override
 live in `.studio/`. How an override combines with the default depends on the file:
 roles and personas shallow-merge over the shipped values, while `scopes.toml` and
 `implementation_loop.toml` are read *instead of* the shipped file — a key you leave
-out of those falls back to the built-in default, not to the shipped file's value.
+out of those falls back to the built-in default, not to the shipped file's value. The
+one exception is `implementation_loop.toml`'s `[gate]` table, which has no built-in
+defaults at all: a repo's own file is the only thing that says how `/forge` gates it,
+so a `[gate]` key left out is empty, and `/forge` refuses rather than guess.
 `setup.cfg` holds
 the mutmut (mutation-testing) config. See `studio/docs/ARCHITECTURE.md` for the full
 catalog and each file's schema.

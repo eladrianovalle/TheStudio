@@ -1046,13 +1046,23 @@ class TestApplyImplementationLoopConfig:
     def test_written_file_resolves_to_what_detection_alone_produced(
         self, node_project: Path
     ) -> None:
-        """The file is a printout of the detection, not a second opinion about it."""
-        detected_only = _resolved_gate(node_project)
+        """The file is a printout of the detection, not a second opinion about it.
+
+        The loader reads only this file now, so the comparison is against the detection
+        itself rather than against a load from before the file existed — before it,
+        there is nothing to load.
+        """
+        import impl_loop
+
+        detected = impl_loop.resolve_profile(node_project)
 
         setup.apply_implementation_loop_config(node_project)
 
-        assert _resolved_gate(node_project) == detected_only
-        assert detected_only.test_command == "npm test"
+        resolved = _resolved_gate(node_project)
+        assert resolved.test_command == detected.test_command == "npm test"
+        assert resolved.static_checks == list(detected.static_checks)
+        assert resolved.require_mutation_check == detected.require_mutation_check
+        assert resolved.mutation_command == (detected.mutation_command or "")
 
     @pytest.mark.parametrize("fixture, expected_checks", [
         ("python_project", ["ruff check {paths}"]),

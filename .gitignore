@@ -7,7 +7,12 @@
 # Studio run outputs (all phases)
 studio/output/
 .studio/
-studio/.studio/
+# ...except Studio's own /forge gate config, which is committed. Three lines, in this
+# order: git cannot re-include a file whose parent directory is excluded, so the
+# directory has to be un-excluded and its contents excluded instead.
+studio/.studio/*
+!studio/.studio/
+!studio/.studio/implementation_loop.toml
 
 # Claude Code local config/memory (keep slash commands, workflows + hooks tracked)
 .claude/*
