@@ -309,8 +309,13 @@ DROPPED_LINE = re.compile(
 
 # A commit the implementation loop wrote: `writer: <unit_id>`, `editor: <unit_id>`, or the
 # escalation `writer(stuck): <unit_id>`. Matched line by line over subjects *and* bodies, so a
-# squash merge that kept the loop's subjects in its body still reads as built.
-_LOOP_COMMIT = re.compile(r"^\s*(writer|editor)(\(stuck\))?:\s+([a-z][a-z0-9_]{2,})\b", re.M)
+# squash merge that kept the loop's subjects in its body still reads as built — including
+# GitHub's default squash body, which is the commonest way a merged unit reaches a log and
+# writes each subject as `* writer: <unit_id>`. One optional list bullet is all that buys it;
+# the id shape after the colon is what keeps a prose line from reading as a build.
+_LOOP_COMMIT = re.compile(
+    r"^\s*(?:[*+-]\s+)?(writer|editor)(\(stuck\))?:\s+([a-z][a-z0-9_]{2,})\b", re.M
+)
 
 # An id as a spec mentions it in prose. Used for one question only — was this id ever planned
 # anywhere? — so it reads every spec at every status, not just the approved ones.
@@ -345,12 +350,18 @@ class UnitLedger:
 
     A planned unit that is built appears in none of these. That is the whole point — the ledger
     reports what is outstanding, and a finished unit is not.
+
+    ``built_known`` is False when the built set could not be read at all, and then every tuple
+    here is empty because nothing could be reconciled — not because nothing is outstanding. A
+    reader that cannot tell those two apart prints "every unit is built" in exactly the repos
+    the unknown built set was invented for.
     """
 
     unbuilt: tuple[PlannedUnit, ...]  # planned in an approved spec, not built, not dropped
     escalated: tuple[PlannedUnit, ...]  # a writer(stuck): commit and no writer:/editor: one
     dropped: tuple[PlannedUnit, ...]  # closed on purpose, with a date and a reason
     unplanned: tuple[str, ...]  # built ids no spec mentions anywhere, sorted
+    built_known: bool = True  # False when git could not be read: every tuple above is silence
 
 
 def _entry_title(tail: str) -> str:
@@ -449,13 +460,19 @@ def reconcile_units(
     ``built`` is ``None`` when the built set could not be read at all — no git, no work tree, a
     shallow clone. Nothing is then reported as unbuilt, because with no built set every planned
     unit reads unbuilt and the ledger would nag about all of them. "I cannot see" and "nothing
-    was built" are different answers, and silence beats a lie. ``escalated`` is only ever read
-    alongside a readable ``built``, so it is a set either way. Drops still count: they are read
-    off the spec and owe git nothing.
+    was built" are different answers, and silence beats a lie. The ledger says which answer it
+    is carrying in ``built_known``, so a caller cannot read that silence as "everything is
+    built". ``escalated`` is only ever read alongside a readable ``built``, so it is a set
+    either way. Drops still count: they are read off the spec and owe git nothing.
+
+    A drop line on a unit git says was built is not a drop — the unit was built, and built work
+    is reported by nothing. Only an unbuilt unit can be closed on purpose.
     """
     dropped = tuple(unit for unit in planned if unit.dropped_on and unit.dropped_reason)
     if built is None:
-        return UnitLedger(unbuilt=(), escalated=(), dropped=dropped, unplanned=())
+        return UnitLedger(
+            unbuilt=(), escalated=(), dropped=dropped, unplanned=(), built_known=False
+        )
 
     open_units = [unit for unit in planned if not (unit.dropped_on and unit.dropped_reason)]
     return UnitLedger(
@@ -467,7 +484,7 @@ def reconcile_units(
             unit for unit in open_units
             if unit.unit_id not in built and unit.unit_id in escalated
         ),
-        dropped=dropped,
+        dropped=tuple(unit for unit in dropped if unit.unit_id not in built),
         unplanned=tuple(sorted(built - set(mentioned_ids))),
     )
 
@@ -720,7 +737,7 @@ def _format_shipped_specs(shipped_specs: Dict) -> List[str]:
     return lines
 
 
-def _units(count: int, noun: str = "unit") -> str:
+def format_count(count: int, noun: str = "unit") -> str:
     """``1 unit`` / ``2 units`` — the plural the sentence around it needs."""
     return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
 
@@ -737,7 +754,14 @@ def format_unit_ledger(ledger: UnitLedger) -> List[str]:
     Silent states are left out rather than printed as zeroes, and a ledger with nothing in it
     gets one line saying so instead of a block of empty headings — a report that looks the same
     whether or not it has news is one people stop reading.
+
+    A ledger whose built set is unknown gets no block at all. It has not reconciled anything,
+    so every line it could print would be a claim it cannot support — and the emptiest of them,
+    "nothing unfinished", is exactly the lie the unknown built set exists to prevent.
     """
+    if not ledger.built_known:
+        return []
+
     lines = ["", "Planned work (approved specs vs. git):"]
 
     if not (ledger.unbuilt or ledger.escalated or ledger.dropped or ledger.unplanned):
@@ -749,24 +773,24 @@ def format_unit_ledger(ledger: UnitLedger) -> List[str]:
     if ledger.unbuilt:
         specs = len({unit.slug for unit in ledger.unbuilt})
         lines.append(
-            f"  Planned and never built: {_units(len(ledger.unbuilt))} "
-            f"across {_units(specs, 'approved spec')}"
+            f"  Planned and never built: {format_count(len(ledger.unbuilt))} "
+            f"across {format_count(specs, 'approved spec')}"
         )
         lines.extend(_unit_line(unit) for unit in ledger.unbuilt)
 
     if ledger.escalated:
         lines.append(
             f"  Started and escalated — a writer stopped on purpose: "
-            f"{_units(len(ledger.escalated))}"
+            f"{format_count(len(ledger.escalated))}"
         )
         lines.extend(_unit_line(unit) for unit in ledger.escalated)
 
     if ledger.dropped:
-        lines.append(f"  Dropped on purpose: {_units(len(ledger.dropped))}")
+        lines.append(f"  Dropped on purpose: {format_count(len(ledger.dropped))}")
 
     if ledger.unplanned:
         lines.append(
-            f"  Built but never planned: {_units(len(ledger.unplanned), 'id')} — a rough "
+            f"  Built but never planned: {format_count(len(ledger.unplanned), 'id')} — a rough "
             "figure. Units built before /forge read a spec's plan are counted here too."
         )
     return lines

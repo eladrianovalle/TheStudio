@@ -412,6 +412,30 @@ def test_brief_names_the_next_unit_its_spec_and_the_forge_command(tmp_path, caps
     assert "already_built" not in context
 
 
+def test_two_specs_sharing_a_slug_each_keep_their_own_path(tmp_path, capsys):
+    """Rule 7 forbids a duplicate `unit_id`, not a duplicate slug.
+
+    Keyed on slug alone, the second spec read would overwrite the first, and the brief would
+    send a session to a file that never planned the unit it just named.
+    """
+    target = _init_repo(tmp_path / "shared-slug")
+    specs = target / "specs"
+    specs.mkdir()
+    for name, unit_id in (("a-feature.md", "first_owed"), ("b-feature.md", "second_owed")):
+        (specs / name).write_text(
+            _spec_text(f"## Build Plan\n\n### 1. `{unit_id}` — what {unit_id} is for\n",
+                       slug="shared"),
+            encoding="utf-8",
+        )
+
+    _do_check_updates(types.SimpleNamespace(target=str(target)))
+    context = _context(capsys)
+
+    assert "`first_owed`" in context
+    assert "specs/a-feature.md" in context
+    assert "specs/b-feature.md" not in context
+
+
 # --- 10. update-only output is byte-identical to what shipped a month ago ---
 
 def test_update_only_output_is_unchanged(tmp_path, monkeypatch, capsys):

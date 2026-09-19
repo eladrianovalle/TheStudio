@@ -91,9 +91,9 @@ from config_loading import tomllib
 from stats import (
     PlannedUnit,
     _parse_usage_log,
-    _units,
     aggregate_stats,
     built_unit_ids,
+    format_count,
     format_stats,
     mentioned_unit_ids,
     parse_build_plan,
@@ -2559,6 +2559,11 @@ def _built_unit_ids(target: Path) -> Optional[Tuple[set, set]]:
     merged still reads as built — nagging about finished work is how a nudge teaches people to
     ignore it. ``--grep`` lets git filter in C, and the record separator is ``\x1e`` rather than
     a NUL: a NUL makes the output binary, and anything reading it then sees nothing at all.
+
+    The ``--grep`` pattern must stay at least as tolerant as ``stats._LOOP_COMMIT``, because it
+    decides what the Python side ever sees: anything git filters out here cannot be read as
+    built no matter what the Python pattern accepts. Hence the leading bullet — GitHub's default
+    squash body writes each subject as ``* writer: <unit_id>``.
     """
     try:
         if _git(target, "rev-parse", "--is-inside-work-tree") != "true":
@@ -2567,7 +2572,7 @@ def _built_unit_ids(target: Path) -> Optional[Tuple[set, set]]:
             return None
         log = _git(
             target, "log", "--all", "--no-merges", "-E",
-            "--grep", r"^(writer|editor)", "--format=%s%n%b%n%x1e",
+            "--grep", r"^[[:space:]*+-]*(writer|editor)", "--format=%s%n%b%n%x1e",
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -2999,10 +3004,14 @@ def _unfinished_context(target: Path) -> str:
     unit is named every session until somebody builds it or drops it.
     """
     planned: List[PlannedUnit] = []
-    spec_files: Dict[str, Path] = {}
+    # Keyed by (slug, unit_id), not by slug alone: two approved specs may carry the same slug —
+    # rule 7 forbids a duplicate unit_id, not a duplicate slug — and keying on slug would put
+    # the other spec's path in front of the reader, which is a worse answer than no path.
+    spec_files: Dict[Tuple[str, str], Path] = {}
     for spec_path, slug, spec_text in _approved_specs(_specs_dir_for(target)):
-        spec_files[slug] = spec_path
-        planned.extend(parse_build_plan(spec_text, slug))
+        units = parse_build_plan(spec_text, slug)
+        spec_files.update({(slug, unit.unit_id): spec_path for unit in units})
+        planned.extend(units)
     if not planned:
         return ""
 
@@ -3023,10 +3032,10 @@ def _unfinished_context(target: Path) -> str:
     unit = unbuilt[0]
     spec_count = len({owed.slug for owed in unbuilt})
     return UNFINISHED_ADDITIONAL_CONTEXT.format(
-        units=_units(len(unbuilt)),
-        specs=_units(spec_count, "approved spec"),
+        units=format_count(len(unbuilt)),
+        specs=format_count(spec_count, "approved spec"),
         unit_id=unit.unit_id,
-        spec_file=_spec_display_path(spec_files[unit.slug], target),
+        spec_file=_spec_display_path(spec_files[(unit.slug, unit.unit_id)], target),
         title=f' \u2014 "{unit.title}"' if unit.title else "",
         slug=unit.slug,
         entrypoint=_entrypoint(),

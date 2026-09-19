@@ -256,6 +256,24 @@ def test_built_ids_come_from_subjects_and_bodies():
     assert escalated == set()
 
 
+def test_githubs_default_squash_body_reads_as_built():
+    """The commonest way a merged unit reaches a log: one bullet per squashed subject.
+
+    The git-side `--grep` has to allow the bullet too, or the Python side never sees the line
+    — see `run_phase._built_unit_ids`.
+    """
+    log = (
+        "Some pull request title (#186)\n\n"
+        "* writer: first_unit\n"
+        "* editor: first_unit\n"
+        "- writer(stuck): second_unit\n\x1e\n"
+    )
+    built, escalated = built_unit_ids(log)
+
+    assert built == {"first_unit"}
+    assert escalated == {"second_unit"}
+
+
 def test_an_escalation_alone_is_not_built():
     """`writer(stuck):` means the writer stopped on purpose rather than fake a finish.
 
@@ -346,6 +364,31 @@ def test_an_unreadable_built_set_reports_nothing_as_unbuilt():
     assert [unit.unit_id for unit in ledger.dropped] == ["closed"]
 
 
+def test_a_drop_on_a_built_unit_is_not_a_drop():
+    """Built work is reported by nothing. Only an unbuilt unit can be closed on purpose.
+
+    A unit that shipped and later collected a `Dropped:` line would otherwise be counted under
+    "Dropped on purpose", which reads as work somebody decided against.
+    """
+    ledger = reconcile_units([_planned("shipped_then_closed", dropped=True)],
+                             {"shipped_then_closed"}, set(), set())
+
+    assert ledger.dropped == ()
+    assert ledger.unbuilt == () and ledger.escalated == ()
+
+
+def test_an_unreadable_built_set_says_it_is_unreadable():
+    """Empty tuples alone cannot tell "nothing is outstanding" from "I could not look".
+
+    Every caller that renders the ledger has to know which one it is holding, so the answer
+    travels with the ledger rather than being re-derived from what the caller happened to pass.
+    """
+    planned = [_planned("one"), _planned("two")]
+
+    assert reconcile_units(planned, None, None, set()).built_known is False
+    assert reconcile_units(planned, set(), set(), set()).built_known is True
+
+
 def test_half_a_drop_closes_nothing():
     """A date with no reason, or a reason with no date, leaves the unit exactly where it was.
 
@@ -418,6 +461,17 @@ def test_an_empty_ledger_prints_one_line_and_no_empty_headings():
         "Planned work (approved specs vs. git):",
         "  Nothing unfinished — every unit an approved spec plans is built or dropped.",
     ]
+
+
+def test_an_unknown_built_set_prints_no_block_at_all():
+    """Nothing was reconciled, so there is nothing the block could honestly say.
+
+    "Nothing unfinished" is the specific lie to avoid here: a shallow CI checkout or a box with
+    no git is exactly where it would claim every planned unit is built.
+    """
+    ledger = reconcile_units([_planned("owed_unit")], None, None, set())
+
+    assert format_unit_ledger(ledger) == []
 
 
 def test_the_block_names_each_state_it_has_something_to_say_about():
@@ -520,6 +574,23 @@ def test_built_ids_are_read_out_of_a_real_repository(tmp_path):
 
     assert built == {"a_built_unit"}
     assert escalated == {"a_stuck_unit"}
+
+
+def test_a_squashed_pull_request_is_read_out_of_a_real_repository(tmp_path):
+    """git's `--grep` is the gate: what it filters out, the Python pattern never sees.
+
+    The subject here is a PR title and every loop commit survives only as a bullet in the body,
+    which is what GitHub's squash button writes.
+    """
+    repo = _repo_with_commits(
+        tmp_path / "squashed",
+        "init",
+        "A pull request title (#186)\n\n* writer: a_built_unit\n* editor: a_built_unit\n",
+    )
+    built, escalated = run_phase._built_unit_ids(repo)
+
+    assert built == {"a_built_unit"}
+    assert escalated == set()
 
 
 def test_a_directory_that_is_not_a_work_tree_reads_as_unknown(tmp_path):
@@ -640,7 +711,10 @@ def test_stats_does_not_nag_about_every_unit_when_git_cannot_be_read(
     output = _stats_output(capsys)
 
     assert "one_unit" not in output and "another_unit" not in output
-    assert "Nothing unfinished" in output
+    # And it does not swing the other way either: with no built set, "nothing unfinished" is
+    # the same lie wearing the opposite sign. The block is left out entirely.
+    assert "Nothing unfinished" not in output
+    assert "Planned work (approved specs vs. git):" not in output
 
 
 def test_a_draft_spec_owes_nobody_a_build(specs_root, monkeypatch, capsys):
