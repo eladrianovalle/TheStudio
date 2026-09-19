@@ -50,6 +50,11 @@ _FENCE_LINE = re.compile(r"^\s*(`{3,})")
 
 _BUILD_PLAN_HEADING = "## Build Plan"
 
+# A heading that means to be the Build Plan but is not it: `## Build Plan (revised after
+# review)`. The lookahead is what keeps `## Build Planning notes` out — a section about
+# planning is not a near miss, it is a different heading.
+_SUFFIXED_BUILD_PLAN_HEADING = re.compile(rf"^{re.escape(_BUILD_PLAN_HEADING)}(?![A-Za-z0-9])")
+
 
 def strip_fenced_blocks(text: str) -> str:
     """The document with every fenced code block blanked out, line for line.
@@ -85,6 +90,11 @@ def build_plan_section(spec_text: str) -> str | None:
     as *not* the plan — ``## Build Plan (as originally proposed)`` written below the real one
     would win, and the real units would vanish with nothing said.
 
+    Exactness cuts both ways, so it does not stand alone. A spec whose *only* plan heading is
+    a suffixed one has no plan as far as this reader is concerned, and that silence would be
+    as total as the one above; ``suffixed_build_plan_headings`` is what lets a caller say so
+    instead of reading nothing.
+
     Both halves of that are load-bearing. A spec that documents the Build Plan format
     contains a *fenced* ``## Build Plan`` heading, and a line-anchored regex cannot see the
     fence, so the phantom heading would win on line order: ``specs/unit-acceptance-criteria.md``
@@ -107,6 +117,28 @@ def build_plan_section(spec_text: str) -> str | None:
             break
         section.append(line)
     return "\n".join(section)
+
+
+def suffixed_build_plan_headings(spec_text: str) -> List[str]:
+    """The ``## Build Plan…`` headings a spec carries when none of them is the plan.
+
+    Empty when ``build_plan_section`` found a real heading, because then the suffixed ones are
+    doing their job: a superseded plan kept under a label is exactly what the exact match
+    exists to skip past. It is only when nothing else is there that the label matters — an
+    author who *renamed* the heading rather than duplicating it has written the plan everyone
+    reads as the plan, and every reader here returns nothing for it.
+
+    Fences are stripped first, for the same reason ``build_plan_section`` strips them: a spec
+    that quotes the plan format in an example is not carrying that heading.
+    """
+    lines = strip_fenced_blocks(spec_text).splitlines()
+    if any(line.rstrip() == _BUILD_PLAN_HEADING for line in lines):
+        return []
+    return [
+        line.strip()
+        for line in lines
+        if _SUFFIXED_BUILD_PLAN_HEADING.match(line)
+    ]
 
 
 def summarize_shipped_specs(records: List[Dict]) -> Dict:

@@ -30,7 +30,13 @@ from typing import NamedTuple
 
 import pytest
 
-from stats import VALID_IMPACT, build_plan_section, parse_frontmatter, strip_fenced_blocks
+from stats import (
+    VALID_IMPACT,
+    build_plan_section,
+    parse_frontmatter,
+    strip_fenced_blocks,
+    suffixed_build_plan_headings,
+)
 
 # CI runs pytest with `working-directory: studio`, so relative paths are out.
 # parents[2] is the repo root — the same idiom test_claude_code.py uses.
@@ -82,11 +88,15 @@ _ENTRY_OPENER = re.compile(r"^(###\s+\d+\.|\d+\.)\s*\**\s*`([^`\n]+)`(.*)$")
 
 # A level-3 heading somebody meant as a unit, whether or not `_ENTRY_OPENER` can read it.
 # Not every `###` in a Build Plan opens a unit — `writer-escalation-channel.md` has a
-# `### Tests` — so a blanket refusal would be wrong. But a heading that opens with an ordinal
-# or carries a backticked token is a unit, and one that `_ENTRY_OPENER` cannot match (the
+# `### Tests` — so a blanket refusal would be wrong. But a heading that *opens* with an
+# ordinal or with a backticked id is a unit, and one that `_ENTRY_OPENER` cannot match (the
 # number forgotten, the backticks forgotten) is dropped by every reader in silence. That is the
 # same defect this rule exists to close, so the heading gets the sentence instead.
-_INTENDED_UNIT_HEADING = re.compile(r"^###\s+(?:\d+\.|[^\n]*`[^`\n]+`)")
+#
+# Both alternatives are anchored at the start of the heading text. An unanchored one would
+# match a backticked token anywhere in the line, and `### Tests for `stats.py`` — prose that
+# happens to quote a filename — would be refused as a malformed unit.
+_INTENDED_UNIT_HEADING = re.compile(r"^###\s+(?:\d+\.|\**`[^`\n]+`)")
 
 # The id pattern, bound for bound the same as the one the reconciler will use. An id this rule
 # accepted but a reader could not see would be silently dropped from the ledger instead of
@@ -185,11 +195,22 @@ def _build_plan_problems(spec_name: str, spec_text: str) -> list[str]:
     """Rule 7, for one spec: every way its Build Plan departs from the canonical shape.
 
     Callers gate this on `status: approved`. A spec with no `## Build Plan` section at all is
-    left alone — not every document has units, and several older specs have no plan.
+    left alone — not every document has units, and several older specs have no plan. A spec
+    whose only plan heading is a suffixed one is not that case: it has a plan, and the exact
+    match the reader needs is the one thing standing between those units and everything that
+    reads them.
     """
     build_plan = build_plan_section(spec_text)
     if build_plan is None:
-        return []
+        return [
+            f"specs/{spec_name} has no `## Build Plan` heading, but it does have "
+            f"`{heading}`. The heading has to read exactly `## Build Plan` — the readers "
+            "match it exactly so a superseded plan kept under a label cannot be mistaken for "
+            "the plan in force, which means a renamed heading is not found at all and every "
+            "unit under it is invisible. Rename it, and put whatever the suffix said in a "
+            "line beneath the heading."
+            for heading in suffixed_build_plan_headings(spec_text)
+        ]
 
     entries = _unit_entries(build_plan)
     unreadable = _unreadable_unit_headings(build_plan)
@@ -1507,6 +1528,26 @@ class TestSyntheticSpecs:
             "synthetic-eval-results.md", None,
         ) == []
 
+    def test_a_third_level_heading_quoting_a_filename_stays_legal(self):
+        """The narrower half of the same tolerance. `### Tests for `stats.py`` is prose that
+        happens to quote a filename; a pattern that looked for backticks anywhere in the line
+        would refuse it as a malformed unit, and a rule that false-reds on a plan written
+        properly is a rule someone deletes."""
+        assert _violations(
+            "synthetic.md",
+            _synthetic_spec(
+                "approved", verification=False,
+                build_plan=(
+                    "## Build Plan\n\n"
+                    "### 1. `synthetic_unit` — it becomes usable\n\n"
+                    "- [ ] The synthetic thing happens.\n\n"
+                    "### Tests for `stats.py`\n\n"
+                    "Run the suite.\n"
+                ),
+            ),
+            "synthetic-eval-results.md", None,
+        ) == []
+
     def test_approved_with_a_unit_written_as_a_list_item_fails(self):
         """The shape most older specs use. It is not wrong markdown; it is a boundary a
         reader has to guess at, which is why the heading replaced it."""
@@ -1822,6 +1863,47 @@ class TestSyntheticSpecs:
         build_plan = build_plan_section(spec)
         assert build_plan is not None
         assert [entry.unit_id for entry in _unit_entries(build_plan)] == ["synthetic_unit"]
+        # And the near-miss complaint stays quiet here: the label is doing its job.
+        assert suffixed_build_plan_headings(spec) == []
+        assert _violations("synthetic.md", spec, "synthetic-eval-results.md", None) == []
+
+    @pytest.mark.parametrize("heading", [
+        "## Build Plan (revised after review)",
+        "## Build Plan — second attempt",
+    ])
+    def test_approved_with_only_a_suffixed_build_plan_heading_fails(self, heading):
+        """The other side of the exact match, and the wider silence of the two.
+
+        Matching exactly is what stops a superseded plan from winning, but an author who
+        renames the heading instead of duplicating it has one plan, reads it as the plan, and
+        gets nothing: no section, so no entries, no ids, no collision check and no complaint.
+        Every unit in the spec is invisible with the suite green.
+        """
+        spec = _synthetic_spec(
+            "approved", verification=False,
+            build_plan=(
+                f"{heading}\n\n"
+                "### 1. `synthetic_unit` — it becomes usable\n\n"
+                "- [ ] The synthetic thing happens.\n"
+            ),
+        )
+        assert build_plan_section(spec) is None
+        problems = _violations("synthetic.md", spec, "synthetic-eval-results.md", None)
+        assert len(problems) == 1
+        assert "specs/synthetic.md" in problems[0]
+        assert heading in problems[0]
+        assert "exactly `## Build Plan`" in problems[0]
+
+    def test_a_section_about_planning_is_not_a_near_miss_build_plan_heading(self):
+        """The complaint above is for a heading that meant to be the Build Plan. `## Build
+        Planning notes` is a different section with a similar name, and a spec that has one
+        and no plan is the no-plan case rule 7 deliberately leaves alone."""
+        spec = _synthetic_spec(
+            "approved", verification=False,
+            build_plan="## Build Planning notes\n\nWe will write the plan after the spike.\n",
+        )
+        assert suffixed_build_plan_headings(spec) == []
+        assert _violations("synthetic.md", spec, "synthetic-eval-results.md", None) == []
 
     def test_the_section_stops_at_the_next_heading(self):
         """The Build Plan is not always the last section. Whatever follows it — risks, notes,
