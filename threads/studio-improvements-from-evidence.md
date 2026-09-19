@@ -76,24 +76,29 @@ As of 2026-09-19 it carries 1053 tests, ruff clean.*
   units reuse, and no two specs may plan the same `unit_id`. Zero specs were migrated, which is what
   gating the rule on `approved` alone buys.
 
+- **The completion ledger is built.** Unit 1 merged (#184): rule 7 holds an `approved` spec's Build
+  Plan to one entry shape, with the fence-stripping section reader in `stats.py`. Units 2 and 3 are
+  open together at **#186**: `stats` reports planned-and-never-built and built-but-never-planned, and
+  the SessionStart hook that already runs in every install names one unfinished unit plus the exact
+  `/forge` command. Nothing is stored — every run re-reads the specs and re-derives the built set from
+  git. It found real work the first time it ran: `stale_configs_get_the_new_command`, planned in
+  `detected-static-check-command` and never built.
+
+- **`specs/first-class-forge-gates.md` is `shipped`** (#183), closing issue #133.
+
 **In flight**
-- **The ledger build is running to completion**, unit by unit. Unit 2 `stats_reconciles_units`
-  reconciles both directions and prints the `stats` block; unit 3 `session_brief_names_the_next_unit`
-  turns `check-updates` into a two-source brief. This note is deliberately not updated per unit —
-  three of its revisions were rejected for carrying stale copies of fast-moving facts, so it gets one
-  update when the ledger is done.
-- **#183** (`first-class-forge-gates` to `shipped`, closes #133) and **#184**
-  (completion-ledger unit 1) both merged 2026-09-19. For what is open right now, read
-  `gh pr list`, not this line — three revisions of this note were rejected for carrying a
-  stale copy of exactly that, and a fourth PR opened while this one was being corrected.
+- **#186** (the ledger's last two units), **#185** (three PR conventions written down for the first
+  time), **#182** (this note). For what is open right now read `gh pr list`, not this line — three
+  revisions of this note were rejected for carrying a stale copy of exactly that.
 - Three issues from the 2026-09-16 work are open and unassigned: **#179** (`setup --defaults` resets
   every prior choice, and `--status` recommends it), **#180** (per-scope `model` in `scopes.toml`),
   **#181** (measure whether the contrarian's confidence ratings are calibrated). #180 is deliberately
   blocked on #181.
 
 **Next action**
-Finish the ledger — units 2 and 3 — then the cross-repo sweep that carries all of this to the
-installs.
+The cross-repo sweep, which carries the ledger and the gate work to the ten installs. The session
+brief needs no installer change — the hook already runs `check-updates --target $CLAUDE_PROJECT_DIR`,
+so `/studio-update` alone is enough.
 
 ## Decisions made
 - **Detection is demoted, not improved.** It becomes the setup wizard's opening guess and leaves the
@@ -109,6 +114,10 @@ installs.
 - **The gate-config sweep runs the wizard, never a hand-written file.** Hand-writing a config tests
   nothing: the wizard is what unit 1 changed, and it is the only path that exercises the stamp and
   the blank-template text. Doing it that way also caught #179.
+- **PRs go to main, one per feature, and an agent never merges.** Written down in Studio's coding
+  principles for the first time (#185), after three conventions this project runs on turned out to
+  exist only in Adriano's head: "rejected" is a reviewer's comment verdict rather than a GitHub state,
+  a fix to an open PR is a commit on that branch, and a spec's units travel in one PR.
 - **`is_wizard_template` means stamped AND `test_command` still blank.** Unit 1's fifth criterion says
   "a file the wizard wrote and untouched", which read literally would also cover a pre-filled Python
   file; the spec's own reasoning says the blank command beside the stamp is the only state that
