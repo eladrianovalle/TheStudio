@@ -95,8 +95,8 @@ The criteria are the part `/forge` depends on, so write them with care:
 - **Keep them checkable from the code and its tests.** The `/forge` editor reads the diff and runs the
   unit's tests; it has no browser and no Play mode. A criterion that only a human at the screen can
   judge belongs in `/smoke`, not here.
-- **`<unit_id>` is a short snake_case handle, unique within this spec.** `/forge --spec <slug> --unit
-  <unit_id>` is how the builder pulls this unit's criteria, so don't rename it once the spec is approved.
+- **`<unit_id>` is a short snake_case handle, unique repo-wide** — no other spec may plan the same id.
+  `/forge --spec <slug> --unit <unit_id>` pulls this unit's criteria; don't rename it once approved.
 ```
 
 Plus a Key Rules line: **The Build Plan is a contract, not a summary.** Each unit carries checkable

@@ -42,6 +42,235 @@ def parse_frontmatter(text: str) -> Dict[str, str]:
     return fields
 
 
+# A fence opens on a line whose first non-blank characters are three or more backticks, and
+# closes on a run at least as long. Tracking the opener's length matters here: this repo writes
+# spec templates inside four-backtick fences precisely so an inner three-backtick block does not
+# close them early, and a stripper that assumed three would end the block in the wrong place.
+_FENCE_LINE = re.compile(r"^\s*(`{3,})")
+
+_BUILD_PLAN_HEADING = "## Build Plan"
+
+# A markdown ATX heading, capturing its hashes so a section can be bounded by its own depth.
+# Up to three leading spaces are allowed because three is markdown's own bound: `  ## Build Plan`
+# renders as a level-2 heading and a reader sees nothing unusual about it, while four spaces make
+# an indented code block — markdown's other way to quote a line, and the one `strip_fenced_blocks`
+# cannot see. Anchoring this at column 0 instead put an indented heading outside every net here:
+# the exact match misses it, so the spec has no plan, and rule 7 leaves a spec with no plan alone.
+_HEADING_LINE = re.compile(r"^ {0,3}(#{1,6})\s")
+
+# How a heading that opens a unit entry starts: an ordinal or a backticked id, either of them
+# possibly wrapped in bold markers. Left unanchored here because its two users prefix it
+# differently — `_section_from` allows the same leading indentation `_HEADING_LINE` does, and
+# rule 7's `_INTENDED_UNIT_HEADING` in `tests/test_spec_verification.py` sits at column 0.
+# Shared as one fragment so the bound that decides where a plan ends and the rule that reads
+# the units inside it cannot disagree about what a unit heading looks like.
+UNIT_HEADING_SHAPE = r"\**(?:\d+\.|`[^`\n]+`)"
+
+# Level 3 exactly, the one depth a unit heading is ever written at. `#{2,}` here let
+# `_section_from`'s continuation exception leak past a level-2 plan heading as well as the
+# level-3 near miss it was written for: ``## `stats.py` — what changes`` and `## 1. Background`
+# both match the shape, so neither ended a `## Build Plan` section and every section after the
+# plan read as more plan. The exception is only ever needed when the plan heading itself sits at
+# unit depth; at level 2 the units are a level down and the depth bound alone is enough.
+_UNIT_HEADING = re.compile(r"^ {0,3}#{3}\s+" + UNIT_HEADING_SHAPE)
+
+
+def _collapsed(line: str) -> str:
+    """A heading line as a reader sees it rendered: casefolded, whitespace runs collapsed."""
+    return " ".join(line.split()).casefold()
+
+
+# A heading that means to be the Build Plan but is not the one the readers match. Compared
+# against `_collapsed` output rather than the raw line, because the ways the exact match gets
+# missed are not all visible on the page: `## Build plan` and `## BUILD PLAN` are typos, `##
+# Build Plan` with two spaces renders identically to the real heading, and `### Build Plan` is
+# the right words at the wrong level. Each one is as invisible to every reader as the
+# deliberate rename `## Build Plan (revised after review)`, so they belong in the same net.
+# The lookahead is what keeps `## Build Planning notes` out — a section about planning is not
+# a near miss, it is a different heading.
+#
+# Level 2 is as shallow as this looks, and level 1 is left out on purpose rather than by
+# oversight: a lone `#` is not reliably a heading in these files. A spec's frontmatter is YAML
+# that carries its notes on `# ...` comment lines — every spec in `specs/` has several — and
+# nothing here strips frontmatter, so `#{1,}` would read one of those as a heading and refuse a
+# spec over a line no renderer ever shows. What that costs is a real `# Build Plan` going
+# unseen, at the one level a spec's own title already occupies.
+_NEAR_MISS_BUILD_PLAN_HEADING = re.compile(r"^#{2,}\s+build plan(?![a-z0-9])")
+
+# The same words with nothing after them, at the levels the net above reads: what
+# `indistinguishable_build_plan_headings` reports. Above that bound the level is deliberately
+# not part of the test — the difference between that function and the near-miss net is whether
+# the author appended something that says the section is not the plan, and `### Build Plan`
+# appends nothing. Also compared against `_collapsed` output, so the single space here is every
+# run of whitespace in the file.
+_UNLABELLED_BUILD_PLAN_HEADING = re.compile(r"^#{2,} build plan$")
+
+
+def strip_fenced_blocks(text: str) -> str:
+    """The document with every fenced code block blanked out, line for line.
+
+    Fenced lines come back as empty strings rather than being deleted, so line numbers still
+    line up with the original file — a violation can say where it is and mean it.
+
+    An unclosed fence swallows the rest of the document, which is what a markdown renderer
+    does with one too.
+    """
+    kept = []
+    open_fence = ""
+    for line in text.splitlines():
+        marker = _FENCE_LINE.match(line)
+        if open_fence:
+            if marker and len(marker.group(1)) >= len(open_fence):
+                open_fence = ""
+            kept.append("")
+        elif marker:
+            open_fence = marker.group(1)
+            kept.append("")
+        else:
+            kept.append(line)
+    return "\n".join(kept)
+
+
+def build_plan_section(spec_text: str) -> str | None:
+    """The ``## Build Plan`` section of a spec, or ``None`` when the spec has none.
+
+    Fenced code blocks are removed first, then the **last** remaining Build Plan heading
+    wins, then the section runs to the next ``## `` heading. The heading has to match
+    exactly: last-wins plus a prefix match would hand the reader a section a human labelled
+    as *not* the plan — ``## Build Plan (as originally proposed)`` written below the real one
+    would win, and the real units would vanish with nothing said.
+
+    Exactness cuts both ways, so it does not stand alone. A spec whose *only* plan heading is
+    a near miss has no plan as far as this reader is concerned, and that silence would be as
+    total as the one above; ``near_miss_build_plan_headings`` is what lets a caller say so
+    instead of reading nothing.
+
+    Both halves of that are load-bearing. A spec that documents the Build Plan format
+    contains a *fenced* ``## Build Plan`` heading, and a line-anchored regex cannot see the
+    fence, so the phantom heading would win on line order: ``specs/unit-acceptance-criteria.md``
+    has one at line 77 and its real plan at line 415, and a first-match slice grabs 283 wrong
+    lines and then reports a plan with no units against a spec whose plan is fine.
+
+    One reader, shared, so the rule that polices Build Plans and the code that reads them can
+    never disagree about where the Build Plan is.
+    """
+    lines = strip_fenced_blocks(spec_text).splitlines()
+    headings = [
+        index for index, line in enumerate(lines) if line.rstrip() == _BUILD_PLAN_HEADING
+    ]
+    if not headings:
+        return None
+    return _section_from(lines, headings[-1])
+
+
+def _section_from(lines: List[str], start: int) -> str:
+    """The heading at ``start`` and everything under it, up to the next section at its level.
+
+    Bounded by the heading's own depth rather than by ``## ``, which is the same thing for the
+    real heading and not for a near miss one level down: a ``### Build Plan`` section stopping
+    only at the next ``## `` runs through every sibling level-3 section after it, so an
+    ``### Appendix`` quoting ``### 2. `appendix_example` `` hands that id to whatever read the
+    section — and a collision reported against it names a spec whose author cannot fix it.
+
+    A unit heading at that same depth continues the plan instead of ending it, which is what
+    stops the depth bound from cutting a ``### Build Plan`` section off before its own first
+    unit: the plan heading and the units under it are both level 3 there, so depth alone cannot
+    tell ``### 1. `real_unit` `` from ``### Appendix``, and only the second one is a new section.
+    That exception is level 3 only. Tested at every depth it defeats the bound it is part of:
+    under a level-2 plan heading the units sit a level down, so nothing there needs it, and
+    ``## `stats.py` — what changes`` — a section heading that happens to open with a backticked
+    filename — would go on reading as more plan, handing its ids to whatever read the section.
+    """
+    depth = len(_HEADING_LINE.match(lines[start]).group(1))
+    section = [lines[start]]
+    for line in lines[start + 1:]:
+        heading = _HEADING_LINE.match(line)
+        if heading and len(heading.group(1)) <= depth and not _UNIT_HEADING.match(line):
+            break
+        section.append(line)
+    return "\n".join(section)
+
+
+def _near_miss_headings(lines: List[str]) -> List[int]:
+    """The indexes of the near-miss Build Plan headings, or nothing when the real one is here."""
+    if any(line.rstrip() == _BUILD_PLAN_HEADING for line in lines):
+        return []
+    return [
+        index
+        for index, line in enumerate(lines)
+        if _HEADING_LINE.match(line)
+        and _NEAR_MISS_BUILD_PLAN_HEADING.match(_collapsed(line))
+    ]
+
+
+def near_miss_build_plan_headings(spec_text: str) -> List[str]:
+    """The Build Plan headings a spec carries when none of them is *the* heading.
+
+    Empty when ``build_plan_section`` found a real heading, because then a labelled one is
+    doing its job: a superseded plan kept under ``## Build Plan (as originally proposed)`` is
+    exactly what the exact match exists to skip past. It is only when nothing else is there
+    that the near miss matters — an author who renamed the heading, or typed it at the wrong
+    level or in the wrong case, has written the plan everyone reads as the plan, and every
+    reader here returns nothing for it.
+
+    Fences are stripped first, for the same reason ``build_plan_section`` strips them: a spec
+    that quotes the plan format in an example is not carrying that heading.
+
+    Only the trailing whitespace comes off each heading. Stripping the leading whitespace too
+    would leave the indented case quoting a heading identical to the one it is being asked for,
+    and a complaint that says a spec has no ``## Build Plan`` heading but does have
+    ``## Build Plan`` tells its reader nothing about what to change.
+    """
+    lines = strip_fenced_blocks(spec_text).splitlines()
+    return [lines[index].rstrip() for index in _near_miss_headings(lines)]
+
+
+def indistinguishable_build_plan_headings(spec_text: str) -> List[str]:
+    """The headings a spec carries that say ``Build Plan`` and nothing else, bar the real one.
+
+    Reported whether or not the real heading is also present, which is the whole difference
+    between this and ``near_miss_build_plan_headings``. The precedence there — a near miss
+    matters only when nothing else matches — reads a labelled heading as its author saying it
+    is not the plan, and that reading is right for ``## Build Plan (as originally proposed)``.
+    A doubled space says nothing of the kind: ``##  Build Plan`` renders character for
+    character like the real heading, so a spec carrying both shows its author two identical
+    lines while every reader here takes the exact one and drops the other's units. Whichever
+    of the two came later, the one that loses is invisible on the page.
+
+    The label is the whole test, so the heading level is not part of it. ``### Build Plan``
+    written beside the real one falls through everything else — the near-miss precedence is
+    satisfied by the exact heading, and a comparison that counted the hashes would call a
+    third ``#`` a difference. It says the same words with nothing appended, so its author has
+    said nothing that makes it not the plan, and its units are read by nothing.
+    """
+    lines = strip_fenced_blocks(spec_text).splitlines()
+    return [
+        line.rstrip()
+        for line in lines
+        if line.rstrip() != _BUILD_PLAN_HEADING
+        and _HEADING_LINE.match(line)
+        and _UNLABELLED_BUILD_PLAN_HEADING.match(_collapsed(line))
+    ]
+
+
+def near_miss_build_plan_section(spec_text: str) -> str | None:
+    """The section under a spec's near-miss Build Plan heading, or ``None`` when there is none.
+
+    The plan its author wrote, read the way they meant it to be read. Nothing that *acts* on a
+    plan may use this — ``build_plan_section`` is the one reader, and a heading nobody matches
+    is the defect ``near_miss_build_plan_headings`` exists to report. It is for the checks that
+    have to see ids they will not otherwise gate: a `draft` or `shipped` spec is exempt from
+    rule 7, so its renamed heading is never complained about, and without this its planned ids
+    are absent from the id-collision map as well — leaving an approved spec free to quietly
+    reuse one.
+    """
+    lines = strip_fenced_blocks(spec_text).splitlines()
+    headings = _near_miss_headings(lines)
+    if not headings:
+        return None
+    return _section_from(lines, headings[-1])
+
+
 def summarize_shipped_specs(records: List[Dict]) -> Dict:
     """Roll up shipped specs into an impact tally and the recent change lines.
 
