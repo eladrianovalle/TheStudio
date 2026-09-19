@@ -3,7 +3,7 @@ type: thread
 status: active
 slug: studio-improvements-from-evidence
 created: 2026-09-15
-updated: 2026-09-18
+updated: 2026-09-19
 ---
 
 # Improving Studio from what its own artifacts say, not from intuition
@@ -15,8 +15,12 @@ anyone hand-writing a config file.
 
 ## Where this stands
 
-**Done and verified (2026-09-15 to 2026-09-18)**
-- Main at `16660cb` after #175, #177 and #178 merged; **1053 tests** with #176's branch merged up, ruff clean.
+**Done and verified (2026-09-15 to 2026-09-19)**
+
+*One anchor, stated once: main is the head of this repo's default branch — run `git log -1` for the
+SHA rather than trusting a copy here, which is how three earlier revisions of this note went stale.
+As of 2026-09-19 it carries 1053 tests, ruff clean.*
+
 - **#169 — cleanup no longer eats finished work.** `cleanup_runs` deleted on age and size alone and
   never checked status; a finalized APPROVED debate died at 30 days like an abandoned prepare. 31+
   consumer runs were already lost. Finalized runs are now never deleted by either rule; unfinished
@@ -32,51 +36,51 @@ anyone hand-writing a config file.
 - **#168 — the `/forge` refusal tells a repo with no tests that having none is the answer**, instead
   of advising a test command it can never have.
 
-- **#172 merged 2026-09-15**, so `specs/first-class-forge-gates.md` is on main and its frontmatter is
-  `status: approved` (commit `8f68a33`, on the unit-1 branch). The debate behind it is
-  `studio/output/tech/run_tech_20260915_015039`, finalized APPROVED, with `decisions.md`,
-  `findings.json` (verified) and `summary.md` all present.
+- **`specs/first-class-forge-gates.md` is built end to end — spec and all three units merged.**
+  #172 put the spec on main; #175, #178 and #176 built the wizard, the mutation-check reason and the
+  loader in that order. The repo's own config file is now the only thing that decides how `/forge`
+  gates it: a `[gate]` key the file leaves out is empty rather than a guess, and when the gate cannot
+  run the refusal names the file it read and says whether the key was blank or the file absent.
+  Unit 3 shipped one fix past its criteria — the schema can require `performed` but cannot demand a
+  `reason` when it is false, so `{"performed": false}` still validated; that rule lives in the
+  orchestration now. The debate is `studio/output/tech/run_tech_20260915_015039`, finalized APPROVED.
+  **The spec has not been flipped to `shipped` yet** — see Next action.
 
-- **#174 merged 2026-09-15**, so this note is on main.
+- **The gate-config sweep is done, and it tested the wizard rather than bypassing it.** Merging the
+  loader unit would have broken `/forge` in **four** installs — `Arkadium/solitaire-game`, `_Cerebro`,
+  `OrcPunk-dotcom` and `miresu`, each of which worked only because detection guessed a command for it.
+  **Five** repos were configured by running `/studio-setup`, because `CREA` was done in the same pass;
+  it was never a regression, since detection already found nothing there and `/forge` refused before
+  and after. The five exercised both of unit 1's paths: pre-filled and stamped in the four Node and
+  Python repos, and the blank stamped template with the "no marker file Studio recognises" line in
+  `CREA`. cemetery-security and OrcPunk-biz still have no config and, like `CREA`, already refused, so
+  they are not regressions either. Running the wizard instead of hand-writing the files is what
+  surfaced issue #179.
 
-- **All three units of `first-class-forge-gates` are built.** Unit 1 merged (#175). Unit 2
-  `gate_keys_resolve_to_none` is open at **#176** — seven criteria pass, 1048 tests. Unit 3
-  `mutation_skip_reason_recorded` is open at **#178** — four criteria pass, plus one fix beyond them:
-  the schema requires `performed` but cannot demand a `reason` when it is false, so
-  `{"performed": false}` still validated. That rule now lives in the orchestration.
+- **The five templates that sweep wrote are corrected** (2026-09-19). They carried a comment saying a
+  missing `[gate]` key falls back to detection — true when written, false once the loader unit merged.
+  The wizard's own template text was fixed by that unit, so only those five files were affected and
+  they were edited in place on this machine.
 
-- **The gate-config sweep is done, and it tested the wizard rather than bypassing it.** #176 would
-  have broken `/forge` in **four** installs the moment it merged — `Arkadium/solitaire-game`,
-  `_Cerebro`, `OrcPunk-dotcom` and `miresu`, each of which worked only because detection guessed a
-  command for it. **Five** repos were configured by running `/studio-setup`, because `CREA` was done
-  in the same pass; it was never a regression, since detection already found nothing there and
-  `/forge` refused before and after. The five exercised both of unit 1's paths: pre-filled and
-  stamped in the four Node/Python repos, and the blank stamped template with the "no marker file
-  Studio recognises" line in `CREA`. cemetery-security and OrcPunk-biz still have no config, and
-  like `CREA` they already refused, so they are not regressions either. **#176 is unblocked.**
-
-- **`specs/completion-ledger.md` is specced and open at #177.** Two advocate passes, two contrarian
-  passes, both rejections accepted rather than argued down, eighteen recorded decisions. Debate:
-  `studio/output/tech/run_tech_20260916_162723`, finalized APPROVED.
+- **`specs/completion-ledger.md` is on main** (#177). Two advocate passes, two contrarian passes, both
+  rejections accepted rather than argued down, eighteen recorded decisions. Debate:
+  `studio/output/tech/run_tech_20260916_162723`, finalized APPROVED. Nothing is built from it yet.
 
 - **The stranded-concern sweep is closed.** 146 concerns recovered from old editor records; most
   load-bearing ones were already fixed or were recorded decisions. Two PRs came out of it:
   cemetery-security #722 and OrkidGarden-Game #133. See [[feedback_stranded_concerns_go_stale]].
 
-- **#177 and #178 merged 2026-09-18** (23:46 and 23:47 UTC — their commits were authored on the
-  16th, the merges were not). Three issues are open from that work —
-  **#179** (`setup --defaults` resets every prior choice, and `--status` recommends it),
-  **#180** (per-scope `model` in `scopes.toml`), **#181** (measure whether the contrarian's
-  confidence ratings are calibrated).
-
 **In flight**
-- **#176** (every review pass on it has come back APPROVED — eight as of 2026-09-18 — checks green,
-  brought up to date with main on 2026-09-18) and **#182**, this note's own pull request.
+- **#182**, this note's own pull request, is the only thing open in Studio.
+- Three issues from the 2026-09-16 work are open and unassigned: **#179** (`setup --defaults` resets
+  every prior choice, and `--status` recommends it), **#180** (per-scope `model` in `scopes.toml`),
+  **#181** (measure whether the contrarian's confidence ratings are calibrated). #180 is deliberately
+  blocked on #181.
 
 **Next action**
-Merge #176 — its blocker is cleared and every install that would have regressed now carries a real
-test command — then flip `first-class-forge-gates` to `shipped`. After that, the ledger's unit 1,
-`build_plan_one_shape`, via `/forge --spec completion-ledger --unit build_plan_one_shape`.
+Flip `specs/first-class-forge-gates.md` to `status: shipped`, which needs `shipped_impact` and
+`shipped_changed` filled in — the suite refuses the flip while either is empty. Then the ledger's
+first unit, via `/forge --spec completion-ledger --unit build_plan_one_shape`.
 
 ## Decisions made
 - **Detection is demoted, not improved.** It becomes the setup wizard's opening guess and leaves the
@@ -139,12 +143,12 @@ test command — then flip `first-class-forge-gates` to `shipped`. After that, t
 - **`setup --defaults` resets every prior choice** (#179), and `--status` recommends it right after
   saying one step is pending. `_Cerebro` lost its role pack and five customizations this way; the
   config files on disk survive, so restoring `SETUP.json` and adding just the new step puts it right.
-- **A template the wizard already wrote is never corrected.** The five written on 2026-09-16 carry a
-  comment saying a missing `[gate]` key falls back to detection — true until #176 merges, false after.
-  setup never overwrites, so nothing corrects them on its own. **Fix them after #176 merges, not
-  before:** the sentence is still true today, and rewriting it early would make it wrong during the
-  window it is right. The window after the merge is short if the correction rides the sweep that is
-  already planned as that spec's deployment step.
+- **A template the wizard already wrote is never corrected.** setup never overwrites an existing
+  file, by design — so when a change makes the template's own comment text wrong, every copy already
+  on disk stays wrong until someone edits it. This fired once: the five templates written 2026-09-16
+  said a missing `[gate]` key falls back to detection, which the loader unit made false. They were
+  corrected in place 2026-09-19. **The lesson is the ordering:** a change to template text leaves a
+  tail of files carrying the old text, and the tail is only findable by knowing when the sweep ran.
 - **Unit 2 must also kill the refusal's last line.** It still ends "Or run /studio-setup, which writes
   that file for you." After unit 1 that sentence tells someone who just ran the wizard to run it
   again, at a file that already exists with the `[gate]` block in it. Unit 2 already owns rewording
@@ -179,7 +183,8 @@ test command — then flip `first-class-forge-gates` to `shipped`. After that, t
   mistake it for live work.
 
 ## Files & artifacts
-- Repo: `/Users/orcpunk/Repos/_TheGameStudio`, main `13e689a`.
+- Repo: `/Users/orcpunk/Repos/_TheGameStudio`. The note deliberately records no main SHA;
+  read it from git.
 - Spec: `specs/first-class-forge-gates.md`, on main and `approved`.
 - Unit 1's tree: `/Users/orcpunk/Repos/_TheGameStudio-wt-forge-gates`, branch
   `impl/wizard_writes_stamped_template`. Remove the worktree only after its PR is open — a
