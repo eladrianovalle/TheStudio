@@ -394,7 +394,15 @@ def test_the_audit_count_against_this_repo_stays_near_the_truth():
     ledger = reconcile_units([], built, escalated, mentioned)
 
     assert len(built) > 20, "the fixture should carry a real repository's worth of built units"
-    assert len(ledger.unplanned) <= 20
+    assert len(ledger.unplanned) <= 20, (
+        f"{len(ledger.unplanned)} ids read as built-but-never-planned; the ceiling is 20.\n"
+        "20 is a MEASUREMENT of this repository on 2026-09-19, not a property of the code. The git\n"
+        "side is frozen in the fixture, but the mention set is read from the live specs/ directory,\n"
+        "so deleting a spec, renaming one to *-eval-results.md, or rewriting prose that quoted a\n"
+        "built id raises this count without touching the reader.\n"
+        "If mentioned_unit_ids or reconcile_units changed, fix the reader. If specs/ changed,\n"
+        "re-measure and re-pin this number in the same commit that moved it."
+    )
     assert len(reconcile_units([], built, escalated, set()).unplanned) > len(ledger.unplanned)
 
 
