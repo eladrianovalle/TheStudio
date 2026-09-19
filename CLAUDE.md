@@ -72,6 +72,8 @@ Open a PR as a **draft** when you intend to keep pushing to it. That guards two 
 
 Draft is a signal about the state of the work, not a ceremony every PR passes through. Re-check the call on every push: if you thought a branch was finished and then pushed to it again, it goes back to draft.
 
+**Every pull request targets the main branch.** Never open one into another pull request's branch. A fix to code on an open pull request is a **commit on that pull request's branch**, not a second pull request aimed at it. Stacked pull requests are only for when a human asks for them by name — otherwise the moment the base branch merges or closes, the work stacked on top is orphaned, and that has already happened here.
+
 **One pull request per feature, not per commit-sized piece.** A pull request should carry a complete MVI unit — something usable on its own — and when a spec's units only make sense together, one pull request carries the whole spec. Splitting a feature across several pull requests makes a reviewer judge half a thing, and it strands the later halves when the earlier ones merge.
 
 **"The PR got rejected" means a review comment, not a GitHub state.**
