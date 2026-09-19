@@ -88,13 +88,21 @@ def _collapsed(line: str) -> str:
 # deliberate rename `## Build Plan (revised after review)`, so they belong in the same net.
 # The lookahead is what keeps `## Build Planning notes` out — a section about planning is not
 # a near miss, it is a different heading.
+#
+# Level 2 is as shallow as this looks, and level 1 is left out on purpose rather than by
+# oversight: a lone `#` is not reliably a heading in these files. A spec's frontmatter is YAML
+# that carries its notes on `# ...` comment lines — every spec in `specs/` has several — and
+# nothing here strips frontmatter, so `#{1,}` would read one of those as a heading and refuse a
+# spec over a line no renderer ever shows. What that costs is a real `# Build Plan` going
+# unseen, at the one level a spec's own title already occupies.
 _NEAR_MISS_BUILD_PLAN_HEADING = re.compile(r"^#{2,}\s+build plan(?![a-z0-9])")
 
-# The same words with nothing after them, at any heading level: what `indistinguishable_build_
-# plan_headings` reports. The level is deliberately not part of the test — the difference between
-# that function and the near-miss net is whether the author appended something that says the
-# section is not the plan, and `### Build Plan` appends nothing. Also compared against
-# `_collapsed` output, so the single space here is every run of whitespace in the file.
+# The same words with nothing after them, at the levels the net above reads: what
+# `indistinguishable_build_plan_headings` reports. Above that bound the level is deliberately
+# not part of the test — the difference between that function and the near-miss net is whether
+# the author appended something that says the section is not the plan, and `### Build Plan`
+# appends nothing. Also compared against `_collapsed` output, so the single space here is every
+# run of whitespace in the file.
 _UNLABELLED_BUILD_PLAN_HEADING = re.compile(r"^#{2,} build plan$")
 
 

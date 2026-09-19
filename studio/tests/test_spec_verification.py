@@ -2069,6 +2069,21 @@ class TestSyntheticSpecs:
         assert "`### Build Plan`" in problems[0]
         assert "the case, the spacing or the heading level" in problems[0]
 
+    def test_a_frontmatter_comment_is_not_a_build_plan_heading(self):
+        """Why both nets stop at level 2, said once here so the bound is not read as an
+        oversight. Saying nothing is the test and the level is no part of it — above level 1.
+        A spec's frontmatter is YAML that keeps its notes on `# ...` comment lines, every spec
+        in `specs/` has several, and nothing here strips frontmatter, so a net that read one
+        `#` as a heading would refuse a spec over a line no renderer shows. The price is a
+        `# Build Plan` written as a real heading going unseen, at the one level a spec's own
+        title already occupies."""
+        spec = _synthetic_spec("approved", verification=False).replace(
+            "status: approved", "# Build Plan\nstatus: approved",
+        )
+        assert indistinguishable_build_plan_headings(spec) == []
+        assert near_miss_build_plan_headings(spec) == []
+        assert _violations("synthetic.md", spec, "synthetic-eval-results.md", None) == []
+
     def test_a_labelled_second_build_plan_heading_is_still_not_a_defect(self):
         """The other half of the case above: a suffix is a label, and a label is an answer. The
         complaint must not widen into every second Build Plan heading, or the repo's own way of
