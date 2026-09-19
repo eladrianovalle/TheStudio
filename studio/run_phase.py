@@ -2492,11 +2492,8 @@ def _approved_spec_units() -> List[PlannedUnit]:
 def _mentioned_unit_ids() -> set:
     """Every id-shaped token any spec quotes in backticks, at any status.
 
-    This is the other half of the audit direction, and it reads every spec rather than the
-    approved ones on purpose: the question is whether an id was ever planned anywhere, and a
-    unit planned under a spec that has since shipped is finished work rather than work nobody
-    proposed. Without it the built-but-never-planned count in this repository reads roughly
-    twice its true size.
+    Every spec rather than the approved ones, because the question this answers is whether an
+    id was ever planned anywhere — see :func:`stats.mentioned_unit_ids`.
     """
     mentioned: set = set()
     for _, spec_text in _readable_specs():
@@ -2603,22 +2600,22 @@ def show_stats(args: argparse.Namespace) -> None:
     # the repo, not to a phase, so --phase does not narrow this.
     shipped_specs = summarize_shipped_specs(_shipped_spec_records())
 
-    # The completion ledger: what the approved specs planned against what git says was built.
-    # Nothing is stored — it is re-derived here every run, which is what keeps it from holding a
-    # stale "done" nobody can see is wrong. A `None` built set means git could not be read at
-    # all, and `reconcile_units` reports nothing as unbuilt rather than nagging about every unit.
-    built_ids = _built_unit_ids(root)
-    built, escalated = built_ids if built_ids is not None else (None, None)
-    unit_ledger = reconcile_units(
-        _approved_spec_units(), built, escalated, _mentioned_unit_ids()
-    )
-
     if getattr(args, "json", False):
         print(json.dumps(
             {**agg, "shipped_specs": shipped_specs, "session_health": session_health},
             indent=2,
         ))
         return
+
+    # The completion ledger: what the approved specs planned against what git says was built.
+    # Nothing is stored — it is re-derived here every run, which is what keeps it from holding a
+    # stale "done" nobody can see is wrong. A `None` built set means git could not be read at
+    # all, and `reconcile_units` reports nothing as unbuilt rather than nagging about every unit.
+    built_ids = _built_unit_ids(root)
+    built, escalated = built_ids if built_ids is not None else (None, set())
+    unit_ledger = reconcile_units(
+        _approved_spec_units(), built, escalated, _mentioned_unit_ids()
+    )
 
     usage = None
     usage_path = root / ".studio" / "usage.log"

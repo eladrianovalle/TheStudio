@@ -437,7 +437,7 @@ def mentioned_unit_ids(spec_text: str) -> set[str]:
 def reconcile_units(
     planned: List[PlannedUnit],
     built: set[str] | None,
-    escalated: set[str] | None,
+    escalated: set[str],
     mentioned_ids: set[str],
 ) -> UnitLedger:
     """Reconcile planned units against built ids: what is outstanding, in both directions.
@@ -449,7 +449,8 @@ def reconcile_units(
     ``built`` is ``None`` when the built set could not be read at all — no git, no work tree, a
     shallow clone. Nothing is then reported as unbuilt, because with no built set every planned
     unit reads unbuilt and the ledger would nag about all of them. "I cannot see" and "nothing
-    was built" are different answers, and silence beats a lie. Drops still count: they are read
+    was built" are different answers, and silence beats a lie. ``escalated`` is only ever read
+    alongside a readable ``built``, so it is a set either way. Drops still count: they are read
     off the spec and owe git nothing.
     """
     dropped = tuple(unit for unit in planned if unit.dropped_on and unit.dropped_reason)
@@ -457,7 +458,6 @@ def reconcile_units(
         return UnitLedger(unbuilt=(), escalated=(), dropped=dropped, unplanned=())
 
     open_units = [unit for unit in planned if not (unit.dropped_on and unit.dropped_reason)]
-    escalated = escalated or set()
     return UnitLedger(
         unbuilt=tuple(
             unit for unit in open_units
@@ -737,11 +737,6 @@ def format_unit_ledger(ledger: UnitLedger) -> List[str]:
     Silent states are left out rather than printed as zeroes, and a ledger with nothing in it
     gets one line saying so instead of a block of empty headings — a report that looks the same
     whether or not it has news is one people stop reading.
-
-    No count here should be read as exact, and the built-but-never-planned line says so on the
-    page. That direction reads ids out of commit subjects, so every unit built before /forge
-    learned to read a spec's plan lands in it, and the tolerant Build Plan reader accepts the
-    occasional backticked token that was never a unit at all.
     """
     lines = ["", "Planned work (approved specs vs. git):"]
 
