@@ -90,6 +90,13 @@ def _collapsed(line: str) -> str:
 # a near miss, it is a different heading.
 _NEAR_MISS_BUILD_PLAN_HEADING = re.compile(r"^#{2,}\s+build plan(?![a-z0-9])")
 
+# The same words with nothing after them, at any heading level: what `indistinguishable_build_
+# plan_headings` reports. The level is deliberately not part of the test — the difference between
+# that function and the near-miss net is whether the author appended something that says the
+# section is not the plan, and `### Build Plan` appends nothing. Also compared against
+# `_collapsed` output, so the single space here is every run of whitespace in the file.
+_UNLABELLED_BUILD_PLAN_HEADING = re.compile(r"^#{2,} build plan$")
+
 
 def strip_fenced_blocks(text: str) -> str:
     """The document with every fenced code block blanked out, line for line.
@@ -211,7 +218,7 @@ def near_miss_build_plan_headings(spec_text: str) -> List[str]:
 
 
 def indistinguishable_build_plan_headings(spec_text: str) -> List[str]:
-    """The headings a spec carries that differ from ``## Build Plan`` in case or spacing only.
+    """The headings a spec carries that say ``Build Plan`` and nothing else, bar the real one.
 
     Reported whether or not the real heading is also present, which is the whole difference
     between this and ``near_miss_build_plan_headings``. The precedence there — a near miss
@@ -221,6 +228,12 @@ def indistinguishable_build_plan_headings(spec_text: str) -> List[str]:
     character like the real heading, so a spec carrying both shows its author two identical
     lines while every reader here takes the exact one and drops the other's units. Whichever
     of the two came later, the one that loses is invisible on the page.
+
+    The label is the whole test, so the heading level is not part of it. ``### Build Plan``
+    written beside the real one falls through everything else — the near-miss precedence is
+    satisfied by the exact heading, and a comparison that counted the hashes would call a
+    third ``#`` a difference. It says the same words with nothing appended, so its author has
+    said nothing that makes it not the plan, and its units are read by nothing.
     """
     lines = strip_fenced_blocks(spec_text).splitlines()
     return [
@@ -228,7 +241,7 @@ def indistinguishable_build_plan_headings(spec_text: str) -> List[str]:
         for line in lines
         if line.rstrip() != _BUILD_PLAN_HEADING
         and _HEADING_LINE.match(line)
-        and _collapsed(line) == _collapsed(_BUILD_PLAN_HEADING)
+        and _UNLABELLED_BUILD_PLAN_HEADING.match(_collapsed(line))
     ]
 
 

@@ -234,11 +234,11 @@ def _build_plan_problems(spec_name: str, spec_text: str) -> list[str]:
     if twins:
         return [
             f"specs/{spec_name} has a second heading that reads as `## Build Plan` but is not "
-            f"it: `{heading}`. Nothing on the rendered page tells the two apart — the "
-            "difference is the case or the spacing — and the readers match one of them "
-            "exactly, so every unit under this one is invisible while its author sees two "
-            "identical headings. Make it the exact heading and fold the two plans into one, "
-            "or, if this one is superseded, label it so it says so."
+            f"it: `{heading}`. It says the same words with nothing appended — the difference "
+            "is only the case, the spacing or the heading level — so nothing about it says "
+            "this section is not the plan, while the readers match the exact heading and every "
+            "unit under this one is invisible. Make it the exact heading and fold the two "
+            "plans into one, or, if this one is superseded, label it so it says so."
             for heading in twins
         ]
 
@@ -2001,8 +2001,10 @@ class TestSyntheticSpecs:
         assert f"`{pad}## Build Plan`" in problems[0]
         assert "no indentation" in problems[0]
 
-    @pytest.mark.parametrize("twin", ["##  Build Plan", "## Build plan", "## BUILD PLAN"])
-    def test_a_heading_differing_only_in_case_or_spacing_is_refused_beside_the_real_one(
+    @pytest.mark.parametrize("twin", [
+        "##  Build Plan", "## Build plan", "## BUILD PLAN", " ## Build Plan",
+    ])
+    def test_an_unlabelled_second_build_plan_heading_is_refused_beside_the_real_one(
         self, twin,
     ):
         """The rename precedence is wrong for a heading that carries no label.
@@ -2012,6 +2014,9 @@ class TestSyntheticSpecs:
         doubled space states nothing — it renders identically — so an author who revised the
         plan under one and left the original above it sees two identical headings, while
         `build_plan_section` takes the exact one and the revision is never read by anything.
+
+        An indented one is here for the same reason: the leading spaces do not render, so it
+        is the doubled-space case with a different invisible character.
         """
         spec = _synthetic_spec(
             "approved", verification=False,
@@ -2031,7 +2036,38 @@ class TestSyntheticSpecs:
         problems = _violations("synthetic.md", spec, "synthetic-eval-results.md", None)
         assert len(problems) == 1
         assert twin.strip() in problems[0]
-        assert "the case or the spacing" in problems[0]
+        assert "the case, the spacing or the heading level" in problems[0]
+
+    def test_a_third_level_build_plan_heading_above_the_real_one_is_refused(self):
+        """Saying nothing is the test, so the heading level is not part of it.
+
+        `### Build Plan` above the real one is the case that falls through everything else. The
+        near-miss net is satisfied by the exact heading, and a twin check that counted the
+        hashes would read the third `#` as a difference its author meant — so the plan under it
+        sits outside the real section and is read by nothing, with the suite green. It renders
+        smaller than the real heading, which is the one clue any of these cases gives, and not
+        enough to leave a plan unread over.
+        """
+        spec = _synthetic_spec(
+            "approved", verification=False,
+            build_plan=(
+                "### Build Plan\n\n"
+                "### 1. `ghost_unit` — the plan as it stood before the rewrite\n\n"
+                "- [ ] It happened.\n\n"
+                "## Build Plan\n\n"
+                "### 1. `synthetic_unit` — it becomes usable\n\n"
+                "- [ ] The synthetic thing happens.\n"
+            ),
+        )
+        # The exact heading wins, so `ghost_unit` is outside the section every reader takes.
+        assert [entry.unit_id for entry in _unit_entries(build_plan_section(spec))] == [
+            "synthetic_unit"
+        ]
+        assert near_miss_build_plan_headings(spec) == []
+        problems = _violations("synthetic.md", spec, "synthetic-eval-results.md", None)
+        assert len(problems) == 1
+        assert "`### Build Plan`" in problems[0]
+        assert "the case, the spacing or the heading level" in problems[0]
 
     def test_a_labelled_second_build_plan_heading_is_still_not_a_defect(self):
         """The other half of the case above: a suffix is a label, and a label is an answer. The
