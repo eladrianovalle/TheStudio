@@ -70,17 +70,26 @@ As of 2026-09-19 it carries 1053 tests, ruff clean.*
   load-bearing ones were already fixed or were recorded decisions. Fixes went to the repos that owned
   them and are tracked there, not here. See [[feedback_stranded_concerns_go_stale]].
 
+- **The completion ledger's unit 1 is merged** (#184, 2026-09-19). Rule 7 holds an `approved` spec's
+  Build Plan to one entry shape, `stats.py` carries the fence-stripping section reader the later
+  units reuse, and no two specs may plan the same `unit_id`. Zero specs were migrated, which is what
+  gating the rule on `approved` alone buys.
+
 **In flight**
-- **#182**, this note's own pull request, is the only thing open in Studio.
+- **The ledger build is running to completion**, unit by unit. Unit 2 `stats_reconciles_units`
+  reconciles both directions and prints the `stats` block; unit 3 `session_brief_names_the_next_unit`
+  turns `check-updates` into a two-source brief. This note is deliberately not updated per unit —
+  three of its revisions were rejected for carrying stale copies of fast-moving facts, so it gets one
+  update when the ledger is done.
+- **#182** (this note) and **#183** (`first-class-forge-gates` to `shipped`, closes #133) are open.
 - Three issues from the 2026-09-16 work are open and unassigned: **#179** (`setup --defaults` resets
   every prior choice, and `--status` recommends it), **#180** (per-scope `model` in `scopes.toml`),
   **#181** (measure whether the contrarian's confidence ratings are calibrated). #180 is deliberately
   blocked on #181.
 
 **Next action**
-Flip `specs/first-class-forge-gates.md` to `status: shipped`, which needs `shipped_impact` and
-`shipped_changed` filled in — the suite refuses the flip while either is empty. Then the ledger's
-first unit, via `/forge --spec completion-ledger --unit build_plan_one_shape`.
+Finish the ledger — units 2 and 3 — then the cross-repo sweep that carries all of this to the
+installs.
 
 ## Decisions made
 - **Detection is demoted, not improved.** It becomes the setup wizard's opening guess and leaves the
