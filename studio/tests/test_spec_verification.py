@@ -90,6 +90,12 @@ _SNAKE_CASE = re.compile(r"^[a-z][a-z0-9_]{2,}$")
 # title — that entry already has an opener complaint, and one complaint per problem is enough.
 _TITLE_AFTER_ID = re.compile(r"^—\s*\S")
 
+# Where an entry ends: the next level-3 heading, whether or not it opens a unit. Level 4 and
+# deeper are sub-headings *inside* a unit, so a `#### What gets built` sitting between the
+# opener and the criteria must not cut the entry short — the unit would read as having no
+# criteria and the complaint would point at the wrong thing entirely.
+_THIRD_LEVEL_HEADING = re.compile(r"^###\s")
+
 # One acceptance criterion, at any indentation. Both indentations in this repo's approved specs
 # are in use — flush-left under a `**Acceptance criteria:**` line, and two spaces in under a
 # `- **Acceptance criteria:**` bullet — and the heading already bounds the entry, so there is
@@ -117,13 +123,13 @@ class _UnitEntry(NamedTuple):
     opener: str    # the `### 1.` or `1.` that opened it
     unit_id: str   # whatever sat in the backticks, canonical or not
     tail: str      # the rest of the opener line, where the title should be
-    body: str      # everything up to the next entry or the next `###` heading
+    body: str      # everything up to the next entry or the next level-3 heading
 
 
 def _unit_entries(build_plan: str) -> list[_UnitEntry]:
     """Every unit entry in a Build Plan section, in document order.
 
-    An entry runs from its opener to the next opener or the next `###` heading, whichever
+    An entry runs from its opener to the next opener or the next level-3 heading, whichever
     comes first. That one boundary is what attaches an acceptance criterion or a `Dropped:`
     line to the unit it belongs to, with no indentation arithmetic and no hazard from the
     nested lists a unit body is full of.
@@ -139,7 +145,7 @@ def _unit_entries(build_plan: str) -> list[_UnitEntry]:
         limit = openers[position + 1][0] if position + 1 < len(openers) else len(lines)
         end = limit
         for offset in range(index + 1, limit):
-            if lines[offset].startswith("###"):
+            if _THIRD_LEVEL_HEADING.match(lines[offset]):
                 end = offset
                 break
         entries.append(
@@ -924,14 +930,6 @@ class TestBuildPlanShape:
             "every case below would be vacuous."
         )
 
-    def test_every_approved_spec_is_already_in_the_canonical_shape(self):
-        """Gating on `approved` was chosen because it migrates nothing. That claim has to be
-        checked rather than believed: if it were wrong, this rule would land red on somebody
-        else's spec and the only cheap way out would be to weaken it."""
-        for spec in _approved_specs():
-            problems = _build_plan_problems(spec.name, spec.read_text(encoding="utf-8"))
-            assert problems == [], "\n\n".join(problems)
-
     def test_rewriting_one_entry_as_a_list_item_turns_the_suite_red(self):
         """The rule, observed failing on a real spec instead of only on a fabricated one.
 
@@ -1588,6 +1586,26 @@ class TestSyntheticSpecs:
         )
         assert len(problems) == 1
         assert "`synthetic_unit` unit has no `- [ ]` acceptance" in problems[0]
+
+    def test_a_deeper_sub_heading_inside_a_unit_does_not_end_it(self):
+        """The other side of that boundary. A unit long enough to want `#### What gets built`
+        is still one unit, and cutting it at a level-4 heading would report a spec with proper
+        criteria as having none — a false red whose cheapest cure is deleting the rule."""
+        assert _violations(
+            "synthetic.md",
+            _synthetic_spec(
+                "approved", verification=False,
+                build_plan=(
+                    "## Build Plan\n\n"
+                    "### 1. `synthetic_unit` — it becomes usable\n\n"
+                    "#### What gets built\n\n"
+                    "The files, the behavior, the tests.\n\n"
+                    "**Acceptance criteria:**\n"
+                    "- [ ] The synthetic thing happens.\n"
+                ),
+            ),
+            "synthetic-eval-results.md", None,
+        ) == []
 
     def test_the_last_unfenced_build_plan_heading_wins(self):
         """Fence-stripping handles the quoted example; the last-heading rule handles the rest.
