@@ -641,3 +641,27 @@ def test_an_installed_repo_reads_its_studio_specs_directory(tmp_path, capsys):
     assert "/forge --spec .studio/specs/a-feature.md --unit the_installed_unit" in context
     assert ".studio/specs/a-feature.md" in context
     assert "not_a_studio_spec" not in context
+
+
+def test_a_specs_dir_outside_the_project_still_hands_over_a_path_that_opens(tmp_path, capsys):
+    """A symlinked specs directory makes `relative_to` raise, and the fallback is a command.
+
+    `/forge --spec <file name>` resolves nothing from the project root — not the bare name,
+    not the name with `.md` appended, not `specs/<name>.md` through the slug lookup. The path
+    the brief hands over has to be one that opens, even when it cannot be shortened.
+    """
+    target = _init_repo(tmp_path / "symlinked")
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    (outside / "a-feature.md").write_text(
+        _spec_text("## Build Plan\n\n### 1. `still_owed` — the one nobody built\n"),
+        encoding="utf-8",
+    )
+    (target / "specs").symlink_to(outside, target_is_directory=True)
+
+    _do_check_updates(types.SimpleNamespace(target=str(target)))
+    context = _context(capsys)
+
+    handed_over = (target / "specs" / "a-feature.md").as_posix()
+    assert f"/forge --spec {handed_over} --unit still_owed" in context
+    assert Path(handed_over).is_file()

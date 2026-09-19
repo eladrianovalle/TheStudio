@@ -2987,11 +2987,20 @@ def _specs_dir_for(target: Path) -> Path:
 
 
 def _spec_display_path(spec_path: Path, target: Path) -> str:
-    """The spec's path the way someone reading the brief would type it: from the project root."""
+    """The spec's path the way someone reading the brief would type it: from the project root.
+
+    The fallback is the whole path rather than the file name, because this value is not only
+    prose: it is interpolated into the ``/forge --spec`` command below it. A bare
+    ``a-feature.md`` is not a file that exists from the project root, ``/forge`` would then try
+    it with ``.md`` appended and then as a slug, and resolve nothing either way — so a display
+    shortcut would hand over a command that opens nothing. The unresolved path is long, but it
+    is the one the reader's project can still open: it reaches the spec through whatever
+    symlink put it outside the tree in the first place.
+    """
     try:
         return spec_path.resolve().relative_to(target.resolve()).as_posix()
     except (ValueError, OSError):
-        return spec_path.name
+        return spec_path.as_posix()
 
 
 def _unfinished_context(target: Path) -> str:
