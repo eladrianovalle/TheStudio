@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from pathlib import PurePath
 from statistics import median
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional
 
 # How much a shipped feature changed downstream, in three coarse buckets. Kept
 # small on purpose: a bucket someone will actually pick beats a scale nobody fills.
@@ -338,7 +339,10 @@ class PlannedUnit:
 
     ``spec_file`` is the spec that planned the unit, and it is the only field that identifies
     that spec: rule 7 forbids a duplicate ``unit_id``, not a duplicate slug, so two approved
-    specs can carry the same slug and counting distinct slugs would call them one spec.
+    specs can carry the same slug and counting distinct slugs would call them one spec. It has
+    no default for that reason — a caller that omitted it would collapse every spec onto one
+    empty string, which is the miscount this field exists to prevent, and it would do it
+    silently. Missing it is a ``TypeError`` instead.
     """
 
     slug: str
@@ -346,7 +350,7 @@ class PlannedUnit:
     title: str
     dropped_on: str
     dropped_reason: str
-    spec_file: str = ""
+    spec_file: str
 
 
 @dataclass(frozen=True)
@@ -374,7 +378,7 @@ def _entry_title(tail: str) -> str:
     return _TITLE_LEAD.sub("", tail.strip()).strip().strip("*").strip()
 
 
-def parse_build_plan(spec_text: str, slug: str, spec_file: str = "") -> List[PlannedUnit]:
+def parse_build_plan(spec_text: str, slug: str, spec_file: str) -> List[PlannedUnit]:
     """Every unit a spec's Build Plan plans, in document order.
 
     Empty for a spec with no ``## Build Plan`` section, which is the normal state of a document
@@ -749,10 +753,30 @@ def format_count(count: int, noun: str = "unit") -> str:
     return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
 
 
-def _unit_line(unit: PlannedUnit) -> str:
-    """One planned unit on one line: which spec planned it, its id, and what it is for."""
+def _shared_slugs(units: Iterable[PlannedUnit]) -> set[str]:
+    """Slugs that more than one spec file carries, among the units about to be printed."""
+    files: Dict[str, set[str]] = {}
+    for unit in units:
+        files.setdefault(unit.slug, set()).add(unit.spec_file)
+    return {slug for slug, paths in files.items() if len(paths) > 1}
+
+
+def _unit_line(unit: PlannedUnit, shared_slugs: set[str]) -> str:
+    """One planned unit on one line: which spec planned it, its id, and what it is for.
+
+    The prefix is the slug, which is what someone types at ``/forge`` — except where two
+    approved specs share one, and then it is the file name. A count that says "2 approved
+    specs" over two identical ``[a-feature]`` prefixes tells the reader nothing about which
+    file planned what; spec file names are unique because one directory holds them all.
+
+    ``PurePath`` here is string work on a path, not a reading of one — this module still
+    touches no filesystem.
+    """
     title = unit.title if len(unit.title) <= 80 else unit.title[:77] + "..."
-    return f"    [{unit.slug}] {unit.unit_id}" + (f" — {title}" if title else "")
+    label = unit.slug
+    if unit.slug in shared_slugs:
+        label = PurePath(unit.spec_file).name or unit.slug
+    return f"    [{label}] {unit.unit_id}" + (f" — {title}" if title else "")
 
 
 def format_unit_ledger(ledger: UnitLedger) -> List[str]:
@@ -777,20 +801,22 @@ def format_unit_ledger(ledger: UnitLedger) -> List[str]:
         )
         return lines
 
+    shared = _shared_slugs(ledger.unbuilt + ledger.escalated)
+
     if ledger.unbuilt:
         specs = len({unit.spec_file for unit in ledger.unbuilt})
         lines.append(
             f"  Planned and never built: {format_count(len(ledger.unbuilt))} "
             f"across {format_count(specs, 'approved spec')}"
         )
-        lines.extend(_unit_line(unit) for unit in ledger.unbuilt)
+        lines.extend(_unit_line(unit, shared) for unit in ledger.unbuilt)
 
     if ledger.escalated:
         lines.append(
             f"  Started and escalated — a writer stopped on purpose: "
             f"{format_count(len(ledger.escalated))}"
         )
-        lines.extend(_unit_line(unit) for unit in ledger.escalated)
+        lines.extend(_unit_line(unit, shared) for unit in ledger.escalated)
 
     if ledger.dropped:
         lines.append(f"  Dropped on purpose: {format_count(len(ledger.dropped))}")

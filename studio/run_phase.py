@@ -2960,10 +2960,13 @@ def _do_check_install(args: argparse.Namespace) -> None:
     _print_local_edits_preview(status["locally_modified"])
 
 
+# `--spec` takes the spec's path rather than its slug: /forge resolves a path that exists
+# before it falls back to slug lookup, and the slug is the one thing that cannot identify a
+# spec — two approved specs may share one, so a slug here could continue the wrong file's unit.
 UNFINISHED_ADDITIONAL_CONTEXT = (
     "Unfinished planned work: {units} in {specs}. The next one is `{unit_id}` in "
     "{spec_file}{title}. Tell the user they can continue it with: "
-    "/forge --spec {slug} --unit {unit_id}. If it was dropped on purpose, open a PR adding "
+    "/forge --spec {spec_file} --unit {unit_id}. If it was dropped on purpose, open a PR adding "
     "`- **Dropped:** YYYY-MM-DD \u2014 <reason>` under that unit's heading in the spec and it "
     "stops being counted. Built work is read from all branches including unmerged ones, so a "
     "teammate who has not fetched may see a different count. Run `{entrypoint} stats` for the "
@@ -3035,7 +3038,6 @@ def _unfinished_context(target: Path) -> str:
         unit_id=unit.unit_id,
         spec_file=_spec_display_path(Path(unit.spec_file), target),
         title=f' \u2014 "{unit.title}"' if unit.title else "",
-        slug=unit.slug,
         entrypoint=_entrypoint(),
     )
 

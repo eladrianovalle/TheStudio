@@ -403,7 +403,7 @@ def test_brief_names_the_next_unit_its_spec_and_the_forge_command(tmp_path, caps
     assert "`still_owed`" in context
     assert "specs/a-feature.md" in context
     assert "the one nobody built" in context
-    assert "/forge --spec a-feature --unit still_owed" in context
+    assert "/forge --spec specs/a-feature.md --unit still_owed" in context
     assert "open a PR adding `- **Dropped:** YYYY-MM-DD — <reason>`" in context
     assert "all branches including unmerged ones" in context
     # One named action, not a list: the second owed unit is counted, never listed, and the
@@ -476,7 +476,7 @@ def test_both_sources_share_one_object_update_first(tmp_path, monkeypatch, capsy
     update, unfinished = context.split("\n\n")
     assert update == install.UPDATE_ADDITIONAL_CONTEXT
     assert unfinished.startswith("Unfinished planned work:")
-    assert "/forge --spec a-feature --unit still_owed" in unfinished
+    assert "/forge --spec specs/a-feature.md --unit still_owed" in unfinished
 
 
 # --- 12. neither source has news: nothing at all, and the process still exits 0 ---
@@ -549,7 +549,7 @@ def test_dropping_a_unit_moves_the_brief_on_and_then_silences_it(tmp_path, capsy
     _do_check_updates(types.SimpleNamespace(target=str(target)))
     context = _context(capsys)
     assert "Unfinished planned work: 1 unit in 1 approved spec." in context
-    assert "/forge --spec a-feature --unit also_owed" in context
+    assert "/forge --spec specs/a-feature.md --unit also_owed" in context
     assert "still_owed" not in context
 
     spec_path.write_text(
@@ -589,7 +589,7 @@ def test_specs_are_read_from_the_target_not_the_working_directory(tmp_path):
 
     assert proc.returncode == 0
     context = json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
-    assert "/forge --spec a-feature --unit still_owed" in context
+    assert "/forge --spec specs/a-feature.md --unit still_owed" in context
     assert "someone_elses_unit" not in context
 
 
@@ -616,7 +616,7 @@ def test_an_unreadable_spec_is_skipped_rather_than_fatal(tmp_path, capsys):
     _do_check_updates(types.SimpleNamespace(target=str(target)))
     context = _context(capsys)
 
-    assert "/forge --spec b-feature --unit readable_unit" in context
+    assert "/forge --spec specs/b-feature.md --unit readable_unit" in context
 
 
 def test_an_installed_repo_reads_its_studio_specs_directory(tmp_path, capsys):
@@ -638,6 +638,6 @@ def test_an_installed_repo_reads_its_studio_specs_directory(tmp_path, capsys):
     _do_check_updates(types.SimpleNamespace(target=str(target)))
     context = _context(capsys)
 
-    assert "/forge --spec a-feature --unit the_installed_unit" in context
+    assert "/forge --spec .studio/specs/a-feature.md --unit the_installed_unit" in context
     assert ".studio/specs/a-feature.md" in context
     assert "not_a_studio_spec" not in context

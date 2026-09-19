@@ -48,6 +48,11 @@ def _spec(build_plan: str, *, status: str = "approved", slug: str = "a-feature")
     )
 
 
+def _plan(spec_text: str, slug: str = "a-feature") -> list[PlannedUnit]:
+    """``parse_build_plan`` for a test that is about the reader, not about which file it read."""
+    return parse_build_plan(spec_text, slug, f"specs/{slug}.md")
+
+
 # --- parse_build_plan: the tolerant reader ---------------------------------
 
 
@@ -67,7 +72,7 @@ def test_both_entry_openers_are_read_in_document_order():
         "More body text.\n\n"
         "### 3. `third_unit` — the third usable outcome\n"
     )
-    units = parse_build_plan(spec, "a-feature")
+    units = _plan(spec)
 
     assert [unit.unit_id for unit in units] == ["first_unit", "second_unit", "third_unit"]
     assert units[0].title == "the first usable outcome"
@@ -88,12 +93,12 @@ def test_an_opener_whose_backticked_token_is_not_an_id_is_skipped():
         "### 2. `Capitalised` — not an id either\n\n"
         "### 3. `real_unit` — the one unit here\n"
     )
-    assert [unit.unit_id for unit in parse_build_plan(spec, "a-feature")] == ["real_unit"]
+    assert [unit.unit_id for unit in _plan(spec)] == ["real_unit"]
 
 
 def test_a_spec_with_no_build_plan_plans_nothing():
     """The normal state of a document with no units, not a defect anyone should hear about."""
-    assert parse_build_plan(_spec("## Risks\n\nNothing here opens a unit.\n"), "a-feature") == []
+    assert _plan(_spec("## Risks\n\nNothing here opens a unit.\n")) == []
 
 
 def test_a_fenced_build_plan_is_not_the_plan():
@@ -112,7 +117,7 @@ def test_a_fenced_build_plan_is_not_the_plan():
         "## Build Plan\n\n"
         "### 1. `real_unit` — the real one\n"
     )
-    assert [unit.unit_id for unit in parse_build_plan(spec, "a-feature")] == ["real_unit"]
+    assert [unit.unit_id for unit in _plan(spec)] == ["real_unit"]
 
 
 # --- Dropping a unit on purpose --------------------------------------------
@@ -133,7 +138,7 @@ def test_a_drop_needs_both_a_date_and_a_reason():
         "### 3. `no_reason` — a drop with no reason\n"
         "- **Dropped:** 2026-09-16 —\n"
     )
-    units = {unit.unit_id: unit for unit in parse_build_plan(spec, "a-feature")}
+    units = {unit.unit_id: unit for unit in _plan(spec)}
 
     assert units["dropped_properly"].dropped_on == "2026-09-16"
     assert units["dropped_properly"].dropped_reason == "superseded by `rank_the_ladder`."
@@ -150,7 +155,7 @@ def test_a_drop_belongs_to_the_unit_it_sits_under():
         "### 2. `closed_unit` — closed on purpose\n"
         "- **Dropped:** 2026-09-16 — the divisor cannot satisfy both ranking rules.\n"
     )
-    units = {unit.unit_id: unit for unit in parse_build_plan(spec, "a-feature")}
+    units = {unit.unit_id: unit for unit in _plan(spec)}
 
     assert units["live_unit"].dropped_on == ""
     assert units["closed_unit"].dropped_on == "2026-09-16"
@@ -172,7 +177,7 @@ def test_a_unit_entry_stops_at_the_next_heading_that_is_not_a_unit():
         "### Notes\n\n"
         "More prose.\n"
     )
-    units = parse_build_plan(spec, "a-feature")
+    units = _plan(spec)
 
     assert [unit.unit_id for unit in units] == ["live_unit"]
     assert units[0].dropped_on == ""
@@ -193,7 +198,7 @@ def test_a_drop_belongs_to_its_own_unit_even_with_no_blank_lines():
         "### Tests\n"
         "- **Dropped:** 2026-09-17 — an example of the line, in a section that is not a unit.\n"
     )
-    units = {unit.unit_id: unit for unit in parse_build_plan(spec, "a-feature")}
+    units = {unit.unit_id: unit for unit in _plan(spec)}
 
     assert units["closed_unit"].dropped_on == "2026-09-16"
     assert units["live_unit"].dropped_on == ""
@@ -215,9 +220,9 @@ def test_a_list_form_entry_is_bounded_by_the_next_entry():
         "3. **`third_unit` — still owed too**\n"
         "   Some more body text.\n"
     )
-    units = {unit.unit_id: unit for unit in parse_build_plan(spec, "a-feature")}
+    units = {unit.unit_id: unit for unit in _plan(spec)}
 
-    assert [unit.unit_id for unit in parse_build_plan(spec, "a-feature")] == [
+    assert [unit.unit_id for unit in _plan(spec)] == [
         "first_unit", "second_unit", "third_unit",
     ]
     assert units["first_unit"].dropped_on == ""
@@ -233,7 +238,27 @@ def test_a_hand_typed_hyphen_closes_a_unit_too(separator):
         "### 1. `closed_unit` — closed on purpose\n"
         f"- **Dropped:** 2026-09-16 {separator} a reason.\n"
     )
-    assert parse_build_plan(spec, "a-feature")[0].dropped_reason == "a reason."
+    assert _plan(spec)[0].dropped_reason == "a reason."
+
+
+def test_every_unit_carries_the_file_the_caller_read_it_from():
+    """The reader is handed the spec's path and stamps it on each unit; there is no default.
+
+    Two approved specs may share a slug, so the path is the only thing that tells them apart.
+    A caller that could omit it would put every unit under one empty string and undercount the
+    specs that owe work — silently, which is why the argument is required rather than defaulted.
+    """
+    spec = _spec(
+        "## Build Plan\n\n"
+        "### 1. `first_unit` — the first outcome\n\n"
+        "### 2. `second_unit` — the second outcome\n"
+    )
+    units = parse_build_plan(spec, "a-feature", "specs/somewhere/a-feature.md")
+
+    assert [unit.spec_file for unit in units] == ["specs/somewhere/a-feature.md"] * 2
+
+    with pytest.raises(TypeError):
+        parse_build_plan(spec, "a-feature")
 
 
 # --- built_unit_ids: reading git ------------------------------------------
@@ -401,8 +426,8 @@ def test_half_a_drop_closes_nothing():
     "dropped" is a way to make the nudge stop without deciding anything.
     """
     planned = [
-        PlannedUnit("a-feature", "no_reason", "a title", "2026-09-16", ""),
-        PlannedUnit("a-feature", "no_date", "a title", "", "superseded"),
+        PlannedUnit("a-feature", "no_reason", "a title", "2026-09-16", "", "specs/a-feature.md"),
+        PlannedUnit("a-feature", "no_date", "a title", "", "superseded", "specs/a-feature.md"),
     ]
     ledger = reconcile_units(planned, set(), set(), set())
 
@@ -547,11 +572,34 @@ def test_two_specs_sharing_a_slug_are_counted_as_two_specs():
     assert "Planned and never built: 2 units across 2 approved specs" in block
 
 
+def test_units_from_two_specs_sharing_a_slug_name_their_files():
+    """A count that says two specs over two identical `[a-feature]` prefixes explains nothing.
+
+    Only the shared slug gives way: a unit whose slug belongs to one file keeps it, because
+    the slug is what the reader recognises and what they would type at `/forge`.
+    """
+    ledger = UnitLedger(
+        unbuilt=(
+            _planned("first", spec_file="specs/a-feature.md"),
+            _planned("second", spec_file="specs/a-feature-revised.md"),
+            _planned("third", slug="b-feature"),
+        ),
+        escalated=(),
+        dropped=(),
+        unplanned=(),
+    )
+    lines = format_unit_ledger(ledger)
+
+    assert "    [a-feature.md] first — what first is for" in lines
+    assert "    [a-feature-revised.md] second — what second is for" in lines
+    assert "    [b-feature] third — what third is for" in lines
+
+
 def test_a_long_title_is_cut_and_a_missing_one_is_left_out():
     """The line has to stay one line, and a unit with no title still names its id."""
-    long_title = PlannedUnit("a-feature", "wordy_unit", "x" * 81, "", "")
-    just_short = PlannedUnit("a-feature", "terse_unit", "y" * 80, "", "")
-    untitled = PlannedUnit("a-feature", "bare_unit", "", "", "")
+    long_title = PlannedUnit("a-feature", "wordy_unit", "x" * 81, "", "", "specs/a-feature.md")
+    just_short = PlannedUnit("a-feature", "terse_unit", "y" * 80, "", "", "specs/a-feature.md")
+    untitled = PlannedUnit("a-feature", "bare_unit", "", "", "", "specs/a-feature.md")
     lines = format_unit_ledger(
         UnitLedger((long_title, just_short, untitled), (), (), ())
     )

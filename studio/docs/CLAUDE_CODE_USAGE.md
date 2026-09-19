@@ -303,7 +303,7 @@ you installed from? If so, you get a single line telling you to run `/studio-upd
 
 **2. Planned work nobody finished.** It compares the Build Plans of your `approved` specs against
 what your commit log says was built, and names **one** unfinished unit — the spec it came from, its
-one-line outcome, how many units are still owed, and the exact `/forge --spec <slug> --unit <id>`
+one-line outcome, how many units are still owed, and the exact `/forge --spec <spec-path> --unit <id>`
 command that continues it. Nothing is stored: it re-derives the answer from your specs and your git
 log every time, so it can never hold a stale "done" nobody can see is wrong. The two ways to make it
 stop are to build the unit, or to open a PR adding a line under that unit in the spec:
