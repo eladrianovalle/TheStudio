@@ -80,6 +80,14 @@ _APPROVAL_EVIDENCE_STEP = "**If the spec carries a `## Verification` section**"
 # which part is wrong.
 _ENTRY_OPENER = re.compile(r"^(###\s+\d+\.|\d+\.)\s*\**\s*`([^`\n]+)`(.*)$")
 
+# A level-3 heading somebody meant as a unit, whether or not `_ENTRY_OPENER` can read it.
+# Not every `###` in a Build Plan opens a unit — `writer-escalation-channel.md` has a
+# `### Tests` — so a blanket refusal would be wrong. But a heading that opens with an ordinal
+# or carries a backticked token is a unit, and one that `_ENTRY_OPENER` cannot match (the
+# number forgotten, the backticks forgotten) is dropped by every reader in silence. That is the
+# same defect this rule exists to close, so the heading gets the sentence instead.
+_INTENDED_UNIT_HEADING = re.compile(r"^###\s+(?:\d+\.|[^\n]*`[^`\n]+`)")
+
 # The id pattern, bound for bound the same as the one the reconciler will use. An id this rule
 # accepted but a reader could not see would be silently dropped from the ledger instead of
 # rejected here, which is the failure this rule exists to prevent.
@@ -159,6 +167,20 @@ def _unit_entries(build_plan: str) -> list[_UnitEntry]:
     return entries
 
 
+def _unreadable_unit_headings(build_plan: str) -> list[str]:
+    """Every level-3 heading in the plan that means to open a unit but cannot be read as one.
+
+    `_unit_entries` can only report what it matched, so a malformed heading leaves no trace at
+    all: its id never reaches the ledger, never reaches `_duplicate_unit_ids`, and the moment
+    the plan holds one valid entry the "nothing in it opens a unit" complaint stops firing too.
+    """
+    return [
+        line.strip()
+        for line in build_plan.splitlines()
+        if _INTENDED_UNIT_HEADING.match(line) and not _ENTRY_OPENER.match(line)
+    ]
+
+
 def _build_plan_problems(spec_name: str, spec_text: str) -> list[str]:
     """Rule 7, for one spec: every way its Build Plan departs from the canonical shape.
 
@@ -170,7 +192,8 @@ def _build_plan_problems(spec_name: str, spec_text: str) -> list[str]:
         return []
 
     entries = _unit_entries(build_plan)
-    if not entries:
+    unreadable = _unreadable_unit_headings(build_plan)
+    if not entries and not unreadable:
         return [
             f"specs/{spec_name} is marked `status: approved` and has a `## Build Plan` "
             "section, but nothing in it opens a unit. Every unit starts with a heading like "
@@ -179,7 +202,14 @@ def _build_plan_problems(spec_name: str, spec_text: str) -> list[str]:
             "can follow up on."
         ]
 
-    problems: list[str] = []
+    problems: list[str] = [
+        f"specs/{spec_name} has a Build Plan heading that reads as a unit but cannot be "
+        f"parsed as one: `{heading}`. Write it as ``### N. `some_unit_id` — one-line usable "
+        "outcome``: the ordinal and the backticks around the id are both required, and a "
+        "heading missing either is invisible to everything that reads the plan — the ledger, "
+        "`/forge --unit`, and the id-collision check alike."
+        for heading in unreadable
+    ]
     for entry in entries:
         if not entry.opener.startswith("###"):
             problems.append(
@@ -199,10 +229,11 @@ def _build_plan_problems(spec_name: str, spec_text: str) -> list[str]:
             )
         if not _TITLE_AFTER_ID.match(entry.tail.lstrip("*").strip()):
             problems.append(
-                f"specs/{spec_name}'s `{entry.unit_id}` unit has no one-line outcome after its "
-                "id. Write `— <what someone can do once this is built>` straight after the "
-                "backticked id: that sentence is what a session brief prints when it names the "
-                "unit, and an id on its own says nothing to whoever reads it next."
+                f"specs/{spec_name}'s `{entry.unit_id}` unit has no `— <one-line outcome>` "
+                "after its id. Write an em dash — not a hyphen and not an en dash — and then "
+                "what someone can do once this is built, straight after the backticked id: "
+                "that sentence is what a session brief prints when it names the unit, and an "
+                "id on its own says nothing to whoever reads it next."
             )
         if not _CRITERION.search(entry.body) and not _DROPPED.search(entry.body):
             problems.append(
@@ -227,6 +258,14 @@ def _duplicate_unit_ids(specs: list[tuple[str, str]]) -> list[str]:
     silences an approved spec's just as well. The complaint is raised only when at least one
     of the colliding specs is `approved`, which lets a draft reuse an id while the argument is
     still running and catches it at the commit that approves it.
+
+    Every id is collected, snake_case or not. Rule 7 is what refuses an id outside the pattern
+    in an approved spec; filtering here as well would mean a non-conforming id in an exempt
+    spec — `doc-parity-tests.md` plans `studio/tests/test_doc_parity.py` — was invisible to the
+    collision check too, which is a silent drop rather than a second complaint.
+
+    A single spec planning one id twice is caught as well: `/forge --spec <slug> --unit <id>`
+    is a direct lookup and cannot tell two entries with the same id apart.
     """
     planned: dict[str, list[str]] = {}
     approved: set[str] = set()
@@ -237,18 +276,26 @@ def _duplicate_unit_ids(specs: list[tuple[str, str]]) -> list[str]:
         if build_plan is None:
             continue
         for entry in _unit_entries(build_plan):
-            if _SNAKE_CASE.match(entry.unit_id):
-                planned.setdefault(entry.unit_id, []).append(name)
+            planned.setdefault(entry.unit_id, []).append(name)
 
     problems = []
     for unit_id, names in sorted(planned.items()):
         owners = sorted(set(names))
-        if len(owners) > 1 and approved.intersection(owners):
+        if not approved.intersection(owners):
+            continue
+        if len(owners) > 1:
             problems.append(
                 f"`{unit_id}` is planned by more than one spec: "
                 f"{', '.join(f'specs/{name}' for name in owners)}. A commit subject carries no "
                 "slug, so building it once would read as building both. Rename it in whichever "
                 "spec has not been built against yet."
+            )
+        elif len(names) > 1:
+            problems.append(
+                f"`{unit_id}` is planned {len(names)} times inside specs/{owners[0]}. "
+                "`/forge --spec <slug> --unit <id>` is a direct lookup on the id and cannot "
+                "tell the two entries apart, so one of them would be built twice and the other "
+                "never. Rename one."
             )
     return problems
 
@@ -992,6 +1039,38 @@ class TestBuildPlanShape:
         assert "`synthetic_unit`" in problems[0]
         assert "specs/one.md" in problems[0] and "specs/two.md" in problems[0]
 
+    def test_one_spec_planning_the_same_id_twice_is_caught(self):
+        """`/forge --spec x --unit dupe` is a direct lookup on the id, so two entries sharing
+        one inside a single spec are no more distinguishable than two specs sharing one."""
+        problems = _duplicate_unit_ids([("one.md", _synthetic_spec(
+            "approved", verification=False,
+            build_plan=(
+                "## Build Plan\n\n"
+                "### 1. `synthetic_unit` — it becomes usable\n\n"
+                "- [ ] It happens.\n\n"
+                "### 2. `synthetic_unit` — it becomes usable again\n\n"
+                "- [ ] It happens twice.\n"
+            ),
+        ))])
+        assert len(problems) == 1
+        assert "`synthetic_unit` is planned 2 times inside specs/one.md" in problems[0]
+
+    def test_an_id_outside_snake_case_still_collides(self):
+        """Rule 7 refuses a non-conforming id in an approved spec. Dropping it from the
+        collision check as well would make the same id invisible in the specs rule 7 exempts —
+        and `doc-parity-tests.md` already plans a path as an id."""
+        odd = _synthetic_spec(
+            "approved", verification=False,
+            build_plan=(
+                "## Build Plan\n\n"
+                "### 1. `studio/tests/test_thing.py` — the tests exist\n\n"
+                "- [ ] They do.\n"
+            ),
+        )
+        problems = _duplicate_unit_ids([("one.md", odd), ("two.md", odd)])
+        assert len(problems) == 1
+        assert "`studio/tests/test_thing.py`" in problems[0]
+
     def test_a_collision_between_drafts_is_left_alone(self):
         """A draft is an argument in progress, and two arguments may reach for the same handle.
         The commit that approves one of them is where it has to be settled."""
@@ -1039,10 +1118,13 @@ class TestBuildPlanShape:
                 f"{SPEC_COMMAND.name}'s Build Plan template shows no one-line outcome after "
                 f"`{entry.unit_id}`, which rule 7 demands."
             )
-        assert _CRITERION.search(build_plan), (
-            f"{SPEC_COMMAND.name}'s Build Plan template shows no `- [ ]` acceptance criteria, "
-            "which rule 7 demands of every unit."
-        )
+            # Per entry, not over the whole plan: rule 7 asks each unit for its own criteria,
+            # and a plan-wide search lets the template show a second unit with none — a spec
+            # copied from it and approved would then fail on a unit the template said was fine.
+            assert _CRITERION.search(entry.body), (
+                f"{SPEC_COMMAND.name}'s Build Plan template shows no `- [ ]` acceptance "
+                f"criteria under `{entry.unit_id}`, which rule 7 demands of every unit."
+            )
         assert "unique repo-wide" in build_plan, (
             f"{SPEC_COMMAND.name}'s Build Plan template no longer says a `unit_id` is unique "
             "repo-wide, but `_duplicate_unit_ids` enforces exactly that across the directory."
@@ -1356,6 +1438,75 @@ class TestSyntheticSpecs:
         assert "specs/synthetic.md" in problems[0]
         assert "nothing in it opens a unit" in problems[0]
 
+    @pytest.mark.parametrize("heading", [
+        "### `ghost_unit` — the number was forgotten",
+        "### 2. ghost_unit — the backticks were forgotten",
+    ])
+    def test_approved_with_a_malformed_unit_heading_beside_a_good_one_fails(self, heading):
+        """A heading no reader can match is worse than a plan with no units at all.
+
+        The zero-entries complaint only fires when *nothing* matches, so one valid entry is
+        enough to silence every malformed sibling: the unit reads as planned by whoever wrote
+        it and as nonexistent to the ledger, `/forge --unit` and the collision check. That
+        gap is the exact silence rule 7 was added to end.
+        """
+        problems = _violations(
+            "synthetic.md",
+            _synthetic_spec(
+                "approved", verification=False,
+                build_plan=(
+                    "## Build Plan\n\n"
+                    "### 1. `synthetic_unit` — it becomes usable\n\n"
+                    "- [ ] The synthetic thing happens.\n\n"
+                    f"{heading}\n\n"
+                    "- [ ] The ghost happens.\n"
+                ),
+            ),
+            "synthetic-eval-results.md", None,
+        )
+        assert len(problems) == 1
+        assert "specs/synthetic.md" in problems[0]
+        assert heading in problems[0]
+        assert "cannot be parsed as one" in problems[0]
+
+    def test_a_plan_whose_only_unit_is_malformed_names_the_heading(self):
+        """Not the generic "nothing opens a unit" sentence. The author wrote something they
+        meant as a unit, and the complaint that helps them is the one quoting it back."""
+        problems = _violations(
+            "synthetic.md",
+            _synthetic_spec(
+                "approved", verification=False,
+                build_plan=(
+                    "## Build Plan\n\n"
+                    "### `ghost_unit` — the number was forgotten\n\n"
+                    "- [ ] The ghost happens.\n"
+                ),
+            ),
+            "synthetic-eval-results.md", None,
+        )
+        assert len(problems) == 1
+        assert "cannot be parsed as one" in problems[0]
+        assert "nothing in it opens a unit" not in problems[0]
+
+    def test_a_third_level_heading_that_is_not_a_unit_stays_legal(self):
+        """`writer-escalation-channel.md` closes its plan with a `### Tests` section. A
+        heading carrying neither an ordinal nor a backticked id is prose, and refusing it
+        would make the rule unusable on plans that are already fine."""
+        assert _violations(
+            "synthetic.md",
+            _synthetic_spec(
+                "approved", verification=False,
+                build_plan=(
+                    "## Build Plan\n\n"
+                    "### 1. `synthetic_unit` — it becomes usable\n\n"
+                    "- [ ] The synthetic thing happens.\n\n"
+                    "### Tests\n\n"
+                    "Run the suite.\n"
+                ),
+            ),
+            "synthetic-eval-results.md", None,
+        ) == []
+
     def test_approved_with_a_unit_written_as_a_list_item_fails(self):
         """The shape most older specs use. It is not wrong markdown; it is a boundary a
         reader has to guess at, which is why the heading replaced it."""
@@ -1410,7 +1561,27 @@ class TestSyntheticSpecs:
             "synthetic-eval-results.md", None,
         )
         assert len(problems) == 1
-        assert "no one-line outcome" in problems[0]
+        assert "`— <one-line outcome>`" in problems[0]
+
+    @pytest.mark.parametrize("separator", ["-", "–"])
+    def test_a_unit_titled_after_the_wrong_dash_is_told_which_dash(self, separator):
+        """`_DROPPED` accepts three dashes and this rule accepts one, which is a defensible
+        split — a dropped line that silently failed to match would leave the unit nagging with
+        no hint, while this one does complain. What it must not do is complain about the wrong
+        thing: the outcome is right there, and "has no outcome" sends the author hunting."""
+        problems = _violations(
+            "synthetic.md",
+            _synthetic_spec(
+                "approved", verification=False,
+                build_plan=(
+                    f"## Build Plan\n\n### 1. `synthetic_unit` {separator} it becomes usable\n\n"
+                    "- [ ] It happens.\n"
+                ),
+            ),
+            "synthetic-eval-results.md", None,
+        )
+        assert len(problems) == 1
+        assert "em dash" in problems[0]
 
     def test_approved_with_a_unit_holding_no_criteria_fails(self):
         problems = _violations(
@@ -1624,6 +1795,28 @@ class TestSyntheticSpecs:
                 "## Build Plan\n\n"
                 "### 1. `synthetic_unit` — it becomes usable\n\n"
                 "- [ ] The synthetic thing happens.\n"
+            ),
+        )
+        build_plan = build_plan_section(spec)
+        assert build_plan is not None
+        assert [entry.unit_id for entry in _unit_entries(build_plan)] == ["synthetic_unit"]
+
+    def test_a_suffixed_build_plan_heading_is_not_the_build_plan(self):
+        """Last-wins is right for two identical headings and wrong for a prefix match.
+
+        A plan kept below the real one for the record — `## Build Plan (as originally
+        proposed)` — is labelled by its author as not the plan. Matched by prefix it wins on
+        line order anyway, and the units actually being built disappear with nothing said.
+        """
+        spec = _synthetic_spec(
+            "approved", verification=False,
+            build_plan=(
+                "## Build Plan\n\n"
+                "### 1. `synthetic_unit` — it becomes usable\n\n"
+                "- [ ] The synthetic thing happens.\n\n"
+                "## Build Plan (as originally proposed, kept for the record)\n\n"
+                "### 1. `old_unit` — what we thought we were building\n\n"
+                "- [ ] It happened.\n"
             ),
         )
         build_plan = build_plan_section(spec)

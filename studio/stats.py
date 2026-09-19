@@ -80,7 +80,10 @@ def build_plan_section(spec_text: str) -> str | None:
     """The ``## Build Plan`` section of a spec, or ``None`` when the spec has none.
 
     Fenced code blocks are removed first, then the **last** remaining Build Plan heading
-    wins, then the section runs to the next ``## `` heading.
+    wins, then the section runs to the next ``## `` heading. The heading has to match
+    exactly: last-wins plus a prefix match would hand the reader a section a human labelled
+    as *not* the plan — ``## Build Plan (as originally proposed)`` written below the real one
+    would win, and the real units would vanish with nothing said.
 
     Both halves of that are load-bearing. A spec that documents the Build Plan format
     contains a *fenced* ``## Build Plan`` heading, and a line-anchored regex cannot see the
@@ -93,7 +96,7 @@ def build_plan_section(spec_text: str) -> str | None:
     """
     lines = strip_fenced_blocks(spec_text).splitlines()
     headings = [
-        index for index, line in enumerate(lines) if line.startswith(_BUILD_PLAN_HEADING)
+        index for index, line in enumerate(lines) if line.rstrip() == _BUILD_PLAN_HEADING
     ]
     if not headings:
         return None

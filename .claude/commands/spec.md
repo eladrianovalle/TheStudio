@@ -215,6 +215,9 @@ What gets built: the files, the behavior, the tests.
 
 ### 2. `<next_unit_id>` — <the next usable outcome>
 
+**Acceptance criteria:**
+- [ ] <one checkable statement>
+
 The heading is what bounds an entry: a unit runs to the next `###`, so a nested list inside one can
 never be read as another unit. Once a spec is `approved`, Studio's spec-verification suite refuses
 any other shape.
