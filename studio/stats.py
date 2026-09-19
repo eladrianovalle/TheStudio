@@ -9,8 +9,10 @@ keeps the aggregation logic out of the CLI entrypoint.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
+from pathlib import PurePath
 from statistics import median
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional
 
 # How much a shipped feature changed downstream, in three coarse buckets. Kept
 # small on purpose: a bucket someone will actually pick beats a scale nobody fills.
@@ -271,6 +273,233 @@ def near_miss_build_plan_section(spec_text: str) -> str | None:
     return _section_from(lines, headings[-1])
 
 
+# ---------------------------------------------------------------------------
+# The completion ledger: what the specs planned, what git says was built
+# ---------------------------------------------------------------------------
+
+# How a Build Plan entry opens, read tolerantly: a level-3 heading carrying an ordinal, or a
+# bare numbered list item, either of them free to wrap the id in bold markers. Rule 7 in
+# `tests/test_spec_verification.py` holds new approved specs to the heading form alone; this
+# reader has to read what is already on disk, and across the approved specs in the installs on
+# this machine the strict shape finds nothing at all in 23 of 24 of them. Zero units is
+# indistinguishable from "nothing is unfinished", which is the silence this ledger exists to end.
+#
+# The `snake_case` demand is not a style preference. It is what stops the reader handing a
+# caller `/forge --spec doc-parity-tests --unit studio/tests/test_doc_parity.py` — a command
+# that cannot run. An opener whose backticked token is not an id simply does not match, and the
+# entry is skipped. The tail is captured so the title can be read off the same line.
+UNIT_OPENER = re.compile(r"^(?:###\s+\d+\.|\d+\.)\s*\**\s*`([a-z][a-z0-9_]{2,})`(.*)$", re.M)
+
+# Where one entry ends and the next thing begins: the next entry opener, or any heading down to
+# level 3. Level 4 and deeper are sub-headings *inside* a unit, so a `#### What gets built`
+# between the opener and the `Dropped:` line must not cut the entry short — the drop would be
+# attributed to nothing and the unit would nag on with no hint why.
+_ENTRY_BOUNDARY = re.compile(r"^ {0,3}#{1,3}\s")
+
+# The one way to close a unit without building it: a date and a reason, both required. A bare
+# "dropped" is a way to stop the nudge without deciding anything. The separator accepts an em
+# dash, a double hyphen or a single one, because a hand-typed hyphen that silently failed to
+# match would leave the unit nagging with no hint why.
+#
+# Shared with rule 7, which imports it, so the shape the suite tells an author to write and the
+# shape the ledger reads can never drift apart. If they did, a spec could carry a drop line the
+# suite accepts and the ledger cannot see, and the unit would be nagged about forever.
+DROPPED_LINE = re.compile(
+    r"^\s*-\s+\*\*Dropped:\*\*\s+(\d{4}-\d{2}-\d{2})\s+(?:—|--|-)\s+(\S.+)$", re.M
+)
+
+# A commit the implementation loop wrote: `writer: <unit_id>`, `editor: <unit_id>`, or the
+# escalation `writer(stuck): <unit_id>`. Matched line by line over subjects *and* bodies, so a
+# squash merge that kept the loop's subjects in its body still reads as built — including
+# GitHub's default squash body, which is the commonest way a merged unit reaches a log and
+# writes each subject as `* writer: <unit_id>`. One optional list bullet is all that buys it;
+# the id shape after the colon is what keeps a prose line from reading as a build.
+_LOOP_COMMIT = re.compile(
+    r"^\s*(?:[*+-]\s+)?(writer|editor)(\(stuck\))?:\s+([a-z][a-z0-9_]{2,})\b", re.M
+)
+
+# An id as a spec mentions it in prose. Used for one question only — was this id ever planned
+# anywhere? — so it reads every spec at every status, not just the approved ones.
+_BACKTICKED_ID = re.compile(r"`([a-z][a-z0-9_]{2,})`")
+
+# What separates an entry's id from its title, and the bold markers a list-form entry wraps the
+# pair in. Stripped off so the title reads as the author wrote it.
+_TITLE_LEAD = re.compile(r"^\**\s*(?:—|–|--|-)?\s*")
+
+
+@dataclass(frozen=True)
+class PlannedUnit:
+    """One unit a spec's Build Plan planned, as written.
+
+    ``dropped_on`` and ``dropped_reason`` are both empty for a live unit and both filled for
+    one closed on purpose; a line carrying only one of them is not a drop (see
+    :data:`DROPPED_LINE`). There is no ordinal field: document order is dependency order — the
+    Build Plan template has said so since it was written — so order is list position, and a
+    second place to record it is a second thing that can disagree.
+
+    ``spec_file`` is the spec that planned the unit, and it is the only field that identifies
+    that spec: rule 7 forbids a duplicate ``unit_id``, not a duplicate slug, so two approved
+    specs can carry the same slug and counting distinct slugs would call them one spec. It has
+    no default for that reason — a caller that omitted it would collapse every spec onto one
+    empty string, which is the miscount this field exists to prevent, and it would do it
+    silently. Missing it is a ``TypeError`` instead.
+    """
+
+    slug: str
+    unit_id: str
+    title: str
+    dropped_on: str
+    dropped_reason: str
+    spec_file: str
+
+
+@dataclass(frozen=True)
+class UnitLedger:
+    """Planned units and built ids, reconciled: the four states worth saying out loud.
+
+    A planned unit that is built appears in none of these. That is the whole point — the ledger
+    reports what is outstanding, and a finished unit is not.
+
+    ``built_known`` is False when the built set could not be read at all, and then every tuple
+    here is empty because nothing could be reconciled — not because nothing is outstanding. A
+    reader that cannot tell those two apart prints "every unit is built" in exactly the repos
+    the unknown built set was invented for.
+    """
+
+    unbuilt: tuple[PlannedUnit, ...]  # planned in an approved spec, not built, not dropped
+    escalated: tuple[PlannedUnit, ...]  # a writer(stuck): commit and no writer:/editor: one
+    dropped: tuple[PlannedUnit, ...]  # unbuilt and closed on purpose, with a date and a reason
+    unplanned: tuple[str, ...]  # built ids no spec mentions anywhere, sorted
+    built_known: bool = True  # False when git could not be read: every tuple above is silence
+
+
+def _entry_title(tail: str) -> str:
+    """The one-line outcome after a unit's id, without the separator or the bold wrapper."""
+    return _TITLE_LEAD.sub("", tail.strip()).strip().strip("*").strip()
+
+
+def parse_build_plan(spec_text: str, slug: str, spec_file: str) -> List[PlannedUnit]:
+    """Every unit a spec's Build Plan plans, in document order.
+
+    Empty for a spec with no ``## Build Plan`` section, which is the normal state of a document
+    that has no units rather than a defect to report.
+
+    An entry runs from its opener to the next opener or the next heading down to level 3,
+    whichever comes first. That one boundary is what attributes a ``Dropped:`` line to the unit
+    it belongs to, with no indentation arithmetic and no hazard from the nested lists a unit
+    body is full of — and it bounds a list-form plan in a consuming repo exactly as it bounds a
+    heading-form one here.
+    """
+    section = build_plan_section(spec_text)
+    if section is None:
+        return []
+
+    lines = section.splitlines()
+    openers = [
+        (index, match)
+        for index, line in enumerate(lines)
+        if (match := UNIT_OPENER.match(line))
+    ]
+
+    units: List[PlannedUnit] = []
+    for position, (index, match) in enumerate(openers):
+        limit = openers[position + 1][0] if position + 1 < len(openers) else len(lines)
+        end = limit
+        for offset in range(index + 1, limit):
+            if _ENTRY_BOUNDARY.match(lines[offset]):
+                end = offset
+                break
+        dropped = DROPPED_LINE.search("\n".join(lines[index + 1:end]))
+        units.append(
+            PlannedUnit(
+                slug=slug,
+                unit_id=match.group(1),
+                title=_entry_title(match.group(2)),
+                dropped_on=dropped.group(1) if dropped else "",
+                dropped_reason=dropped.group(2).strip() if dropped else "",
+                spec_file=spec_file,
+            )
+        )
+    return units
+
+
+def built_unit_ids(git_log_text: str) -> tuple[set[str], set[str]]:
+    """The unit ids a commit log says were built, and the ones a writer escalated instead.
+
+    Returns ``(built, escalated)``. ``writer(stuck): <id>`` is the commit the implementation
+    loop tells a blocked writer to make, and it means the writer stopped on purpose rather than
+    fake a finish — counting it as built would delete from the report the one case a fresh
+    session most needs to be told about. It gets its own set.
+
+    Built wins. A unit carrying both an escalation and a ``writer:`` or ``editor:`` commit is
+    built, because the writer only commits a passing state. Neither set carries any order, so
+    that is decided by membership and never by commit time.
+    """
+    built: set[str] = set()
+    escalated: set[str] = set()
+    for match in _LOOP_COMMIT.finditer(git_log_text):
+        (escalated if match.group(2) else built).add(match.group(3))
+    return built, escalated - built
+
+
+def mentioned_unit_ids(spec_text: str) -> set[str]:
+    """Every id-shaped token a spec quotes in backticks, at any status, anywhere in the text.
+
+    This answers a different question from :func:`parse_build_plan` and so it needs a different
+    reader. "Which approved spec still owes this unit?" reads Build Plans; "was this id ever
+    planned anywhere?" reads the whole document of every spec, because a unit planned under a
+    spec that has since shipped is finished work, not undisciplined work. Without it the
+    built-but-never-planned count in this repository reads 41 against a truth near 20, and a
+    count twice the truth is one people learn to ignore.
+    """
+    return set(_BACKTICKED_ID.findall(spec_text))
+
+
+def reconcile_units(
+    planned: List[PlannedUnit],
+    built: set[str] | None,
+    escalated: set[str],
+    mentioned_ids: set[str],
+) -> UnitLedger:
+    """Reconcile planned units against built ids: what is outstanding, in both directions.
+
+    ``planned`` arrives already filtered to approved specs, so the status policy lives with the
+    caller that reads the directory rather than being re-decided here. Every planned unit lands
+    in exactly one state: dropped, built (reported by nothing), escalated, or unbuilt.
+
+    ``built`` is ``None`` when the built set could not be read at all — no git, no work tree, a
+    shallow clone. Nothing is then reported as unbuilt, because with no built set every planned
+    unit reads unbuilt and the ledger would nag about all of them. "I cannot see" and "nothing
+    was built" are different answers, and silence beats a lie. The ledger says which answer it
+    is carrying in ``built_known``, so a caller cannot read that silence as "everything is
+    built". ``escalated`` is only ever read alongside a readable ``built``, so it is a set
+    either way. Drops do not survive it either: a drop is only a drop on a unit git does not
+    say was built, so with no built set there is nothing to say about them either.
+
+    A drop line on a unit git says was built is not a drop — the unit was built, and built work
+    is reported by nothing. Only an unbuilt unit can be closed on purpose.
+    """
+    if built is None:
+        return UnitLedger(
+            unbuilt=(), escalated=(), dropped=(), unplanned=(), built_known=False
+        )
+
+    dropped = tuple(unit for unit in planned if unit.dropped_on and unit.dropped_reason)
+    open_units = [unit for unit in planned if not (unit.dropped_on and unit.dropped_reason)]
+    return UnitLedger(
+        unbuilt=tuple(
+            unit for unit in open_units
+            if unit.unit_id not in built and unit.unit_id not in escalated
+        ),
+        escalated=tuple(
+            unit for unit in open_units
+            if unit.unit_id not in built and unit.unit_id in escalated
+        ),
+        dropped=tuple(unit for unit in dropped if unit.unit_id not in built),
+        unplanned=tuple(sorted(built - set(mentioned_ids))),
+    )
+
+
 def summarize_shipped_specs(records: List[Dict]) -> Dict:
     """Roll up shipped specs into an impact tally and the recent change lines.
 
@@ -519,6 +748,87 @@ def _format_shipped_specs(shipped_specs: Dict) -> List[str]:
     return lines
 
 
+def format_count(count: int, noun: str = "unit") -> str:
+    """``1 unit`` / ``2 units`` — the plural the sentence around it needs."""
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
+
+
+def _shared_slugs(units: Iterable[PlannedUnit]) -> set[str]:
+    """Slugs that more than one spec file carries, among the units about to be printed."""
+    files: Dict[str, set[str]] = {}
+    for unit in units:
+        files.setdefault(unit.slug, set()).add(unit.spec_file)
+    return {slug for slug, paths in files.items() if len(paths) > 1}
+
+
+def _unit_line(unit: PlannedUnit, shared_slugs: set[str]) -> str:
+    """One planned unit on one line: which spec planned it, its id, and what it is for.
+
+    The prefix is the slug, which is what someone types at ``/forge`` — except where two
+    approved specs share one, and then it is the file name. A count that says "2 approved
+    specs" over two identical ``[a-feature]`` prefixes tells the reader nothing about which
+    file planned what; spec file names are unique because one directory holds them all.
+
+    ``PurePath`` here is string work on a path, not a reading of one — this module still
+    touches no filesystem.
+    """
+    title = unit.title if len(unit.title) <= 80 else unit.title[:77] + "..."
+    label = unit.slug
+    if unit.slug in shared_slugs:
+        label = PurePath(unit.spec_file).name or unit.slug
+    return f"    [{label}] {unit.unit_id}" + (f" — {title}" if title else "")
+
+
+def format_unit_ledger(ledger: UnitLedger) -> List[str]:
+    """Render the completion ledger: planned work still owed, and built work no plan proposed.
+
+    Silent states are left out rather than printed as zeroes, and a ledger with nothing in it
+    gets one line saying so instead of a block of empty headings — a report that looks the same
+    whether or not it has news is one people stop reading.
+
+    A ledger whose built set is unknown gets no block at all. It has not reconciled anything,
+    so every line it could print would be a claim it cannot support — and the emptiest of them,
+    "nothing unfinished", is exactly the lie the unknown built set exists to prevent.
+    """
+    if not ledger.built_known:
+        return []
+
+    lines = ["", "Planned work (approved specs vs. git):"]
+
+    if not (ledger.unbuilt or ledger.escalated or ledger.dropped or ledger.unplanned):
+        lines.append(
+            "  Nothing unfinished — every unit an approved spec plans is built or dropped."
+        )
+        return lines
+
+    shared = _shared_slugs(ledger.unbuilt + ledger.escalated)
+
+    if ledger.unbuilt:
+        specs = len({unit.spec_file for unit in ledger.unbuilt})
+        lines.append(
+            f"  Planned and never built: {format_count(len(ledger.unbuilt))} "
+            f"across {format_count(specs, 'approved spec')}"
+        )
+        lines.extend(_unit_line(unit, shared) for unit in ledger.unbuilt)
+
+    if ledger.escalated:
+        lines.append(
+            f"  Started and escalated — a writer stopped on purpose: "
+            f"{format_count(len(ledger.escalated))}"
+        )
+        lines.extend(_unit_line(unit, shared) for unit in ledger.escalated)
+
+    if ledger.dropped:
+        lines.append(f"  Dropped on purpose: {format_count(len(ledger.dropped))}")
+
+    if ledger.unplanned:
+        lines.append(
+            f"  Built but never planned: {format_count(len(ledger.unplanned), 'id')} — a rough "
+            "figure. Units built before /forge read a spec's plan are counted here too."
+        )
+    return lines
+
+
 def _fmt_signal(value: Optional[float], *, pct: bool) -> str:
     """Format one session-health number, or "n/a" when it could not be computed."""
     if value is None:
@@ -584,6 +894,7 @@ def format_stats(
     clarity_note: Optional[str] = None,
     shipped_specs: Optional[Dict] = None,
     session_health: Optional[Dict] = None,
+    unit_ledger: Optional[UnitLedger] = None,
 ) -> str:
     """Render an aggregate_stats() result as a terminal dashboard."""
     bar = "=" * 60
@@ -597,6 +908,8 @@ def format_stats(
         # a reader who sees the line once knows where a feature would appear.
         if shipped_specs is not None:
             lines.extend(_format_shipped_specs(shipped_specs))
+        if unit_ledger is not None:
+            lines.extend(format_unit_ledger(unit_ledger))
         lines.append(bar)
         return "\n".join(lines)
 
@@ -613,6 +926,9 @@ def format_stats(
 
     if shipped_specs is not None:
         lines.extend(_format_shipped_specs(shipped_specs))
+
+    if unit_ledger is not None:
+        lines.extend(format_unit_ledger(unit_ledger))
 
     d = agg["decisions"]
     lines.append("")

@@ -1,0 +1,848 @@
+editor: build_plan_one_shape
+A unit entry now ends only at the next level-3 heading. It used to end at
+anything starting with '###', so a '#### What gets built' between a unit's
+opener and its acceptance criteria cut the entry short and the rule reported
+a spec with proper criteria as having none — a false red pointing at the
+wrong thing, whose cheapest cure would have been deleting the rule. Added the
+case that shows it.
+
+Cut test_every_approved_spec_is_already_in_the_canonical_shape: it ran
+_build_plan_problems over the approved specs, which is exactly the subset
+TestRealSpecs.test_every_spec_satisfies_the_convention already covers by
+running _violations over the whole directory.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01MmkDByQw45e8fXsGotscQX
+
+
+writer: build_plan_one_shape
+An approved spec's Build Plan now has one shape, and the suite refuses another.
+
+Rule 7 in test_spec_verification.py fires on a `status: approved` spec whose
+Build Plan holds no readable unit, opens a unit as a list item instead of a
+heading, uses an id that isn't snake_case, leaves a unit with no one-line
+outcome, or leaves one with neither a `- [ ]` criterion nor a dated `Dropped:`
+line with a reason. It stays quiet for a spec with no Build Plan at all, for
+draft and shipped specs, and for both acceptance-criteria indentations already
+in use. A directory-wide check refuses two specs planning the same unit_id.
+
+stats.py gains the shared reader both rule 7 and the reconciler will use:
+strip_fenced_blocks blanks fenced code blocks line for line, and
+build_plan_section takes the last remaining `## Build Plan` heading and slices
+to the next `## `. Without that, a spec that quotes the plan format in a fence
+reads as a spec with two plans.
+
+spec.md's template now shows the heading form and says a unit_id is unique
+repo-wide; forge.md points at that template instead of restating the format in
+its own words.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01MmkDByQw45e8fXsGotscQX
+
+
+editor: mutation_skip_reason_recorded
+Fold the reason comment into the schema description the writer actually reads,
+and drop the duplicate required-list assertion already pinned exactly upstream.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01MmkDByQw45e8fXsGotscQX
+
+
+writer: mutation_skip_reason_recorded
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01MmkDByQw45e8fXsGotscQX
+
+
+editor: gate_keys_resolve_to_none
+Cut one test the new one subsumes, and corrected three claims this change made
+untrue in the files it touched.
+
+The Unity "file naming only test_command inherits nothing" test is the Multica
+test with weaker markers: now that nothing is detected at load, the marker files
+are beside the point, and the Python repo is the case that would have inherited
+ruff and mutmut. Unity coverage stays in the Orkid Garden test.
+
+The three stale claims: load_loop_config still promised a config "merged over the
+detected profile"; the STACK_MARKERS comment credited the loader with a refusal
+only the wizard makes now; and apply_implementation_loop_config still explained
+itself as one function with two callers, which is what this change ended.
+_gate_config_path's "never the shipped config" is now scoped to the resolution
+chain, which is where it is true — asked for that file by name, the refusal names
+it, and a test pins that.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01MmkDByQw45e8fXsGotscQX
+
+
+writer: gate_keys_resolve_to_none
+The repo's own implementation_loop.toml is now the only thing that decides how
+/forge gates it. load_loop_config no longer calls resolve_profile, LoopConfig's
+four gate literals are gone (test_command has no default at all, so a bare
+LoopConfig() raises instead of gating on pytest/ruff/mutmut), and a [gate] key a
+file leaves out resolves to empty.
+
+The refusal picks its wording from whether the file exists, never from which
+resolution branch supplied the path: a file that is there with a blank key says
+so and names the line to fill in; no file says the path does not exist and points
+at /studio-setup. Neither mentions detection, which no longer runs at load.
+
+Detection itself stays put as the wizard's opening guess, and Studio now carries
+its own committed gate config at studio/.studio/implementation_loop.toml.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01MmkDByQw45e8fXsGotscQX
+
+
+editor: wizard_writes_stamped_template
+Cuts and one correctness fix on the writer's unit:
+
+- _comment_lines loses its width parameter; no caller ever overrode it, and
+  the width-minus-two arithmetic was a moving part with one reader.
+- _format_loop_toml's docstring loses the paragraph explaining why the
+  Detected line is reused from impl_loop._detected_line. The same reasoning
+  already sits as a comment on the branch that makes the choice; the missing
+  half of it (word for word, never paraphrased) moved down there too.
+- is_wizard_template now also catches UnicodeDecodeError. Its docstring
+  promises an unreadable file is not the template, but read_text on a file
+  that is not UTF-8 raises a ValueError the OSError handler misses.
+
+Two concerns could not be fixed in this pass; they are written up in
+reviewer-concerns/wizard_writes_stamped_template.md.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01MmkDByQw45e8fXsGotscQX
+
+
+writer: wizard_writes_stamped_template
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01MmkDByQw45e8fXsGotscQX
+
+
+editor: board_cited_spec
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01AhCZxYGoHcGFqxTxqUs2h1
+
+
+writer: board_cited_spec
+
+
+editor: board_conversation
+Cut a cross-reference and two duplicated assertions; renamed one test that
+promised more than it checked.
+
+- DESIGN_BOARD.md: the paragraph naming the repo's CLAUDE.md restated the
+  opening conditional and sent the reader off to the find-before-you-grep rule
+  for an analogy. Collapsed to the two facts it carries: the repo names the
+  tool and the destinations, and nothing parses that declaration.
+- test_install.py: dropped the sha256 comparison. test_creates_manifest and
+  test_manifest_covers_claude_commands_and_workflows already prove the manifest
+  records real checksums; the unit needs the file on disk and its key present.
+- test_design_board.py: renamed test_the_structural_call_comes_before_any_content_read
+  to say what it asserts — the listing is the cheap call and returns only
+  addresses. It never checked ordering; the six-rules test does.
+
+Suite 1006 passed, ruff clean.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01AhCZxYGoHcGFqxTxqUs2h1
+
+
+writer: board_conversation
+Ship the design-board discipline as its own document.
+
+- studio/docs/DESIGN_BOARD.md: locate before you read, structure gives
+  addresses not content, every claim sourced to a region read this turn,
+  same-turn re-read before any write, propose before writing, and say so
+  when something can't be sourced. Conditional on the repo naming a board;
+  names no vendor.
+- A three-line pointer in CODING_PRINCIPLES.md, added after the numbered
+  principles so the existing sections are untouched.
+- One SOURCE_FILES entry so the doc ships to consuming repos.
+- Tests: the six rules in order, vendor-neutrality asserted as absence of
+  the category (no proper nouns, no one-product UI nouns), the pointer's
+  three-line budget, and a fresh install putting the file on disk and in
+  MANIFEST.json.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01AhCZxYGoHcGFqxTxqUs2h1
+
+
+fix: make the concerns path unambiguous and its mkdir explicit
+Three follow-ups from the review of #152, all about the concerns file being
+easy to find and easy to write.
+
+The `/forge` summary pointed the user at a bare `reviewer-concerns/<unit_id>.md`.
+That path is relative to the tree the editor worked in, which for a `--work-dir`
+run is the per-unit worktree, not the checkout the user is standing in. The
+summary now spells out the resolved work dir.
+
+The editor prompt asked for the directory "creating the directory if needed" in
+prose while the writer's handoff line gives an explicit `mkdir -p`. It now gives
+the command too, so there is nothing left to infer. The directory name lives in
+one place (`concernsDir`) rather than two.
+
+Named in the spec: in a shared checkout, a later unit's writer runs `git add -A`,
+which sweeps a leftover concerns file into that unit's commit. Nothing is lost,
+but it lands committed, which is the opposite of the "surface, not bury" reason
+the editor's `git commit -am` leaves it alone.
+
+The golden prompt fixture is regenerated for the editor prompt change. The
+writer prompt is byte-identical.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Co-authored-by: multica-agent <github@multica.ai>
+
+
+editor: approval_writes_the_date
+
+
+writer: approval_writes_the_date
+
+
+editor: due_date_rule
+
+
+writer: due_date_rule
+
+
+editor: wizard_writes_static_commands
+
+
+writer: wizard_writes_static_commands
+
+
+editor: static_checks_are_commands
+
+
+writer: static_checks_are_commands
+
+
+ci: run the workflow shell tests, so implementation-loop.js is guarded
+Closes #136.
+
+`.claude/workflows/tests/workflow-shells.test.mjs` holds 35 tests over the
+writer and editor prompt shells, and nothing in CI ran them. No Python
+test loads that file, so a change to implementation-loop.js — the file
+every /forge unit is built by — could break all 35 and still show a green
+PR.
+
+It is also self-shadowing: a /forge unit that edits the loop has a gate
+blind to the file it just changed, unless whoever ran it hand-built a
+compound test command. That happened on the find_before_you_grep unit,
+which is what surfaced this.
+
+Verified the step actually catches a regression rather than just running:
+changing one word in the editor prompt turns 3 tests red and exits 1;
+restoring gives 35/35 and exit 0.
+
+The job defaults to working-directory: studio, so this step overrides it
+back to the repo root. Node ships on the runner and the tests use only
+node:test/node:assert, so there is nothing to install.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+
+fix: give the writer the index rule too, and unmangle a sentence
+Both are reviewer concerns the editor raised but couldn't fix in-pass.
+
+The writer does most of the code-finding and doesn't inherit the editor's
+mandate, so the rule reached it only if whoever called /forge typed it
+into the per-unit instructions. That meant the editor got it by
+construction and the writer got it by convention — and a workflow invoked
+directly, without /forge, gave the writer nothing at all. The rule doesn't
+need the caller's help to stay conditional: the sentence already opens
+with "if this repo has a code index or symbol search". So it moves into
+writerPrompt, and forge.md stops asking the caller to supply it.
+
+The other was a sentence that didn't parse: "never the quote, whatever the
+tool claims its excerpt is enough for". This is prompt text an agent has
+to follow, so the wording is the feature, not decoration.
+
+The byte-exact prompt fixture is regenerated on purpose — its own comment
+says to do that only when a change to the unpinned prompts is intended,
+and this is one. 962 pytest, 35 node tests, ruff clean.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+
+editor: find_before_you_grep
+
+
+writer: find_before_you_grep
+Teach the /forge editor, /forge's writer instructions and /spec to locate code
+with a code index or symbol search when the repo has one — and to treat the
+index as saying WHERE, not WHAT: open the real file at the returned file:line
+and quote from there, never from the index's summary or inlined excerpt.
+
+Studio names no tool and reads none; the whole change is prompt text plus tests
+and docs. scopes.py is deliberately untouched: CONTRARIAN_MANDATE ships to
+market and design debates that have no codebase, so a new test pins that those
+phases' rendered instructions carry no code-index instruction.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+
+editor: wizard_writes_loop_config
+
+
+writer: wizard_writes_loop_config
+
+
+editor: detected_gate_defaults
+
+
+writer: detected_gate_defaults
+
+
+editor: nudge_hook_survives_update
+
+
+writer: nudge_hook_survives_update
+
+
+editor: findings_extracted_at_finalize
+
+
+writer: findings_extracted_at_finalize
+
+
+editor: outcomes_from_specs
+
+
+editor: outcomes_from_specs
+
+
+writer: outcomes_from_specs
+
+
+editor: spec_shipped_frontmatter
+
+
+writer: spec_shipped_frontmatter
+
+
+editor: stop_generating_scopes_toml
+
+
+writer: stop_generating_scopes_toml
+
+
+editor: retire_efficiency_metrics
+
+
+writer: retire_efficiency_metrics
+
+
+editor: retire_supplied_numbers
+
+
+writer: retire_supplied_numbers
+
+
+spec: say shipped on the eight specs that shipped
+Every spec in the repo said `approved` except two, including eight whose
+features have been built, merged and in use for weeks. The status field
+could not tell you what was actually shipped, which is the same blindness
+that let the verification convention's own evidence file sit blank for
+five days at `approved`.
+
+Each of the eight was checked against the code before flipping, not
+against memory: the verifier module and its workflow, the doc-parity
+test, `auto_pull_source`, the source-repo branch in `get_artifact_root`,
+`acceptance_criteria`, `check-updates`, the staleness check, and the
+writer's `stuck` field all exist on main.
+
+None of the eight promises evidence — they predate the verification
+convention or are code-shaped, where the tests are the criterion — so
+`shipped` here costs no results file and the suite stays green.
+
+This is bookkeeping. It does NOT close the enforcement hole recorded in
+prompt-feature-verification-eval-results.md: nothing stops a future spec
+parking at `approved` with a blank evidence file, because the check still
+only refuses a spec that claims completion.
+
+
+spec: forge-work-dir is shipped — the evidence file is filled from a live run
+The spec has sat at `approved` since it was written, because its own stop
+condition says nobody may call the feature working while the evidence file still
+reads FILL_ME. Two controlled runs of the same disposable probe unit now fill it.
+
+Baseline, no work_dir, from the main checkout while a worktree existed: the
+writer's commit landed in the main checkout, the probe file was created there and
+not in the worktree, and the worktree's HEAD never moved. That is the behavior the
+feature exists to change, reproduced on purpose rather than asserted.
+
+With work_dir set, all four parts of the criterion were read from git and from the
+test's own output rather than from the agents' reports: the only commit is on the
+worktree's branch, main's HEAD is identical before and after, main's working tree
+is clean with the probe file absent, and the probe printed the worktree path it
+ran in.
+
+What the section on limits actually says, because it is the point of the file: the
+"every commit" clause was tested against exactly one commit, since the editor
+found nothing to cut in a 14-line probe and so never made a commit of its own. The
+probe measures where the test ran, not where git committed — the loop's own editor
+raised that during the run and it is right, so criteria 1-3 rest on git rather than
+on the probe. The arms were not identical in shape. And a single obedient run looks
+exactly like a run that could not have disobeyed; only repetition separates them,
+and there has been none.
+
+The probe and both scratch branches are deleted rather than left behind, since
+"delete once the measurement is done" is an instruction to a human and not a
+mechanism — also the editor's point.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+
+editor: retire_pin_script
+Trim three spots the writer left rough, no behavior or doc-guard change:
+the --work-dir bullet in forge.md referred to "these git commands" with
+nothing for "these" to point at; the CHANGELOG carried the --path-format
+=absolute implementation detail, which is spec material rather than
+something a reader of the changelog acts on; and one spec line overshot
+the file's wrap.
+
+Suite green at 887.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+
+writer: retire_pin_script
+Delete the hand-rolled worktree workaround now that --work-dir replaces it, document the flag in the loop spec and the usage guide (including that the path is validated before the loop starts), and keep every description of it honest about reducing the blast radius rather than ruling the accident out.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+
+editor: work_dir_validation
+
+
+writer: work_dir_validation
+
+
+test: catch a bare git added to a prompt later, not just the ones we know about
+The editor raised this as a reviewer concern and it is right. The two pinned-token
+counts prove the git commands that exist today are pinned, but they count only
+PINNED tokens — add a new bare `git` to a prompt tomorrow and the counts are
+unchanged, so the suite stays green while the loop half-targets the worktree. That
+is the same failure the unit exists to prevent, arriving through the door the tests
+left open.
+
+This renders both prompts with a work dir, strips the preamble, and asserts nothing
+backticked starts with `git ` unless it is `git -C`. The preamble has to go first
+because it legitimately quotes a bare `git` — the rule telling the agent never to
+retry a failed pinned command as one.
+
+Verified it bites rather than assuming: injected a new `git status` line into the
+writer prompt and watched this test fail while both counts stayed green, then
+restored and confirmed 33 JS tests pass.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+
+editor: work_dir_pinning
+
+
+editor: docs_and_invocation
+Cut test_doc_names_where_each_kind_of_repo_files_its_runs. It asserted three
+literal strings appear somewhere in the ARCHITECTURE.md section, which is not
+the same as checking what it claimed: the bridge-doc assertion passes just as
+happily on a sentence saying the source repo DOES scaffold itself one. The
+branch-order test keeps the section anchored to get_artifact_root's real code,
+and test_run_phase.py already pins the behavior the prose describes.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+
+writer: docs_and_invocation
+Make every doc that says where Studio files its own runs match what
+get_artifact_root() now does: a run from the source repo root lands in
+studio/output/, not in a .studio/output/ meant for somebody else's project.
+
+- ARCHITECTURE.md gains a "Where Artifacts Land" section walking all four
+  branches in the order the code tries them, including the new source-repo
+  case, and says why the last two must not be merged.
+- CLAUDE.md and the README's run-directory tree now name both destinations
+  instead of only the consuming-repo one, and pin bridge-doc scaffolding to
+  the consuming repo, which is the only place it still happens.
+- New doc-parity tests hold the section to the code: the branches must be
+  described in code order, and both destinations named. Statements that
+  correctly describe a consuming repo were left alone.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+
+writer: work_dir_pinning
+
+
+docs: run Phase 0, and correct the instrument it proved wrong
+Phase 0 was the named blocker on three decisions since 2026-07-16. It was never
+runnable as written, and that — not procrastination — is why it sat undone.
+
+It asked for per-unit editor token cost and editor_liveness/shrink_ratio "over
+the existing forge runs". Neither works. The loop emits no token data at all:
+zero references to metrics recording, zero metrics.json under any run dir. And
+editor_liveness reads advocate-document word counts from *debate* runs, so it has
+never measured the forge editor and structurally cannot.
+
+The metric is also broken on its own terms. It reads 0% across all six session
+records, which the scorecard defines as a dead cut mandate. Five of those runs are
+single-iteration, so first draft is the final draft and the ratio is 0.0 by
+arithmetic. The sixth reads -6.57 because scoped runs are designed to grow from a
+500-word alignment doc to a full depth doc — the metric scores the intended design
+as the worst result in the set.
+
+What was recoverable is the number people actually wanted: from the 12 forge
+handoffs on disk, 9 produced real cuts. The forge editor's cut mandate is alive at
+75%, with zero reverts ever and a median rationale of 125 words against a 400
+budget. The three exceptions genuinely open with "No edits." and reasoning, which I
+checked rather than trusting a keyword match.
+
+So the breadth valve stays rejected, but for a better reason: not "nobody ran the
+baseline" but "per-unit editor cost is not instrumented" — a smaller and fixable
+gap, and a build rather than a measurement.
+
+Corrects the three scorecard places citing editor_liveness as the instrument for
+forge-editor questions, since it has never measured that.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+
+editor: source_repo_detection
+
+
+writer: source_repo_detection
+Studio run from its own repo root now files artifacts in studio/output/
+instead of treating its own repo as a consuming repo.
+
+get_artifact_root() decided "this is somebody's project" partly by spotting a
+bare .studio/ directory with no VERSION file. Studio's own repo has exactly
+that shape — .studio/ holds update.toml and usage.log — so running
+`python studio/run_phase.py <cmd>` from the repo root, the invocation CLAUDE.md
+documents, made Studio classify itself as a guest. Artifacts landed in
+<repo>/.studio/output/ and prepare wrote a stray docs/studio-bridge.md into the
+source tree.
+
+The new branch identifies the source repo structurally: a studio_root that is
+not an installed snapshot, with cwd under its parent. It sits above the
+.studio/VERSION walk-up so a source repo is recognized before any consumer
+heuristic can claim it, and below --artifact-root and STUDIO_ARTIFACT_ROOT,
+which are deliberate overrides and still win.
+
+This is a restoration, not an invention. get_output_root, get_knowledge_log_path,
+_project_name and get_outcomes_ledger_path all already branch on
+`artifact_root == studio_root` meaning "this is the source repo", and
+_project_name's docstring states the invariant outright. impl_loop.py resolves
+the source repo this way already. get_artifact_root() was the outlier; the two
+now agree.
+
+Three existing cross-repo tests placed the pretend consuming repo as a sibling
+of studio/, which under the new rule reads as a directory inside the Studio
+source repo. Their studio_root moves one level down so the caller's repo is
+genuinely outside the source tree — the layout those tests meant to describe.
+
+Verified by reverting the branch by hand and watching the new tests go red: the
+repo-root case failed and prepare printed "Created bridge doc". The
+cwd == studio_root test stayed green throughout, which is the point — it proves
+the new coverage cannot pass for the old reason.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+
+docs: cite the principles by name, not by number
+The merge renumbered the file, which broke four references that pointed at
+sections by number. Two of them were live instructions in the /spec command
+prompt, telling an agent to consult "Coding Principles §8" and "Coding Principle
+9" in a file that now ends at §7.
+
+Fixed by citing the principles by title instead of by number, which is what the
+editor suggested and is the durable form — the next renumbering can't break it.
+Also corrected three statements in the superpowers study that the merge made
+false, including two using "the file still ends at §9" as a live trigger
+condition.
+
+Found by the loop's editor and recorded as reviewer concerns rather than fixed
+in-unit, which was the right call: they sit outside the unit's files.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+
+editor: principles_write_for_humans
+
+
+writer: principles_write_for_humans
+
+
+editor: shape_rule_record
+
+
+writer: shape_rule_record
+
+
+editor: shape_rule
+
+
+writer: shape_rule
+
+
+editor: criteria_contract
+
+
+writer: criteria_contract
+
+
+writer: verification_tests
+Make the shipped claim cost evidence. A new test file walks specs/ and holds
+three rules: the status must be one of draft/approved/shipped; a spec that
+promises verification and is approved or shipped must have its results file
+beside it; and a spec marked shipped must have that file filled in, with no
+FILL_ME left.
+
+Rules 2 and 3 stay quiet on a spec with no "## Verification" section, so the
+specs already in the tree are untouched. A pure checker plus synthetic specs
+means each rule is observed failing, not just passing — against the real
+directory alone this would pass today and keep passing if inverted.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+
+writer: verification_convention
+
+
+fix: close the two honesty holes the review found
+Both Must-fix items from the review on #84. Both were real, both are amendments to
+approved specs, and both amendments are in this commit.
+
+A graded run with the editor off shipped clean. `editor_enabled === false` returned
+the literal `flagged: false` even when the unit carried acceptance criteria, so a
+`/forge --spec` run with `mandate = "off"` would log "criteria ungraded" and still
+report a clean unit — nobody graded anything, and the payload said everything was
+fine. This spec already refuses the same failure in its other form, ruling that a
+mistyped `--spec` must stop rather than "silently downgrade to an ungraded run";
+config is just a quieter way to reach the same place. Now `flagged` is true on that
+path when criteria were carried, and false when they were not, so the config's
+users see nothing new unless they also asked for grading.
+
+Worth being clear about provenance: that line came from the merged per-criterion
+grading work, not from this branch. The review found it here because this branch
+is stacked on it.
+
+The escalation prompt asked the writer to lie about its tests. It said to report
+`tests` "honestly (passed=false and the real exit_code)" — two instructions that
+cannot both be followed. A writer blocked on scope, a missing interface, or
+contradictory instructions can be staring at a green suite, and telling it to claim
+red corrupts the one machine-checked field in the handoff to signal something
+`stuck` already says. Nothing depended on it: the entry gate closes on
+`mvi_claimed=false` alone, which the JS tests already proved by handing an escalated
+writer a green suite and watching the gate stay shut. The prompt now asks for the
+real exit code and says outright not to report a red suite to mean "I am stuck."
+
+Two tests, each verified by reverting the fix and watching the intended test fail.
+Also corrected the three other places that described `tests.passed=false` as part
+of the escalation record; the signal is the `writer(stuck):` label, `mvi_claimed`,
+and `stuck`.
+
+Suite 831.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+
+editor: entry_gate_pinned
+
+
+writer: entry_gate_pinned
+
+
+editor: writer_escalation
+
+
+writer: writer_escalation
+
+
+fix: the gate matches each criterion instead of counting the grades
+Two reviewers went over the previous commit — which had never had an adversarial
+pass, since I wrote it by hand outside the loop — and both found real problems.
+
+The gate counted grades instead of matching them. Three verdicts that all named
+the same easy criterion, all passing, would hold the gate on a unit whose other
+two criteria were never looked at. That is the hallucinated-or-softened-criterion
+risk the spec already names, arriving through the check meant to catch it. The
+gate now requires every criterion to be matched, by its own text, to a passing
+grade that carries evidence — which also fixes the mirror case, where a Build
+Plan listing one criterion twice flagged an honest single verdict. Verdicts
+naming criteria the unit never carried are ignored rather than punished.
+
+A pass with the evidence field left blank no longer counts. The schema requires
+the field, but an empty string satisfies it, so without this the field deterred
+nothing. Enforced at the gate rather than with a schema minLength, so a bluff
+gets the unit flagged instead of rejecting the whole payload and killing the
+editor stage.
+
+No test could see the gate. It was an inline expression, so neutralizing the
+criteria check left all 28 tests green — an enforcement mechanism no test can
+reach is not enforcement. It is now a named function with its own tests, the same
+pattern collectReviewerConcerns already uses.
+
+The spec's decision table still ruled "no new gate — the exit gate's code is
+untouched", which the previous commit had already made false. Amended, along with
+the reworded criterion 2, which undercounted the editor prompt's additions.
+
+Also cut: five copies of the same justification, down to one in the spec and a
+short pointer at each use. The two criteria log lines collapse into one, which
+fixes a spec-less run logging "Criteria not passing" while shipping unflagged,
+and a "graded 4/3 — an ungraded criterion" line that misreported over-grading.
+
+Mutations verified, each caught by the test meant to catch it: neutralizing the
+gate's criteria check, regressing the rule to a count, and dropping the evidence
+requirement.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+
+editor: loop_grades_criteria
+
+
+writer: loop_grades_criteria
+
+
+spec: named-risk valve for the /forge editor's read scope
+The editor is told "Do not wander beyond that read scope" with no exception.
+That leaves one class of bug unfindable: code that depends on other code
+without importing it. Rename a config key, change a file format, alter a CLI
+flag, and every test passes because nothing in the import graph noticed. The
+editor is the only agent positioned to catch it and is forbidden to look.
+
+This replaces the ban with a valve — open one more file, but only against a
+risk you can name, one file per risk, and report what you checked including
+the clean checks. Reads widen; edits do not.
+
+The contrarian earned its rejection twice over. It killed the rationale the
+first draft rested on: the ban does not orphan the existing out_of_unit_scope
+concern category, because read scope is larger than unit scope, and that false
+claim was about to be committed into the design of record. The true argument is
+narrower — direct importers only catch static-import consumers.
+
+It also caught that the "cite, don't narrate" rule illustrated itself with a
+fabricated citation: studio/verdict.py is 7 lines long and the example pointed
+at line 88. A rule against asserting what you cannot point at, modelling a made
+-up pointer. The example is deleted and the spec records why nobody should add
+it back.
+
+Also cut: three of five proposed tests (one passed before the change, one was
+unfalsifiable, one forbade a decision that was never forbidden), and a plan to
+hand-record two token numbers as the valve's first data points — the spec
+already calls two data points insufficient, so two more would assert precision
+it disclaims. A one-line provenance note replaces them.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+
+writer: finding_verifier
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
+editor: findings_json
+
+
+writer: findings_json
+Structured contrarian findings (spec Unit 1). New studio/findings.py mirrors
+decision_points.py: a canonical FINDING blockquote (single source of truth),
+a Finding dataclass, parse_findings, format_finding, save/load_findings_json,
+and extract_findings_from_run over contrarian files. CONTRARIAN_MANDATE now
+tells the contrarian to also emit each finding as a FINDING block, importing
+the template so emit and parse cannot drift. findings.py added to the install
+snapshot list and the mutation-test scope.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
+editor: pull_source_wiring_cli
+
+
+writer: pull_source_wiring_cli
+
+
+editor: pull_source_ff_primitives
+
+
+writer: pull_source_ff_primitives
+
+
+editor: sessionstart_hook_install
+
+
+writer: sessionstart_hook_install
+
+
+writer: check_updates_signal
+
+
+writer: update_staleness_wiring
+
+
+writer: check_install_staleness_wiring
+
+
+writer: source_staleness_detector
+
+
+editor: stats_session_health
+
+
+writer: stats_session_health
+
+
+editor: ledger_auto_append
+
+
+writer: ledger_auto_append
+
+
+writer: session_json_finalize
+Auto-write a judgment-free session.json health record into the run dir at
+finalize: convergence, decision profile, clarity delta, cost, and editor
+liveness, all derived from files the run already produced. Additive and
+soft-fail so it never breaks finalize.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
+editor: loop_config_args
+
+
+writer: loop_config_args
+
+
+editor: collapse triplicated TOML schema in load_loop_config docstring
+Editor stage of the writer/editor loop (unit_impl_loop_config). The shipped TOML
+table shape was repeated in the docstring, config/implementation_loop.toml, and
+SPEC §4 — three copies that would drift (the staleness /unstale guards against).
+Collapsed the docstring copy to a pointer; canonical shape stays in the config +
+spec. No behavior change; 14 tests green before and after.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
+writer: unit_impl_loop_config
+
+
+feat: add implementation writer/editor loop (spec + workflow + /studio-implement)
+Brings the advocate/contrarian (writer/editor) cadence into implementation: a
+writer agent builds one complete MVI unit and commits its passing state; a fresh
+editor agent (reusing CONTRARIAN_MANDATE) cuts/refines against the writer's diff,
+reverting if an edit breaks green; then the unit is delivered.
+
+- studio/docs/IMPLEMENTATION_LOOP_SPEC.md — design spec. Gate split into an entry
+  moment (writer declares done + tests green -> triggers editor) and an exit moment
+  (editor's authoritative MVI verdict can overturn the claim). Prompts/gates/cadence/
+  handoff kept as data so a port rewrites only the thin shell. Refined once via a
+  Product + Engineering role pass.
+- .claude/workflows/implementation-loop.js — the orchestration shell (not yet run).
+  In-memory handoff anchored to writer_sha for diff base + revert point.
+- .claude/commands/studio-implement.md — /studio-implement: parse request -> echo
+  plan -> run the loop. The authorized trigger that opts in to the workflow.
+- .gitignore — track .claude/workflows/ (parallel to the existing commands exception)
+  so the command's workflow ships with it.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
