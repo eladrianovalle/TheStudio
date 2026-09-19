@@ -15,7 +15,7 @@ verification_due:
 # shipped_impact: one of none | minor | major — how much it changed downstream
 # shipped_changed: one line, in plain words, on what this actually changed
 shipped_impact: major
-shipped_changed: /forge is gated by the repo's own config file instead of a guess about its stack, and setup always leaves that file behind.
+shipped_changed: /forge is gated by the repo's own config file instead of a guess about its stack, setup always leaves that file behind, and every writer handoff now records whether the mutation check ran and why not.
 ---
 
 # First-class /forge gate configuration — Architecture Spec
