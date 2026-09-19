@@ -50,6 +50,21 @@ _FENCE_LINE = re.compile(r"^\s*(`{3,})")
 
 _BUILD_PLAN_HEADING = "## Build Plan"
 
+# A markdown ATX heading, capturing its hashes so a section can be bounded by its own depth.
+# Anchored at column 0 on purpose: four leading spaces make an indented code block, which is
+# markdown's other way to quote a line and the one `strip_fenced_blocks` cannot see.
+_HEADING_LINE = re.compile(r"^(#{1,6})\s")
+
+# How a heading that opens a unit entry starts: an ordinal or a backticked id, either of them
+# possibly wrapped in bold markers. Left unanchored here because its two users need different
+# levels — `_section_from` has to recognize one at whatever level a near-miss plan heading sits
+# at, and rule 7's `_INTENDED_UNIT_HEADING` in `tests/test_spec_verification.py` wants level 3
+# exactly. Shared as one fragment so the bound that decides where a plan ends and the rule that
+# reads the units inside it cannot disagree about what a unit heading looks like.
+UNIT_HEADING_SHAPE = r"\**(?:\d+\.|`[^`\n]+`)"
+
+_UNIT_HEADING = re.compile(r"^#{2,}\s+" + UNIT_HEADING_SHAPE)
+
 
 def _collapsed(line: str) -> str:
     """A heading line as a reader sees it rendered: casefolded, whitespace runs collapsed."""
@@ -125,10 +140,24 @@ def build_plan_section(spec_text: str) -> str | None:
 
 
 def _section_from(lines: List[str], start: int) -> str:
-    """The heading at ``start`` and everything under it, up to the next ``## `` heading."""
+    """The heading at ``start`` and everything under it, up to the next section at its level.
+
+    Bounded by the heading's own depth rather than by ``## ``, which is the same thing for the
+    real heading and not for a near miss one level down: a ``### Build Plan`` section stopping
+    only at the next ``## `` runs through every sibling level-3 section after it, so an
+    ``### Appendix`` quoting ``### 2. `appendix_example` `` hands that id to whatever read the
+    section — and a collision reported against it names a spec whose author cannot fix it.
+
+    A unit heading at that same depth continues the plan instead of ending it, which is what
+    stops the depth bound from cutting a ``### Build Plan`` section off before its own first
+    unit: the plan heading and the units under it are both level 3 there, so depth alone cannot
+    tell ``### 1. `real_unit` `` from ``### Appendix``, and only the second one is a new section.
+    """
+    depth = len(_HEADING_LINE.match(lines[start]).group(1))
     section = [lines[start]]
     for line in lines[start + 1:]:
-        if line.startswith("## "):
+        heading = _HEADING_LINE.match(line)
+        if heading and len(heading.group(1)) <= depth and not _UNIT_HEADING.match(line):
             break
         section.append(line)
     return "\n".join(section)
@@ -141,7 +170,8 @@ def _near_miss_headings(lines: List[str]) -> List[int]:
     return [
         index
         for index, line in enumerate(lines)
-        if _NEAR_MISS_BUILD_PLAN_HEADING.match(_collapsed(line))
+        if _HEADING_LINE.match(line)
+        and _NEAR_MISS_BUILD_PLAN_HEADING.match(_collapsed(line))
     ]
 
 
@@ -160,6 +190,28 @@ def near_miss_build_plan_headings(spec_text: str) -> List[str]:
     """
     lines = strip_fenced_blocks(spec_text).splitlines()
     return [lines[index].strip() for index in _near_miss_headings(lines)]
+
+
+def indistinguishable_build_plan_headings(spec_text: str) -> List[str]:
+    """The headings a spec carries that differ from ``## Build Plan`` in case or spacing only.
+
+    Reported whether or not the real heading is also present, which is the whole difference
+    between this and ``near_miss_build_plan_headings``. The precedence there — a near miss
+    matters only when nothing else matches — reads a labelled heading as its author saying it
+    is not the plan, and that reading is right for ``## Build Plan (as originally proposed)``.
+    A doubled space says nothing of the kind: ``##  Build Plan`` renders character for
+    character like the real heading, so a spec carrying both shows its author two identical
+    lines while every reader here takes the exact one and drops the other's units. Whichever
+    of the two came later, the one that loses is invisible on the page.
+    """
+    lines = strip_fenced_blocks(spec_text).splitlines()
+    return [
+        line.strip()
+        for line in lines
+        if line.rstrip() != _BUILD_PLAN_HEADING
+        and _HEADING_LINE.match(line)
+        and _collapsed(line) == _collapsed(_BUILD_PLAN_HEADING)
+    ]
 
 
 def near_miss_build_plan_section(spec_text: str) -> str | None:
