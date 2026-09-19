@@ -2036,8 +2036,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     check_updates_parser = subparsers.add_parser(
         "check-updates",
-        help="Print a one-line update nudge if the installed Studio snapshot is "
-             "behind upstream. Silent when current. Invoked by the SessionStart hook.",
+        help="Print the session brief: an available Studio update, and one unit an "
+             "approved spec planned that nothing ever built. Silent when neither. "
+             "Invoked by the SessionStart hook.",
     )
     check_updates_parser.add_argument(
         "--target",
@@ -2954,7 +2955,7 @@ def _do_check_install(args: argparse.Namespace) -> None:
 
 
 UNFINISHED_ADDITIONAL_CONTEXT = (
-    "Unfinished planned work: {units} {preposition} {specs}. The next one is `{unit_id}` in "
+    "Unfinished planned work: {units} in {specs}. The next one is `{unit_id}` in "
     "{spec_file}{title}. Tell the user they can continue it with: "
     "/forge --spec {slug} --unit {unit_id}. If it was dropped on purpose, open a PR adding "
     "`- **Dropped:** YYYY-MM-DD \u2014 <reason>` under that unit's heading in the spec and it "
@@ -3023,7 +3024,6 @@ def _unfinished_context(target: Path) -> str:
     spec_count = len({owed.slug for owed in unbuilt})
     return UNFINISHED_ADDITIONAL_CONTEXT.format(
         units=_units(len(unbuilt)),
-        preposition="in" if spec_count == 1 else "across",
         specs=_units(spec_count, "approved spec"),
         unit_id=unit.unit_id,
         spec_file=_spec_display_path(spec_files[unit.slug], target),
