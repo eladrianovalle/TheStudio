@@ -77,7 +77,9 @@ persisted to the run directory.
     "exit_code": 0
   },
   "mvi_claimed": true,              // writer's DECLARATION that the unit is a complete thought — the handoff trigger
-  "mutation_check": { "performed": true, "mutations_introduced": 2, "caught": true },  // attested; counts PRODUCTION-code changes, never broken assertions
+  "mutation_check": { "performed": true, "mutations_introduced": 2, "caught": true },  // REQUIRED; attested; counts PRODUCTION-code changes, never broken assertions
+  // when it did not run, say why: { "performed": false, "reason": "not_configured" } — the check is disabled by
+  // config, even if the writer escalated; "nothing_to_mutate" — no production code to change; "not_reached" — the writer stopped first
   "load_bearing": ["the retry in save_profile guards a real race; do not cut"],
   "stuck": "…",       // present ONLY when the writer stopped deliberately: the blocker, quoted. Absent normally
   "stage": "writer"   // "writer" | "editor"
@@ -244,25 +246,26 @@ tomllib/tomli loader, same resolution chain (CLI flag → `.studio/` override �
 `ScopeConfig`/`load_scopes_config()` in `scopes.py`.
 
 Below is **everything a repo may set**, not what ships. Studio ships `[loop]` and `[editor]`
-only; the `[gate]` commands are detected from the repo's own stack (`impl_loop.STACK_MARKERS` →
-`resolve_profile`), so a Python repo gets `pytest -q` + `ruff` + `mutmut run`, a Node repo with a
-`test` script gets `npm test`, and a repo Studio can't identify — or one matching two stacks at
-once — is refused at load with the file and the lines to write.
+only. **The `[gate]` commands come from the repo's own `.studio/implementation_loop.toml` and from
+nowhere else**: a key that file leaves out is empty, not a guess, and nothing is detected at load.
+A repo with no file, or with a blank `test_command`, is refused at load — and the refusal names the
+file it read and says whether the key was blank or the file was missing.
 
-Two things about the file itself. A `[gate]` table in a project file merges **over** the detected
-profile, so setting only `test_command` leaves the rest as the stack's rather than another
-language's. `/studio-setup` writes that project file with the detected commands (and leaves an
-existing one untouched), so what the gate runs is visible and editable rather than implied. And a
-project file is read **instead of** the shipped one, never merged with it — so copy over any
-`[loop]`/`[editor]` value you want to keep. Those two tables match the dataclass
-defaults exactly, which is the only reason that shadowing is harmless; `test_impl_loop.py` holds
-them to it.
+`/studio-setup` is what leaves that file behind, on every path: pre-filled where it recognises the
+project (`impl_loop.STACK_MARKERS` → `resolve_profile` — a Python repo gets `pytest -q` + `ruff` +
+`mutmut run`, a Node repo with a `test` script gets `npm test`), and blank with instructions where
+it does not. It never modifies a file that is already there. Detection is that one opening guess and
+nothing more; a wrong guess costs one edit instead of a silently mis-gated build.
+
+A project file is read **instead of** the shipped one, never merged with it — so copy over any
+`[loop]`/`[editor]` value you want to keep. Those two tables match the dataclass defaults exactly,
+which is the only reason that shadowing is harmless; `test_impl_loop.py` holds them to it.
 
 ```toml
 [loop]
 deliver_on_gate_fail = true   # if the writer can't reach green, deliver flagged (uncommitted) rather than spin
 
-[gate]                             # detected per repo; set these only to override the detection
+[gate]                             # this file only; a key left out is empty, never a default
 test_command = "pytest -q"       # what runs the unit-scoped tests here (a Node repo: "npm test")
 static_checks = ["ruff check {paths}"]  # the lint commands to run; {paths} = the unit's paths, [] skips
 require_mutation_check = true    # writer runs the mutation check on the touched code and reports it

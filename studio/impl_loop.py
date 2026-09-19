@@ -5,9 +5,11 @@ Configuration for the implementation writer/editor loop.
 Mirrors the ScopeConfig / load_scopes_config() pattern in scopes.py: a dataclass
 for the shipped config tables plus a loader with the tomllib/tomli fallback and a
 resolution chain (explicit path → .studio/ override → shipped default → defaults).
-The [gate] table is the exception: its commands come from the repo's detected stack
-profile, never from a shipped default, and load_loop_config refuses rather than falling
-back when nothing supplies a runnable test command.
+The [gate] table is the exception: its commands come from the repo's own config file and
+from nowhere else — a key that file leaves out is empty, not a guess — and load_loop_config
+refuses rather than falling back when nothing supplies a runnable test command. Detection
+(STACK_MARKERS → resolve_profile) survives here as the setup wizard's opening guess; the
+loader does not call it.
 
 See studio/docs/IMPLEMENTATION_LOOP_SPEC.md §4 for the table shape.
 """
@@ -86,7 +88,7 @@ class LoopConfigError(ValueError):
 # holding a `*` is globbed; every other pattern is an exact path test.
 #
 # `rust` is recognised but unserved: Studio ships no gate commands for it, which is how
-# the loader says "I know what this is and still have no command for it" instead of
+# the wizard says "I know what this is and still have no command for it" instead of
 # guessing. It is load-bearing. Without the row, a Rust game whose package.json only
 # describes CI tooling matches node alone and gets handed `npm test`, which passes while
 # testing none of the game — a wrong-reason *pass*, worse than the wrong-reason failure
@@ -112,8 +114,8 @@ class StackProfile:
     commands and both are refusals. A single stack whose ``test_command`` is None is the
     third no-command case — recognised, but Studio has nothing honest to run (Unity,
     Rust, a Node package declaring no test script). That is a valid result, not an error:
-    the loader decides whether it is fatal, because an override may still supply the
-    command.
+    the wizard writes a blank template from it and the person filling that template in
+    supplies the command.
 
     ``static_checks`` is a tuple rather than a list because PROFILES is module-level
     shared state, and ``frozen=True`` would not stop a caller mutating a list in place.
@@ -238,11 +240,12 @@ def _node_profile(root: Path) -> StackProfile:
 
 
 def resolve_profile(root: Path) -> StackProfile:
-    """The gate defaults for the repository at ``root``.
+    """The gate commands Studio would offer the repository at ``root``.
 
-    A profile whose test_command is None is a valid result meaning "recognised, no
-    command known" — the loader decides whether that is fatal, because an override may
-    still supply one.
+    The setup wizard's opening guess, and nothing else: ``load_loop_config`` does not
+    call this, because a repository's own config file is the only thing that decides how
+    /forge gates it. A profile whose test_command is None is a valid result meaning
+    "recognised, no command known" — the wizard writes a blank template for it.
     """
     stacks = tuple(detect_stacks(root))
     if len(stacks) != 1:
@@ -253,7 +256,9 @@ def resolve_profile(root: Path) -> StackProfile:
 
 
 def _detected_line(profile: StackProfile, root: Path) -> str:
-    """The one line of the refusal that says what was found here, and why it is no help."""
+    """The one line of the wizard's template that says what was found here, and why it is
+    no help. Written into the file someone is about to edit; the loader's refusal no
+    longer mentions detection at all."""
     markers = dict(_matched_markers(root))
     named = [f"{stack} ({markers[stack]})" for stack in profile.stacks]
 
@@ -289,50 +294,67 @@ def _detected_line(profile: StackProfile, root: Path) -> str:
     return f"{named[0]}. Studio ships no test command for {stack.capitalize()}."
 
 
-def _no_test_command_message(profile: StackProfile, root: Path) -> str:
-    """Why the loop is refusing to start, and the exact three lines that fix it.
+def _no_test_command_message(config_path: Path) -> str:
+    """Why the loop is refusing to start, and the exact lines that fix it.
 
-    Five repositories in ten reach this message rather than a detected profile, so it is
+    Five repositories in ten reach this message rather than a filled-in gate, so it is
     not an edge case — it is this feature's main interface. It never offers a value that
     skips the gate: the only command that would satisfy such a value is one that does
     nothing, which reopens the hole the refusal closes.
+
+    The two wordings are chosen by whether ``config_path`` is *there*, and never by which
+    branch of the resolution chain handed it over. A file passed in explicitly with a
+    blank key is a blank key, not a missing file, and telling its owner the path does not
+    exist sends them looking for something they are already holding.
+
+    It says nothing about what was detected, because by the time anyone reads this nothing
+    has been: the file is the only thing that decides how a repo is gated.
     """
-    override = root / ".studio" / "implementation_loop.toml"
+    if config_path.exists():
+        found = "the file is there, but gate.test_command in it is blank or missing."
+        fix = [
+            f"Fill in the test_command line in {config_path}:",
+            "",
+            "    [gate]",
+            '    test_command = "<the command that runs this repo\'s tests>"',
+        ]
+    else:
+        found = "there is no file at that path."
+        fix = [
+            f"Write {config_path}:",
+            "",
+            "    [gate]",
+            '    test_command = "<the command that runs this repo\'s tests>"',
+            "",
+            "Or run /studio-setup, which writes that file for you.",
+        ]
     return "\n".join([
         "gate.test_command is not set, and Studio has no default for this repository.",
         "",
-        f"  Looked in:  {root}",
-        f"  Detected:   {_detected_line(profile, root)}",
+        f"  Looked in:  {config_path}",
+        f"  Found:      {found}",
         "",
         "/forge runs a test gate; without a command it would ask the writer agent to invent",
         "one and then believe whatever it reported back. It will not do that.",
         "",
-        f"Set the command in {override}:",
+        *fix,
         "",
-        "    [gate]",
-        '    test_command = "<the command that runs this repo\'s tests>"',
-        "",
-        "Or run /studio-setup, which writes that file for you.",
-        *([] if profile.stacks else [
-            "",
-            "If this repository has no tests at all, that is the real answer and there is",
-            "nothing to set: /forge is for code you can prove still works. Use /spec to",
-            "settle the design and build it the ordinary way.",
-        ]),
+        "If this repository has no tests at all, that is the real answer and there is",
+        "nothing to set: /forge is for code you can prove still works. Use /spec to",
+        "settle the design and build it the ordinary way.",
     ])
 
 
-def _no_mutation_command_message(root: Path) -> str:
+def _no_mutation_command_message(config_path: Path) -> str:
     """The other way a gate can be unrunnable: the check is on and has nothing to run."""
-    override = root / ".studio" / "implementation_loop.toml"
     return "\n".join([
         "gate.require_mutation_check is on, but gate.mutation_command is empty.",
         "",
-        f"  Looked in:  {root}",
+        f"  Looked in:  {config_path}",
         "",
         "The writer would be told to run the mutation check with no command to run.",
         "",
-        f"Give it one in {override}, or turn the check off there:",
+        f"Give it one in {config_path}, or turn the check off there:",
         "",
         "    [gate]",
         '    mutation_command = "<the command that mutation-tests this repo>"',
@@ -368,32 +390,30 @@ def _bare_static_check_name_message(entry: str, config_path: Path) -> str:
     ])
 
 
-def _require_gate_commands(
-    config: LoopConfig,
-    detected: StackProfile,
-    root: Path,
-    config_path: Path | None = None,
-) -> None:
+def _require_gate_commands(config: LoopConfig, config_path: Path) -> None:
     """Refuse a resolved config whose gate the loop cannot actually run.
 
+    ``config_path`` is the file that decides this repo's gate, and every refusal here
+    names it — so it is passed in rather than worked out again, and it is the same path
+    whether that file exists or not.
+
     Deliberately not a branch in ``LoopConfig.__post_init__``: that checks types, while
-    this asks whether a resolved config is *runnable*, which needs the detection context
-    to explain itself. An empty string passes __post_init__ today and would flow all the
-    way to the writer, which is told to run the command and then believed when it reports
-    the result.
+    this asks whether a resolved config is *runnable*, which needs to know which file
+    should have supplied the command to explain itself. An empty string passes
+    __post_init__ today and would flow all the way to the writer, which is told to run the
+    command and then believed when it reports the result.
 
     ``static_checks`` holds the commands the loop runs. An empty list is still not a
     refusal — it means "skip the static check" — and any command is taken as written. The
     one refusal is a leftover bare tool name, which would run nothing at all.
     """
     if not config.test_command.strip():
-        raise LoopConfigError(_no_test_command_message(detected, root))
+        raise LoopConfigError(_no_test_command_message(config_path))
     if config.require_mutation_check and not config.mutation_command.strip():
-        raise LoopConfigError(_no_mutation_command_message(root))
+        raise LoopConfigError(_no_mutation_command_message(config_path))
     for entry in config.static_checks:
         if isinstance(entry, str) and entry.strip() in LEGACY_STATIC_CHECK_COMMANDS:
-            named_file = config_path or root / ".studio" / "implementation_loop.toml"
-            raise LoopConfigError(_bare_static_check_name_message(entry, named_file))
+            raise LoopConfigError(_bare_static_check_name_message(entry, config_path))
 
 
 @dataclass
@@ -401,20 +421,23 @@ class LoopConfig:
     """Configuration for the implementation writer/editor loop.
 
     The [loop] and [editor] defaults are the shipped defaults from the spec §4. The
-    [gate] defaults are Python's, and they are **not** what a repository gets:
-    ``load_loop_config`` builds its merge base from ``resolve_profile`` instead, so a
-    Node repo starts from Node's commands and a repo Studio cannot identify starts from
-    none at all. No production path reads them — the loader always passes the gate keys
-    in — so they stand only as an example of the shape for whoever reads a bare
-    ``LoopConfig()``, which is why they are plain literals and not a factory over PROFILES.
+    [gate] fields have no such defaults, and that is the point: a repository's own config
+    file is the only thing that says how /forge gates it, so a key that file leaves out
+    has to arrive here as nothing rather than as Python's idea of a reasonable command.
+    Give them literals again — ``"pytest -q"``, ``"mutmut run"`` — and a repo whose file
+    sets only ``test_command`` quietly starts being told to run tools it does not have.
+
+    ``test_command`` has no default at all, so ``LoopConfig()`` is a TypeError rather than
+    a config that gates on nothing. A gate with no command is a real state, reached by
+    writing ``test_command=""``; it is never reached by leaving the argument off.
     """
+    # [gate]
+    test_command: str
+    static_checks: List[str] = field(default_factory=list)
+    require_mutation_check: bool = False
+    mutation_command: str = ""
     # [loop]
     deliver_on_gate_fail: bool = True
-    # [gate]
-    test_command: str = "pytest -q"
-    static_checks: List[str] = field(default_factory=lambda: ["ruff check {paths}"])
-    require_mutation_check: bool = True
-    mutation_command: str = "mutmut run"
     # [editor]
     mandate: str = "contrarian"
     read_scope: str = "touched+importers"
@@ -451,9 +474,8 @@ class LoopConfig:
 def project_artifact_root(studio_root: Path) -> Path:
     """The consuming repo root where project-local config lives.
 
-    Public because ``setup.py`` asks it where ``/forge`` will look, the same way it asks
-    ``resolve_profile`` what ``/forge`` will run: one function, two callers, so the two
-    answers cannot drift.
+    Public because ``setup.py`` asks it where ``/forge`` will look: one function, two
+    callers, so the wizard cannot write a file the loader never reads.
 
     Mirrors run_phase.get_artifact_root's installed-layout detection WITHOUT importing
     run_phase (impl_loop ships standalone to .studio/source/): honor STUDIO_ARTIFACT_ROOT,
@@ -493,7 +515,7 @@ def _resolve_config_path(path: Path | None, studio_root: Path) -> Path | None:
     explicit ``path`` → ``<artifact-root>/.studio/implementation_loop.toml`` (the project
     override, which lives at the consuming repo root, NOT under the source snapshot) →
     ``<studio-root>/config/implementation_loop.toml`` (the shipped default). Returns None
-    when nothing in the chain exists (caller falls back to built-in defaults).
+    when nothing in the chain exists (caller refuses with ``LoopConfigError``).
     """
     if path is not None:
         return Path(path)
@@ -504,6 +526,25 @@ def _resolve_config_path(path: Path | None, studio_root: Path) -> Path | None:
     if shipped.exists():
         return shipped
     return None
+
+
+def _gate_config_path(path: Path | None, repo_root: Path) -> Path:
+    """The file that decides this repo's gate, which every gate refusal names.
+
+    The explicitly requested file when there is one, and otherwise the repo's own
+    ``.studio/implementation_loop.toml`` — named whether or not it is there, because
+    "there is no file at that path" is the useful half of the refusal for a repo that
+    has never written one.
+
+    The resolution chain must never land here on Studio's shipped
+    ``config/implementation_loop.toml``. That file carries no [gate] table at all, so it is
+    never what gates a repository, and sending someone to edit it would send them to a copy
+    the next update overwrites. Ask for it by name and the refusal does name it — you are
+    holding that file, and being told about a different one would be the confusing answer.
+    """
+    if path is not None:
+        return Path(path)
+    return repo_root / ".studio" / "implementation_loop.toml"
 
 
 def load_loop_config(path: Path | None = None, studio_root: Path | None = None) -> LoopConfig:
@@ -517,15 +558,14 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
     exist raises FileNotFoundError: a typo'd config path is an error rather than a silent
     request for defaults.
 
-    **The gate commands come from the repository, not from a shipped default.** The merge
-    base is ``resolve_profile``'s answer for the repo being built in, so a config file
-    that sets only ``gate.test_command`` no longer inherits ``ruff`` and ``mutmut``
-    through the gap. When nothing supplies a test command — no override, and a repo Studio
-    cannot identify — this raises LoopConfigError rather than returning a config the loop
-    would fail on later for a reason that has nothing to do with your code.
+    **The gate commands come from that file and from nowhere else.** A [gate] key the file
+    leaves out is empty, not a guess: nothing is detected here, and no shipped default
+    fills the gap. When nothing supplies a test command this raises LoopConfigError rather
+    than returning a config the loop would fail on later for a reason that has nothing to
+    do with your code, and the refusal names the file it read.
 
-    All tables/keys are optional; unspecified keys inherit the detected profile for the
-    gate and the LoopConfig defaults for everything else. See
+    All tables/keys are optional; unspecified [gate] keys resolve to empty, and
+    unspecified [loop]/[editor] keys to the LoopConfig defaults. See
     config/implementation_loop.toml (the shipped default) and SPEC §4 for the canonical
     table shape.
 
@@ -535,7 +575,7 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
             dir). Exposed for testing.
 
     Returns:
-        LoopConfig with parsed values merged over the detected profile.
+        LoopConfig with the file's values, and nothing where it named nothing.
 
     Raises:
         FileNotFoundError: If an explicit ``path`` is given but does not exist.
@@ -547,18 +587,11 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
 
     root = studio_root if studio_root is not None else STUDIO_ROOT
     repo_root = project_artifact_root(root)
-    detected = resolve_profile(repo_root)
-    defaults = LoopConfig(
-        test_command=detected.test_command or "",
-        static_checks=list(detected.static_checks),
-        require_mutation_check=detected.require_mutation_check,
-        mutation_command=detected.mutation_command or "",
-    )
+    gate_file = _gate_config_path(path, repo_root)
 
     config_path = _resolve_config_path(path, root)
-    if config_path is None or not config_path.exists():
-        _require_gate_commands(defaults, detected, repo_root)
-        return defaults
+    if config_path is None:
+        raise LoopConfigError(_no_test_command_message(gate_file))
 
     try:
         with open(config_path, "rb") as f:
@@ -573,6 +606,9 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
         if not isinstance(table, dict):
             raise ValueError(f"'{name}' must be a table/dict: {config_path}")
 
+    # An empty gate, kept only so the [loop] and [editor] fallbacks below read out of the
+    # dataclass rather than being written a second time here, where they could drift.
+    defaults = LoopConfig(test_command="")
     resolved = LoopConfig(
         deliver_on_gate_fail=loop.get("deliver_on_gate_fail", defaults.deliver_on_gate_fail),
         test_command=gate.get("test_command", defaults.test_command),
@@ -583,7 +619,7 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
         read_scope=editor.get("read_scope", defaults.read_scope),
         output_budget=editor.get("output_budget", defaults.output_budget),
     )
-    _require_gate_commands(resolved, detected, repo_root, config_path)
+    _require_gate_commands(resolved, gate_file)
     return resolved
 
 
