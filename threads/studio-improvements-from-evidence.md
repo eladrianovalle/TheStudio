@@ -44,7 +44,7 @@ As of 2026-09-19 it carries 1053 tests, ruff clean.*
   Unit 3 shipped one fix past its criteria — the schema can require `performed` but cannot demand a
   `reason` when it is false, so `{"performed": false}` still validated; that rule lives in the
   orchestration now. The debate is `studio/output/tech/run_tech_20260915_015039`, finalized APPROVED.
-  **The spec has not been flipped to `shipped` yet** — see Next action.
+  **The spec is flipped to `shipped`** — #183 merged 2026-09-19.
 
 - **The gate-config sweep is done, and it tested the wizard rather than bypassing it.** Merging the
   loader unit would have broken `/forge` in **four** installs — `Arkadium/solitaire-game`, `_Cerebro`,
@@ -64,7 +64,8 @@ As of 2026-09-19 it carries 1053 tests, ruff clean.*
 
 - **`specs/completion-ledger.md` is on main** (#177). Two advocate passes, two contrarian passes, both
   rejections accepted rather than argued down, eighteen recorded decisions. Debate:
-  `studio/output/tech/run_tech_20260916_162723`, finalized APPROVED. Nothing is built from it yet.
+  `studio/output/tech/run_tech_20260916_162723`, finalized APPROVED. Unit 1 is built and merged
+  (#184); units 2 and 3 remain.
 
 - **The stranded-concern sweep is closed.** 146 concerns recovered from old editor records; most
   load-bearing ones were already fixed or were recorded decisions. Fixes went to the repos that owned
@@ -81,7 +82,10 @@ As of 2026-09-19 it carries 1053 tests, ruff clean.*
   turns `check-updates` into a two-source brief. This note is deliberately not updated per unit —
   three of its revisions were rejected for carrying stale copies of fast-moving facts, so it gets one
   update when the ledger is done.
-- **#182** (this note) and **#183** (`first-class-forge-gates` to `shipped`, closes #133) are open.
+- **#183** (`first-class-forge-gates` to `shipped`, closes #133) and **#184**
+  (completion-ledger unit 1) both merged 2026-09-19. For what is open right now, read
+  `gh pr list`, not this line — three revisions of this note were rejected for carrying a
+  stale copy of exactly that, and a fourth PR opened while this one was being corrected.
 - Three issues from the 2026-09-16 work are open and unassigned: **#179** (`setup --defaults` resets
   every prior choice, and `--status` recommends it), **#180** (per-scope `model` in `scopes.toml`),
   **#181** (measure whether the contrarian's confidence ratings are calibrated). #180 is deliberately
