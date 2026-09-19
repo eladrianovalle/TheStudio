@@ -200,13 +200,24 @@ instrument is a person reading the output, keep it and fill it in.
 ## Build Plan
 How this maps to buildable units — a short list of MVI units (each a complete, usable interaction;
 "build a skateboard, not a wheel"), in dependency order. This is the bridge to `/forge`, which reads
-this section directly, so give every unit the same shape:
+this section directly, so open every unit with a level-3 heading carrying its number, a backticked
+`unit_id`, an em dash and a one-line outcome:
 
-1. **`<unit_id>` — <one-line usable outcome>.** What gets built: the files, the behavior, the tests.
-   - **Acceptance criteria:**
-     - [ ] <one checkable statement>
-     - [ ] <another>
-   - **Out of scope:** what this unit deliberately does not do.
+### 1. `<unit_id>` — <one-line usable outcome>
+
+What gets built: the files, the behavior, the tests.
+
+**Acceptance criteria:**
+- [ ] <one checkable statement>
+- [ ] <another>
+
+**Out of scope:** what this unit deliberately does not do.
+
+### 2. `<next_unit_id>` — <the next usable outcome>
+
+The heading is what bounds an entry: a unit runs to the next `###`, so a nested list inside one can
+never be read as another unit. Once a spec is `approved`, Studio's spec-verification suite refuses
+any other shape.
 
 The criteria are the part `/forge` depends on, so write them with care:
 
@@ -218,8 +229,10 @@ The criteria are the part `/forge` depends on, so write them with care:
 - **Keep them checkable from the code and its tests.** The `/forge` editor reads the diff and runs the
   unit's tests; it has no browser and no Play mode. A criterion that only a human at the screen can
   judge belongs in `/smoke`, not here.
-- **`<unit_id>` is a short snake_case handle, unique within this spec.** `/forge --spec <slug> --unit
-  <unit_id>` is how the builder pulls this unit's criteria, so don't rename it once the spec is approved.
+- **`<unit_id>` is a short snake_case handle, unique repo-wide** — no other spec may plan the same id,
+  because a commit subject carries no slug and two specs sharing an id cannot be told apart. `/forge
+  --spec <slug> --unit <unit_id>` is how the builder pulls this unit's criteria, so don't rename it
+  once the spec is approved.
 ````
 
 Keep the writing human (Coding Principles §6): plain language, say what a thing does and why it

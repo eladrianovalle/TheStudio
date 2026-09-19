@@ -42,6 +42,70 @@ def parse_frontmatter(text: str) -> Dict[str, str]:
     return fields
 
 
+# A fence opens on a line whose first non-blank characters are three or more backticks, and
+# closes on a run at least as long. Tracking the opener's length matters here: this repo writes
+# spec templates inside four-backtick fences precisely so an inner three-backtick block does not
+# close them early, and a stripper that assumed three would end the block in the wrong place.
+_FENCE_LINE = re.compile(r"^\s*(`{3,})")
+
+_BUILD_PLAN_HEADING = "## Build Plan"
+
+
+def strip_fenced_blocks(text: str) -> str:
+    """The document with every fenced code block blanked out, line for line.
+
+    Fenced lines come back as empty strings rather than being deleted, so line numbers still
+    line up with the original file — a violation can say where it is and mean it.
+
+    An unclosed fence swallows the rest of the document, which is what a markdown renderer
+    does with one too.
+    """
+    kept = []
+    open_fence = ""
+    for line in text.splitlines():
+        marker = _FENCE_LINE.match(line)
+        if open_fence:
+            if marker and len(marker.group(1)) >= len(open_fence):
+                open_fence = ""
+            kept.append("")
+        elif marker:
+            open_fence = marker.group(1)
+            kept.append("")
+        else:
+            kept.append(line)
+    return "\n".join(kept)
+
+
+def build_plan_section(spec_text: str) -> str | None:
+    """The ``## Build Plan`` section of a spec, or ``None`` when the spec has none.
+
+    Fenced code blocks are removed first, then the **last** remaining Build Plan heading
+    wins, then the section runs to the next ``## `` heading.
+
+    Both halves of that are load-bearing. A spec that documents the Build Plan format
+    contains a *fenced* ``## Build Plan`` heading, and a line-anchored regex cannot see the
+    fence, so the phantom heading would win on line order: ``specs/unit-acceptance-criteria.md``
+    has one at line 77 and its real plan at line 415, and a first-match slice grabs 283 wrong
+    lines and then reports a plan with no units against a spec whose plan is fine.
+
+    One reader, shared, so the rule that polices Build Plans and the code that reads them can
+    never disagree about where the Build Plan is.
+    """
+    lines = strip_fenced_blocks(spec_text).splitlines()
+    headings = [
+        index for index, line in enumerate(lines) if line.startswith(_BUILD_PLAN_HEADING)
+    ]
+    if not headings:
+        return None
+    start = headings[-1]
+    section = [lines[start]]
+    for line in lines[start + 1:]:
+        if line.startswith("## "):
+            break
+        section.append(line)
+    return "\n".join(section)
+
+
 def summarize_shipped_specs(records: List[Dict]) -> Dict:
     """Roll up shipped specs into an impact tally and the recent change lines.
 
