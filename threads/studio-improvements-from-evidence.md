@@ -15,8 +15,8 @@ anyone hand-writing a config file.
 
 ## Where this stands
 
-**Done and verified (2026-09-15)**
-- Main at `3715caf` after #175, #177 and #178 merged; **1053 tests** with #176's branch merged up, ruff clean.
+**Done and verified (2026-09-15 to 2026-09-18)**
+- Main at `16660cb` after #175, #177 and #178 merged; **1053 tests** with #176's branch merged up, ruff clean.
 - **#169 — cleanup no longer eats finished work.** `cleanup_runs` deleted on age and size alone and
   never checked status; a finalized APPROVED debate died at 30 days like an abandoned prepare. 31+
   consumer runs were already lost. Finalized runs are now never deleted by either rule; unfinished
@@ -63,13 +63,15 @@ anyone hand-writing a config file.
   load-bearing ones were already fixed or were recorded decisions. Two PRs came out of it:
   cemetery-security #722 and OrkidGarden-Game #133. See [[feedback_stranded_concerns_go_stale]].
 
-**In flight**
-- **#177 and #178 merged 2026-09-16.** Open now: **#176** (approved three times, checks green,
-  brought up to date with main on 2026-09-18) and **#182**, this note's own pull request. Three
-  issues are open from that day's work —
+- **#177 and #178 merged 2026-09-18** (23:46 and 23:47 UTC — their commits were authored on the
+  16th, the merges were not). Three issues are open from that work —
   **#179** (`setup --defaults` resets every prior choice, and `--status` recommends it),
   **#180** (per-scope `model` in `scopes.toml`), **#181** (measure whether the contrarian's
   confidence ratings are calibrated).
+
+**In flight**
+- **#176** (every review pass on it has come back APPROVED — eight as of 2026-09-18 — checks green,
+  brought up to date with main on 2026-09-18) and **#182**, this note's own pull request.
 
 **Next action**
 Merge #176 — its blocker is cleared and every install that would have regressed now carries a real
