@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 import textwrap
 from datetime import datetime, timezone
@@ -88,10 +89,15 @@ from integrations.slack_digest import (
 
 from config_loading import tomllib
 from stats import (
+    PlannedUnit,
     _parse_usage_log,
     aggregate_stats,
+    built_unit_ids,
     format_stats,
+    mentioned_unit_ids,
+    parse_build_plan,
     parse_frontmatter,
+    reconcile_units,
     summarize_session_health,
     summarize_shipped_specs,
 )
@@ -2461,6 +2467,112 @@ def _shipped_spec_records() -> List[Dict]:
     return records
 
 
+def _approved_spec_units() -> List[PlannedUnit]:
+    """Every unit planned by a spec whose frontmatter says ``status: approved``.
+
+    Approved is the whole filter, and it is deliberate on both sides. A draft spec is an
+    argument in progress and owes nobody a build; a shipped one is finished, and its units are
+    history. Specs are read in slug order and units keep their document order inside a spec, so
+    the same unit is named in the same place every time the dashboard is printed.
+
+    Returns an empty list when there is no specs directory, the normal state of a repo that has
+    never run /spec. An unreadable spec is skipped rather than fatal, the same as
+    ``_shipped_spec_records`` does.
+    """
+    units: List[PlannedUnit] = []
+    for spec_path, spec_text in _readable_specs():
+        frontmatter = parse_frontmatter(spec_text)
+        if frontmatter.get("status", "").strip() != "approved":
+            continue
+        slug = frontmatter.get("slug", "").strip() or spec_path.stem
+        units.extend(parse_build_plan(spec_text, slug))
+    return units
+
+
+def _mentioned_unit_ids() -> set:
+    """Every id-shaped token any spec quotes in backticks, at any status.
+
+    This is the other half of the audit direction, and it reads every spec rather than the
+    approved ones on purpose: the question is whether an id was ever planned anywhere, and a
+    unit planned under a spec that has since shipped is finished work rather than work nobody
+    proposed. Without it the built-but-never-planned count in this repository reads roughly
+    twice its true size.
+    """
+    mentioned: set = set()
+    for _, spec_text in _readable_specs():
+        mentioned |= mentioned_unit_ids(spec_text)
+    return mentioned
+
+
+def _readable_specs() -> List[Tuple[Path, str]]:
+    """Each spec in the specs directory with its text, skipping what cannot be read.
+
+    Eval-results files are excluded by name, the same as ``_shipped_spec_records`` excludes
+    them: they sit beside a spec as its evidence and plan nothing of their own.
+    """
+    specs_dir = get_specs_dir()
+    if not specs_dir.is_dir():
+        return []
+
+    specs: List[Tuple[Path, str]] = []
+    for spec_path in sorted(specs_dir.glob("*.md")):
+        if spec_path.name.endswith("-eval-results.md"):
+            continue
+        try:
+            specs.append((spec_path, spec_path.read_text(encoding="utf-8")))
+        except OSError:
+            continue
+    return specs
+
+
+def _built_unit_ids(target: Path) -> Optional[Tuple[set, set]]:
+    """``(built, escalated)`` unit ids read from *target*'s commit log, or ``None``.
+
+    ``None`` means the built set could not be read — no git on PATH, not a work tree, a shallow
+    clone, or a log that took too long. It is not the same answer as an empty set, and the
+    caller must keep them apart: with no built set every planned unit reads unbuilt, so a repo
+    with approved specs would be told that nothing in them was ever built. Silence beats a lie.
+
+    A shallow clone is checked for rather than tolerated because truncated history drops old
+    ``writer:`` commits, which fails the same way and is one cheap call to detect. CI clones at
+    ``fetch-depth: 1`` land here.
+
+    ``--all`` covers every local and remote-tracking ref, so a unit built on a branch nobody has
+    merged still reads as built — nagging about finished work is how a nudge teaches people to
+    ignore it. ``--grep`` lets git filter in C, and the record separator is ``\x1e`` rather than
+    a NUL: a NUL makes the output binary, and anything reading it then sees nothing at all.
+    """
+    try:
+        if _git(target, "rev-parse", "--is-inside-work-tree") != "true":
+            return None
+        if _git(target, "rev-parse", "--is-shallow-repository") != "false":
+            return None
+        log = _git(
+            target, "log", "--all", "--no-merges", "-E",
+            "--grep", r"^(writer|editor)", "--format=%s%n%b%n%x1e",
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if log is None:
+        return None
+    return built_unit_ids(log)
+
+
+def _git(target: Path, *arguments: str) -> Optional[str]:
+    """One git command against *target*, or ``None`` when git refuses it.
+
+    Five seconds is the ceiling. Nothing here is worth making a command wait on, and the caller
+    reads a timeout the same way it reads a missing repository: the built set is unknown.
+    """
+    result = subprocess.run(
+        ["git", "-C", str(target), *arguments],
+        capture_output=True, text=True, timeout=5,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip()
+
+
 def show_stats(args: argparse.Namespace) -> None:
     """Display cross-run diagnostics: shipped features, verdicts, decisions, usage."""
     root = Path(args.artifact_root).resolve() if getattr(args, "artifact_root", None) else get_artifact_root()
@@ -2491,6 +2603,16 @@ def show_stats(args: argparse.Namespace) -> None:
     # the repo, not to a phase, so --phase does not narrow this.
     shipped_specs = summarize_shipped_specs(_shipped_spec_records())
 
+    # The completion ledger: what the approved specs planned against what git says was built.
+    # Nothing is stored — it is re-derived here every run, which is what keeps it from holding a
+    # stale "done" nobody can see is wrong. A `None` built set means git could not be read at
+    # all, and `reconcile_units` reports nothing as unbuilt rather than nagging about every unit.
+    built_ids = _built_unit_ids(root)
+    built, escalated = built_ids if built_ids is not None else (None, None)
+    unit_ledger = reconcile_units(
+        _approved_spec_units(), built, escalated, _mentioned_unit_ids()
+    )
+
     if getattr(args, "json", False):
         print(json.dumps(
             {**agg, "shipped_specs": shipped_specs, "session_health": session_health},
@@ -2513,7 +2635,7 @@ def show_stats(args: argparse.Namespace) -> None:
 
     print(format_stats(
         agg, usage=usage, clarity_note=clarity_note, shipped_specs=shipped_specs,
-        session_health=session_health,
+        session_health=session_health, unit_ledger=unit_ledger,
     ))
 
 
