@@ -33,9 +33,10 @@ import pytest
 from stats import (
     VALID_IMPACT,
     build_plan_section,
+    near_miss_build_plan_headings,
+    near_miss_build_plan_section,
     parse_frontmatter,
     strip_fenced_blocks,
-    suffixed_build_plan_headings,
 )
 
 # CI runs pytest with `working-directory: studio`, so relative paths are out.
@@ -96,7 +97,12 @@ _ENTRY_OPENER = re.compile(r"^(###\s+\d+\.|\d+\.)\s*\**\s*`([^`\n]+)`(.*)$")
 # Both alternatives are anchored at the start of the heading text. An unanchored one would
 # match a backticked token anywhere in the line, and `### Tests for `stats.py`` — prose that
 # happens to quote a filename — would be refused as a malformed unit.
-_INTENDED_UNIT_HEADING = re.compile(r"^###\s+(?:\d+\.|\**`[^`\n]+`)")
+#
+# The bold markers sit out in front of the pair rather than on the backtick branch, because a
+# heading bolded whole — `### **2. `bold_x`** — outcome` — wraps the ordinal too, and guarding
+# only the backticks left that one matching neither this nor `_ENTRY_OPENER`: dropped by every
+# reader with the suite green, which is the hole this regex exists to close.
+_INTENDED_UNIT_HEADING = re.compile(r"^###\s+\**(?:\d+\.|`[^`\n]+`)")
 
 # The id pattern, bound for bound the same as the one the reconciler will use. An id this rule
 # accepted but a reader could not see would be silently dropped from the ledger instead of
@@ -196,7 +202,7 @@ def _build_plan_problems(spec_name: str, spec_text: str) -> list[str]:
 
     Callers gate this on `status: approved`. A spec with no `## Build Plan` section at all is
     left alone — not every document has units, and several older specs have no plan. A spec
-    whose only plan heading is a suffixed one is not that case: it has a plan, and the exact
+    whose only plan heading is a near miss is not that case: it has a plan, and the exact
     match the reader needs is the one thing standing between those units and everything that
     reads them.
     """
@@ -209,7 +215,7 @@ def _build_plan_problems(spec_name: str, spec_text: str) -> list[str]:
             "the plan in force, which means a renamed heading is not found at all and every "
             "unit under it is invisible. Rename it, and put whatever the suffix said in a "
             "line beneath the heading."
-            for heading in suffixed_build_plan_headings(spec_text)
+            for heading in near_miss_build_plan_headings(spec_text)
         ]
 
     entries = _unit_entries(build_plan)
@@ -287,13 +293,18 @@ def _duplicate_unit_ids(specs: list[tuple[str, str]]) -> list[str]:
 
     A single spec planning one id twice is caught as well: `/forge --spec <slug> --unit <id>`
     is a direct lookup and cannot tell two entries with the same id apart.
+
+    A plan under a near-miss heading counts too. Rule 7 makes that heading an approved spec's
+    problem before anything else, but a `draft` or `shipped` spec is exempt from rule 7 — so
+    reading only the exact heading here would leave its ids out of the map entirely and let an
+    approved spec quietly reuse one, which is the ledger collision this check exists to stop.
     """
     planned: dict[str, list[str]] = {}
     approved: set[str] = set()
     for name, spec_text in specs:
         if parse_frontmatter(spec_text).get("status") == "approved":
             approved.add(name)
-        build_plan = build_plan_section(spec_text)
+        build_plan = build_plan_section(spec_text) or near_miss_build_plan_section(spec_text)
         if build_plan is None:
             continue
         for entry in _unit_entries(build_plan):
@@ -1462,6 +1473,8 @@ class TestSyntheticSpecs:
     @pytest.mark.parametrize("heading", [
         "### `ghost_unit` — the number was forgotten",
         "### 2. ghost_unit — the backticks were forgotten",
+        "### **2. `ghost_unit`** — the whole heading was bolded",
+        "### **`ghost_unit`** — bolded whole, and the number forgotten",
     ])
     def test_approved_with_a_malformed_unit_heading_beside_a_good_one_fails(self, heading):
         """A heading no reader can match is worse than a plan with no units at all.
@@ -1470,6 +1483,11 @@ class TestSyntheticSpecs:
         enough to silence every malformed sibling: the unit reads as planned by whoever wrote
         it and as nonexistent to the ledger, `/forge --unit` and the collision check. That
         gap is the exact silence rule 7 was added to end.
+
+        The bolded pair is why `_INTENDED_UNIT_HEADING` guards the ordinal and the backticks
+        together rather than the backticks alone. A heading bolded whole wraps its ordinal in
+        the asterisks too, so `_ENTRY_OPENER` — which only tolerates them *after* the ordinal —
+        cannot read it either, and it fell through both patterns into the same silence.
         """
         problems = _violations(
             "synthetic.md",
@@ -1864,20 +1882,29 @@ class TestSyntheticSpecs:
         assert build_plan is not None
         assert [entry.unit_id for entry in _unit_entries(build_plan)] == ["synthetic_unit"]
         # And the near-miss complaint stays quiet here: the label is doing its job.
-        assert suffixed_build_plan_headings(spec) == []
+        assert near_miss_build_plan_headings(spec) == []
         assert _violations("synthetic.md", spec, "synthetic-eval-results.md", None) == []
 
     @pytest.mark.parametrize("heading", [
         "## Build Plan (revised after review)",
         "## Build Plan — second attempt",
+        "## Build plan",
+        "## BUILD PLAN",
+        "##  Build Plan",
+        "### Build Plan",
     ])
-    def test_approved_with_only_a_suffixed_build_plan_heading_fails(self, heading):
+    def test_approved_with_only_a_near_miss_build_plan_heading_fails(self, heading):
         """The other side of the exact match, and the wider silence of the two.
 
         Matching exactly is what stops a superseded plan from winning, but an author who
         renames the heading instead of duplicating it has one plan, reads it as the plan, and
         gets nothing: no section, so no entries, no ids, no collision check and no complaint.
         Every unit in the spec is invisible with the suite green.
+
+        A rename is only the visible way to miss the match. The case, the heading level and
+        the number of spaces after the hashes are each as fatal to the exact comparison and
+        none of them is a decision anybody made — `##  Build Plan` with two spaces renders
+        character for character like the real one, so its author has no way to see it at all.
         """
         spec = _synthetic_spec(
             "approved", verification=False,
@@ -1891,7 +1918,7 @@ class TestSyntheticSpecs:
         problems = _violations("synthetic.md", spec, "synthetic-eval-results.md", None)
         assert len(problems) == 1
         assert "specs/synthetic.md" in problems[0]
-        assert heading in problems[0]
+        assert heading.strip() in problems[0]
         assert "exactly `## Build Plan`" in problems[0]
 
     def test_a_section_about_planning_is_not_a_near_miss_build_plan_heading(self):
@@ -1902,8 +1929,30 @@ class TestSyntheticSpecs:
             "approved", verification=False,
             build_plan="## Build Planning notes\n\nWe will write the plan after the spike.\n",
         )
-        assert suffixed_build_plan_headings(spec) == []
+        assert near_miss_build_plan_headings(spec) == []
         assert _violations("synthetic.md", spec, "synthetic-eval-results.md", None) == []
+
+    def test_a_near_miss_heading_still_hands_its_ids_to_the_collision_check(self):
+        """Rule 7 gates `approved` specs only, so a `draft` or `shipped` spec keeps a renamed
+        heading with nothing said. Reading only the exact heading in the collision map would
+        make its planned ids invisible there as well, and an approved spec could take one —
+        two specs planning it, no complaint, and one commit subject for both."""
+        renamed = _synthetic_spec(
+            "shipped", verification=False,
+            build_plan=(
+                "## Build Plan (as we shipped it)\n\n"
+                "### 1. `synthetic_unit` — it becomes usable\n\n"
+                "- [ ] It happens.\n"
+            ),
+        )
+        assert build_plan_section(renamed) is None
+        assert near_miss_build_plan_section(renamed) is not None
+        problems = _duplicate_unit_ids([
+            ("shipped.md", renamed),
+            ("approved.md", _synthetic_spec("approved", verification=False)),
+        ])
+        assert len(problems) == 1
+        assert "`synthetic_unit`" in problems[0]
 
     def test_the_section_stops_at_the_next_heading(self):
         """The Build Plan is not always the last section. Whatever follows it — risks, notes,

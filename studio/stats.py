@@ -50,10 +50,21 @@ _FENCE_LINE = re.compile(r"^\s*(`{3,})")
 
 _BUILD_PLAN_HEADING = "## Build Plan"
 
-# A heading that means to be the Build Plan but is not it: `## Build Plan (revised after
-# review)`. The lookahead is what keeps `## Build Planning notes` out — a section about
-# planning is not a near miss, it is a different heading.
-_SUFFIXED_BUILD_PLAN_HEADING = re.compile(rf"^{re.escape(_BUILD_PLAN_HEADING)}(?![A-Za-z0-9])")
+
+def _collapsed(line: str) -> str:
+    """A heading line as a reader sees it rendered: casefolded, whitespace runs collapsed."""
+    return " ".join(line.split()).casefold()
+
+
+# A heading that means to be the Build Plan but is not the one the readers match. Compared
+# against `_collapsed` output rather than the raw line, because the ways the exact match gets
+# missed are not all visible on the page: `## Build plan` and `## BUILD PLAN` are typos, `##
+# Build Plan` with two spaces renders identically to the real heading, and `### Build Plan` is
+# the right words at the wrong level. Each one is as invisible to every reader as the
+# deliberate rename `## Build Plan (revised after review)`, so they belong in the same net.
+# The lookahead is what keeps `## Build Planning notes` out — a section about planning is not
+# a near miss, it is a different heading.
+_NEAR_MISS_BUILD_PLAN_HEADING = re.compile(r"^#{2,}\s+build plan(?![a-z0-9])")
 
 
 def strip_fenced_blocks(text: str) -> str:
@@ -91,8 +102,8 @@ def build_plan_section(spec_text: str) -> str | None:
     would win, and the real units would vanish with nothing said.
 
     Exactness cuts both ways, so it does not stand alone. A spec whose *only* plan heading is
-    a suffixed one has no plan as far as this reader is concerned, and that silence would be
-    as total as the one above; ``suffixed_build_plan_headings`` is what lets a caller say so
+    a near miss has no plan as far as this reader is concerned, and that silence would be as
+    total as the one above; ``near_miss_build_plan_headings`` is what lets a caller say so
     instead of reading nothing.
 
     Both halves of that are load-bearing. A spec that documents the Build Plan format
@@ -110,7 +121,11 @@ def build_plan_section(spec_text: str) -> str | None:
     ]
     if not headings:
         return None
-    start = headings[-1]
+    return _section_from(lines, headings[-1])
+
+
+def _section_from(lines: List[str], start: int) -> str:
+    """The heading at ``start`` and everything under it, up to the next ``## `` heading."""
     section = [lines[start]]
     for line in lines[start + 1:]:
         if line.startswith("## "):
@@ -119,26 +134,50 @@ def build_plan_section(spec_text: str) -> str | None:
     return "\n".join(section)
 
 
-def suffixed_build_plan_headings(spec_text: str) -> List[str]:
-    """The ``## Build Plan…`` headings a spec carries when none of them is the plan.
+def _near_miss_headings(lines: List[str]) -> List[int]:
+    """The indexes of the near-miss Build Plan headings, or nothing when the real one is here."""
+    if any(line.rstrip() == _BUILD_PLAN_HEADING for line in lines):
+        return []
+    return [
+        index
+        for index, line in enumerate(lines)
+        if _NEAR_MISS_BUILD_PLAN_HEADING.match(_collapsed(line))
+    ]
 
-    Empty when ``build_plan_section`` found a real heading, because then the suffixed ones are
-    doing their job: a superseded plan kept under a label is exactly what the exact match
-    exists to skip past. It is only when nothing else is there that the label matters — an
-    author who *renamed* the heading rather than duplicating it has written the plan everyone
-    reads as the plan, and every reader here returns nothing for it.
+
+def near_miss_build_plan_headings(spec_text: str) -> List[str]:
+    """The Build Plan headings a spec carries when none of them is *the* heading.
+
+    Empty when ``build_plan_section`` found a real heading, because then a labelled one is
+    doing its job: a superseded plan kept under ``## Build Plan (as originally proposed)`` is
+    exactly what the exact match exists to skip past. It is only when nothing else is there
+    that the near miss matters — an author who renamed the heading, or typed it at the wrong
+    level or in the wrong case, has written the plan everyone reads as the plan, and every
+    reader here returns nothing for it.
 
     Fences are stripped first, for the same reason ``build_plan_section`` strips them: a spec
     that quotes the plan format in an example is not carrying that heading.
     """
     lines = strip_fenced_blocks(spec_text).splitlines()
-    if any(line.rstrip() == _BUILD_PLAN_HEADING for line in lines):
-        return []
-    return [
-        line.strip()
-        for line in lines
-        if _SUFFIXED_BUILD_PLAN_HEADING.match(line)
-    ]
+    return [lines[index].strip() for index in _near_miss_headings(lines)]
+
+
+def near_miss_build_plan_section(spec_text: str) -> str | None:
+    """The section under a spec's near-miss Build Plan heading, or ``None`` when there is none.
+
+    The plan its author wrote, read the way they meant it to be read. Nothing that *acts* on a
+    plan may use this — ``build_plan_section`` is the one reader, and a heading nobody matches
+    is the defect ``near_miss_build_plan_headings`` exists to report. It is for the checks that
+    have to see ids they will not otherwise gate: a `draft` or `shipped` spec is exempt from
+    rule 7, so its renamed heading is never complained about, and without this its planned ids
+    are absent from the id-collision map as well — leaving an approved spec free to quietly
+    reuse one.
+    """
+    lines = strip_fenced_blocks(spec_text).splitlines()
+    headings = _near_miss_headings(lines)
+    if not headings:
+        return None
+    return _section_from(lines, headings[-1])
 
 
 def summarize_shipped_specs(records: List[Dict]) -> Dict:
