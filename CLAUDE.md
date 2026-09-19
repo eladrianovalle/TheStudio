@@ -72,6 +72,16 @@ Open a PR as a **draft** when you intend to keep pushing to it. That guards two 
 
 Draft is a signal about the state of the work, not a ceremony every PR passes through. Re-check the call on every push: if you thought a branch was finished and then pushed to it again, it goes back to draft.
 
+**"The PR got rejected" means a review comment, not a GitHub state.**
+
+The loop here is: an agent builds the work and opens a pull request; an agentic reviewer reads the diff and leaves a comment whose verdict is **APPROVED** or **REJECTED**, with its reasoning split into **Must fix** and **Consider**; an agentic responder addresses what it can and pushes to the same branch; a human merges. GitHub has no "rejected" state — the verdict lives in the comment text, so read the comments, not the PR's review status.
+
+Two things follow. A rejection is answered **on that pull request**, never by opening a fresh one: push to the same branch and the reviewer looks again. And **Must fix is blocking while Consider is a judgment call** — a responder may decline a Consider back to the human with its reasoning, and an APPROVED review can still carry Considers worth acting on.
+
+Mind the word collision. Studio's contrarian also ends with `VERDICT: APPROVED` or `VERDICT: REJECTED`, but that one judges a *debate* and lives in a run directory under `output/`. A verdict in a pull request comment judges code. Same words, different subject.
+
+**Merging is the human's step.** An approved pull request waits for a person. An agent does not merge its own work, or anyone else's, unless it is asked to.
+
 ### 6. Write for Humans
 
 **Your docs, your code, and your updates are all read by a person. Write for that person.**
