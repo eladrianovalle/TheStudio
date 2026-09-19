@@ -67,8 +67,8 @@ As of 2026-09-19 it carries 1053 tests, ruff clean.*
   `studio/output/tech/run_tech_20260916_162723`, finalized APPROVED. Nothing is built from it yet.
 
 - **The stranded-concern sweep is closed.** 146 concerns recovered from old editor records; most
-  load-bearing ones were already fixed or were recorded decisions. Two PRs came out of it:
-  cemetery-security #722 and OrkidGarden-Game #133. See [[feedback_stranded_concerns_go_stale]].
+  load-bearing ones were already fixed or were recorded decisions. Fixes went to the repos that owned
+  them and are tracked there, not here. See [[feedback_stranded_concerns_go_stale]].
 
 **In flight**
 - **#182**, this note's own pull request, is the only thing open in Studio.
@@ -117,17 +117,6 @@ first unit, via `/forge --spec completion-ledger --unit build_plan_one_shape`.
   still refusing to touch a hand-written file, or dropping the function and letting the stamp be
   provenance a person reads. **`update` is now the likelier answer**, since it is the only thing that
   revisits a repo after setup has run.
-- **Adriano — World 1 slime placement, in cemetery-security.** Area 4's one Level is both the slimes
-  intro and the World finale, while every other Area gives its enemy an intro plus two Levels of
-  runway. Worse, the spawner picks uniformly from the Area roster, so an un-graduated prototype
-  reaches live play while issue #385 (graduate slimes out of the Gym after a balance pass) is still
-  open. Three sources say the placement is deliberately unmade: the doc comment above the constant,
-  the ladder spec's Risks, and issue #609's Kids → Slimes → Teens ordering. **Recommended: pull
-  slimes out of Area 4 as an interim** — point it at the Kids+Teens roster and give it a plain
-  enemy Level, roughly three lines plus four test updates. That restores gym-first, makes the finale
-  play only enemies the player has been taught, and pre-empts nothing about #609. It costs World 1
-  one enemy type until #385 lands. The alternatives are giving slimes their own Area as part of #609
-  (World 1 goes 9 → 12 Levels and needs a fourth board rung) or leaving it.
 - **Adriano — four consumer PRs still open**, contrary to what an earlier note in this repo implied:
   `OrcPunk-biz` #19, `cerebro` #226, `OrcPunk-dotcom` #82, `cemetery-security` #721. The first two
   are what `specs/detected-static-check-command.md` needs to reach `shipped`; its three acceptance
