@@ -2987,7 +2987,11 @@ def _specs_dir_for(target: Path) -> Path:
 
 
 def _spec_display_path(spec_path: Path, target: Path) -> str:
-    """The spec's path the way someone reading the brief would type it: from the project root.
+    """The spec's path the way someone reading the brief could open it.
+
+    Normally that is the path from the project root. When the spec sits outside the project —
+    reachable only through a symlink, or ``relative_to`` raising — it is the whole path instead,
+    for the reason below.
 
     The fallback is the whole path rather than the file name, because this value is not only
     prose: it is interpolated into the ``/forge --spec`` command below it. A bare

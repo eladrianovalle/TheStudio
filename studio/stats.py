@@ -769,13 +769,18 @@ def _unit_line(unit: PlannedUnit, shared_slugs: set[str]) -> str:
     specs" over two identical ``[a-feature]`` prefixes tells the reader nothing about which
     file planned what; spec file names are unique because one directory holds them all.
 
+    The disambiguator is the file *stem*, not its name: ``/forge --spec`` resolves a bare value
+    as a slug against ``specs/<value>.md``, so ``a-feature`` opens the file while ``a-feature.md``
+    sends it looking for ``specs/a-feature.md.md``. Two specs cannot share a stem in one
+    directory, so the stem always separates them — and it is the form a reader can type.
+
     ``PurePath`` here is string work on a path, not a reading of one — this module still
     touches no filesystem.
     """
     title = unit.title if len(unit.title) <= 80 else unit.title[:77] + "..."
     label = unit.slug
     if unit.slug in shared_slugs:
-        label = PurePath(unit.spec_file).name or unit.slug
+        label = PurePath(unit.spec_file).stem or unit.slug
     return f"    [{label}] {unit.unit_id}" + (f" — {title}" if title else "")
 
 

@@ -590,8 +590,8 @@ def test_units_from_two_specs_sharing_a_slug_name_their_files():
     )
     lines = format_unit_ledger(ledger)
 
-    assert "    [a-feature.md] first — what first is for" in lines
-    assert "    [a-feature-revised.md] second — what second is for" in lines
+    assert "    [a-feature] first — what first is for" in lines
+    assert "    [a-feature-revised] second — what second is for" in lines
     assert "    [b-feature] third — what third is for" in lines
 
 
