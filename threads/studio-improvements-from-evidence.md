@@ -9,9 +9,12 @@ updated: 2026-09-19
 # Improving Studio from what its own artifacts say, not from intuition
 
 ## Goal
-Studio gets measurably better at the things people actually use it for. Done for this stretch when
-`specs/first-class-forge-gates.md` is built and `shipped` — `/forge` then works in a repo without
-anyone hand-writing a config file.
+Studio gets measurably better at the things people actually use it for.
+
+**The first stretch's condition is met** — `/forge` now works in a repo without anyone hand-writing
+a config file. What that took, and its state, is the first entry under Where this stands; this
+section does not keep a second copy. The stretch still open is the completion ledger — a session
+knowing what was planned and never built — and carrying both to the installs.
 
 ## Where this stands
 
@@ -64,31 +67,24 @@ As of 2026-09-19 it carries 1053 tests, ruff clean.*
 
 - **`specs/completion-ledger.md` is on main** (#177). Two advocate passes, two contrarian passes, both
   rejections accepted rather than argued down, eighteen recorded decisions. Debate:
-  `studio/output/tech/run_tech_20260916_162723`, finalized APPROVED. Unit 1 is built and merged
-  (#184); units 2 and 3 remain.
+  `studio/output/tech/run_tech_20260916_162723`, finalized APPROVED. **Unit 1 is merged** (#184): rule
+  7 holds an `approved` spec's Build Plan to one entry shape, `stats.py` carries the fence-stripping
+  section reader the later units reuse, and no two specs may plan the same `unit_id`. Zero specs were
+  migrated, which is what gating the rule on `approved` alone buys. **Units 2 and 3 are in review, not
+  built** — see In flight.
 
 - **The stranded-concern sweep is closed.** 146 concerns recovered from old editor records; most
   load-bearing ones were already fixed or were recorded decisions. Fixes went to the repos that owned
   them and are tracked there, not here. See [[feedback_stranded_concerns_go_stale]].
 
-- **The completion ledger's unit 1 is merged** (#184, 2026-09-19). Rule 7 holds an `approved` spec's
-  Build Plan to one entry shape, `stats.py` carries the fence-stripping section reader the later
-  units reuse, and no two specs may plan the same `unit_id`. Zero specs were migrated, which is what
-  gating the rule on `approved` alone buys.
-
-- **The completion ledger is built.** Unit 1 merged (#184): rule 7 holds an `approved` spec's Build
-  Plan to one entry shape, with the fence-stripping section reader in `stats.py`. Units 2 and 3 are
-  open together at **#186**: `stats` reports planned-and-never-built and built-but-never-planned, and
-  the SessionStart hook that already runs in every install names one unfinished unit plus the exact
-  `/forge` command. Nothing is stored — every run re-reads the specs and re-derives the built set from
-  git. It found real work the first time it ran: `stale_configs_get_the_new_command`, planned in
-  `detected-static-check-command` and never built.
-
-- **`specs/first-class-forge-gates.md` is `shipped`** (#183), closing issue #133.
 
 **In flight**
-- **#186** (the ledger's last two units), **#185** (three PR conventions written down for the first
-  time), **#182** (this note). For what is open right now read `gh pr list`, not this line — three
+- **#186** carries the ledger's units 2 and 3: `stats` reports both directions, and the SessionStart
+  hook already running in every install names one unfinished unit plus the exact `/forge` command.
+  Nothing is stored — every run re-reads the specs and re-derives the built set from git. It found
+  real work the first time it ran: `stale_configs_get_the_new_command`, planned in
+  `detected-static-check-command` and never built. Also open: **#185** (three PR conventions written
+  down for the first time) and **#182** (this note). For what is open right now read `gh pr list`, not this line — three
   revisions of this note were rejected for carrying a stale copy of exactly that.
 - Three issues from the 2026-09-16 work are open and unassigned: **#179** (`setup --defaults` resets
   every prior choice, and `--status` recommends it), **#180** (per-scope `model` in `scopes.toml`),
@@ -160,11 +156,12 @@ so `/studio-update` alone is enough.
   said a missing `[gate]` key falls back to detection, which the loader unit made false. They were
   corrected in place 2026-09-19. **The lesson is the ordering:** a change to template text leaves a
   tail of files carrying the old text, and the tail is only findable by knowing when the sweep ran.
-- **Unit 2 must also kill the refusal's last line.** It still ends "Or run /studio-setup, which writes
-  that file for you." After unit 1 that sentence tells someone who just ran the wizard to run it
-  again, at a file that already exists with the `[gate]` block in it. Unit 2 already owns rewording
-  the refusal around whether the file exists; drop the sentence from the file-exists branch and point
-  at the blank `test_command` line instead.
+- **A refusal that names a fix must check the fix is not already done** (resolved 2026-09-19). The
+  no-command refusal used to end "Or run /studio-setup, which writes that file for you" on every
+  branch — which, once the wizard always wrote a file, told someone who had just run it to run it
+  again. `_no_test_command_message` now branches on `config_path.exists()` (`studio/impl_loop.py:313`):
+  the sentence survives only in the no-file arm, where it is correct, and the file-exists arm points
+  at the blank `test_command` line.
 - **Unit order was load-bearing, and the order held** (resolved 2026-09-16). The loader unit changes
   `_no_test_command_message`'s signature while `setup.py` still calls the old one, and deletes refusal
   text `test_setup.py` asserts on — so the wizard unit had to go first, and did. Kept because the
@@ -188,7 +185,9 @@ so `/studio-update` alone is enough.
   that mattered. Related: the artifacts were nearly all deleted, which is what #169 fixed.
 - **Commission the usage analysis with a re-derived roster, never a remembered list.** Briefing an
   agent with 8 repos missed `Arkadium/solitaire-game` (18 forge units, an active user) and `CREA`.
-  The roster is 10 installs: `find /Users/orcpunk -maxdepth 6 -name VERSION -path "*/.studio/*"`.
+  The roster is **11 installs** as of 2026-09-20 — a later briefing that said 10 missed `Tycho`, which
+  is the same mistake one level down. Re-derive it every time:
+  `find /Users/orcpunk -maxdepth 6 -name VERSION -path "*/.studio/*"`.
 - **`spec/editor-breadth-valve` is an orphaned branch on origin** — 293 lines of spec from
   2026-07-28 whose PR #78 was closed unmerged. Not lost, but it belongs to a rejected item; do not
   mistake it for live work.
@@ -196,13 +195,16 @@ so `/studio-update` alone is enough.
 ## Files & artifacts
 - Repo: `/Users/orcpunk/Repos/_TheGameStudio`. The note deliberately records no main SHA;
   read it from git.
-- Spec: `specs/first-class-forge-gates.md`, on main and `approved`.
-- Unit 1's tree: `/Users/orcpunk/Repos/_TheGameStudio-wt-forge-gates`, branch
-  `impl/wizard_writes_stamped_template`. Remove the worktree only after its PR is open — a
-  `git worktree remove` destroys the run's gitignored records.
+- Specs: `specs/first-class-forge-gates.md` and `specs/completion-ledger.md`, both on main. Their
+  status lives in their own frontmatter; this note does not keep a second copy of it.
+- `git worktree remove` destroys a run's gitignored records — the `.studio/output/impl_loop/` handoffs
+  and anything not committed. Copy them out before removing a `/forge` worktree, and commit the
+  `reviewer-concerns/` file, which is written outside the ignored directory precisely so it survives
+  but which nothing commits for you.
 - Debate: `studio/output/tech/run_tech_20260915_015039` — instructions, decisions, both advocate and
   contrarian rounds, verified `findings.json`, summary. Survives cleanup now that #169 shipped.
-- Ticket: [#133](https://github.com/eladrianovalle/TheStudio/issues/133), which #172 supersedes.
+- Ticket: [#133](https://github.com/eladrianovalle/TheStudio/issues/133), closed by the shipped
+  gate work.
 - Other live threads in this repo: `game-design-boards.md` (eval arms built and verified in Orkid
   Garden, clear to run from 2026-09-15), `studio-rollout-and-open-prs.md`,
   `reviewer-concerns-rescued.md`.
