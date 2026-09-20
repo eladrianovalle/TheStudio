@@ -432,6 +432,24 @@ def test_cross_repo_prepare_creates_artifacts_in_caller_repo(tmp_path, monkeypat
     assert run_id in index_path.read_text()
 
 
+def test_the_real_template_carries_the_string_the_scaffold_substitutes_on():
+    """The bridge scaffold rewrites one exact literal; the shipped template must contain it.
+
+    `_ensure_bridge_doc` swaps `export STUDIO_ROOT="/path/to/studio"` for the real path. The
+    scaffold tests around it write their own fixture template carrying that line, so they stay
+    green even if the shipped one loses it — and every new repo would then get a bridge doc
+    telling it to export a path that does not exist. This reads the real file.
+    """
+    template = (
+        Path(__file__).resolve().parents[1] / "docs" / "STUDIO_BRIDGE_TEMPLATE.md"
+    ).read_text(encoding="utf-8")
+    assert 'export STUDIO_ROOT="/path/to/studio"' in template, (
+        "the shipped bridge template no longer carries the literal that "
+        "run_phase._ensure_bridge_doc substitutes on, so a new repo's bridge doc would "
+        "keep the placeholder path"
+    )
+
+
 def test_cross_repo_scaffold_creates_bridge_doc(tmp_path, monkeypatch):
     """First prepare from external repo creates .studio/ and bridge doc."""
     from conftest import _seed_studio_root
