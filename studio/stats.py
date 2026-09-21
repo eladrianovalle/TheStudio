@@ -765,14 +765,15 @@ def _unit_line(unit: PlannedUnit, shared_slugs: set[str]) -> str:
     """One planned unit on one line: which spec planned it, its id, and what it is for.
 
     The prefix is the slug, which is what someone types at ``/forge`` — except where two
-    approved specs share one, and then it is the file name. A count that says "2 approved
-    specs" over two identical ``[a-feature]`` prefixes tells the reader nothing about which
-    file planned what; spec file names are unique because one directory holds them all.
+    approved specs share one, and then it is the spec file's *stem*. A count that says
+    "2 approved specs" over two identical ``[a-feature]`` prefixes tells the reader nothing
+    about which file planned what.
 
-    The disambiguator is the file *stem*, not its name: ``/forge --spec`` resolves a bare value
-    as a slug against ``specs/<value>.md``, so ``a-feature`` opens the file while ``a-feature.md``
-    sends it looking for ``specs/a-feature.md.md``. Two specs cannot share a stem in one
-    directory, so the stem always separates them — and it is the form a reader can type.
+    The stem rather than the whole file name, because the prefix should stay typeable:
+    ``/forge --spec`` resolves a bare value as a slug against ``specs/<value>.md``, so
+    ``a-feature`` opens the file while ``a-feature.md`` sends it looking for
+    ``specs/a-feature.md.md``. Two specs cannot share a stem when one directory holds them
+    all, so it separates them as well as the full name would.
 
     ``PurePath`` here is string work on a path, not a reading of one — this module still
     touches no filesystem.
