@@ -3,7 +3,7 @@ feature: The completion ledger — a session knows what was planned and never bu
 slug: completion-ledger
 ticket: none
 # status: draft → approved (a human approved it) → shipped (built AND verified)
-status: draft
+status: shipped
 studio_run: studio/output/tech/run_tech_20260916_162723
 # verification_due: the date the evidence is due (YYYY-MM-DD). Required once this spec is
 # `approved`, and only if it carries a `## Verification` section — no section, no deadline.
@@ -14,8 +14,8 @@ verification_due:
 # satisfy the gate having edited nothing.
 # shipped_impact: one of none | minor | major — how much it changed downstream
 # shipped_changed: one line, in plain words, on what this actually changed
-shipped_impact:
-shipped_changed:
+shipped_impact: minor
+shipped_changed: stats reports units an approved spec planned that nothing built, and the session brief names the next one with the command that continues it.
 ---
 
 # The Completion Ledger — Architecture Spec
