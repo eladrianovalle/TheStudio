@@ -20,9 +20,9 @@ knowing what was planned and never built — and carrying both to the installs.
 
 **Done and verified (2026-09-15 to 2026-09-20)**
 
-*One anchor, stated once: main is the head of this repo's default branch — run `git log -1` for the
-SHA rather than trusting a copy here, which is how three earlier revisions of this note went stale.
-As of 2026-09-20 it carries 1121 tests, ruff clean.*
+*This note records no moving number — no main SHA, no test count. Both went stale inside a day and
+each was caught by a reviewer. Read them from the repo instead: `git log -1` for the commit,
+`cd studio && python -m pytest tests/ -q` for the suite, `ruff check .` from the root for lint.*
 
 - **#169 — cleanup no longer eats finished work.** `cleanup_runs` deleted on age and size alone and
   never checked status; a finalized APPROVED debate died at 30 days like an abandoned prepare. 31+
