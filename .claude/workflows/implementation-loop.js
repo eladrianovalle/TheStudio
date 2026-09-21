@@ -397,6 +397,13 @@ const entryGate = passesEntryGate(writer, staticRequired)
 if (writer.stuck) {
   log(`Writer escalated (stopped deliberately): ${writer.stuck}`)
 }
+// `static_ok` absent passes the gate on purpose — a writer that never reached the static check
+// should not fail a unit over a missing field. But when static_checks ARE configured, absent and
+// "they all passed" are different facts, and the gate cannot tell them apart. Say which it was,
+// where the handoff has already landed, rather than tightening a gate that is deliberately loose.
+if (staticRequired && writer.static_ok === undefined) {
+  log(`Static checks are configured but the writer reported no static_ok — the gate passed it as unknown, not as clean.`)
+}
 // A skipped mutation check has to say why. The schema can require `performed`, but it cannot say
 // "and when that is false, a reason is required" — JSON Schema expresses that only through if/then,
 // which this shell does not use. So the check lives here, where the handoff has already landed.
