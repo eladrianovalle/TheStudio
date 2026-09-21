@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 import textwrap
 from datetime import datetime, timezone
@@ -88,10 +89,16 @@ from integrations.slack_digest import (
 
 from config_loading import tomllib
 from stats import (
+    PlannedUnit,
     _parse_usage_log,
     aggregate_stats,
+    built_unit_ids,
+    format_count,
     format_stats,
+    mentioned_unit_ids,
+    parse_build_plan,
     parse_frontmatter,
+    reconcile_units,
     summarize_session_health,
     summarize_shipped_specs,
 )
@@ -2029,8 +2036,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     check_updates_parser = subparsers.add_parser(
         "check-updates",
-        help="Print a one-line update nudge if the installed Studio snapshot is "
-             "behind upstream. Silent when current. Invoked by the SessionStart hook.",
+        help="Print the session brief: an available Studio update, and one unit an "
+             "approved spec planned that nothing ever built. Silent when neither. "
+             "Invoked by the SessionStart hook.",
     )
     check_updates_parser.add_argument(
         "--target",
@@ -2461,6 +2469,133 @@ def _shipped_spec_records() -> List[Dict]:
     return records
 
 
+def _approved_spec_units(specs_dir: Optional[Path] = None) -> List[PlannedUnit]:
+    """Every unit planned by a spec whose frontmatter says ``status: approved``.
+
+    Approved is the whole filter, and it is deliberate on both sides. A draft spec is an
+    argument in progress and owes nobody a build; a shipped one is finished, and its units are
+    history. Specs are read in slug order and units keep their document order inside a spec, so
+    the same unit is named in the same place every time the dashboard is printed.
+
+    Returns an empty list when there is no specs directory, the normal state of a repo that has
+    never run /spec. An unreadable spec is skipped rather than fatal, the same as
+    ``_shipped_spec_records`` does.
+    """
+    return [
+        unit
+        for spec_path, slug, spec_text in _approved_specs(specs_dir)
+        for unit in parse_build_plan(spec_text, slug, str(spec_path))
+    ]
+
+
+def _approved_specs(specs_dir: Optional[Path] = None) -> List[Tuple[Path, str, str]]:
+    """Each approved spec as ``(path, slug, text)``, in filename order.
+
+    Both readers of the specs directory go through here, so the dashboard and the session
+    brief can never disagree about which specs still owe work or what a spec's slug is. The
+    brief needs the path as well as the units — it names the file the unit was planned in.
+    """
+    approved: List[Tuple[Path, str, str]] = []
+    for spec_path, spec_text in _readable_specs(specs_dir):
+        frontmatter = parse_frontmatter(spec_text)
+        if frontmatter.get("status", "").strip() != "approved":
+            continue
+        slug = frontmatter.get("slug", "").strip() or spec_path.stem
+        approved.append((spec_path, slug, spec_text))
+    return approved
+
+
+def _mentioned_unit_ids() -> set:
+    """Every id-shaped token any spec quotes in backticks, at any status.
+
+    Every spec rather than the approved ones, because the question this answers is whether an
+    id was ever planned anywhere — see :func:`stats.mentioned_unit_ids`.
+    """
+    mentioned: set = set()
+    for _, spec_text in _readable_specs():
+        mentioned |= mentioned_unit_ids(spec_text)
+    return mentioned
+
+
+def _readable_specs(specs_dir: Optional[Path] = None) -> List[Tuple[Path, str]]:
+    """Each spec in the specs directory with its text, skipping what cannot be read.
+
+    Eval-results files are excluded by name, the same as ``_shipped_spec_records`` excludes
+    them: they sit beside a spec as its evidence and plan nothing of their own.
+
+    *specs_dir* is handed in by the session brief, which resolves the directory from its
+    ``--target``. Everything else lets it default to ``get_specs_dir()``, which derives the
+    directory from the working directory — no use to a SessionStart hook, which runs from
+    wherever the session happened to open.
+    """
+    specs_dir = specs_dir or get_specs_dir()
+    if not specs_dir.is_dir():
+        return []
+
+    specs: List[Tuple[Path, str]] = []
+    for spec_path in sorted(specs_dir.glob("*.md")):
+        if spec_path.name.endswith("-eval-results.md"):
+            continue
+        try:
+            specs.append((spec_path, spec_path.read_text(encoding="utf-8")))
+        except OSError:
+            continue
+    return specs
+
+
+def _built_unit_ids(target: Path) -> Optional[Tuple[set, set]]:
+    """``(built, escalated)`` unit ids read from *target*'s commit log, or ``None``.
+
+    ``None`` means the built set could not be read — no git on PATH, not a work tree, a shallow
+    clone, or a log that took too long. It is not the same answer as an empty set, and the
+    caller must keep them apart: with no built set every planned unit reads unbuilt, so a repo
+    with approved specs would be told that nothing in them was ever built. Silence beats a lie.
+
+    A shallow clone is checked for rather than tolerated because truncated history drops old
+    ``writer:`` commits, which fails the same way and is one cheap call to detect. CI clones at
+    ``fetch-depth: 1`` land here.
+
+    ``--all`` covers every local and remote-tracking ref, so a unit built on a branch nobody has
+    merged still reads as built — nagging about finished work is how a nudge teaches people to
+    ignore it. ``--grep`` lets git filter in C, and the record separator is ``\x1e`` rather than
+    a NUL: a NUL makes the output binary, and anything reading it then sees nothing at all.
+
+    The ``--grep`` pattern must stay at least as tolerant as ``stats._LOOP_COMMIT``, because it
+    decides what the Python side ever sees: anything git filters out here cannot be read as
+    built no matter what the Python pattern accepts. Hence the leading bullet — GitHub's default
+    squash body writes each subject as ``* writer: <unit_id>``.
+    """
+    try:
+        if _git(target, "rev-parse", "--is-inside-work-tree") != "true":
+            return None
+        if _git(target, "rev-parse", "--is-shallow-repository") != "false":
+            return None
+        log = _git(
+            target, "log", "--all", "--no-merges", "-E",
+            "--grep", r"^[[:space:]*+-]*(writer|editor)", "--format=%s%n%b%n%x1e",
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if log is None:
+        return None
+    return built_unit_ids(log)
+
+
+def _git(target: Path, *arguments: str) -> Optional[str]:
+    """One git command against *target*, or ``None`` when git refuses it.
+
+    Five seconds is the ceiling. Nothing here is worth making a command wait on, and the caller
+    reads a timeout the same way it reads a missing repository: the built set is unknown.
+    """
+    result = subprocess.run(
+        ["git", "-C", str(target), *arguments],
+        capture_output=True, text=True, timeout=5,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip()
+
+
 def show_stats(args: argparse.Namespace) -> None:
     """Display cross-run diagnostics: shipped features, verdicts, decisions, usage."""
     root = Path(args.artifact_root).resolve() if getattr(args, "artifact_root", None) else get_artifact_root()
@@ -2498,6 +2633,17 @@ def show_stats(args: argparse.Namespace) -> None:
         ))
         return
 
+    # The completion ledger: what the approved specs planned against what git says was built.
+    # Nothing is stored — it is re-derived here every run, which is what keeps it from holding a
+    # stale "done" nobody can see is wrong. A `None` built set means git could not be read at
+    # all: `reconcile_units` reconciles nothing and records that it could not see, and the block
+    # is then left out of the dashboard entirely rather than printed with nothing under it.
+    built_ids = _built_unit_ids(root)
+    built, escalated = built_ids if built_ids is not None else (None, set())
+    unit_ledger = reconcile_units(
+        _approved_spec_units(), built, escalated, _mentioned_unit_ids()
+    )
+
     usage = None
     usage_path = root / ".studio" / "usage.log"
     if usage_path.exists():
@@ -2513,7 +2659,7 @@ def show_stats(args: argparse.Namespace) -> None:
 
     print(format_stats(
         agg, usage=usage, clarity_note=clarity_note, shipped_specs=shipped_specs,
-        session_health=session_health,
+        session_health=session_health, unit_ledger=unit_ledger,
     ))
 
 
@@ -2814,25 +2960,144 @@ def _do_check_install(args: argparse.Namespace) -> None:
     _print_local_edits_preview(status["locally_modified"])
 
 
-def _do_check_updates(args: argparse.Namespace) -> None:
-    """Print a one-line SessionStart nudge when the installed snapshot is behind.
+# `--spec` takes the spec's path rather than its slug: /forge resolves a path that exists
+# before it falls back to slug lookup, and the slug is the one thing that cannot identify a
+# spec — two approved specs may share one, so a slug here could continue the wrong file's unit.
+UNFINISHED_ADDITIONAL_CONTEXT = (
+    "Unfinished planned work: {units} in {specs}. The next one is `{unit_id}` in "
+    "{spec_file}{title}. Tell the user they can continue it with: "
+    "/forge --spec {spec_file} --unit {unit_id}. If it was dropped on purpose, open a PR adding "
+    "`- **Dropped:** YYYY-MM-DD \u2014 <reason>` under that unit's heading in the spec and it "
+    "stops being counted. Built work is read from all branches including unmerged ones, so a "
+    "teammate who has not fetched may see a different count. Run `{entrypoint} stats` for the "
+    "full list, both directions."
+)
 
-    Invoked by the SessionStart hook, so it must NEVER fail the session: every
-    path is wrapped and the process always exits 0. Silent when current, offline,
-    or anything at all goes wrong.
+
+def _specs_dir_for(target: Path) -> Path:
+    """Where *target* keeps its specs: ``.studio/specs`` when installed, ``specs/`` in source.
+
+    Resolved from the target and never from ``get_specs_dir()``, which derives an artifact
+    root from the working directory. The SessionStart hook runs from wherever the session was
+    opened — any subdirectory, or a different project entirely — so the working directory is
+    not evidence of anything here.
+    """
+    installed = target / ".studio" / "specs"
+    return installed if installed.is_dir() else target / "specs"
+
+
+def _spec_display_path(spec_path: Path, target: Path) -> str:
+    """The spec's path the way someone reading the brief could open it.
+
+    Normally that is the path from the project root. When the spec sits outside the project —
+    reachable only through a symlink, or ``relative_to`` raising — it is the whole path instead,
+    for the reason below.
+
+    The fallback is the whole path rather than the file name, because this value is not only
+    prose: it is interpolated into the ``/forge --spec`` command below it. A bare
+    ``a-feature.md`` is not a file that exists from the project root, ``/forge`` would then try
+    it with ``.md`` appended and then as a slug, and resolve nothing either way — so a display
+    shortcut would hand over a command that opens nothing. The unresolved path is long, but it
+    is the one the reader's project can still open: it reaches the spec through whatever
+    symlink put it outside the tree in the first place.
     """
     try:
+        return spec_path.resolve().relative_to(target.resolve()).as_posix()
+    except (ValueError, OSError):
+        return spec_path.as_posix()
+
+
+def _unfinished_context(target: Path) -> str:
+    """One sentence naming the next unfinished unit, or ``""`` when there is nothing to say.
+
+    Silence answers every "cannot tell" — no specs directory, no approved spec, or a built set
+    git would not produce. That last one matters most: with no built set every planned unit
+    reads unbuilt, so the brief would tell a repo that nothing in it was ever built. Silence
+    beats a lie.
+
+    One unit is named, never a list. A list is a status report people skim; a single named
+    action with the command that continues it is what biases a fresh session toward doing the
+    work. Specs sort by slug and units keep their document order inside a spec, so the same
+    unit is named every session until somebody builds it or drops it.
+    """
+    planned: List[PlannedUnit] = []
+    # Every unit carries the file that planned it, rather than a map keyed by slug: two
+    # approved specs may carry the same slug — rule 7 forbids a duplicate unit_id, not a
+    # duplicate slug — and a slug key would put the other spec's path in front of the reader.
+    for spec_path, slug, spec_text in _approved_specs(_specs_dir_for(target)):
+        planned.extend(parse_build_plan(spec_text, slug, str(spec_path)))
+    if not planned:
+        return ""
+
+    built_ids = _built_unit_ids(target)
+    if built_ids is None:
+        return ""
+    built, escalated = built_ids
+
+    # Only the planned-and-unbuilt direction belongs at session start, so the audit direction
+    # is deliberately not computed: `mentioned_ids` is empty and `ledger.unplanned` is never
+    # read. "What was built that no spec ever planned" is a question somebody asks `stats`,
+    # and putting its dozens of lines in front of every session would bury the one action.
+    ledger = reconcile_units(planned, built, escalated, set())
+    unbuilt = sorted(ledger.unbuilt, key=lambda unit: unit.slug)
+    if not unbuilt:
+        return ""
+
+    unit = unbuilt[0]
+    spec_count = len({owed.spec_file for owed in unbuilt})
+    return UNFINISHED_ADDITIONAL_CONTEXT.format(
+        units=format_count(len(unbuilt)),
+        specs=format_count(spec_count, "approved spec"),
+        unit_id=unit.unit_id,
+        spec_file=_spec_display_path(Path(unit.spec_file), target),
+        title=f' \u2014 "{unit.title}"' if unit.title else "",
+        entrypoint=_entrypoint(),
+    )
+
+
+def _do_check_updates(args: argparse.Namespace) -> None:
+    """Print the SessionStart brief: an available update, unfinished planned work, or nothing.
+
+    Two sources of news, and each gets its own ``try``. A single wrapper around both would let
+    one malformed spec or one odd git state silence the update nudge that every installed copy
+    depends on — and worse, ``compute_update_check`` records that it has shown a notice as a
+    side effect of being asked, so a failure between that write and the ``print`` would consume
+    an update notice nobody ever saw.
+
+    The unfinished-work block cannot ride the update block's condition either. That one speaks
+    at most once per new upstream commit and says nothing in a repo that is current, which is
+    every installed copy on a normal day — so a brief that waited for it would be silent from
+    the day it shipped. Each source decides on its own whether it has something to say.
+
+    Invoked by the SessionStart hook, so it must NEVER fail the session: every path is wrapped
+    and the process always exits 0. When neither source has news nothing is printed at all —
+    not an empty object — because a nudge that fires when there is no news is one people learn
+    to skip.
+    """
+    target = Path(args.target).resolve()
+    blocks: List[str] = []
+
+    try:
         import install
-        result = install.compute_update_check(Path(args.target).resolve())
-        if result.should_notify:
-            print(json.dumps({
-                "hookSpecificOutput": {
-                    "hookEventName": "SessionStart",
-                    "additionalContext": install.UPDATE_ADDITIONAL_CONTEXT,
-                }
-            }))
+        if install.compute_update_check(target).should_notify:
+            blocks.append(install.UPDATE_ADDITIONAL_CONTEXT)
     except Exception:
         pass
+
+    try:
+        unfinished = _unfinished_context(target)
+        if unfinished:
+            blocks.append(unfinished)
+    except Exception:
+        pass
+
+    if blocks:
+        print(json.dumps({
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": "\n\n".join(blocks),
+            }
+        }))
 
 
 def _do_update(args: argparse.Namespace) -> None:

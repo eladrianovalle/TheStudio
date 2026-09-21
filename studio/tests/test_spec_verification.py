@@ -31,6 +31,7 @@ from typing import NamedTuple
 import pytest
 
 from stats import (
+    DROPPED_LINE,
     UNIT_HEADING_SHAPE,
     VALID_IMPACT,
     build_plan_section,
@@ -131,14 +132,6 @@ _THIRD_LEVEL_HEADING = re.compile(r"^###\s")
 # `- **Acceptance criteria:**` bullet — and the heading already bounds the entry, so there is
 # nothing to gain by demanding one of them.
 _CRITERION = re.compile(r"^\s*-\s+\[[ xX]\]\s*\S", re.M)
-
-# The one way to close a unit without building it: a date and a reason, both required. A bare
-# "dropped" is a way to stop the nag without deciding anything. The separator accepts an em
-# dash, a double hyphen or a single one, because a hand-typed hyphen that silently failed to
-# match would leave the unit nagging with no hint why.
-_DROPPED = re.compile(
-    r"^\s*-\s+\*\*Dropped:\*\*\s+(\d{4}-\d{2}-\d{2})\s+(?:—|--|-)\s+(\S.+)$", re.M
-)
 
 # The sentence `spec.md` used to teach, which said an id only had to be unique inside its own
 # spec. Git commit subjects carry no slug, so two specs planning the same id cannot be told
@@ -286,7 +279,7 @@ def _build_plan_problems(spec_name: str, spec_text: str) -> list[str]:
                 "that sentence is what a session brief prints when it names the unit, and an "
                 "id on its own says nothing to whoever reads it next."
             )
-        if not _CRITERION.search(entry.body) and not _DROPPED.search(entry.body):
+        if not _CRITERION.search(entry.body) and not DROPPED_LINE.search(entry.body):
             problems.append(
                 f"specs/{spec_name}'s `{entry.unit_id}` unit has no `- [ ]` acceptance "
                 "criteria. Either write the checkable statements the /forge editor grades the "
@@ -1648,7 +1641,7 @@ class TestSyntheticSpecs:
 
     @pytest.mark.parametrize("separator", ["-", "–"])
     def test_a_unit_titled_after_the_wrong_dash_is_told_which_dash(self, separator):
-        """`_DROPPED` accepts three dashes and this rule accepts one, which is a defensible
+        """`DROPPED_LINE` accepts three dashes and this rule accepts one, which is a defensible
         split — a dropped line that silently failed to match would leave the unit nagging with
         no hint, while this one does complain. What it must not do is complain about the wrong
         thing: the outcome is right there, and "has no outcome" sends the author hunting."""
