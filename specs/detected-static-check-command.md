@@ -289,7 +289,7 @@ files". Diff the flagged files against the install commit before believing that 
 
 **Acceptance criteria:**
 - [x] Running `update` against a repo whose snapshot carries `static_checks = ["ruff"]` leaves a tree where `load_loop_config` returns `["ruff check {paths}"]` and raises nothing. **Met** — `_Cerebro`, measured 2026-09-12, returns exactly that.
-- [x] Neither `_Cerebro` nor `OrcPunk-biz` raises the stale-config refusal, verified by running `load_loop_config` against each after the update. **Met**, measured 2026-09-12. **This criterion was narrowed after measuring — the original wording and the reasoning are below.**
+- [ ] Neither `_Cerebro` nor `OrcPunk-biz` raises the stale-config refusal, verified by running `load_loop_config` against each after the update. **Not met — `_Cerebro` passes, `OrcPunk-biz` does not.** Re-measured 2026-09-21: `_Cerebro` loads to `['ruff check {paths}']` with no error, but `OrcPunk-biz` still raises *"gate.static_checks holds \"ruff\", which is a tool name and not a command to run"* — its `.studio/source/config/implementation_loop.toml` still carries `static_checks = ["ruff"]` on line 13. The 2026-09-12 reading that marked this **Met** was taken against the contents of `OrcPunk-biz` PR #19 rather than the repository, and that pull request has not merged. It is the change that replaces the line, so merging it is what makes this true. **This criterion was narrowed after measuring — the original wording and the reasoning are below.**
 - [x] `_Alfred` and `Orkid Garden` still load to `["make lint"]` and `[]` respectively — an update must not overwrite a project's own override. **Met**, measured 2026-09-12.
 
 **What the second criterion used to say, and why it changed.** As written, it read:
