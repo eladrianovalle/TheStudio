@@ -23,7 +23,7 @@ The documents that count as authoritative here, so an agent has the full picture
 
 ## 4. Maintenance
 - Update the Studio path here if the repo moves or `STUDIO_ROOT` changes.
-- Staying current is automatic: a SessionStart hook opens each session with a brief — an update nudge when your installed Studio falls behind, and unfinished planned work when an approved spec has a unit nobody built. Turn it off with `studio update --no-hook` or an empty `.studio/update-check.off`.
+- Each session opens with a short brief, automatically. A SessionStart hook nudges you to run `/studio-update` when your installed Studio falls behind upstream, and names one unit an approved spec under `.studio/specs/` planned that nothing ever built, with the `/forge` command that continues it. Quiet when there is neither. Turn it off with `studio update --no-hook` or an empty `.studio/update-check.off`.
 - Studio's specs and their evidence files under `.studio/specs/` are **tracked docs meant to be committed** — unlike `.studio/output/` and `.studio/knowledge/`, which must not be. If your `.gitignore` ignores `.studio/`, git silently refuses to track them, and the obvious one-line fix does not work: git cannot re-include a file whose parent directory is excluded, so `!.studio/specs/` under a `.studio/` rule does nothing. Use this form:
 
   ```gitignore
