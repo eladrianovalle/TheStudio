@@ -3,7 +3,7 @@ type: thread
 status: active
 slug: studio-improvements-from-evidence
 created: 2026-09-15
-updated: 2026-09-19
+updated: 2026-09-20
 ---
 
 # Improving Studio from what its own artifacts say, not from intuition
@@ -18,11 +18,11 @@ knowing what was planned and never built — and carrying both to the installs.
 
 ## Where this stands
 
-**Done and verified (2026-09-15 to 2026-09-19)**
+**Done and verified (2026-09-15 to 2026-09-20)**
 
 *One anchor, stated once: main is the head of this repo's default branch — run `git log -1` for the
 SHA rather than trusting a copy here, which is how three earlier revisions of this note went stale.
-As of 2026-09-19 it carries 1053 tests, ruff clean.*
+As of 2026-09-20 it carries 1121 tests, ruff clean.*
 
 - **#169 — cleanup no longer eats finished work.** `cleanup_runs` deleted on age and size alone and
   never checked status; a finalized APPROVED debate died at 30 days like an abandoned prepare. 31+
@@ -83,18 +83,19 @@ As of 2026-09-19 it carries 1053 tests, ruff clean.*
   hook already running in every install names one unfinished unit plus the exact `/forge` command.
   Nothing is stored — every run re-reads the specs and re-derives the built set from git. It found
   real work the first time it ran: `stale_configs_get_the_new_command`, planned in
-  `detected-static-check-command` and never built. Also open: **#185** (three PR conventions written
-  down for the first time) and **#182** (this note). For what is open right now read `gh pr list`, not this line — three
-  revisions of this note were rejected for carrying a stale copy of exactly that.
+  `detected-static-check-command` and never built. The only other thing open in Studio is **#182**,
+  this note. For what is open right now read `gh pr list` rather than this line — every revision of
+  this note that carried its own copy of that list went stale before it could merge.
 - Three issues from the 2026-09-16 work are open and unassigned: **#179** (`setup --defaults` resets
   every prior choice, and `--status` recommends it), **#180** (per-scope `model` in `scopes.toml`),
   **#181** (measure whether the contrarian's confidence ratings are calibrated). #180 is deliberately
   blocked on #181.
 
 **Next action**
-The cross-repo sweep, which carries the ledger and the gate work to the ten installs. The session
-brief needs no installer change — the hook already runs `check-updates --target $CLAUDE_PROJECT_DIR`,
-so `/studio-update` alone is enough.
+The cross-repo sweep, which carries the ledger and the gate work out to the installs — the roster,
+and the command that re-derives it, are in Landmines. The session brief needs no installer change —
+the hook already runs `check-updates --target $CLAUDE_PROJECT_DIR`, so `/studio-update` alone is
+enough.
 
 ## Decisions made
 - **Detection is demoted, not improved.** It becomes the setup wizard's opening guess and leaves the
@@ -111,9 +112,10 @@ so `/studio-update` alone is enough.
   nothing: the wizard is what unit 1 changed, and it is the only path that exercises the stamp and
   the blank-template text. Doing it that way also caught #179.
 - **PRs go to main, one per feature, and an agent never merges.** Written down in Studio's coding
-  principles for the first time (#185), after three conventions this project runs on turned out to
-  exist only in Adriano's head: "rejected" is a reviewer's comment verdict rather than a GitHub state,
-  a fix to an open PR is a commit on that branch, and a spec's units travel in one PR.
+  principles for the first time (#185, merged 2026-09-20), after three conventions this project
+  runs on turned out to exist only in Adriano's head: "rejected" is a reviewer's comment verdict
+  rather than a GitHub state, a fix to an open PR is a commit on that branch, and a spec's units
+  travel in one PR.
 - **`is_wizard_template` means stamped AND `test_command` still blank.** Unit 1's fifth criterion says
   "a file the wizard wrote and untouched", which read literally would also cover a pre-filled Python
   file; the spec's own reasoning says the blank command beside the stamp is the only state that
@@ -145,8 +147,8 @@ so `/studio-update` alone is enough.
   bug it fixes.** Those literals (`pytest -q`, `ruff check {paths}`, `require_mutation_check=True`,
   `mutmut run`) are harmless today only because the loader always passes gate keys in — which is true
   *because* it consults `resolve_profile`. `Multica`'s config sets only `test_command`, so it would
-  fall through to them. Verified: the only production constructions are inside `load_loop_config`
-  itself (`impl_loop.py:551`, `:576`).
+  fall through to them. Verified: the only production constructions of it are inside
+  `load_loop_config` itself.
 - **`setup --defaults` resets every prior choice** (#179), and `--status` recommends it right after
   saying one step is pending. `_Cerebro` lost its role pack and five customizations this way; the
   config files on disk survive, so restoring `SETUP.json` and adding just the new step puts it right.
