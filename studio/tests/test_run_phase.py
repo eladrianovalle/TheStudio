@@ -1658,11 +1658,15 @@ class TestInitInstallsCommittedMain:
     """
 
     @staticmethod
-    def _source_repo(root: Path) -> Path:
+    def _git(*args: str) -> None:
+        subprocess.run(args, check=True, capture_output=True)
+
+    @classmethod
+    def _source_repo(cls, root: Path) -> Path:
         """A minimal git repo shaped like Studio, with `main` committed."""
         studio = root / "studio"
         studio.mkdir(parents=True)
-        run = lambda *a: subprocess.run(a, check=True, capture_output=True)
+        run = cls._git
         run("git", "-c", "init.defaultBranch=main", "init", "-q", str(root))
         run("git", "-C", str(root), "config", "user.email", "t@t")
         run("git", "-C", str(root), "config", "user.name", "t")
@@ -1674,7 +1678,7 @@ class TestInitInstallsCommittedMain:
     def test_a_parked_feature_branch_does_not_reach_a_new_install(self, tmp_path, monkeypatch, capsys):
         root = tmp_path / "src"
         studio = self._source_repo(root)
-        run = lambda *a: subprocess.run(a, check=True, capture_output=True)
+        run = self._git
         run("git", "-C", str(root), "checkout", "-q", "-b", "half-finished")
         (studio / "marker.txt").write_text("work in progress\n", encoding="utf-8")
         run("git", "-C", str(root), "commit", "-qam", "wip")
