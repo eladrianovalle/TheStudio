@@ -2906,13 +2906,14 @@ def _do_init(args: argparse.Namespace) -> None:
         # commands, so promising them for a run that copied none is a wrong banner.
         commands_src = effective_dir.parent / ".claude" / "commands"
         shipped_commands = any((commands_src / name).is_file() for name in SLASH_COMMANDS)
-        # Name the tree the check actually ran against. On the materialized path that is
-        # the committed default branch, not the checkout beside it: a source whose
-        # `.claude/commands/` exists but is uncommitted is not missing them, they just
-        # are not in the tree this install read.
-        commands_origin = (
-            f"{source_dir}, read from its committed default branch"
-            if effective_dir != source_dir else str(source_dir)
+        # Name the tree the check actually ran against, in the same clause that says
+        # what is missing. On the materialized path that tree is the committed default
+        # branch, not the checkout beside it: a source whose `.claude/commands/` exists
+        # but is uncommitted is not missing them, they just are not in the tree this
+        # install read.
+        commands_where = (
+            "in its committed default branch"
+            if effective_dir != source_dir else "beside it"
         )
     if from_snapshot:
         # The WARNING above already said what this run does not do. The normal banner
@@ -2925,7 +2926,7 @@ def _do_init(args: argparse.Namespace) -> None:
     print(f"  Source: {dot_studio / 'source'}")
     if not shipped_commands:
         print(f"\nWARNING: no slash command was installed — the source this ran from "
-              f"({commands_origin}) has no '.claude/commands/' beside it, which is what "
+              f"({source_dir}) has no '.claude/commands/' {commands_where}, which is what "
               "an installed snapshot looks like rather than an upstream checkout. Re-run "
               "from an upstream Studio repo to get the commands.")
         return

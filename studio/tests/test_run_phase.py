@@ -1841,9 +1841,9 @@ class TestInitInstallsCommittedMain:
 
         out = capsys.readouterr().out
         assert "no slash command was installed" in out
-        assert "read from its committed default branch" in out, (
-            "the warning named the checkout, which does have '.claude/commands/' "
-            "beside it — only the committed tree this install read does not"
+        assert "no '.claude/commands/' in its committed default branch" in out, (
+            "the warning said the checkout has none beside it, which is false — it "
+            "does; only the committed tree this install read does not"
         )
 
     def test_a_rerun_from_the_installed_snapshot_leaves_the_snapshot_alone(self, tmp_path):
