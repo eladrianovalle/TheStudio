@@ -415,14 +415,17 @@ class TestStaticOkAbsentIsReported:
     def _loop_source(self):
         return (_WORKFLOW_DIR / "implementation-loop.js").read_text()
 
-    def test_the_gate_still_passes_an_absent_static_ok(self):
-        src = self._loop_source()
-        assert "(!staticRequired || writer.static_ok !== false)" in src
+    def test_an_unreported_static_check_is_logged_only_when_the_gate_opened(self):
+        """The condition itself is driven in the node suite; this pins the call site.
 
-    def test_an_unreported_static_check_is_logged_when_one_was_configured(self):
+        It must sit below `entryGate` and be conditioned on it — on a shut gate, "the gate passed
+        it as unknown" would read as if the unit got through.
+        """
         src = self._loop_source()
-        assert "staticRequired && writer.static_ok === undefined" in src
-        guard = src.split("staticRequired && writer.static_ok === undefined", 1)[1][:300]
+        call = "if (entryGate && staticOkUnreported(writer, staticRequired)) {"
+        assert call in src
+        assert src.index("const entryGate = passesEntryGate(") < src.index(call)
+        guard = src.split(call, 1)[1][:300]
         assert "static_ok" in guard and "not as clean" in guard
 
 

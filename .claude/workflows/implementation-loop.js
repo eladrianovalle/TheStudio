@@ -385,6 +385,11 @@ function skippedMutationCheckWithoutReason(writer) {
   return !!(writer.mutation_check && writer.mutation_check.performed === false && !writer.mutation_check.reason)
 }
 
+// Named for the same reason as passesEntryGate: so the JS shell tests can drive it.
+function staticOkUnreported(writer, staticRequired) {
+  return !!(staticRequired && writer.static_ok === undefined)
+}
+
 if (!writer) {
   log('Writer agent failed to return a handoff — aborting.')
   return { delivered: false, reason: 'writer_failed' }
@@ -401,7 +406,8 @@ if (writer.stuck) {
 // should not fail a unit over a missing field. But when static_checks ARE configured, absent and
 // "they all passed" are different facts, and the gate cannot tell them apart. Say which it was,
 // where the handoff has already landed, rather than tightening a gate that is deliberately loose.
-if (staticRequired && writer.static_ok === undefined) {
+// Only when the gate opened: on a shut gate, "passed it as unknown" would read as if the unit got through.
+if (entryGate && staticOkUnreported(writer, staticRequired)) {
   log(`Static checks are configured but the writer reported no static_ok — the gate passed it as unknown, not as clean.`)
 }
 // A skipped mutation check has to say why. The schema can require `performed`, but it cannot say

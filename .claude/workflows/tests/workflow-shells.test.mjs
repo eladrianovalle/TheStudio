@@ -407,6 +407,22 @@ test('a skipped mutation check is caught only when it gives no reason', () => {
   assert.equal(skippedMutationCheckWithoutReason({}), false)
 })
 
+// implementation-loop.js — a configured static check the writer never reported. The entry gate
+// passes an absent static_ok on purpose, so this is what tells "unknown" apart from "clean".
+const staticOkUnreported = loadFunction('../implementation-loop.js', 'staticOkUnreported')
+
+test('an absent static_ok is flagged only when static checks were configured', () => {
+  const noStaticField = { mvi_claimed: true, tests: GREEN_WRITER.tests }
+  assert.equal(staticOkUnreported(noStaticField, true), true)
+  // The gate still lets that same handoff through — the flag is a transcript line, not a blocker.
+  assert.equal(passesEntryGate(noStaticField, true), true)
+  // Nothing configured, nothing to report.
+  assert.equal(staticOkUnreported(noStaticField, false), false)
+  // A reported result either way is a known fact, not an unknown one.
+  assert.equal(staticOkUnreported(GREEN_WRITER, true), false)
+  assert.equal(staticOkUnreported({ ...GREEN_WRITER, static_ok: false }, true), false)
+})
+
 // ---------------------------------------------------------------------------
 // implementation-loop.js — work_dir. The loop can be told which directory to build in (a git
 // worktree), instead of trusting wherever the agent's shell happens to be sitting.
