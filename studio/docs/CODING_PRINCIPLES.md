@@ -128,12 +128,12 @@ The test: if someone asked "what are we building and why is it shaped this way?"
 
 ## Design board
 
-If this repository keeps a design board, the discipline for reading from it and writing to it lives in
-`.studio/source/docs/DESIGN_BOARD.md`: locate before you read, source every claim to a region you read
-this turn, and propose the exact item and destination before you write. A repository with no board can ignore it.
+If this repository keeps a design board, the discipline lives in `.studio/source/docs/DESIGN_BOARD.md`
+— inside the gitignored snapshot, so a fresh clone gets it from `/studio-update`. Locate before you
+read, source every claim to a region you read this turn, and name the item and destination before you write.
 
 ---
 
-*These guidelines are working if:* fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+*These guidelines are working if:* fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and the questions that do get asked are the ones where guessing would have been unsafe or wasted the work.
 
 *Adapted from [Andrej Karpathy's coding principles](https://github.com/forrestchang/andrej-karpathy-skills).*

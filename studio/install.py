@@ -1135,6 +1135,9 @@ def install_studio(
             source_path = prior
     version_info = {
         "installed_at": now,
+        # Machine-local: an absolute path that means nothing on another host. It exists so
+        # check-install and update can find the live source on THIS machine and compare against
+        # it. `commit` below is the portable half — the only field another host can act on.
         "source_path": str(source_path),
         "commit": git.get("commit", "unknown"),
         "commit_date": git.get("commit_date", ""),
