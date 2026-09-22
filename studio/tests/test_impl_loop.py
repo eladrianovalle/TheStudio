@@ -910,11 +910,11 @@ def test_a_subdirectory_project_with_a_hand_written_override_still_resolves(tmp_
     assert config.require_mutation_check is False
 
 
-def test_alfreds_own_file_loads_to_all_four_values_it_writes(tmp_path):
-    """Alfred is the repo that sets every gate key, and each one arrives as written.
+def test_a_file_setting_all_four_keys_loads_to_every_value_it_writes(tmp_path):
+    """A real repo that sets every gate key gets each one exactly as written.
 
     Its file says `make lint`, which is a command and not a tool name — the reason this
-    field holds commands at all. Nothing at Alfred's root identifies a stack, so under
+    field holds commands at all. Nothing at that repo's root identifies a stack, so under
     the old loader all four values came from a file merged over an empty profile; now
     they come from the file alone, and this is the pin that says the result is the same.
     """
@@ -1217,9 +1217,9 @@ def test_a_lone_test_command_leaves_every_other_gate_key_empty(tmp_path):
     have started running `ruff` and `mutmut` there — neither of which is installed. That
     is the original complaint reappearing through its own fix, so it is pinned here.
     """
-    root = _python_repo(tmp_path / "multica")
+    root = _python_repo(tmp_path / "only-test-command")
     _override(root, (
-        "# Loop config for orc-review.\n"
+        "# Loop config for this repo.\n"
         "\n"
         "[gate]\n"
         f'test_command = "{ONLY_TEST_COMMAND}"\n'
