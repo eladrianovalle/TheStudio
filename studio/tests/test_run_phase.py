@@ -2,6 +2,7 @@
 import argparse
 import json
 import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -1692,7 +1693,7 @@ class TestInitInstallsCommittedMain:
             return target / ".studio"
 
         monkeypatch.setattr(install, "install_studio", fake_install)
-        monkeypatch.setattr(install, "_resolve_source_dir", lambda target, given: (studio, None))
+        monkeypatch.setattr(install, "_get_studio_root", lambda: studio)
 
         target = tmp_path / "consumer"
         target.mkdir()
@@ -1705,3 +1706,56 @@ class TestInitInstallsCommittedMain:
             "VERSION must record the durable source, not the throwaway worktree that is "
             "gone the moment the install finishes"
         )
+
+    def test_a_rerun_from_the_installed_snapshot_leaves_the_snapshot_alone(self, tmp_path):
+        """`init --target .` from `.studio/source/` must stay inert.
+
+        `.claude/commands/studio-setup.md` documents that exact command, and from the
+        snapshot the source root IS the snapshot — so materializing an upstream there
+        would copy over `.studio/source/` with none of the `locally_modified` guard
+        `update_studio` enforces. Nothing is monkeypatched here: the snapshot's own
+        `run_phase.py` runs in a real subprocess, so the resolution that decides whether
+        this path clobbers is the real one.
+        """
+        from install import install_studio
+
+        target = tmp_path / "consumer"
+        target.mkdir()
+        install_studio(target, Path(__file__).resolve().parents[1], install_hook=False)
+        source = target / ".studio" / "source"
+
+        edited = source / "findings.py"
+        edited.write_text(
+            edited.read_text(encoding="utf-8") + "\n# local edit\n", encoding="utf-8"
+        )
+        before = self._tree(source)
+
+        result = subprocess.run(
+            [sys.executable, str(source / "run_phase.py"),
+             "init", "--target", str(target), "--no-hook"],
+            capture_output=True, text=True, cwd=str(target),
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert "# local edit" in edited.read_text(encoding="utf-8"), (
+            "re-running init from the snapshot overwrote a local edit; update refuses to "
+            "clobber these without --force and init must not do it silently"
+        )
+        # The whole snapshot, not just the edited file: which files an upstream would
+        # overwrite depends on what that checkout is parked on, and none of them should
+        # move. (An empty diff here is only meaningful because the edit above proves the
+        # comparison can see a change.)
+        assert self._tree(source) == before, "init from the snapshot rewrote the snapshot"
+        assert "WARNING" in result.stdout, (
+            "an install that copies nothing must say so, not print a plain success"
+        )
+
+    @staticmethod
+    def _tree(root: Path) -> dict:
+        """Every installed file's bytes, keyed by path. `__pycache__` is skipped: the
+        subprocess writes it just by importing the snapshot."""
+        return {
+            str(f.relative_to(root)): f.read_bytes()
+            for f in sorted(root.rglob("*"))
+            if f.is_file() and "__pycache__" not in f.parts
+        }

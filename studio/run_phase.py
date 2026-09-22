@@ -2853,7 +2853,7 @@ def recompute_clarity(args: argparse.Namespace) -> None:
 
 def _do_init(args: argparse.Namespace) -> None:
     """Install Studio into a target project."""
-    from install import _resolve_source_dir, _source_at_default_branch, install_studio
+    from install import _get_studio_root, _source_at_default_branch, install_studio
     target = Path(args.target).resolve()
     if not target.is_dir():
         raise FileNotFoundError(f"Target directory not found: {target}")
@@ -2864,10 +2864,30 @@ def _do_init(args: argparse.Namespace) -> None:
     # version that repo is on. Same helper, same fallbacks: when the source is not a git
     # working copy, or has no resolvable default branch, it yields the live tree and says
     # why — which is also what a fresh clone of Studio gets, before anything is committed.
-    source_dir, warning = _resolve_source_dir(target, None)
-    with _source_at_default_branch(source_dir, warning is None) as (effective_dir, note):
+    #
+    # Only from a real upstream working copy, though. Re-run inside an installed repo
+    # (`init --target .` from `.studio/source/`, which studio-setup documents) the source
+    # IS that snapshot: materializing upstream there would copy over the snapshot with
+    # none of the locally_modified guard `update` enforces. Keep that re-run inert, as it
+    # was before — same source in and out, so install_studio's samefile skip holds.
+    source_dir = _get_studio_root()
+    from_snapshot = source_dir.resolve() == (target / ".studio" / "source").resolve()
+    if from_snapshot:
+        print(
+            f"WARNING: running from {target}'s own installed snapshot, so there is no "
+            "upstream to install from — no source file and no slash command is "
+            "refreshed. Re-run from the upstream Studio repo instead: "
+            f"python studio/run_phase.py init --target {target}\n"
+        )
+    with _source_at_default_branch(source_dir, not from_snapshot) as (effective_dir, note):
         if note:
-            print(f"  {note}")
+            print(f"Note: {note}.")
+        elif effective_dir != source_dir:
+            # Materialized with nothing to say about the branch: the checkout is already
+            # on the default branch and the bypass was its uncommitted edits. Silence is
+            # fine for check/update; here the user just asked to install this tree.
+            print("Note: read Studio source from the committed default branch; "
+                  "uncommitted edits in the source checkout are not installed.")
         # Record the durable source in VERSION, never the throwaway worktree path,
         # which is gone the moment this block exits.
         override = source_dir if effective_dir != source_dir else None
