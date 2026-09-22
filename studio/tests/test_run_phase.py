@@ -1,11 +1,14 @@
 """Unit tests for run_phase.py core functions."""
 import argparse
 import json
+import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 import findings
+import install
 import run_phase
 from integrations.slack_digest import INTEGRATIONS_FILENAME, load_integrations_config
 from conftest import make_prepare_args, make_finalize_args
@@ -1642,3 +1645,59 @@ def test_verifier_can_load_the_findings_finalize_wrote(studio_root):
     expected = extract_findings_from_run(run_dir)
     assert loaded == expected
     assert [f.flaw for f in loaded] == [f.flaw for f in expected]
+
+
+class TestInitInstallsCommittedMain:
+    """`init` copies the default branch's committed tree, not the parked checkout.
+
+    `check` and `update` have read through `_source_at_default_branch` for a while;
+    `init` was the one path still copying the live working tree, so a first install
+    could capture a half-finished branch — or an uncommitted edit — and then record it
+    in VERSION as the version that repo is on. A consuming repo bootstrapped that way
+    starts life on something nobody released, and nothing later tells it so.
+    """
+
+    @staticmethod
+    def _source_repo(root: Path) -> Path:
+        """A minimal git repo shaped like Studio, with `main` committed."""
+        studio = root / "studio"
+        studio.mkdir(parents=True)
+        run = lambda *a: subprocess.run(a, check=True, capture_output=True)
+        run("git", "-c", "init.defaultBranch=main", "init", "-q", str(root))
+        run("git", "-C", str(root), "config", "user.email", "t@t")
+        run("git", "-C", str(root), "config", "user.name", "t")
+        (studio / "marker.txt").write_text("main version\n", encoding="utf-8")
+        run("git", "-C", str(root), "add", "-A")
+        run("git", "-C", str(root), "commit", "-qm", "init")
+        return studio
+
+    def test_a_parked_feature_branch_does_not_reach_a_new_install(self, tmp_path, monkeypatch, capsys):
+        root = tmp_path / "src"
+        studio = self._source_repo(root)
+        run = lambda *a: subprocess.run(a, check=True, capture_output=True)
+        run("git", "-C", str(root), "checkout", "-q", "-b", "half-finished")
+        (studio / "marker.txt").write_text("work in progress\n", encoding="utf-8")
+        run("git", "-C", str(root), "commit", "-qam", "wip")
+        (studio / "marker.txt").write_text("not even committed\n", encoding="utf-8")
+
+        captured = {}
+
+        def fake_install(target, studio_dir=None, source_path_override=None, install_hook=True):
+            captured["marker"] = (studio_dir / "marker.txt").read_text(encoding="utf-8")
+            captured["override"] = source_path_override
+            return target / ".studio"
+
+        monkeypatch.setattr(install, "install_studio", fake_install)
+        monkeypatch.setattr(install, "_resolve_source_dir", lambda target, given: (studio, None))
+
+        target = tmp_path / "consumer"
+        target.mkdir()
+        run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True))
+
+        assert captured["marker"] == "main version\n", (
+            "init copied the parked branch's tree; a new install must take committed main"
+        )
+        assert captured["override"] == studio, (
+            "VERSION must record the durable source, not the throwaway worktree that is "
+            "gone the moment the install finishes"
+        )

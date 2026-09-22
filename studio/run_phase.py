@@ -2853,11 +2853,28 @@ def recompute_clarity(args: argparse.Namespace) -> None:
 
 def _do_init(args: argparse.Namespace) -> None:
     """Install Studio into a target project."""
-    from install import install_studio
+    from install import _resolve_source_dir, _source_at_default_branch, install_studio
     target = Path(args.target).resolve()
     if not target.is_dir():
         raise FileNotFoundError(f"Target directory not found: {target}")
-    dot_studio = install_studio(target, install_hook=not args.no_hook)
+    # Install from the default branch's COMMITTED tree, not whatever this checkout is
+    # parked on. `check` and `update` have read through this helper for a while; `init`
+    # was the one path still copying the live working tree, so a first install could
+    # capture a half-finished branch or an uncommitted edit and then record it as the
+    # version that repo is on. Same helper, same fallbacks: when the source is not a git
+    # working copy, or has no resolvable default branch, it yields the live tree and says
+    # why — which is also what a fresh clone of Studio gets, before anything is committed.
+    source_dir, warning = _resolve_source_dir(target, None)
+    with _source_at_default_branch(source_dir, warning is None) as (effective_dir, note):
+        if note:
+            print(f"  {note}")
+        # Record the durable source in VERSION, never the throwaway worktree path,
+        # which is gone the moment this block exits.
+        override = source_dir if effective_dir != source_dir else None
+        dot_studio = install_studio(
+            target, effective_dir, source_path_override=override,
+            install_hook=not args.no_hook,
+        )
     print(f"Studio installed to {dot_studio}")
     print(f"  Slash commands: {target / '.claude' / 'commands'}")
     print(f"  Source: {dot_studio / 'source'}")
