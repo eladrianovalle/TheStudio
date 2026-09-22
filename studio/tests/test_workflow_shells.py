@@ -425,7 +425,7 @@ class TestStaticOkAbsentIsReported:
         call = "if (entryGate && staticOkUnreported(writer, staticRequired)) {"
         assert call in src
         assert src.index("const entryGate = passesEntryGate(") < src.index(call)
-        guard = src.split(call, 1)[1][:300]
+        guard = src.split(call, 1)[1].split("\n}", 1)[0]
         assert "static_ok" in guard and "not as clean" in guard
 
 

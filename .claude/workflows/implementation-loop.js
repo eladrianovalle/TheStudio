@@ -386,8 +386,10 @@ function skippedMutationCheckWithoutReason(writer) {
 }
 
 // Named for the same reason as passesEntryGate: so the JS shell tests can drive it.
+// Anything that is not a boolean counts as unreported: the gate lets every non-`false` value
+// through, so a `null` would otherwise open it and read as clean.
 function staticOkUnreported(writer, staticRequired) {
-  return !!(staticRequired && writer.static_ok === undefined)
+  return !!(staticRequired && typeof writer.static_ok !== 'boolean')
 }
 
 if (!writer) {

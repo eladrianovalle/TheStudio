@@ -414,6 +414,9 @@ const staticOkUnreported = loadFunction('../implementation-loop.js', 'staticOkUn
 test('an absent static_ok is flagged only when static checks were configured', () => {
   const noStaticField = { mvi_claimed: true, tests: GREEN_WRITER.tests }
   assert.equal(staticOkUnreported(noStaticField, true), true)
+  // A null opens the gate just like an absent field, so it is just as unknown.
+  assert.equal(staticOkUnreported({ ...noStaticField, static_ok: null }, true), true)
+  assert.equal(passesEntryGate({ ...noStaticField, static_ok: null }, true), true)
   // The gate still lets that same handoff through — the flag is a transcript line, not a blocker.
   assert.equal(passesEntryGate(noStaticField, true), true)
   // Nothing configured, nothing to report.
