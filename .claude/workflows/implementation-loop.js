@@ -410,7 +410,7 @@ if (writer.stuck) {
 // where the handoff has already landed, rather than tightening a gate that is deliberately loose.
 // Only when the gate opened: on a shut gate, "passed it as unknown" would read as if the unit got through.
 if (entryGate && staticOkUnreported(writer, staticRequired)) {
-  log(`Static checks are configured but the writer reported no static_ok — the gate passed it as unknown, not as clean.`)
+  log(`Static checks are configured but the writer reported no boolean static_ok — the gate passed it as unknown, not as clean.`)
 }
 // A skipped mutation check has to say why. The schema can require `performed`, but it cannot say
 // "and when that is false, a reason is required" — JSON Schema expresses that only through if/then,
