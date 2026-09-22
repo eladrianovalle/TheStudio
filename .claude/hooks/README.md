@@ -28,7 +28,7 @@ habit you want in every project, and registering it once covers all of them:
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /Users/orcpunk/.claude/hooks/finish-check.py",
+            "command": "python3 $HOME/.claude/hooks/finish-check.py",
             "timeout": 10,
             "statusMessage": "Finish-check: anything left undone?"
           }

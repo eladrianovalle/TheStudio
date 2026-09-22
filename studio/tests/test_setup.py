@@ -880,11 +880,11 @@ class TestApplySmokeConfig:
 # ---------------------------------------------------------------------------
 
 
-# Orkid Garden's real override, byte for byte. It keeps its Unity project in a
+# A real hand-written override, byte for byte. It keeps its Unity project in a
 # subdirectory, so nothing at its root identifies it and this file is the only reason
 # /forge works there at all.
 ORKID_OVERRIDE = (
-    "# Orkid Garden's overrides for the implementation writer/editor loop.\n"
+    "# This repo's overrides for the implementation writer/editor loop.\n"
     "\n"
     "[gate]\n"
     'test_command = "./scripts/run-editmode-tests.sh"\n'
@@ -1202,7 +1202,7 @@ class TestApplyImplementationLoopConfig:
         assert "detected from this repo's stack (python)" in prose
         assert "Studio ships no test command" not in prose
 
-    def test_never_overwrites_orkid_gardens_own_file(
+    def test_never_overwrites_a_hand_written_file(
         self, project: Path, capsys: pytest.CaptureFixture
     ) -> None:
         """The one file keeping /forge alive in the repo that reported the bug."""
@@ -1394,7 +1394,7 @@ class TestIsWizardTemplate:
         assert not setup.is_wizard_template(config_path)
 
     def test_false_for_a_hand_written_file(self, project: Path) -> None:
-        """Orkid Garden's real file: no stamp, and a command that works."""
+        """A real hand-written file: no stamp, and a command that works."""
         config_path = project / ".studio" / "implementation_loop.toml"
         config_path.write_text(ORKID_OVERRIDE, encoding="utf-8")
 
