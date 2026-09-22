@@ -1809,6 +1809,43 @@ class TestInitInstallsCommittedMain:
         run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True))
         assert "Slash commands:" in capsys.readouterr().out
 
+    def test_the_no_commands_warning_names_the_tree_it_was_checked_against(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """A checkout whose `.claude/commands/` is merely uncommitted is not told it
+        has none.
+
+        The check runs against `effective_dir.parent`, which on the materialized path
+        is the committed default branch rather than the checkout the user is sitting
+        in. Naming the checkout there says something false about a directory plainly
+        on disk beside it.
+        """
+        root = tmp_path / "src"
+        studio = self._source_repo(root)
+        # Beside the source but never committed, so `main` does not carry it. The
+        # untracked file is also what takes this run off the clean-tree fast path.
+        (root / ".claude" / "commands").mkdir(parents=True)
+        (root / ".claude" / "commands" / "run-phase.md").write_text("cmd\n", encoding="utf-8")
+
+        monkeypatch.setattr(
+            install, "install_studio",
+            lambda target, studio_dir=None, source_path_override=None, install_hook=True: (
+                target / ".studio"
+            ),
+        )
+        monkeypatch.setattr(install, "_get_studio_root", lambda: studio)
+
+        target = tmp_path / "consumer"
+        target.mkdir()
+        run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True))
+
+        out = capsys.readouterr().out
+        assert "no slash command was installed" in out
+        assert "read from its committed default branch" in out, (
+            "the warning named the checkout, which does have '.claude/commands/' "
+            "beside it — only the committed tree this install read does not"
+        )
+
     def test_a_rerun_from_the_installed_snapshot_leaves_the_snapshot_alone(self, tmp_path):
         """`init --target .` from `.studio/source/` must stay inert.
 

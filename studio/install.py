@@ -1094,13 +1094,17 @@ def install_studio(
             continue
         shutil.copy2(src, dst)
 
-    # Copy slash commands verbatim (they use .studio/source/ paths directly)
-    commands_dest.mkdir(parents=True, exist_ok=True)
+    # Copy slash commands verbatim (they use .studio/source/ paths directly).
+    # mkdir inside the loop, like the workflows below: a source with no
+    # `.claude/commands/` beside it ships no command at all (an installed snapshot
+    # has none), and the empty directory left behind is both what a half-finished
+    # install looks like and the one `init` deliberately stops naming in its banner.
     commands_src = studio_dir.parent / ".claude" / "commands"
     for cmd_name in SLASH_COMMANDS:
         src = commands_src / cmd_name
         if not src.exists():
             continue
+        commands_dest.mkdir(parents=True, exist_ok=True)
         dst = commands_dest / cmd_name
         if dst.exists() and src.samefile(dst):
             continue

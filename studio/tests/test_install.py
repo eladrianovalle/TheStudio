@@ -81,6 +81,26 @@ class TestInstallStudio:
         dst = target_dir / ".claude" / "commands" / "run-phase.md"
         assert src.read_text() == dst.read_text()
 
+    def test_a_source_with_no_commands_leaves_no_empty_commands_dir(self, tmp_path, studio_dir):
+        """An install that ships no slash command must not leave the directory behind.
+
+        `.claude/` sits ABOVE the source dir, so installing from an installed snapshot
+        copies no command at all. An empty `.claude/commands/` is what a half-finished
+        install looks like to whoever opens it next — and it is precisely the directory
+        `init` now refuses to name in its banner on that path.
+        """
+        host = tmp_path / "host"
+        host.mkdir()
+        install_studio(host, studio_dir, install_hook=False)
+
+        target = tmp_path / "other"
+        target.mkdir()
+        install_studio(target, host / ".studio" / "source", install_hook=False)
+
+        assert not (target / ".claude" / "commands").exists(), (
+            "the install copied no slash command but created the directory anyway"
+        )
+
     def test_creates_version_file(self, target_dir, studio_dir):
         """Install creates .studio/VERSION with metadata."""
         install_studio(target_dir, studio_dir)
