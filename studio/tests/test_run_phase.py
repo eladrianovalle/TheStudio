@@ -1758,11 +1758,63 @@ class TestInitInstallsCommittedMain:
             "installing something other than the committed default branch must say so"
         )
 
+    def test_a_source_with_no_claude_dir_does_not_promise_slash_commands(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """`init --target <other>` from an installed snapshot ships no slash command.
+
+        `.claude/` lives ABOVE the source dir, so a snapshot has none for
+        `install_studio` to copy. The banner is all about those commands — naming the
+        directory, telling the user to run /studio-setup and restart their session —
+        so printing it unchanged reports a working install of commands that are not
+        there. That run used to crash before this path started succeeding, which is
+        why the banner only starts costing something now.
+        """
+        host = tmp_path / "host"
+        source = host / ".studio" / "source"
+        source.mkdir(parents=True)
+        run = self._git
+        run("git", "-c", "init.defaultBranch=main", "init", "-q", str(host))
+        run("git", "-C", str(host), "config", "user.email", "t@t")
+        run("git", "-C", str(host), "config", "user.name", "t")
+        (host / "README.md").write_text("the host project\n", encoding="utf-8")
+        run("git", "-C", str(host), "add", "README.md")
+        run("git", "-C", str(host), "commit", "-qm", "init")
+        # An installed snapshot: untracked in the host repo, with no `.claude/` above it.
+        (source / "run_phase.py").write_text("# stand-in entrypoint\n", encoding="utf-8")
+
+        monkeypatch.setattr(
+            install, "install_studio",
+            lambda target, studio_dir=None, source_path_override=None, install_hook=True: (
+                target / ".studio"
+            ),
+        )
+        monkeypatch.setattr(install, "_get_studio_root", lambda: source)
+
+        target = tmp_path / "consumer"
+        target.mkdir()
+        run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True))
+
+        out = capsys.readouterr().out
+        assert "Slash commands:" not in out, "the banner named a command dir nothing landed in"
+        assert "/studio-setup" not in out, "told the user to run a command that is not installed"
+        assert "no slash command was installed" in out
+
+        # Same install from a source that DOES carry them: the banner is unchanged.
+        (host / ".claude" / "commands").mkdir(parents=True)
+        (host / ".claude" / "commands" / "run-phase.md").write_text("cmd\n", encoding="utf-8")
+        monkeypatch.setattr(install, "_get_studio_root", lambda: host / "studio")
+        (host / "studio").mkdir()
+        (host / "studio" / "run_phase.py").write_text("# stand-in\n", encoding="utf-8")
+        run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True))
+        assert "Slash commands:" in capsys.readouterr().out
+
     def test_a_rerun_from_the_installed_snapshot_leaves_the_snapshot_alone(self, tmp_path):
         """`init --target .` from `.studio/source/` must stay inert.
 
-        `.claude/commands/studio-setup.md` documents that exact command, and from the
-        snapshot the source root IS the snapshot — so materializing an upstream there
+        studio-setup no longer tells users to run that command, but every install made
+        before it stopped still ships the line — and from the snapshot the source root
+        IS the snapshot — so materializing an upstream there
         would copy over `.studio/source/` with none of the `locally_modified` guard
         `update_studio` enforces. Nothing is monkeypatched here: the snapshot's own
         `run_phase.py` runs in a real subprocess, so the resolution that decides whether

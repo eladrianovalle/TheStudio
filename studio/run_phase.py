@@ -2853,7 +2853,9 @@ def recompute_clarity(args: argparse.Namespace) -> None:
 
 def _do_init(args: argparse.Namespace) -> None:
     """Install Studio into a target project."""
-    from install import _get_studio_root, _source_at_default_branch, install_studio
+    from install import (
+        SLASH_COMMANDS, _get_studio_root, _source_at_default_branch, install_studio,
+    )
     target = Path(args.target).resolve()
     if not target.is_dir():
         raise FileNotFoundError(f"Target directory not found: {target}")
@@ -2866,7 +2868,8 @@ def _do_init(args: argparse.Namespace) -> None:
     # why — which is also what a fresh clone of Studio gets, before anything is committed.
     #
     # Only from a real upstream working copy, though. Re-run inside an installed repo
-    # (`init --target .` from `.studio/source/`, which studio-setup documents) the source
+    # (`init --target .` from `.studio/source/` — studio-setup no longer tells users to
+    # run that, but every install made before it stopped still ships the line) the source
     # IS that snapshot: materializing upstream there would copy over the snapshot with
     # none of the locally_modified guard `update` enforces. Keep that re-run copying
     # nothing, as it was before — same source in and out, so install_studio's samefile
@@ -2897,14 +2900,27 @@ def _do_init(args: argparse.Namespace) -> None:
             target, effective_dir, source_path_override=override,
             install_hook=not args.no_hook,
         )
+        # `.claude/` sits ABOVE the source dir, so a source that is an installed
+        # snapshot (`init --target <other>` run from `.studio/source/`) has none and
+        # ships no slash command. Everything below the install line is about those
+        # commands, so promising them for a run that copied none is a wrong banner.
+        commands_src = effective_dir.parent / ".claude" / "commands"
+        shipped_commands = any((commands_src / name).is_file() for name in SLASH_COMMANDS)
     if from_snapshot:
         # The WARNING above already said what this run does not do. The normal banner
         # under it would report a fresh install for a run that copied no source file.
         print(f"No source file copied. Left as it was: {dot_studio / 'source'}")
         return
     print(f"Studio installed to {dot_studio}")
-    print(f"  Slash commands: {target / '.claude' / 'commands'}")
+    if shipped_commands:
+        print(f"  Slash commands: {target / '.claude' / 'commands'}")
     print(f"  Source: {dot_studio / 'source'}")
+    if not shipped_commands:
+        print(f"\nWARNING: no slash command was installed — the source this ran from "
+              f"({source_dir}) has no '.claude/commands/' beside it, which is what an "
+              "installed snapshot looks like rather than an upstream checkout. Re-run "
+              "from an upstream Studio repo to get the commands.")
+        return
     print("\nRun /studio-setup to configure roles, personas, scopes, cleanup, and unstale audit.")
     print("Then use /run-phase or /run-studio-phase — pause-and-ask included.")
     print("NOTE: Start a NEW Claude Code session (not just /clear) to discover the commands.")
