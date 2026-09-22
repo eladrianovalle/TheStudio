@@ -1672,6 +1672,7 @@ class TestInitInstallsCommittedMain:
         run("git", "-C", str(root), "config", "user.email", "t@t")
         run("git", "-C", str(root), "config", "user.name", "t")
         (studio / "marker.txt").write_text("main version\n", encoding="utf-8")
+        (studio / "run_phase.py").write_text("# stand-in entrypoint\n", encoding="utf-8")
         run("git", "-C", str(root), "add", "-A")
         run("git", "-C", str(root), "commit", "-qm", "init")
         return studio
@@ -1705,6 +1706,56 @@ class TestInitInstallsCommittedMain:
         assert captured["override"] == studio, (
             "VERSION must record the durable source, not the throwaway worktree that is "
             "gone the moment the install finishes"
+        )
+
+    def test_a_source_that_is_not_in_the_default_branch_installs_the_live_tree(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """A Studio tree that the resolved default branch has never heard of.
+
+        `rev-parse --show-toplevel` finds *some* repo for any source dir under git —
+        an unrelated one when Studio was copied in rather than cloned, and the host
+        repo when `init --target <other>` runs from an untracked `.studio/source/`.
+        Neither has the source dir in its committed tree, so materializing it yields
+        an empty path: zero files copied, VERSION and MANIFEST still written, and the
+        target reads as installed while holding no source. Install the live tree, as
+        it did before the default branch came into this path.
+        """
+        host = tmp_path / "host"
+        studio = host / "TheStudio" / "studio"
+        studio.mkdir(parents=True)
+        run = self._git
+        run("git", "-c", "init.defaultBranch=main", "init", "-q", str(host))
+        run("git", "-C", str(host), "config", "user.email", "t@t")
+        run("git", "-C", str(host), "config", "user.name", "t")
+        (host / "README.md").write_text("someone else's repo\n", encoding="utf-8")
+        run("git", "-C", str(host), "add", "README.md")
+        run("git", "-C", str(host), "commit", "-qm", "init")
+        # The Studio tree itself is never committed to that repo.
+        (studio / "marker.txt").write_text("live version\n", encoding="utf-8")
+        (studio / "run_phase.py").write_text("# stand-in entrypoint\n", encoding="utf-8")
+
+        captured = {}
+
+        def fake_install(target, studio_dir=None, source_path_override=None, install_hook=True):
+            captured["files"] = sorted(str(p) for p in install._collect_source_files(studio_dir))
+            captured["marker"] = (studio_dir / "marker.txt").read_text(encoding="utf-8")
+            return target / ".studio"
+
+        monkeypatch.setattr(install, "install_studio", fake_install)
+        monkeypatch.setattr(install, "_get_studio_root", lambda: studio)
+
+        target = tmp_path / "consumer"
+        target.mkdir()
+        run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True))
+
+        assert captured["marker"] == "live version\n"
+        assert captured["files"] == ["run_phase.py"], (
+            "the install was handed a path the default branch does not have, so it "
+            "would have copied nothing and still written VERSION"
+        )
+        assert "Note:" in capsys.readouterr().out, (
+            "installing something other than the committed default branch must say so"
         )
 
     def test_a_rerun_from_the_installed_snapshot_leaves_the_snapshot_alone(self, tmp_path):
@@ -1741,10 +1792,12 @@ class TestInitInstallsCommittedMain:
             "re-running init from the snapshot overwrote a local edit; update refuses to "
             "clobber these without --force and init must not do it silently"
         )
-        # The whole snapshot, not just the edited file: which files an upstream would
+        # The whole source tree, not just the edited file: which files an upstream would
         # overwrite depends on what that checkout is parked on, and none of them should
         # move. (An empty diff here is only meaningful because the edit above proves the
-        # comparison can see a change.)
+        # comparison can see a change.) Scoped to `.studio/source/` on purpose — VERSION
+        # and MANIFEST.json sit above it and install_studio does rewrite them from the
+        # snapshot, which is true on `main` too and is not what this test pins.
         assert self._tree(source) == before, "init from the snapshot rewrote the snapshot"
         assert "WARNING" in result.stdout, (
             "an install that copies nothing must say so, not print a plain success"

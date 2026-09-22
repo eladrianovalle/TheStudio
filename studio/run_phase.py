@@ -2868,8 +2868,10 @@ def _do_init(args: argparse.Namespace) -> None:
     # Only from a real upstream working copy, though. Re-run inside an installed repo
     # (`init --target .` from `.studio/source/`, which studio-setup documents) the source
     # IS that snapshot: materializing upstream there would copy over the snapshot with
-    # none of the locally_modified guard `update` enforces. Keep that re-run inert, as it
-    # was before — same source in and out, so install_studio's samefile skip holds.
+    # none of the locally_modified guard `update` enforces. Keep that re-run copying
+    # nothing, as it was before — same source in and out, so install_studio's samefile
+    # skip holds. (Not fully inert even then: install_studio still rewrites VERSION and
+    # MANIFEST from the snapshot, which predates this path.)
     source_dir = _get_studio_root()
     from_snapshot = source_dir.resolve() == (target / ".studio" / "source").resolve()
     if from_snapshot:
@@ -2895,6 +2897,11 @@ def _do_init(args: argparse.Namespace) -> None:
             target, effective_dir, source_path_override=override,
             install_hook=not args.no_hook,
         )
+    if from_snapshot:
+        # The WARNING above already said what this run does not do. The normal banner
+        # under it would report a fresh install for a run that copied no source file.
+        print(f"No source file copied. Left as it was: {dot_studio / 'source'}")
+        return
     print(f"Studio installed to {dot_studio}")
     print(f"  Slash commands: {target / '.claude' / 'commands'}")
     print(f"  Source: {dot_studio / 'source'}")

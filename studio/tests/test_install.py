@@ -686,6 +686,7 @@ class TestSourceAtDefaultBranch:
         subprocess.run(["git", "-C", str(root), "config", "user.email", "t@t"], check=True)
         subprocess.run(["git", "-C", str(root), "config", "user.name", "t"], check=True)
         (studio / "marker.txt").write_text("main version\n", encoding="utf-8")
+        (studio / "run_phase.py").write_text("# stand-in entrypoint\n", encoding="utf-8")
         subprocess.run(["git", "-C", str(root), "add", "-A"], check=True)
         subprocess.run(["git", "-C", str(root), "commit", "-qm", "init"], check=True)
         return studio
@@ -730,6 +731,34 @@ class TestSourceAtDefaultBranch:
             capture_output=True, text=True, check=True,
         ).stdout.strip().splitlines()
         assert len(listed) == 1
+
+    def test_falls_back_when_the_source_dir_is_not_in_the_default_branch(self, tmp_path):
+        """A Studio tree that lives under a repo that never committed it.
+
+        The toplevel resolves and `main` resolves, but the source dir's path is not
+        in that tree, so the materialized path is empty — `_collect_source_files`
+        would return [] and the caller would install nothing. Yield the live tree.
+        """
+        host = tmp_path / "host"
+        studio = host / "TheStudio" / "studio"
+        studio.mkdir(parents=True)
+        subprocess.run(["git", "-c", "init.defaultBranch=main", "init", "-q", str(host)], check=True)
+        subprocess.run(["git", "-C", str(host), "config", "user.email", "t@t"], check=True)
+        subprocess.run(["git", "-C", str(host), "config", "user.name", "t"], check=True)
+        (host / "README.md").write_text("someone else's repo\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(host), "add", "README.md"], check=True)
+        subprocess.run(["git", "-C", str(host), "commit", "-qm", "init"], check=True)
+        (studio / "run_phase.py").write_text("# stand-in entrypoint\n", encoding="utf-8")
+
+        with install._source_at_default_branch(studio, enabled=True) as (src, note):
+            assert src == studio
+            assert note is not None and "main" in note
+
+        listed = subprocess.run(
+            ["git", "-C", str(host), "worktree", "list"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip().splitlines()
+        assert len(listed) == 1, "the throwaway worktree outlived the fallback"
 
     def test_reads_committed_main_when_dirty_on_main(self, tmp_path):
         root = tmp_path / "src"
