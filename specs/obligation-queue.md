@@ -28,9 +28,10 @@ sentence is the most-used thing Studio has ever shipped, and the reason is not t
 is that nobody has to remember to ask for it.
 
 There are two other ways work goes unfinished here, and neither has a voice. A spec can have every
-unit built and still say `status: approved` in its frontmatter, because flipping it to `shipped` is a
-separate edit somebody has to remember — and until they do, the ledger keeps reporting that spec
-forever, as if it were still owed. That happened three times in a single week. Separately, a spec
+unit built, and any evidence it promised recorded, and still say `status: approved` in its
+frontmatter, because flipping it to `shipped` is a separate edit somebody has to remember — and until
+they do, `stats` leaves it out of the shipped-features block, so the record of what landed and what it
+changed is missing a feature that did land. That happened three times in a single week. Separately, a spec
 that promised evidence by a date can sail past it with the evidence file still blank; the test suite
 goes red over it, but nothing tells you before you start work, when doing something about it is cheap.
 
@@ -114,8 +115,8 @@ STALE_STATUS     = "stale_status"
 EVIDENCE_OVERDUE = "evidence_overdue"
 
 # Rank order, and the order the brief picks from. stale_status leads because a finished spec
-# left at `approved` poisons every other reading of the ledger: it reports its own units as
-# owed forever, and it is the cheapest of the three to discharge.
+# left at `approved` is missing from the shipped-features block — the only record of what
+# landed and what it changed — and it is the cheapest of the three to discharge.
 RANK = (STALE_STATUS, EVIDENCE_OVERDUE, UNBUILT_UNIT)
 
 
@@ -142,7 +143,8 @@ class SpecView:
     slug: str
     spec_file: str
     status: str
-    verification_due: str            # "" when the spec promised no evidence
+    promises_evidence: bool          # True when the spec has a `## Verification` section
+    verification_due: str            # the raw frontmatter value; "" when there is none
     evidence_is_blank: bool          # True when the results file is missing, unreadable, or still FILL_ME
     units: Tuple[PlannedUnit, ...]
 
@@ -167,10 +169,22 @@ An obligation is a value derived from committed artifacts at the moment it is as
 identity, no lifecycle, and no storage. It exists exactly while the facts that imply it are true and
 stops existing the moment they are not.
 
+`stale_status` is gated on pending evidence because the frontmatter template defines `shipped` as
+built *and* verified, and the spec-verification suite enforces the second half: rule 3 turns red on a
+`shipped` spec whose evidence file still holds `FILL_ME`. A spec that is built but still waiting on
+evidence before its deadline owes nothing yet — telling its reader to flip it would be telling them to
+make an edit the suite rejects. Once the deadline passes, `evidence_overdue` names it instead.
+
+Two edge cases are silent on purpose. An approved spec whose Build Plan yields no units produces no
+`stale_status`: "every unit is built" is vacuously true of it, and a spec that planned nothing has not
+been shown to be finished. An approved spec whose units are all `Dropped:` produces none either — it
+was abandoned rather than shipped, and `shipped` would be a false claim about it. Neither produces an
+`unbuilt_unit`, so both are simply absent from the queue.
+
 | Kind | Derived from | Discharged by | Silenced by |
 |---|---|---|---|
-| `stale_status` | every unit of an approved spec is built or dropped | editing the frontmatter to `status: shipped`, with `shipped_impact` and `shipped_changed` | nothing — it is discharged or it is not |
-| `evidence_overdue` | `verification_due` is on or before `today`, the spec is `approved`, and its evidence file is still blank | filling in the evidence file | moving `verification_due`, which is a visible edit |
+| `stale_status` | an approved spec plans at least one unit, every unit is built or dropped, at least one is built, and no evidence is pending — the spec has no `## Verification` section, or its evidence file is no longer blank | editing the frontmatter to `status: shipped`, with `shipped_impact` and `shipped_changed` | nothing — it is discharged or it is not |
+| `evidence_overdue` | `verification_due` parses as a date on or before `today`, the spec is `approved`, and its evidence file is still blank | filling in the evidence file | moving `verification_due`, which is a visible edit |
 | `unbuilt_unit` | an approved spec's Build Plan minus git's built set (`reconcile_units`, unchanged) | `/forge --spec <slug> --unit <unit_id>` | `- **Dropped:** YYYY-MM-DD — reason` |
 
 **Failure modes**
@@ -178,6 +192,7 @@ stops existing the moment they are not.
 | It cannot see… | What happens |
 |---|---|
 | git missing, not a work tree, shallow clone, or slow | `built_unit_ids` returns `None`, `reconcile_units` reports `built_known=False`, `derive` returns `[]`. The brief is silent, `stats` prints its existing "cannot read" line. Exactly today's behaviour. |
+| a `verification_due` that will not parse as `YYYY-MM-DD` | Read as no deadline, the same way rule 6 of the spec-verification suite reads it (`_parse_due` returns `None`, and rule 6a reports the spec). No `evidence_overdue` fires, and because the evidence is still pending no `stale_status` fires either, so the queue says nothing about that spec while the suite is already red over it — the queue does not restate a failure the suite already reports. |
 | a spec that will not parse | That spec contributes no `SpecView`. One bad file silences its own obligations and nothing else's — the per-source isolation `_do_check_updates` already uses so one bad spec cannot eat the update nudge. |
 | no specs directory at all | No specs, no obligations, silence. This is every consuming repo that has not written a spec yet. |
 | an evidence file that is missing or unreadable | Treated as blank, which is the safe direction: it can produce an obligation to look at, never a claim that evidence exists. |
@@ -197,8 +212,9 @@ to silence when the inputs cannot be read, while a stored one degrades to a row 
 needed one.
 
 **`stale_status` leads the ranking.** A finished spec left at `approved` is not merely one item in a
-list — it keeps reporting its own finished units as owed, forever, which distorts every other reading
-of the ledger. It is also the cheapest of the three to discharge. Both arguments point the same way.
+list — `stats` leaves it out of the shipped-features block, so the count of shipped features, the
+impact tally and the recent change lines all read as if it never landed, for as long as nobody flips
+it. It is also the cheapest of the three to discharge. Both arguments point the same way.
 
 **The judged obligations are out, and the reason is measured, not aesthetic.** Two of the five ideas
 this started with needed a model to decide something rather than compute it: "this plan names a
@@ -262,9 +278,11 @@ this started as, and most of what was cut was cut on evidence rather than taste.
 
 **Nothing here proves a surfaced obligation gets discharged.** Tests can prove the queue computes the
 right obligations; they cannot prove anybody acts on one. The honest measurement is this repository's
-own state later: `specs/game-design-board.md` is `approved` with both its units built and its evidence
-file blank, so it will be a live obligation from the day this ships. If it is still sitting there in a
-month, naming it was not enough and the Stop hook argument deserves another look. That is worth
+own state later: `specs/game-design-board.md` is `approved` with both its units built, its evidence
+file blank and its `verification_due` at 2026-11-15. It owes nothing the day this ships — it is waiting
+on evidence, not on a flip — and becomes a live `evidence_overdue` obligation the day after its
+deadline if the file is still blank. If it is still sitting there a month after that, naming it was
+not enough and the Stop hook argument deserves another look. That is worth
 watching, and it is not worth a pre-registered evidence file for a feature whose mechanics are all
 testable.
 
@@ -285,7 +303,9 @@ the top obligation instead of the next unbuilt unit. `obligations.py` is added t
 **Acceptance criteria:**
 
 - [ ] `python studio/run_phase.py stats` prints obligations of all three kinds, each with the spec that defines it and either the command that discharges it or the edit that does, and the `unbuilt_unit` entries carry the same information the "Planned work" block carries today.
-- [ ] A spec whose every planned unit is built while its frontmatter still says `status: approved` produces exactly one `stale_status` obligation naming that spec, and producing it does not also report that spec's units as unbuilt.
+- [ ] A spec whose every planned unit is built while its frontmatter still says `status: approved`, and which has no `## Verification` section or an evidence file that is no longer blank, produces exactly one `stale_status` obligation naming that spec, and producing it does not also report that spec's units as unbuilt.
+- [ ] A spec with a `## Verification` section whose units are all built but whose evidence file is missing or still holds `FILL_ME` produces no `stale_status` obligation, and no obligation at all while its `verification_due` is after `today`.
+- [ ] An approved spec whose Build Plan yields no units, or whose units are all `Dropped:`, produces no `stale_status` obligation; a spec whose `verification_due` does not parse as a date produces no `evidence_overdue` obligation.
 - [ ] A spec whose `verification_due` is on or before the supplied `today`, with its evidence file missing or still holding the skeleton's placeholders, produces exactly one `evidence_overdue` obligation; moving the date past `today` removes it.
 - [ ] The queue degrades to silence rather than to a guess: `derive` returns an empty list whenever `ledger.built_known` is `False` and the brief then prints nothing at all, while a spec that cannot be parsed removes only its own obligations and leaves both the other specs' obligations and the update nudge intact.
 - [ ] The session brief names exactly one obligation — the first by `RANK`, then spec path, then subject — states how many there are in total, and never prints a list; with no obligations and no available update it prints nothing.
