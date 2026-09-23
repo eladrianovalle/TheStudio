@@ -143,7 +143,9 @@ class SpecView:
     slug: str
     spec_file: str
     status: str
-    promises_evidence: bool          # True when the spec has a `## Verification` section
+    promises_evidence: bool          # True when any line starts with `## Verification` — the same prefix
+                                     # reading as the suite's `_has_verification_section`, so
+                                     # `## Verification & Evidence` counts too
     verification_due: str            # the raw frontmatter value; "" when there is none
     evidence_is_blank: bool          # True when the results file is missing, unreadable, or still FILL_ME
     units: Tuple[PlannedUnit, ...]
