@@ -40,12 +40,14 @@ def read_description(command_file: Path) -> str:
     return match.group(1) if match else ""
 
 
-def unescaped_inner_quotes(command_file: Path) -> list[str]:
-    """Return frontmatter lines whose double-quoted value holds a bare inner ``"``.
+def malformed_quoted_values(command_file: Path) -> list[str]:
+    """Return frontmatter lines whose quoted value closes before the line ends.
 
-    A YAML loader ends a double-quoted scalar at the first unescaped ``"``, so
-    such a line fails to parse and takes the whole frontmatter block with it.
-    The suite has no YAML dependency, so this checks for that one mistake.
+    A YAML loader ends a double-quoted scalar at the first ``"`` not escaped with
+    a backslash, and a single-quoted one at the first ``'`` not doubled as ``''``.
+    Anything after that other than a ``# comment`` fails to parse and takes the
+    whole frontmatter block with it. The suite has no YAML dependency, so this
+    checks for that one mistake.
     """
     text = command_file.read_text(encoding="utf-8")
     if not text.startswith("---\n"):
@@ -55,26 +57,28 @@ def unescaped_inner_quotes(command_file: Path) -> list[str]:
     for line in frontmatter.splitlines():
         _, sep, value = line.partition(":")
         value = value.strip()
-        if not sep or not value.startswith('"'):
+        if not sep or not value or value[0] not in "\"'":
             continue
-        inner = re.sub(r"\\.", "", value[1:])
-        if inner.find('"') != len(inner) - 1:
+        quote = value[0]
+        inner = re.sub(r"\\." if quote == '"' else "''", "", value[1:])
+        end = inner.find(quote)
+        if end == -1 or not re.fullmatch(r"\s*(#.*)?", inner[end + 1 :]):
             bad.append(line)
     return bad
 
 
 class TestCommandDescriptions(unittest.TestCase):
-    def test_frontmatter_double_quoted_values_are_well_formed(self):
+    def test_frontmatter_quoted_values_are_well_formed(self):
         for name in SLASH_COMMANDS:
             with self.subTest(command=name):
-                bad = unescaped_inner_quotes(COMMANDS_DIR / name)
+                bad = malformed_quoted_values(COMMANDS_DIR / name)
                 self.assertEqual(
                     bad,
                     [],
-                    f"{name} has a double-quoted frontmatter value with an unescaped "
-                    f'inner ". YAML ends the value there, so the whole frontmatter '
-                    f"block, description included, fails to load. Single-quote the "
-                    f"value instead.",
+                    f"{name} has a quoted frontmatter value with an unescaped inner "
+                    f"quote. YAML ends the value there, so the whole frontmatter block, "
+                    f"description included, fails to load. Use the other quote style, "
+                    f"or escape it: \\\" inside double quotes, '' inside single.",
                 )
 
     def test_every_shipped_command_has_a_description(self):
