@@ -1,6 +1,6 @@
 ---
 description: "Use for a question that cuts across the whole studio rather than one specialty: runs a multi-role advocate/contrarian debate through three scoped tiers, alignment then depth then polish, and ends with an integrator duel. Triggers include 'get the whole team on this' and 'debate this across roles'. Heavier than /run-phase, so reach for that one when a single discipline owns the question."
-argument-hint: "--text "<idea>" [--roles +role -role] [--role-pack <name>]"
+argument-hint: '--text "<idea>" [--roles +role -role] [--role-pack <name>] [--max-iterations N]'
 ---
 
 # Studio Phase Run (Multi-Role)

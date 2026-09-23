@@ -40,7 +40,43 @@ def read_description(command_file: Path) -> str:
     return match.group(1) if match else ""
 
 
+def unescaped_inner_quotes(command_file: Path) -> list[str]:
+    """Return frontmatter lines whose double-quoted value holds a bare inner ``"``.
+
+    A YAML loader ends a double-quoted scalar at the first unescaped ``"``, so
+    such a line fails to parse and takes the whole frontmatter block with it.
+    The suite has no YAML dependency, so this checks for that one mistake.
+    """
+    text = command_file.read_text(encoding="utf-8")
+    if not text.startswith("---\n"):
+        return []
+    frontmatter = text[4:].split("\n---\n", 1)[0]
+    bad = []
+    for line in frontmatter.splitlines():
+        _, sep, value = line.partition(":")
+        value = value.strip()
+        if not sep or not value.startswith('"'):
+            continue
+        inner = re.sub(r"\\.", "", value[1:])
+        if inner.find('"') != len(inner) - 1:
+            bad.append(line)
+    return bad
+
+
 class TestCommandDescriptions(unittest.TestCase):
+    def test_frontmatter_double_quoted_values_are_well_formed(self):
+        for name in SLASH_COMMANDS:
+            with self.subTest(command=name):
+                bad = unescaped_inner_quotes(COMMANDS_DIR / name)
+                self.assertEqual(
+                    bad,
+                    [],
+                    f"{name} has a double-quoted frontmatter value with an unescaped "
+                    f'inner ". YAML ends the value there, so the whole frontmatter '
+                    f"block, description included, fails to load. Single-quote the "
+                    f"value instead.",
+                )
+
     def test_every_shipped_command_has_a_description(self):
         for name in SLASH_COMMANDS:
             with self.subTest(command=name):

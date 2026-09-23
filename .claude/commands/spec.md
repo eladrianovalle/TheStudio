@@ -1,6 +1,6 @@
 ---
 description: "Use before building any non-trivial feature, to settle its architecture before code exists. Runs a discovery plus advocate/contrarian debate and writes the tracked spec the build then follows, with acceptance criteria /forge reads directly. Triggers include 'map out the architecture for X', 'write the spec for X', 'how should we build X', and noticing that a plan contains a feature nobody has designed yet. Produces a document, not code. Skip it for one-line fixes and obvious tweaks; use /forge to build what it specifies."
-argument-hint: "--text "<feature>" [--ticket <id>] [--id <slug>]"
+argument-hint: '--text "<feature>" [--ticket <id>] [--id <slug>]'
 ---
 
 # Spec: Map a Feature's Architecture Before You Build It

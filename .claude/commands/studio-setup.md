@@ -1,5 +1,5 @@
 ---
-description: "Use to configure this project's Studio installation: role packs, personas, the /forge gate commands for tests, linting and mutation, and the unstale and smoke profiles. Triggers include 'configure Studio', 'set up the forge gates', and /forge refusing to run because this repo has no gate configuration. Run it after installing Studio somewhere new, and again whenever the wizard gains a version."
+description: "Use to configure this project's Studio installation: role packs, personas, the /forge gate commands for tests, linting and mutation, and the unstale and smoke profiles. Triggers include 'configure Studio', 'set up the forge gates', and /forge refusing to run because this repo has no gate configuration. Run it after installing Studio somewhere new, and again whenever the wizard's version changes."
 argument-hint: "[--status] [--defaults]"
 ---
 
