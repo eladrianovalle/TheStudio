@@ -36,7 +36,7 @@ def read_description(command_file: Path) -> str:
     if not text.startswith("---\n"):
         return ""
     frontmatter = text.split("\n---\n", 1)[0]
-    match = re.search(r"^description:\s*([\"']?)(.*?)\1\s*$", frontmatter, re.MULTILINE)
+    match = re.search(r"^description:\s*([\"']?)(.*?)\1(\s+#.*)?\s*$", frontmatter, re.MULTILINE)
     return match.group(2) if match else ""
 
 
