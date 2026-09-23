@@ -709,6 +709,8 @@ def _format_loop_toml(profile: Any, root: Path) -> str:
         fill_in = "  # ← the command that runs this repo's tests"
     else:
         fill_in = ""
+    if profile.mutation_note:
+        lines += ["#", *_comment_lines(profile.mutation_note)]
     lines += [
         "",
         "[gate]",

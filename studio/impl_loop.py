@@ -125,19 +125,13 @@ class StackProfile:
     static_checks: tuple[str, ...] = ()
     require_mutation_check: bool = False
     mutation_command: str | None = None
+    mutation_note: str = ""
 
 
-# The gate commands for each stack whose answer is the same in every repository. Node is
-# missing on purpose: what it can offer depends on what package.json declares, so
-# _node_profile works it out per repo.
+# The gate commands for each stack whose answer is the same in every repository. Node and
+# Python are missing on purpose: what each can offer depends on what the repository itself
+# declares, so _node_profile and _python_profile work them out per repo.
 PROFILES: dict[str, StackProfile] = {
-    "python": StackProfile(
-        stacks=("python",),
-        test_command="pytest -q",
-        static_checks=("ruff check {paths}",),
-        require_mutation_check=True,
-        mutation_command="mutmut run",
-    ),
     # Recognised, deliberately unserved. A Unity test run needs a wrapper that reads the
     # result file (the editor reports success even when it discovered no tests at all),
     # and no Rust profile is shipped, so both fall through to the refusal.
@@ -239,6 +233,70 @@ def _node_profile(root: Path) -> StackProfile:
     )
 
 
+MUTMUT_CONFIG_MARKERS: tuple[tuple[str, str], ...] = (
+    ("setup.cfg", "[mutmut]"),
+    ("pyproject.toml", "[tool.mutmut]"),
+)
+
+
+def _has_mutmut_config(root: Path) -> bool:
+    """Does this repository tell mutmut what to mutate?
+
+    ``mutmut run`` takes ``paths_to_mutate`` from a config section; given none it guesses
+    a ``src/``, ``lib/`` or project-named directory. A repo with neither the section nor
+    that layout gets a gate that errors or mutates the wrong tree, which is the
+    wrong-reason failure this detection exists to remove.
+
+    A ``mutmut_config.py`` counts on its own: it is mutmut's own hook file, and a repo
+    that wrote one has thought about mutation testing.
+    """
+    if (root / "mutmut_config.py").is_file():
+        return True
+    for filename, section in MUTMUT_CONFIG_MARKERS:
+        try:
+            text = (root / filename).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if section in text:
+            return True
+    return False
+
+
+def _python_profile(root: Path) -> StackProfile:
+    """Python's gate commands, with the mutation gate decided by this repository.
+
+    ``pytest -q`` and ``ruff check`` mean the same thing everywhere. ``mutmut run`` does
+    not: it needs the repository to say what to mutate. So the gate is offered only to a
+    repo that has said, and every other repo gets it switched off with a note saying what
+    to add — rather than a gate that fails on the first unit for a reason that has nothing
+    to do with the code being built.
+
+    ``mutation_command`` is written either way, so turning the gate on later is a one-word
+    edit rather than a lookup.
+    """
+    if _has_mutmut_config(root):
+        return StackProfile(
+            stacks=("python",),
+            test_command="pytest -q",
+            static_checks=("ruff check {paths}",),
+            require_mutation_check=True,
+            mutation_command="mutmut run",
+        )
+    return StackProfile(
+        stacks=("python",),
+        test_command="pytest -q",
+        static_checks=("ruff check {paths}",),
+        require_mutation_check=False,
+        mutation_command="mutmut run",
+        mutation_note=(
+            "The mutation gate is off because nothing here tells mutmut what to mutate. "
+            "To turn it on, add a [mutmut] section to setup.cfg (or [tool.mutmut] to "
+            "pyproject.toml) setting paths_to_mutate, then set require_mutation_check to "
+            "true. Scope it narrowly: mutmut runs the whole suite again for every mutant."
+        ),
+    )
+
+
 def resolve_profile(root: Path) -> StackProfile:
     """The gate commands Studio would offer the repository at ``root``.
 
@@ -252,6 +310,8 @@ def resolve_profile(root: Path) -> StackProfile:
         return StackProfile(stacks=stacks)
     if stacks[0] == "node":
         return _node_profile(root)
+    if stacks[0] == "python":
+        return _python_profile(root)
     return PROFILES[stacks[0]]
 
 
