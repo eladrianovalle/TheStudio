@@ -36,8 +36,8 @@ def read_description(command_file: Path) -> str:
     if not text.startswith("---\n"):
         return ""
     frontmatter = text.split("\n---\n", 1)[0]
-    match = re.search(r'^description:\s*"?(.*?)"?\s*$', frontmatter, re.MULTILINE)
-    return match.group(1) if match else ""
+    match = re.search(r"^description:\s*([\"']?)(.*?)\1\s*$", frontmatter, re.MULTILINE)
+    return match.group(2) if match else ""
 
 
 def malformed_quoted_values(command_file: Path) -> list[str]:
@@ -62,7 +62,7 @@ def malformed_quoted_values(command_file: Path) -> list[str]:
         quote = value[0]
         inner = re.sub(r"\\." if quote == '"' else "''", "", value[1:])
         end = inner.find(quote)
-        if end == -1 or not re.fullmatch(r"\s*(#.*)?", inner[end + 1 :]):
+        if end == -1 or not re.fullmatch(r"(\s+#.*|\s*)", inner[end + 1 :]):
             bad.append(line)
     return bad
 
