@@ -171,7 +171,7 @@ Strict writing, tolerant reading, and the split is the difference between a feat
 repository and one that works in four. Measured across the 24 approved specs in the five consuming
 installs on this machine: the strict shape-A regex finds **zero units in 23 of them**, and zero units
 is indistinguishable from "nothing is unfinished" — the exact silence this feature exists to end. The
-tolerant opener finds **61 units instead of 9**. A second install goes from 0 to 45, hand-checked and all
+tolerant opener finds **61 units instead of 9**. One install goes from 0 to 45, hand-checked and all
 real handles. The cost is roughly 3 percent false positives (see Risks).
 
 Under either opener an entry runs from its opener to the next unit opener of either form, or the next

@@ -310,6 +310,6 @@ Narrowing a criterion after measuring against it is normally how a criterion sto
 which is why the original is quoted here rather than replaced silently. Anyone auditing this can see
 both the bar that was set and the bar that was met, and disagree with the change.
 
-**Out of scope:** any further change to detection, the refusal, or the wizard. Neither install is
-blocked after all: a later pull request in the consuming repo supersedes the two stale ones that
-were open when this was written, and both of those are now closed.
+**Out of scope:** any further change to detection, the refusal, or the wizard. The install with a
+test suite is not blocked after all: a later pull request in that repo supersedes the two stale ones
+that were open when this was written, and both of those are now closed.
