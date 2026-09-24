@@ -104,7 +104,7 @@ the source repo," and `_project_name`'s docstring states the invariant outright:
 cwd = <repo>            →  artifact_root = <repo>/studio  (== studio_root)
                         →  get_output_root()        = <repo>/studio/output
                         →  get_knowledge_log_path() = <repo>/studio/knowledge/run_log.md
-                        →  _project_name()          = "_TheGameStudio"   (studio_root.parent.name)
+                        →  _project_name()          = "<repo>"           (studio_root.parent.name)
                         →  artifact_root == studio_root, so _scaffold_external_repo never fires
 ```
 
@@ -134,7 +134,7 @@ missing, get committed by accident, or drift.
 **2. Insert above the `.studio/VERSION` walk-up.** *(settled on evidence, not preference)*
 The theoretical cost is hijacking an `init`-installed project nested *inside* the Studio source
 tree. The contrarian checked: no `.studio/VERSION` exists anywhere in the tree, and all 17 worktrees
-are siblings under `_TheGameStudio-wt/*`, which `_is_within` never matches. The cost is currently
+are siblings under `<repo>-wt/*`, which `_is_within` never matches. The cost is currently
 zero and the alternative leaves `init --target .` able to recreate the bug.
 
 **3. Migrate the history; no legacy fallback.** *(P0, answered by the user)*
