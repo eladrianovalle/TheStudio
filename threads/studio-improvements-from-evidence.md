@@ -189,13 +189,13 @@ enough.
   agent with 8 repos missed `Arkadium/solitaire-game` (18 forge units, an active user) and `CREA`.
   The roster is **11 installs** as of 2026-09-20 — a later briefing that said 10 missed `Tycho`, which
   is the same mistake one level down. Re-derive it every time:
-  `find /Users/orcpunk -maxdepth 6 -name VERSION -path "*/.studio/*"`.
+  `find "$HOME" -maxdepth 6 -name VERSION -path "*/.studio/*"`.
 - **`spec/editor-breadth-valve` is an orphaned branch on origin** — 293 lines of spec from
   2026-07-28 whose PR #78 was closed unmerged. Not lost, but it belongs to a rejected item; do not
   mistake it for live work.
 
 ## Files & artifacts
-- Repo: `/Users/orcpunk/Repos/_TheGameStudio`. The note deliberately records no main SHA;
+- Repo: this checkout. The note deliberately records no main SHA;
   read it from git.
 - Specs: `specs/first-class-forge-gates.md` and `specs/completion-ledger.md`, both on main. Their
   status lives in their own frontmatter; this note does not keep a second copy of it.
