@@ -185,7 +185,7 @@ harness has none and adding one for a single assertion is not worth a dependency
 - **Test churn is real and worth naming.** Deleting the gate literals re-points about 3 tests;
   taking detection out of the loader re-points roughly 15 more. None are deleted, but that is a
   meaningful diff to review.
-- **The heaviest `/forge` user arrives cold.** It has 53 units, no config, and detection that
+- **The Rust/wasm game arrives cold.** It has 53 `/forge` units, no config, and detection that
   returns two stacks at once. Nothing here fixes it automatically — it needs the wizard run, which
   is why the sweep is called out as deployment rather than assumed.
 - **The build order is load-bearing, not cosmetic.** See the Build Plan: the loader unit cannot go

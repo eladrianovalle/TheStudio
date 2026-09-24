@@ -228,7 +228,7 @@ subprocess.run(
 - `%x1e` (record separator), never `%x00`. A NUL separator makes `git log` output binary, and any
   shell pipeline over it prints "Binary file matches" and nothing else — a silently empty built set
   that looks exactly like "no units were ever built." This is not hypothetical: it is the most likely
-  cause of the debate's first measurement of that install reading 19 built ids where the real count is 71.
+  cause of the debate's first measurement of one install reading 19 built ids where the real count is 71.
   Parse in Python; never pipe this through `grep`.
 - Nothing is cached. The 24-hour update-check cache is deliberately not reused: a cache is a second
   source of truth that can disagree with git, and this feature exists because two sources of truth
@@ -503,7 +503,7 @@ added.
   command someone chose to run.
 
 - **Duplicate `unit_id`s are enforced where the problem does not exist and absent where it does.**
-  Rule 7's directory-wide check runs in Studio's CI, which has zero collisions. The heaviest install
+  Rule 7's directory-wide check runs in Studio's CI, which has zero collisions. One consuming install
   has six, will never run Studio's suite, and has no clean exit: renaming an id in an approved spec
   makes a built unit read unbuilt and nag forever, while leaving it means one build silences two
   units. *Open question:* add a reconciler-side guard — when two specs plan the same id, decline to
