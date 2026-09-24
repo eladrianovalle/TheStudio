@@ -401,6 +401,34 @@ class TestMutationGateTeeth:
         assert "Reviewer Concern" in editor
 
 
+class TestStaticOkAbsentIsReported:
+    """A configured static check that the writer never reported is said out loud.
+
+    `static_ok` absent passes the entry gate deliberately — the comment above the gate calls
+    that out, and a writer that escalated before reaching the check should not fail a unit over
+    a missing field. But when `static_checks` are configured, "absent" and "all clean" are
+    different facts the gate cannot distinguish, so the orchestration names which one it was.
+    Same shape as the mutation-check reason: the schema cannot say "required when", so the rule
+    lives where the handoff has already landed.
+    """
+
+    def _loop_source(self):
+        return (_WORKFLOW_DIR / "implementation-loop.js").read_text()
+
+    def test_an_unreported_static_check_is_logged_only_when_the_gate_opened(self):
+        """The condition itself is driven in the node suite; this pins the call site.
+
+        It must sit below `entryGate` and be conditioned on it — on a shut gate, "the gate passed
+        it as unknown" would read as if the unit got through.
+        """
+        src = self._loop_source()
+        call = "if (entryGate && staticOkUnreported(writer, staticRequired)) {"
+        assert call in src
+        assert src.index("const entryGate = passesEntryGate(") < src.index(call)
+        guard = src.split(call, 1)[1].split("\n}", 1)[0]
+        assert "static_ok" in guard and "not as clean" in guard
+
+
 class TestMutationSkipReasonRecorded:
     """Pin that a skipped mutation check is a recorded fact, not a missing field.
 

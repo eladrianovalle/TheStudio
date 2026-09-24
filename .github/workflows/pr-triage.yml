@@ -3,7 +3,7 @@ name: PR triage (heuristic)
 # Phase 1 of the agent-driven PR review pipeline. This workflow is the cheap
 # gate: every open non-draft PR gets one of the `triage:*` labels based on
 # size + which paths it touches. NO LLM calls; NO merges; NO comments. The
-# label is the audit trail. Phase 2 (the Multica review agent) consumes the
+# label is the audit trail. Phase 2 (the external review agent) consumes the
 # labels: only `triage:small` PRs get an LLM review; `triage:trivial` is
 # mergeable with green checks; `triage:medium`/`large` ping a human.
 #
