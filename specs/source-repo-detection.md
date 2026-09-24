@@ -104,7 +104,7 @@ the source repo," and `_project_name`'s docstring states the invariant outright:
 cwd = <repo>            →  artifact_root = <repo>/studio  (== studio_root)
                         →  get_output_root()        = <repo>/studio/output
                         →  get_knowledge_log_path() = <repo>/studio/knowledge/run_log.md
-                        →  _project_name()          = "<repo>"           (studio_root.parent.name)
+                        →  _project_name()          = "<repo dir name>" (studio_root.parent.name)
                         →  artifact_root == studio_root, so _scaffold_external_repo never fires
 ```
 
