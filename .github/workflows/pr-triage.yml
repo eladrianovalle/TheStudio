@@ -13,9 +13,7 @@ name: PR triage (heuristic)
 #     else         full agent review; none of them auto-merges and none of them
 #                  pings anyone. Read them as a size at a glance, nothing more.
 #
-# Merging stays a human's step regardless of label. Keep this comment honest:
-# it described a size-based routing policy that the review agent had stopped
-# implementing, which is worse than no comment at all.
+# Merging stays a human's step regardless of label. Keep this comment honest.
 #
 # Stack-agnostic: file-type heuristics below match docs/tests across TS, C#,
 # Rust, Python. Only HIGH_RISK_GLOBS is tuned per repo.
