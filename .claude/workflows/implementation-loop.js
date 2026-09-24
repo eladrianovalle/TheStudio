@@ -385,6 +385,13 @@ function skippedMutationCheckWithoutReason(writer) {
   return !!(writer.mutation_check && writer.mutation_check.performed === false && !writer.mutation_check.reason)
 }
 
+// Named for the same reason as passesEntryGate: so the JS shell tests can drive it.
+// Anything that is not a boolean counts as unreported: the gate lets every non-`false` value
+// through, so a `null` would otherwise open it and read as clean.
+function staticOkUnreported(writer, staticRequired) {
+  return !!(staticRequired && typeof writer.static_ok !== 'boolean')
+}
+
 if (!writer) {
   log('Writer agent failed to return a handoff — aborting.')
   return { delivered: false, reason: 'writer_failed' }
@@ -396,6 +403,14 @@ const entryGate = passesEntryGate(writer, staticRequired)
 // out loud in the transcript — and say it whichever way the gate falls.
 if (writer.stuck) {
   log(`Writer escalated (stopped deliberately): ${writer.stuck}`)
+}
+// `static_ok` absent passes the gate on purpose — a writer that never reached the static check
+// should not fail a unit over a missing field. But when static_checks ARE configured, absent and
+// "they all passed" are different facts, and the gate cannot tell them apart. Say which it was,
+// where the handoff has already landed, rather than tightening a gate that is deliberately loose.
+// Only when the gate opened: on a shut gate, "passed it as unknown" would read as if the unit got through.
+if (entryGate && staticOkUnreported(writer, staticRequired)) {
+  log(`Static checks are configured but the writer reported no boolean static_ok — the gate passed it as unknown, not as clean.`)
 }
 // A skipped mutation check has to say why. The schema can require `performed`, but it cannot say
 // "and when that is false, a reason is required" — JSON Schema expresses that only through if/then,
