@@ -2164,6 +2164,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     setup_parser.add_argument(
         "--answers", type=str, default=None,
+        # Inline JSON lands in argv, which is readable by any process listing. Every setup answer
+        # today is non-sensitive config, and a step that ever needs a secret must take a file path
+        # here rather than an inline object.
         help="Apply configuration from a JSON answers file, or from a JSON object given inline.",
     )
     setup_parser.add_argument(
