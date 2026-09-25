@@ -1,6 +1,6 @@
 ---
 description: "Use when CLAUDE.md has grown too long to read in one sitting. Finds content that belongs in companion documents, writes pointer stubs in its place, and can apply the move with a backup and a rollback. Triggers include 'CLAUDE.md is too long' and 'move this into a doc'. Read-only unless asked to apply. Use /unstale instead when the instructions are wrong rather than bloated."
-argument-hint: "[--apply] [--rollback]"
+argument-hint: "[--apply] [--dry-run] [--verify] [--rollback]"
 ---
 
 # Offload: Slim CLAUDE.md by Moving Reference Content to Companion Docs

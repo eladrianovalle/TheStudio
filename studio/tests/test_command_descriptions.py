@@ -67,6 +67,77 @@ def malformed_quoted_values(command_file: Path) -> list[str]:
     return bad
 
 
+def read_argument_hint(command_file: Path) -> str | None:
+    """Return the ``argument-hint`` from a command's frontmatter, or None if absent."""
+    text = command_file.read_text(encoding="utf-8")
+    if not text.startswith("---\n"):
+        return None
+    frontmatter = text.split("\n---\n", 1)[0]
+    match = re.search(r"""^argument-hint:\s*(["'])(.*)\1\s*$""", frontmatter, re.MULTILINE)
+    return match.group(2) if match else None
+
+
+def documented_flags(command_file: Path) -> list[str]:
+    """Every ``--flag`` the command's own Arguments section documents."""
+    text = command_file.read_text(encoding="utf-8")
+    body = text.split("\n---\n", 1)[1] if text.startswith("---\n") else text
+    section = re.search(r"^## Arguments\n(.*?)(?=^## )", body, re.MULTILINE | re.DOTALL)
+    if not section:
+        return []
+    # Flags are read out of inline-code spans, not the prose around them. Some commands
+    # document a flag on its own (`--plan`) and others inside a format string
+    # (`--phase <market|design|tech> --text "..."`); both count, while a flag merely
+    # mentioned in a sentence does not.
+    code_spans = re.findall(r"`([^`]+)`", section.group(1))
+    return sorted({
+        flag for span in code_spans for flag in re.findall(r"(--[a-z][a-z-]*)", span)
+    })
+
+
+class TestArgumentHints(unittest.TestCase):
+    """The hint is the only argument list most people ever read.
+
+    It appears inline as someone types the command, where the body below it does not. A
+    flag missing from the hint is a flag most users never learn exists; a flag promised by
+    the hint and documented nowhere is worse, because they will try it.
+    """
+
+    def test_the_hint_offers_every_flag_the_command_documents(self):
+        for name in SLASH_COMMANDS:
+            path = COMMANDS_DIR / name
+            flags = documented_flags(path)
+            if not flags:
+                continue
+            hint = read_argument_hint(path) or ""
+            missing = [flag for flag in flags if flag not in hint]
+            with self.subTest(command=name):
+                self.assertEqual(
+                    missing, [],
+                    f"{name} documents {missing} but its argument-hint does not offer them. "
+                    f"The hint is what a user reads while typing; a flag left out of it is "
+                    f"one most people never find.",
+                )
+
+    def test_the_hint_promises_nothing_the_command_does_not_document(self):
+        for name in SLASH_COMMANDS:
+            path = COMMANDS_DIR / name
+            hint = read_argument_hint(path)
+            if hint is None:
+                continue
+            documented = documented_flags(path)
+            invented = [
+                flag for flag in sorted(set(re.findall(r"(--[a-z][a-z-]*)", hint)))
+                if flag not in documented
+            ]
+            with self.subTest(command=name):
+                self.assertEqual(
+                    invented, [],
+                    f"{name}'s argument-hint offers {invented}, which its Arguments section "
+                    f"never documents. A hint that promises a flag nobody implemented sends "
+                    f"people to try it.",
+                )
+
+
 class TestCommandDescriptions(unittest.TestCase):
     def test_frontmatter_quoted_values_are_well_formed(self):
         for name in SLASH_COMMANDS:

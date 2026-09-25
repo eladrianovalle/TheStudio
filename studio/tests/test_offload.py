@@ -3,6 +3,7 @@ import re
 
 
 from offload import (
+    scan_slash_commands,
     TIER_ALWAYS_INLINE,
     TIER_REFERENCE_OFFLOADABLE,
     classify_sections,
@@ -496,3 +497,52 @@ class TestScorePointerStrength:
         result = score_pointer_strength(pointer)
         assert result["score"] < 0.5
         assert result["rating"] == "weak"
+
+
+# ---------------------------------------------------------------------------
+# scan_slash_commands: frontmatter is metadata, not instructions
+# ---------------------------------------------------------------------------
+
+
+def _command(tmp_path, name, text):
+    commands = tmp_path / "commands"
+    commands.mkdir(exist_ok=True)
+    (commands / name).write_text(text, encoding="utf-8")
+    return str(commands)
+
+
+class TestScanSkipsFrontmatter:
+    """A section name in a command's metadata is not a dependency on that section.
+
+    ``scan_slash_commands`` warns when offloading a CLAUDE.md section would strand a command
+    that refers to it, and instructions live in the body. A description is prose about the
+    command, where a section name is far likelier to be a coincidence of wording. Measured
+    when descriptions were added: one new match across every command, ``/run-phase`` against
+    the "Architecture" section, because its description says "for a feature's architecture
+    use /spec". That is the word, not the section.
+    """
+
+    def test_a_section_named_only_in_frontmatter_is_not_a_reference(self, tmp_path):
+        commands = _command(
+            tmp_path, "example.md",
+            '---\ndescription: "Use when the Architecture needs explaining."\n---\n\n'
+            "# Example\n\nThis command explains nothing in particular.\n",
+        )
+        assert scan_slash_commands(commands, [{"name": "Architecture"}]) == []
+
+    def test_a_section_named_in_the_body_is_still_a_reference(self, tmp_path):
+        commands = _command(
+            tmp_path, "example.md",
+            '---\ndescription: "Use to do a thing."\n---\n\n'
+            "# Example\n\nFollow the Architecture section before starting.\n",
+        )
+        conflicts = scan_slash_commands(commands, [{"name": "Architecture"}])
+        assert [c["references"] for c in conflicts] == [["Architecture"]]
+
+    def test_a_command_with_no_frontmatter_is_scanned_whole(self, tmp_path):
+        """Every command looked like this before descriptions existed."""
+        commands = _command(
+            tmp_path, "old.md", "# Old\n\nSee the Architecture section.\n"
+        )
+        conflicts = scan_slash_commands(commands, [{"name": "Architecture"}])
+        assert [c["references"] for c in conflicts] == [["Architecture"]]

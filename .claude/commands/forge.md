@@ -1,6 +1,6 @@
 ---
 description: "Use to build one complete, usable unit of work through the writer/editor loop, which commits a passing state and then has a fresh editor cut and grade it. Point it at an approved spec with --spec <slug> --unit <id> and it grades the result against that unit's acceptance criteria one at a time. Triggers include 'implement X', 'build the next unit', and 'run the writer-editor loop on X'. Writes and commits real code. If the feature has no approved design yet, use /spec first."
-argument-hint: "<unit description> [--spec <slug> --unit <id>] [--branch <name>]"
+argument-hint: "<unit description> [--spec <slug>] [--unit <id>] [--branch <name>] [--work-dir <path>] [--test <cmd>] [--plan]"
 ---
 
 # Forge (Writer/Editor Loop)
