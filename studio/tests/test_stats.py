@@ -15,11 +15,12 @@ from types import SimpleNamespace
 import pytest
 
 import run_phase
+from obligations import STALE_STATUS, UNBUILT_UNIT, Obligation
 from stats import (
     PlannedUnit,
     UnitLedger,
     built_unit_ids,
-    format_unit_ledger,
+    format_obligations,
     mentioned_unit_ids,
     parse_build_plan,
     reconcile_units,
@@ -35,13 +36,20 @@ SPECS_DIR = REPO_ROOT / "specs"
 GIT_LOG_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "git_log_built_units.txt"
 
 
-def _spec(build_plan: str, *, status: str = "approved", slug: str = "a-feature") -> str:
+def _spec(
+    build_plan: str,
+    *,
+    status: str = "approved",
+    slug: str = "a-feature",
+    verification_due: str = "",
+) -> str:
     """A spec file's text: frontmatter, a little prose, then the plan under test."""
     return (
         "---\n"
         "feature: A Feature\n"
         f"slug: {slug}\n"
         f"status: {status}\n"
+        f"verification_due: {verification_due}\n"
         "---\n\n"
         "# A Feature\n\nSome prose.\n\n"
         f"{build_plan}"
@@ -479,129 +487,174 @@ def test_the_audit_count_against_this_repo_stays_near_the_truth():
     assert len(reconcile_units([], built, escalated, set()).unplanned) > len(ledger.unplanned)
 
 
-# --- format_unit_ledger ----------------------------------------------------
+# --- format_obligations: the block a person actually reads --------------------
 
 
-def test_an_empty_ledger_prints_one_line_and_no_empty_headings():
+def _owed(unit_id: str, *, slug: str = "a-feature", spec_file: str = "") -> Obligation:
+    """One `unbuilt_unit` obligation, the shape `derive` builds for a unit nobody built."""
+    return Obligation(
+        kind=UNBUILT_UNIT,
+        subject=unit_id,
+        spec_file=spec_file or f"specs/{slug}.md",
+        detail=f"`{unit_id}`, planned by `{slug}`, is not in any commit",
+        command=f"/forge --spec {spec_file or f'specs/{slug}.md'} --unit {unit_id}",
+        silence="open a PR adding `- **Dropped:** YYYY-MM-DD — <reason>`",
+    )
+
+
+def test_an_empty_queue_prints_one_line_and_no_empty_headings():
     """A report that looks the same with and without news is one people stop reading."""
-    lines = format_unit_ledger(UnitLedger((), (), (), ()))
+    lines = format_obligations((), UnitLedger((), (), (), ()))
 
     assert lines == [
         "",
-        "Planned work (approved specs vs. git):",
-        "  Nothing unfinished — every unit an approved spec plans is built or dropped.",
+        "What this repository owes (approved specs vs. git):",
+        "  Nothing owed — every unit an approved spec plans is built or dropped, and every "
+        "finished spec says so.",
     ]
 
 
 def test_an_unknown_built_set_prints_no_block_at_all():
     """Nothing was reconciled, so there is nothing the block could honestly say.
 
-    "Nothing unfinished" is the specific lie to avoid here: a shallow CI checkout or a box with
+    "Nothing owed" is the specific lie to avoid here: a shallow CI checkout or a box with
     no git is exactly where it would claim every planned unit is built.
     """
     ledger = reconcile_units([_planned("owed_unit")], None, None, set())
 
-    assert format_unit_ledger(ledger) == []
+    assert format_obligations((), ledger) == []
 
 
 def test_the_block_names_each_state_it_has_something_to_say_about():
-    """What a person reads: the units by spec, the escalations, the counts, and the caveat."""
+    """What a person reads: the queue, the escalations, the counts, and the caveat."""
     ledger = UnitLedger(
         unbuilt=(_planned("owed_unit"),),
         escalated=(_planned("stuck_unit", slug="other-feature"),),
         dropped=(_planned("closed_unit", dropped=True),),
         unplanned=("stray_id",),
     )
-    block = "\n".join(format_unit_ledger(ledger))
+    block = "\n".join(format_obligations((_owed("owed_unit"),), ledger))
 
-    assert "Planned and never built: 1 unit across 1 approved spec" in block
-    assert "[a-feature] owed_unit — what owed_unit is for" in block
+    assert "1 obligation, most important first:" in block
+    assert "Planned and never built: 1" in block
+    assert "`owed_unit`, planned by `a-feature`, is not in any commit" in block
+    assert "Run: /forge --spec specs/a-feature.md --unit owed_unit" in block
     assert "Started and escalated" in block and "[other-feature] stuck_unit" in block
     assert "Dropped on purpose: 1 unit" in block
     assert "Built but never planned: 1 id" in block
-    assert "before /forge" in block
-    assert "Nothing unfinished" not in block
+    assert "Nothing owed" not in block
 
 
-def test_units_still_owed_are_listed_even_when_nothing_else_has_news():
+def test_obligations_are_listed_even_when_nothing_else_has_news():
     """The commonest shape there is: work outstanding, nothing dropped, nothing stray.
 
-    It has to print the list rather than the "nothing unfinished" line, which is the whole
-    reason that line is gated on all four states being empty and not on some of them.
+    It has to print the queue rather than the "nothing owed" line, which is the whole
+    reason that line is gated on the queue and all three ledger states being empty.
     """
-    ledger = UnitLedger(unbuilt=(_planned("owed_unit"),), escalated=(), dropped=(),
-                        unplanned=())
-    block = "\n".join(format_unit_ledger(ledger))
+    block = "\n".join(format_obligations((_owed("owed_unit"),), UnitLedger((), (), (), ())))
 
-    assert "[a-feature] owed_unit" in block
-    assert "Nothing unfinished" not in block
+    assert "`owed_unit`" in block
+    assert "Nothing owed" not in block
+
+
+def test_each_kind_gets_its_own_heading_its_own_count_and_its_own_indent():
+    """Obligations arrive sorted by kind, so the headings count the run under each.
+
+    The indentation is checked line for line: a heading, its obligations one level in, and
+    the way out one level further. That shape is the only thing separating the three groups
+    on a terminal, and a substring match would not notice it going.
+    """
+    stale = Obligation(
+        kind=STALE_STATUS, subject="b-feature", spec_file="specs/b-feature.md",
+        detail="every unit `b-feature` plans is built", command="", silence="",
+    )
+    lines = format_obligations(
+        (stale, _owed("first"), _owed("second")), UnitLedger((), (), (), ())
+    )
+
+    assert lines == [
+        "",
+        "What this repository owes (approved specs vs. git):",
+        "  3 obligations, most important first:",
+        "  Finished but still `approved` — the frontmatter owes a flip: 1",
+        "    every unit `b-feature` plans is built",
+        "  Planned and never built: 2",
+        "    `first`, planned by `a-feature`, is not in any commit",
+        "      Run: /forge --spec specs/a-feature.md --unit first",
+        "      Or close it on purpose: open a PR adding "
+        "`- **Dropped:** YYYY-MM-DD — <reason>`",
+        "    `second`, planned by `a-feature`, is not in any commit",
+        "      Run: /forge --spec specs/a-feature.md --unit second",
+        "      Or close it on purpose: open a PR adding "
+        "`- **Dropped:** YYYY-MM-DD — <reason>`",
+    ]
 
 
 def test_the_counts_read_as_plurals_when_there_is_more_than_one():
-    """Two units across two specs, said the way a person would say it."""
+    """Two of everything, said the way a person would say it."""
     ledger = UnitLedger(
-        unbuilt=(_planned("first"), _planned("second", slug="other-feature")),
+        unbuilt=(),
         escalated=(),
         dropped=(_planned("closed", dropped=True), _planned("also_closed", dropped=True)),
         unplanned=("one_id", "another_id"),
     )
-    block = "\n".join(format_unit_ledger(ledger))
+    block = "\n".join(format_obligations(
+        (_owed("first"), _owed("second", slug="other-feature")), ledger
+    ))
 
-    assert "Planned and never built: 2 units across 2 approved specs" in block
+    assert "2 obligations, most important first:" in block
     assert "Dropped on purpose: 2 units" in block
     assert "Built but never planned: 2 ids" in block
 
 
-def test_two_specs_sharing_a_slug_are_counted_as_two_specs():
+def test_two_specs_sharing_a_slug_each_name_their_own_file():
     """Rule 7 forbids a duplicate `unit_id`, not a duplicate slug.
 
-    Counted by slug, two files that each planned a unit read as one spec, and the line says
-    less work is outstanding in fewer places than actually is.
+    Every obligation carries the file that defines it, so two specs sharing a slug can never
+    send a reader to the wrong one — the `/forge` line under each names its own spec.
     """
-    ledger = UnitLedger(
-        unbuilt=(
-            _planned("first", spec_file="specs/a-feature.md"),
-            _planned("second", spec_file="specs/b-feature.md"),
+    block = "\n".join(format_obligations(
+        (
+            _owed("first", spec_file="specs/a-feature.md"),
+            _owed("second", spec_file="specs/a-feature-revised.md"),
         ),
-        escalated=(),
-        dropped=(),
-        unplanned=(),
-    )
-    block = "\n".join(format_unit_ledger(ledger))
+        UnitLedger((), (), (), ()),
+    ))
 
-    assert "Planned and never built: 2 units across 2 approved specs" in block
+    assert "/forge --spec specs/a-feature.md --unit first" in block
+    assert "/forge --spec specs/a-feature-revised.md --unit second" in block
 
 
-def test_units_from_two_specs_sharing_a_slug_name_their_files():
+def test_escalated_units_from_two_specs_sharing_a_slug_name_their_files():
     """A count that says two specs over two identical `[a-feature]` prefixes explains nothing.
 
     Only the shared slug gives way: a unit whose slug belongs to one file keeps it, because
     the slug is what the reader recognises and what they would type at `/forge`.
     """
     ledger = UnitLedger(
-        unbuilt=(
+        unbuilt=(),
+        escalated=(
             _planned("first", spec_file="specs/a-feature.md"),
             _planned("second", spec_file="specs/a-feature-revised.md"),
             _planned("third", slug="b-feature"),
         ),
-        escalated=(),
         dropped=(),
         unplanned=(),
     )
-    lines = format_unit_ledger(ledger)
+    lines = format_obligations((), ledger)
 
     assert "    [a-feature] first — what first is for" in lines
     assert "    [a-feature-revised] second — what second is for" in lines
     assert "    [b-feature] third — what third is for" in lines
 
 
-def test_a_long_title_is_cut_and_a_missing_one_is_left_out():
+def test_a_long_escalated_title_is_cut_and_a_missing_one_is_left_out():
     """The line has to stay one line, and a unit with no title still names its id."""
     long_title = PlannedUnit("a-feature", "wordy_unit", "x" * 81, "", "", "specs/a-feature.md")
     just_short = PlannedUnit("a-feature", "terse_unit", "y" * 80, "", "", "specs/a-feature.md")
     untitled = PlannedUnit("a-feature", "bare_unit", "", "", "", "specs/a-feature.md")
-    lines = format_unit_ledger(
-        UnitLedger((long_title, just_short, untitled), (), (), ())
+    lines = format_obligations(
+        (), UnitLedger((), (long_title, just_short, untitled), (), ())
     )
 
     assert "    [a-feature] wordy_unit — " + "x" * 77 + "..." in lines
@@ -611,7 +664,7 @@ def test_a_long_title_is_cut_and_a_missing_one_is_left_out():
 
 def test_counts_that_have_nothing_to_report_are_left_out():
     """Zeroes are noise. Only a state with something in it gets a line."""
-    block = "\n".join(format_unit_ledger(UnitLedger((), (), (), ("stray_id",))))
+    block = "\n".join(format_obligations((), UnitLedger((), (), (), ("stray_id",))))
 
     assert "Built but never planned" in block
     assert "Planned and never built" not in block
@@ -739,8 +792,12 @@ def _stats_output(capsys) -> str:
     return capsys.readouterr().out
 
 
-def test_stats_prints_the_planned_and_unbuilt_units(specs_root, monkeypatch, capsys):
-    """The dashboard block, end to end: an approved spec's owed unit, named with its spec."""
+def test_stats_prints_the_obligation_queue(specs_root, monkeypatch, capsys):
+    """The dashboard block, end to end: an approved spec's owed unit, named with its spec.
+
+    The unit line carries everything the "Planned work" block carried before the queue
+    replaced it — the slug, the id and the one-line outcome — plus the command that builds it.
+    """
     _seed_spec(specs_root, _spec(
         "## Build Plan\n\n"
         "### 1. `already_built` — done\n\n"
@@ -752,24 +809,64 @@ def test_stats_prints_the_planned_and_unbuilt_units(specs_root, monkeypatch, cap
 
     output = _stats_output(capsys)
 
-    assert "Planned work (approved specs vs. git):" in output
-    assert "Planned and never built: 1 unit across 1 approved spec" in output
-    assert "[a-feature] still_owed — the one nobody built" in output
+    assert "What this repository owes (approved specs vs. git):" in output
+    assert "1 obligation, most important first:" in output
+    assert "Planned and never built: 1" in output
+    assert "`still_owed`, planned by `a-feature` in specs/a-feature.md" in output
+    assert '— "the one nobody built"' in output
+    assert "Run: /forge --spec specs/a-feature.md --unit still_owed" in output
     assert "already_built" not in output
     assert "Dropped on purpose: 1 unit" in output
 
 
-def test_stats_says_nothing_is_unfinished_rather_than_printing_an_empty_block(
+def test_stats_prints_the_two_spec_level_obligations(specs_root, monkeypatch, capsys):
+    """A spec finished but still `approved`, and one whose evidence is past due.
+
+    Both are edits rather than commands, so each has to say in words what to change — a
+    kind of obligation with no `/forge` line under it is the reason `command` can be empty.
+    """
+    _seed_spec(specs_root, _spec("## Build Plan\n\n### 1. `already_built` — done\n"))
+    _seed_spec(specs_root, _spec(
+        "## Build Plan\n\n### 1. `also_built` — done\n\n"
+        "## Verification\n\nEvidence was promised.\n",
+        slug="b-feature", verification_due="2020-01-01",
+    ), name="b-feature.md")
+    monkeypatch.setattr(
+        run_phase, "_built_unit_ids", lambda target: ({"already_built", "also_built"}, set())
+    )
+
+    output = _stats_output(capsys)
+
+    assert "Finished but still `approved` — the frontmatter owes a flip: 1" in output
+    assert "`status: shipped`" in output and "`shipped_impact`" in output
+    assert "Evidence overdue — the results file is still blank: 1" in output
+    assert "specs/b-feature-eval-results.md is still blank" in output
+    # The overdue spec is waiting on evidence, so it owes no flip — and the finished one
+    # promised no evidence, so it is not overdue. One obligation each, never both.
+    assert "2 obligations, most important first:" in output
+
+
+def test_stats_says_nothing_is_owed_rather_than_printing_an_empty_block(
     specs_root, monkeypatch, capsys
 ):
-    """One line when there is no news, not a heading with nothing under it."""
-    _seed_spec(specs_root, _spec("## Build Plan\n\n### 1. `already_built` — done\n"))
+    """One line when there is no news, not a heading with nothing under it.
+
+    The spec here has its every unit built and still says `approved`, which is usually a
+    `stale_status` obligation — but it promised evidence that is not due yet, and flipping it
+    to `shipped` is an edit the spec-verification suite would reject while that file is blank.
+    """
+    _seed_spec(specs_root, _spec(
+        "## Build Plan\n\n### 1. `already_built` — done\n\n"
+        "## Verification\n\nEvidence is due later.\n",
+        verification_due="2099-01-01",
+    ))
     monkeypatch.setattr(run_phase, "_built_unit_ids", lambda target: ({"already_built"}, set()))
 
     output = _stats_output(capsys)
 
-    assert "Nothing unfinished" in output
+    assert "Nothing owed" in output
     assert "Planned and never built" not in output
+    assert "Finished but still" not in output
 
 
 def test_stats_does_not_nag_about_every_unit_when_git_cannot_be_read(
@@ -784,10 +881,10 @@ def test_stats_does_not_nag_about_every_unit_when_git_cannot_be_read(
     output = _stats_output(capsys)
 
     assert "one_unit" not in output and "another_unit" not in output
-    # And it does not swing the other way either: with no built set, "nothing unfinished" is
-    # the same lie wearing the opposite sign. The block is left out entirely.
-    assert "Nothing unfinished" not in output
-    assert "Planned work (approved specs vs. git):" not in output
+    # And it does not swing the other way either: with no built set, "nothing owed" is the
+    # same lie wearing the opposite sign. The block is left out entirely.
+    assert "Nothing owed" not in output
+    assert "What this repository owes (approved specs vs. git):" not in output
 
 
 def test_a_draft_spec_owes_nobody_a_build(specs_root, monkeypatch, capsys):
@@ -800,4 +897,4 @@ def test_a_draft_spec_owes_nobody_a_build(specs_root, monkeypatch, capsys):
     output = _stats_output(capsys)
 
     assert "argued_about" not in output
-    assert "Nothing unfinished" in output
+    assert "Nothing owed" in output
