@@ -98,8 +98,8 @@ TheStudio's one open PR, #175, belongs to the `studio-improvements-from-evidence
   installed". Copy the pieces (`source`, `VERSION`, `MANIFEST.json`), not the directory.
 
 ## Files & artifacts
-- Repo: `/Users/orcpunk/Repos/_TheGameStudio`, main `eeea628`.
-- Worktree: `/Users/orcpunk/Repos/_TheGameStudio-wt-static-checks` (branch `chore/unstale-2026-09-02`).
+- Repo: this checkout, main `eeea628`.
+- Worktree: `../_TheGameStudio-wt-static-checks` (branch `chore/unstale-2026-09-02`).
   Keep it — `.studio/output/impl_loop/` handoff records are gitignored and die with the worktree.
 - Spec: `specs/detected-static-check-command.md` — all three unit 3 criteria met, `approved` until
   the two rollout PRs merge.

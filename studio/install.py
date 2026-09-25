@@ -764,9 +764,10 @@ def _source_at_default_branch(
 
     Falls back to ``studio_dir`` unchanged (``note`` = None) when disabled, not a
     git repo, the branch can't be resolved, or (with no override) the checkout is
-    already sitting on that branch's commit with a clean tree. ``note`` is a short
-    human line naming the ref that was read in place of the checkout; None when
-    nothing was bypassed.
+    already sitting on that branch's commit with a clean tree — and with a ``note``
+    when that ref has no Studio source tree at the source dir's path. ``note`` is a
+    short human line naming the ref that was read in place of the checkout (or why
+    it wasn't); None when nothing was bypassed.
     """
     if not enabled:
         yield studio_dir, None
@@ -811,12 +812,25 @@ def _source_at_default_branch(
             yield studio_dir, None
             return
         added = True
+        # `rel` is only the source dir's path relative to the git toplevel — nothing so
+        # far says that path is a Studio source tree in `ref`. It is not when the source
+        # was copied inside an unrelated repo, or when it is an untracked `.studio/`
+        # snapshot in a host repo. Handing back the empty path would collect zero source
+        # files and still write VERSION/MANIFEST, so the target reads as installed while
+        # holding nothing. Read the live tree instead, as `main` did, and say why.
+        materialized = worktree / rel
+        if not (materialized / "run_phase.py").is_file():
+            yield studio_dir, (
+                f"read Studio source from the checkout itself — '{rel}' is not a Studio "
+                f"source tree in '{ref}'"
+            )
+            return
         note = None
         if override_ref is not None:
             note = f"read Studio source from '{ref}' — your local checkout is behind it"
         elif current and current != ref:
             note = f"read Studio source from '{ref}' (the source checkout is on '{current}')"
-        yield worktree / rel, note
+        yield materialized, note
     finally:
         if added:
             _git_out(repo, "worktree", "remove", "--force", str(worktree))
@@ -1080,13 +1094,17 @@ def install_studio(
             continue
         shutil.copy2(src, dst)
 
-    # Copy slash commands verbatim (they use .studio/source/ paths directly)
-    commands_dest.mkdir(parents=True, exist_ok=True)
+    # Copy slash commands verbatim (they use .studio/source/ paths directly).
+    # mkdir inside the loop, like the workflows below: a source with no
+    # `.claude/commands/` beside it ships no command at all (an installed snapshot
+    # has none), and the empty directory left behind is both what a half-finished
+    # install looks like and the one `init` deliberately stops naming in its banner.
     commands_src = studio_dir.parent / ".claude" / "commands"
     for cmd_name in SLASH_COMMANDS:
         src = commands_src / cmd_name
         if not src.exists():
             continue
+        commands_dest.mkdir(parents=True, exist_ok=True)
         dst = commands_dest / cmd_name
         if dst.exists() and src.samefile(dst):
             continue
