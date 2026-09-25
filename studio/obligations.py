@@ -201,7 +201,7 @@ def _stale_status(
         return None
     if any(_key(unit) in still_owed for unit in spec.units):
         return None
-    if not any(_key(unit) not in dropped for unit in spec.units):
+    if all(_key(unit) in dropped for unit in spec.units):
         return None
     if spec.promises_evidence and spec.evidence_is_blank:
         return None

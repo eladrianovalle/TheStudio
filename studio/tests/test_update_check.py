@@ -657,6 +657,9 @@ def test_an_unreadable_spec_is_skipped_rather_than_fatal(tmp_path, capsys):
     context = _context(capsys)
 
     assert context.startswith("Unfinished work:")
+    # Two obligations, so the readable spec's unbuilt unit is still counted: the directory
+    # named like a spec cost only itself. A prefix match alone would pass with it eaten.
+    assert "this repository owes 2 obligations" in context
 
 
 def test_one_unparseable_spec_takes_only_its_own_obligations_down(tmp_path, monkeypatch):
