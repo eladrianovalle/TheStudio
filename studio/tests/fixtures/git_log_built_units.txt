@@ -57,10 +57,10 @@ editor: gate_keys_resolve_to_none
 Cut one test the new one subsumes, and corrected three claims this change made
 untrue in the files it touched.
 
-The Unity "file naming only test_command inherits nothing" test is the Multica
+The Unity "file naming only test_command inherits nothing" test is the lone-command
 test with weaker markers: now that nothing is detected at load, the marker files
 are beside the point, and the Python repo is the case that would have inherited
-ruff and mutmut. Unity coverage stays in the Orkid Garden test.
+ruff and mutmut. Unity coverage stays in the subdirectory-project test.
 
 The three stale claims: load_loop_config still promised a config "merged over the
 detected profile"; the STACK_MARKERS comment credited the loader with a refusal

@@ -37,7 +37,7 @@ python ".studio/source/run_phase.py" setup --target . --status
 
 Check that `.studio/VERSION` exists in this project. If not, tell the user:
 
-> Studio isn't installed in this project. Run `python .studio/source/run_phase.py init --target .` first, or install from the Studio source repo.
+> Studio isn't installed in this project. Install it from a checkout of the Studio source repo: `python studio/run_phase.py init --target /path/to/this/project`.
 
 And stop.
 

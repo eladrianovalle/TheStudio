@@ -36,7 +36,7 @@ def test_normal_studio_run_shapes_full_record():
 
     record = build_session_record(
         run_id="run_studio_20260701_x",
-        repo="Pictorly",
+        repo="example-repo",
         phase="studio",
         mode="deliverables",
         finalized_iso="2026-07-01T00:00:00+00:00",
@@ -52,7 +52,7 @@ def test_normal_studio_run_shapes_full_record():
 
     # Top-level identity + convergence
     assert record["run_id"] == "run_studio_20260701_x"
-    assert record["repo"] == "Pictorly"
+    assert record["repo"] == "example-repo"
     assert record["verdict"] == "APPROVED"
     assert record["convergence"] == {"iterations": 3, "max_iterations": 4, "rejections": 2}
 

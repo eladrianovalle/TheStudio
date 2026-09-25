@@ -880,11 +880,11 @@ class TestApplySmokeConfig:
 # ---------------------------------------------------------------------------
 
 
-# Orkid Garden's real override, byte for byte. It keeps its Unity project in a
+# A real hand-written override, byte for byte. It keeps its Unity project in a
 # subdirectory, so nothing at its root identifies it and this file is the only reason
 # /forge works there at all.
-ORKID_OVERRIDE = (
-    "# Orkid Garden's overrides for the implementation writer/editor loop.\n"
+HAND_WRITTEN_OVERRIDE = (
+    "# This repo's overrides for the implementation writer/editor loop.\n"
     "\n"
     "[gate]\n"
     'test_command = "./scripts/run-editmode-tests.sh"\n'
@@ -1202,17 +1202,17 @@ class TestApplyImplementationLoopConfig:
         assert "detected from this repo's stack (python)" in prose
         assert "Studio ships no test command" not in prose
 
-    def test_never_overwrites_orkid_gardens_own_file(
+    def test_never_overwrites_a_hand_written_file(
         self, project: Path, capsys: pytest.CaptureFixture
     ) -> None:
         """The one file keeping /forge alive in the repo that reported the bug."""
         (project / "unity").mkdir()  # the Unity project, invisible to root-only detection
         config_path = project / ".studio" / "implementation_loop.toml"
-        config_path.write_text(ORKID_OVERRIDE, encoding="utf-8")
+        config_path.write_text(HAND_WRITTEN_OVERRIDE, encoding="utf-8")
 
         setup.apply_implementation_loop_config(project)
 
-        assert config_path.read_text(encoding="utf-8") == ORKID_OVERRIDE
+        assert config_path.read_text(encoding="utf-8") == HAND_WRITTEN_OVERRIDE
         assert capsys.readouterr().out == (
             f"Kept the existing {config_path} — setup never overwrites one.\n"
         )
@@ -1247,11 +1247,11 @@ class TestApplyImplementationLoopConfig:
     ) -> None:
         """Detection having something to say is not a licence to replace your file."""
         config_path = node_project / ".studio" / "implementation_loop.toml"
-        config_path.write_text(ORKID_OVERRIDE, encoding="utf-8")
+        config_path.write_text(HAND_WRITTEN_OVERRIDE, encoding="utf-8")
 
         setup.apply_implementation_loop_config(node_project)
 
-        assert config_path.read_text(encoding="utf-8") == ORKID_OVERRIDE
+        assert config_path.read_text(encoding="utf-8") == HAND_WRITTEN_OVERRIDE
         assert _resolved_gate(node_project).test_command == "./scripts/run-editmode-tests.sh"
 
     def test_marks_the_step_and_records_the_command(self, node_project: Path) -> None:
@@ -1353,7 +1353,7 @@ class TestApplyImplementationLoopConfig:
 
     def test_status_row_says_when_your_own_file_was_kept(self, project: Path) -> None:
         (project / ".studio" / "implementation_loop.toml").write_text(
-            ORKID_OVERRIDE, encoding="utf-8"
+            HAND_WRITTEN_OVERRIDE, encoding="utf-8"
         )
         setup.apply_defaults(project)
         assert (
@@ -1394,9 +1394,9 @@ class TestIsWizardTemplate:
         assert not setup.is_wizard_template(config_path)
 
     def test_false_for_a_hand_written_file(self, project: Path) -> None:
-        """Orkid Garden's real file: no stamp, and a command that works."""
+        """A real hand-written file: no stamp, and a command that works."""
         config_path = project / ".studio" / "implementation_loop.toml"
-        config_path.write_text(ORKID_OVERRIDE, encoding="utf-8")
+        config_path.write_text(HAND_WRITTEN_OVERRIDE, encoding="utf-8")
 
         assert not setup.is_wizard_template(config_path)
 
