@@ -879,26 +879,26 @@ def test_any_one_python_marker_is_enough_on_its_own(tmp_path, marker, contents):
     """Every marker in the table is there for some repo, so each one is pinned here —
     an untested marker can be deleted by accident and nothing says so.
 
-    conftest.py alone is _Cerebro's exact shape: without that marker it is undetectable,
-    and a Python project would be refused a Python gate.
+    conftest.py alone is a real shape: a Python project whose only marker is that file is
+    undetectable without it, and would be refused a Python gate.
     """
     (tmp_path / marker).write_text(contents)
 
     assert resolve_profile(tmp_path).test_command == "pytest -q"
 
 
-def test_orkid_gardens_own_override_still_resolves_and_raises_nothing(tmp_path):
+def test_a_subdirectory_project_with_a_hand_written_override_still_resolves(tmp_path):
     """The repo that reported this bug keeps working, byte-for-byte as it is today.
 
-    Orkid Garden keeps its Unity project in a subdirectory, so nothing at its root
-    identifies it — detection alone would refuse. Its hand-written override is still the
-    answer, and this change must not disturb it.
+    A repo that keeps its Unity project in a subdirectory has nothing at its root to
+    identify it — detection alone would refuse. Its hand-written override is still the
+    answer, and this change must not disturb it. Copied from a real one, byte for byte.
     """
-    root = tmp_path / "Orkid Garden"
+    root = tmp_path / "unity-in-a-subdirectory"
     root.mkdir()
     (root / "unity").mkdir()  # the Unity project, invisible to root-only detection
     _override(root, (
-        "# Orkid Garden's overrides for the implementation writer/editor loop.\n"
+        "# This repo's overrides for the implementation writer/editor loop.\n"
         "\n"
         "[gate]\n"
         'test_command = "./scripts/run-editmode-tests.sh"\n'
@@ -913,15 +913,15 @@ def test_orkid_gardens_own_override_still_resolves_and_raises_nothing(tmp_path):
     assert config.require_mutation_check is False
 
 
-def test_alfreds_own_file_loads_to_all_four_values_it_writes(tmp_path):
-    """Alfred is the repo that sets every gate key, and each one arrives as written.
+def test_a_file_setting_all_four_keys_loads_to_every_value_it_writes(tmp_path):
+    """A real repo that sets every gate key gets each one exactly as written.
 
     Its file says `make lint`, which is a command and not a tool name — the reason this
-    field holds commands at all. Nothing at Alfred's root identifies a stack, so under
+    field holds commands at all. Nothing at that repo's root identifies a stack, so under
     the old loader all four values came from a file merged over an empty profile; now
     they come from the file alone, and this is the pin that says the result is the same.
     """
-    root = tmp_path / "_Alfred"
+    root = tmp_path / "sets-all-four-keys"
     root.mkdir()
     _override(root, (
         "# /forge gate commands for this repo, written by hand.\n"
@@ -1039,7 +1039,7 @@ def test_the_detected_line_names_unity_and_why_no_command_ships_for_it(tmp_path)
 def test_refusal_on_two_stacks_names_both_markers(tmp_path):
     """Cargo.toml beside package.json is refused, not ranked.
 
-    cemetery-security is that repo: a Rust/wasm game whose package.json is CI release
+    A real repo has this shape: a Rust/wasm game whose package.json is CI release
     tooling. Ranking package.json first hands it `npm test`, which passes while testing
     none of the game — a wrong-reason pass, worse than the failure being fixed.
     """
@@ -1210,35 +1210,35 @@ def test_refusal_on_three_stacks_lists_all_of_them(tmp_path):
     )
 
 
-# Multica's one gate key, copied out of that repo's own file: three stdlib unittest
-# suites in three directories, chained so any failure fails the whole thing.
-MULTICA_TEST_COMMAND = (
+# One real gate key, copied out of a repo's own file: three stdlib unittest suites in
+# three directories, chained so any failure fails the whole thing.
+ONLY_TEST_COMMAND = (
     "cd pr-gate && python3 -m unittest discover -p 'test_*.py'"
     " && cd ../api-reviewer && python3 -m unittest discover -p 'test_*.py'"
     " && cd ../bare-reviewer && python3 -m unittest discover -p 'test_*.py'"
 )
 
 
-def test_multicas_shape_leaves_every_other_gate_key_empty(tmp_path):
-    """A file that sets only test_command gets nothing else — Multica's exact shape.
+def test_a_lone_test_command_leaves_every_other_gate_key_empty(tmp_path):
+    """A file that sets only test_command gets nothing else — a real repo's exact shape.
 
-    Multica is a Python repo by any reasonable reading, and its file names three stdlib
+    It is a Python repo by any reasonable reading, and its file names three stdlib
     unittest suites because there is no other way to run them. Before this, taking
     detection out of the loader while the dataclass still held Python's literals would
     have started running `ruff` and `mutmut` there — neither of which is installed. That
     is the original complaint reappearing through its own fix, so it is pinned here.
     """
-    root = _python_repo(tmp_path / "multica")
+    root = _python_repo(tmp_path / "only-test-command")
     _override(root, (
-        "# Loop config for orc-review.\n"
+        "# Loop config for this repo.\n"
         "\n"
         "[gate]\n"
-        f'test_command = "{MULTICA_TEST_COMMAND}"\n'
+        f'test_command = "{ONLY_TEST_COMMAND}"\n'
     ))
 
     config = load_loop_config(studio_root=root)
 
-    assert config.test_command == MULTICA_TEST_COMMAND
+    assert config.test_command == ONLY_TEST_COMMAND
     assert config.static_checks == []
     assert config.require_mutation_check is False
     assert config.mutation_command == ""
