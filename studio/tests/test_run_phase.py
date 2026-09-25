@@ -1,11 +1,15 @@
 """Unit tests for run_phase.py core functions."""
 import argparse
 import json
+import subprocess
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 import findings
+import install
 import run_phase
 from integrations.slack_digest import INTEGRATIONS_FILENAME, load_integrations_config
 from conftest import make_prepare_args, make_finalize_args
@@ -1642,3 +1646,258 @@ def test_verifier_can_load_the_findings_finalize_wrote(studio_root):
     expected = extract_findings_from_run(run_dir)
     assert loaded == expected
     assert [f.flaw for f in loaded] == [f.flaw for f in expected]
+
+
+class TestInitInstallsCommittedMain:
+    """`init` copies the default branch's committed tree, not the parked checkout.
+
+    `check` and `update` have read through `_source_at_default_branch` for a while;
+    `init` was the one path still copying the live working tree, so a first install
+    could capture a half-finished branch — or an uncommitted edit — and then record it
+    in VERSION as the version that repo is on. A consuming repo bootstrapped that way
+    starts life on something nobody released, and nothing later tells it so.
+    """
+
+    @staticmethod
+    def _git(*args: str) -> None:
+        subprocess.run(args, check=True, capture_output=True)
+
+    @classmethod
+    def _source_repo(cls, root: Path) -> Path:
+        """A minimal git repo shaped like Studio, with `main` committed."""
+        studio = root / "studio"
+        studio.mkdir(parents=True)
+        run = cls._git
+        run("git", "-c", "init.defaultBranch=main", "init", "-q", str(root))
+        run("git", "-C", str(root), "config", "user.email", "t@t")
+        run("git", "-C", str(root), "config", "user.name", "t")
+        (studio / "marker.txt").write_text("main version\n", encoding="utf-8")
+        (studio / "run_phase.py").write_text("# stand-in entrypoint\n", encoding="utf-8")
+        run("git", "-C", str(root), "add", "-A")
+        run("git", "-C", str(root), "commit", "-qm", "init")
+        return studio
+
+    def test_a_parked_feature_branch_does_not_reach_a_new_install(self, tmp_path, monkeypatch, capsys):
+        root = tmp_path / "src"
+        studio = self._source_repo(root)
+        run = self._git
+        run("git", "-C", str(root), "checkout", "-q", "-b", "half-finished")
+        (studio / "marker.txt").write_text("work in progress\n", encoding="utf-8")
+        run("git", "-C", str(root), "commit", "-qam", "wip")
+        (studio / "marker.txt").write_text("not even committed\n", encoding="utf-8")
+
+        captured = {}
+
+        def fake_install(target, studio_dir=None, source_path_override=None, install_hook=True):
+            captured["marker"] = (studio_dir / "marker.txt").read_text(encoding="utf-8")
+            captured["override"] = source_path_override
+            return target / ".studio"
+
+        monkeypatch.setattr(install, "install_studio", fake_install)
+        monkeypatch.setattr(install, "_get_studio_root", lambda: studio)
+
+        target = tmp_path / "consumer"
+        target.mkdir()
+        run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True))
+
+        assert captured["marker"] == "main version\n", (
+            "init copied the parked branch's tree; a new install must take committed main"
+        )
+        assert captured["override"] == studio, (
+            "VERSION must record the durable source, not the throwaway worktree that is "
+            "gone the moment the install finishes"
+        )
+
+    def test_a_source_that_is_not_in_the_default_branch_installs_the_live_tree(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """A Studio tree that the resolved default branch has never heard of.
+
+        `rev-parse --show-toplevel` finds *some* repo for any source dir under git —
+        an unrelated one when Studio was copied in rather than cloned, and the host
+        repo when `init --target <other>` runs from an untracked `.studio/source/`.
+        Neither has the source dir in its committed tree, so materializing it yields
+        an empty path: zero files copied, VERSION and MANIFEST still written, and the
+        target reads as installed while holding no source. Install the live tree, as
+        it did before the default branch came into this path.
+        """
+        host = tmp_path / "host"
+        studio = host / "TheStudio" / "studio"
+        studio.mkdir(parents=True)
+        run = self._git
+        run("git", "-c", "init.defaultBranch=main", "init", "-q", str(host))
+        run("git", "-C", str(host), "config", "user.email", "t@t")
+        run("git", "-C", str(host), "config", "user.name", "t")
+        (host / "README.md").write_text("someone else's repo\n", encoding="utf-8")
+        run("git", "-C", str(host), "add", "README.md")
+        run("git", "-C", str(host), "commit", "-qm", "init")
+        # The Studio tree itself is never committed to that repo.
+        (studio / "marker.txt").write_text("live version\n", encoding="utf-8")
+        (studio / "run_phase.py").write_text("# stand-in entrypoint\n", encoding="utf-8")
+
+        captured = {}
+
+        def fake_install(target, studio_dir=None, source_path_override=None, install_hook=True):
+            captured["files"] = sorted(str(p) for p in install._collect_source_files(studio_dir))
+            captured["marker"] = (studio_dir / "marker.txt").read_text(encoding="utf-8")
+            return target / ".studio"
+
+        monkeypatch.setattr(install, "install_studio", fake_install)
+        monkeypatch.setattr(install, "_get_studio_root", lambda: studio)
+
+        target = tmp_path / "consumer"
+        target.mkdir()
+        run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True))
+
+        assert captured["marker"] == "live version\n"
+        assert captured["files"] == ["run_phase.py"], (
+            "the install was handed a path the default branch does not have, so it "
+            "would have copied nothing and still written VERSION"
+        )
+        assert "Note:" in capsys.readouterr().out, (
+            "installing something other than the committed default branch must say so"
+        )
+
+    def test_a_source_with_no_claude_dir_does_not_promise_slash_commands(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """`init --target <other>` from an installed snapshot ships no slash command.
+
+        `.claude/` lives ABOVE the source dir, so a snapshot has none for
+        `install_studio` to copy. The banner is all about those commands — naming the
+        directory, telling the user to run /studio-setup and restart their session —
+        so printing it unchanged reports a working install of commands that are not
+        there. That run used to crash before this path started succeeding, which is
+        why the banner only starts costing something now.
+        """
+        host = tmp_path / "host"
+        source = host / ".studio" / "source"
+        source.mkdir(parents=True)
+        run = self._git
+        run("git", "-c", "init.defaultBranch=main", "init", "-q", str(host))
+        run("git", "-C", str(host), "config", "user.email", "t@t")
+        run("git", "-C", str(host), "config", "user.name", "t")
+        (host / "README.md").write_text("the host project\n", encoding="utf-8")
+        run("git", "-C", str(host), "add", "README.md")
+        run("git", "-C", str(host), "commit", "-qm", "init")
+        # An installed snapshot: untracked in the host repo, with no `.claude/` above it.
+        (source / "run_phase.py").write_text("# stand-in entrypoint\n", encoding="utf-8")
+
+        monkeypatch.setattr(
+            install, "install_studio",
+            lambda target, studio_dir=None, source_path_override=None, install_hook=True: (
+                target / ".studio"
+            ),
+        )
+        monkeypatch.setattr(install, "_get_studio_root", lambda: source)
+
+        target = tmp_path / "consumer"
+        target.mkdir()
+        run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True))
+
+        out = capsys.readouterr().out
+        assert "Slash commands:" not in out, "the banner named a command dir nothing landed in"
+        assert "/studio-setup" not in out, "told the user to run a command that is not installed"
+        assert "no slash command was installed" in out
+
+        # Same install from a source that DOES carry them: the banner is unchanged.
+        (host / ".claude" / "commands").mkdir(parents=True)
+        (host / ".claude" / "commands" / "run-phase.md").write_text("cmd\n", encoding="utf-8")
+        monkeypatch.setattr(install, "_get_studio_root", lambda: host / "studio")
+        (host / "studio").mkdir()
+        (host / "studio" / "run_phase.py").write_text("# stand-in\n", encoding="utf-8")
+        run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True))
+        assert "Slash commands:" in capsys.readouterr().out
+
+    def test_the_no_commands_warning_names_the_tree_it_was_checked_against(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """A checkout whose `.claude/commands/` is merely uncommitted is not told it
+        has none.
+
+        The check runs against `effective_dir.parent`, which on the materialized path
+        is the committed default branch rather than the checkout the user is sitting
+        in. Naming the checkout there says something false about a directory plainly
+        on disk beside it.
+        """
+        root = tmp_path / "src"
+        studio = self._source_repo(root)
+        # Beside the source but never committed, so `main` does not carry it. The
+        # untracked file is also what takes this run off the clean-tree fast path.
+        (root / ".claude" / "commands").mkdir(parents=True)
+        (root / ".claude" / "commands" / "run-phase.md").write_text("cmd\n", encoding="utf-8")
+
+        monkeypatch.setattr(
+            install, "install_studio",
+            lambda target, studio_dir=None, source_path_override=None, install_hook=True: (
+                target / ".studio"
+            ),
+        )
+        monkeypatch.setattr(install, "_get_studio_root", lambda: studio)
+
+        target = tmp_path / "consumer"
+        target.mkdir()
+        run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True))
+
+        out = capsys.readouterr().out
+        assert "no slash command was installed" in out
+        assert "no '.claude/commands/' in its committed default branch" in out, (
+            "the warning said the checkout has none beside it, which is false — it "
+            "does; only the committed tree this install read does not"
+        )
+
+    def test_a_rerun_from_the_installed_snapshot_leaves_the_snapshot_alone(self, tmp_path):
+        """`init --target .` from `.studio/source/` must stay inert.
+
+        studio-setup no longer tells users to run that command, but every install made
+        before it stopped still ships the line — and from the snapshot the source root
+        IS the snapshot — so materializing an upstream there
+        would copy over `.studio/source/` with none of the `locally_modified` guard
+        `update_studio` enforces. Nothing is monkeypatched here: the snapshot's own
+        `run_phase.py` runs in a real subprocess, so the resolution that decides whether
+        this path clobbers is the real one.
+        """
+        from install import install_studio
+
+        target = tmp_path / "consumer"
+        target.mkdir()
+        install_studio(target, Path(__file__).resolve().parents[1], install_hook=False)
+        source = target / ".studio" / "source"
+
+        edited = source / "findings.py"
+        edited.write_text(
+            edited.read_text(encoding="utf-8") + "\n# local edit\n", encoding="utf-8"
+        )
+        before = self._tree(source)
+
+        result = subprocess.run(
+            [sys.executable, str(source / "run_phase.py"),
+             "init", "--target", str(target), "--no-hook"],
+            capture_output=True, text=True, cwd=str(target),
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert "# local edit" in edited.read_text(encoding="utf-8"), (
+            "re-running init from the snapshot overwrote a local edit; update refuses to "
+            "clobber these without --force and init must not do it silently"
+        )
+        # The whole source tree, not just the edited file: which files an upstream would
+        # overwrite depends on what that checkout is parked on, and none of them should
+        # move. (An empty diff here is only meaningful because the edit above proves the
+        # comparison can see a change.) Scoped to `.studio/source/` on purpose — VERSION
+        # and MANIFEST.json sit above it and install_studio does rewrite them from the
+        # snapshot, which is true on `main` too and is not what this test pins.
+        assert self._tree(source) == before, "init from the snapshot rewrote the snapshot"
+        assert "WARNING" in result.stdout, (
+            "an install that copies nothing must say so, not print a plain success"
+        )
+
+    @staticmethod
+    def _tree(root: Path) -> dict:
+        """Every installed file's bytes, keyed by path. `__pycache__` is skipped: the
+        subprocess writes it just by importing the snapshot."""
+        return {
+            str(f.relative_to(root)): f.read_bytes()
+            for f in sorted(root.rglob("*"))
+            if f.is_file() and "__pycache__" not in f.parts
+        }
