@@ -106,6 +106,7 @@ from stats import (
     parse_build_plan,
     parse_frontmatter,
     reconcile_units,
+    UnitLedger,
     summarize_session_health,
     summarize_shipped_specs,
 )
@@ -2479,25 +2480,6 @@ def _shipped_spec_records() -> List[Dict]:
     return records
 
 
-def _approved_spec_units(specs_dir: Optional[Path] = None) -> List[PlannedUnit]:
-    """Every unit planned by a spec whose frontmatter says ``status: approved``.
-
-    Approved is the whole filter, and it is deliberate on both sides. A draft spec is an
-    argument in progress and owes nobody a build; a shipped one is finished, and its units are
-    history. Specs are read in slug order and units keep their document order inside a spec, so
-    the same unit is named in the same place every time the dashboard is printed.
-
-    Returns an empty list when there is no specs directory, the normal state of a repo that has
-    never run /spec. An unreadable spec is skipped rather than fatal, the same as
-    ``_shipped_spec_records`` does.
-    """
-    return [
-        unit
-        for spec_path, slug, spec_text in _approved_specs(specs_dir)
-        for unit in parse_build_plan(spec_text, slug, str(spec_path))
-    ]
-
-
 def _approved_specs(specs_dir: Optional[Path] = None) -> List[Tuple[Path, str, str]]:
     """Each approved spec as ``(path, slug, text)``, in filename order.
 
@@ -2648,15 +2630,15 @@ def show_stats(args: argparse.Namespace) -> None:
     # stale "done" nobody can see is wrong. A `None` built set means git could not be read at
     # all: `reconcile_units` reconciles nothing and records that it could not see, and the block
     # is then left out of the dashboard entirely rather than printed with nothing under it.
-    built_ids = _built_unit_ids(root)
-    built, escalated = built_ids if built_ids is not None else (None, set())
-    unit_ledger = reconcile_units(
-        _approved_spec_units(), built, escalated, _mentioned_unit_ids()
-    )
-    # What the repo owes, in the order it should be dealt with. The ledger above still
-    # carries the audit direction the queue has no opinion about: escalations, drops, and
+    # One read answers both: the queue says what to do next, and the ledger it came from
+    # carries the audit direction the queue has no opinion about — escalations, drops, and
     # ids git says were built that no spec planned.
-    obligations = _collect_obligations(root, today=date.today(), specs_dir=get_specs_dir())
+    obligations, unit_ledger = _obligations_and_ledger(
+        root,
+        today=date.today(),
+        specs_dir=get_specs_dir(),
+        mentioned_ids=_mentioned_unit_ids(),
+    )
 
     usage = None
     usage_path = root / ".studio" / "usage.log"
@@ -3113,10 +3095,25 @@ def _evidence_is_blank(spec_path: Path) -> bool:
         return True
 
 
-def _collect_obligations(
-    target: Path, *, today: date, specs_dir: Optional[Path] = None
-) -> List[Obligation]:
-    """Everything *target* owes: the one place I/O meets the pure derivation.
+def _obligations_and_ledger(
+    target: Path,
+    *,
+    today: date,
+    specs_dir: Optional[Path] = None,
+    mentioned_ids: Optional[set] = None,
+) -> Tuple[List[Obligation], UnitLedger]:
+    """Everything *target* owes, and the ledger it was worked out from.
+
+    Both come back because they are one read. The dashboard needs the ledger too — it
+    carries the audit direction the queue has no opinion about, the escalations, the drops
+    and the ids git says were built that no spec planned — and computing it separately
+    meant reading every spec and calling ``git log`` twice for one answer. Two reads of the
+    same thing can disagree, and these two already did: one recorded an absolute path on
+    each planned unit and the other a repo-relative one.
+
+    *mentioned_ids* is the audit direction's other half, and it is empty by default. The
+    session brief never asks "what was built that nothing planned", so it does not pay for
+    the extra spec read that question needs.
 
     Reads the specs directory and the commit log, builds a :class:`SpecView` per approved
     spec, and hands both to ``obligations.derive``. Nothing is stored — the answer is worked
@@ -3168,8 +3165,16 @@ def _collect_obligations(
     # deliberately not computed: `mentioned_ids` is empty and `ledger.unplanned` is never
     # read here. "What was built that no spec ever planned" is a question somebody asks
     # `stats`, and the dashboard computes it there.
-    ledger = reconcile_units(planned, built, escalated, set())
-    return derive(views, ledger, today=today)
+    ledger = reconcile_units(planned, built, escalated, mentioned_ids or set())
+    return derive(views, ledger, today=today), ledger
+
+
+def _collect_obligations(
+    target: Path, *, today: date, specs_dir: Optional[Path] = None
+) -> List[Obligation]:
+    """Everything *target* owes, for a caller that wants only the queue."""
+    queue, _ = _obligations_and_ledger(target, today=today, specs_dir=specs_dir)
+    return queue
 
 
 def _unfinished_context(target: Path) -> str:

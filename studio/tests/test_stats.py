@@ -898,3 +898,46 @@ def test_a_draft_spec_owes_nobody_a_build(specs_root, monkeypatch, capsys):
 
     assert "argued_about" not in output
     assert "Nothing owed" in output
+
+
+def test_the_dashboard_reads_the_specs_and_git_once(specs_root, monkeypatch, capsys):
+    """One answer, one read.
+
+    `show_stats` needs two things that come from the same source: the queue, which says what
+    to do next, and the ledger it was derived from, which carries the audit direction the
+    queue has no opinion about. Building them separately meant parsing every spec and calling
+    `git log` twice — and two reads of one thing can disagree. These two already did: one
+    recorded an absolute path on each planned unit while the other recorded a repo-relative
+    one, which is the kind of difference that stays invisible until something compares them.
+    """
+    _seed_spec(
+        specs_root,
+        "---\nstatus: approved\n---\n\n## Build Plan\n\n"
+        "### 1. `owed_unit` — something nobody built\n\n"
+        "**Acceptance criteria:**\n- [ ] it works\n",
+    )
+
+    spec_reads = []
+    git_reads = []
+    real_specs = run_phase._approved_specs
+    real_built = run_phase._built_unit_ids
+
+    def counting_specs(*args, **kwargs):
+        spec_reads.append(1)
+        return real_specs(*args, **kwargs)
+
+    def counting_built(*args, **kwargs):
+        git_reads.append(1)
+        return real_built(*args, **kwargs)
+
+    monkeypatch.setattr(run_phase, "_approved_specs", counting_specs)
+    monkeypatch.setattr(run_phase, "_built_unit_ids", counting_built)
+
+    _stats_output(capsys)
+
+    assert len(git_reads) == 1, (
+        f"the dashboard asked git what was built {len(git_reads)} times for one answer"
+    )
+    assert len(spec_reads) == 1, (
+        f"the dashboard read the specs directory {len(spec_reads)} times for one answer"
+    )

@@ -34,6 +34,14 @@ spend.
 already read to `_collect_obligations`, so the dashboard reads the specs and calls git once;
 keep the session brief on the current no-arguments path.
 
+**RESOLVED 2026-09-25, on this branch.** `_obligations_and_ledger` now returns both the queue
+and the ledger it was derived from, and `show_stats` takes both from that one call. The
+`_approved_spec_units` reader it duplicated had no other caller and is gone, which is what
+settles the absolute-versus-relative `spec_file` disagreement: there is one reader left.
+`_collect_obligations` survives as the queue-only shape the session brief uses.
+`test_the_dashboard_reads_the_specs_and_git_once` pins it — restoring the double read fails it
+with `assert 2 == 1`.
+
 ## 2. "Approved" is filtered in two places, and only half of it reaches the units
 
 **The concern.** `obligations.derive` filters the spec-level kinds itself:
