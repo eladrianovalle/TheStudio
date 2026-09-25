@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from config_loading import tomllib
 import argparse
+import configparser
 import json
 import os
 import string
@@ -233,32 +234,46 @@ def _node_profile(root: Path) -> StackProfile:
     )
 
 
-MUTMUT_CONFIG_MARKERS: tuple[tuple[str, str], ...] = (
-    ("setup.cfg", "[mutmut]"),
-    ("pyproject.toml", "[tool.mutmut]"),
-)
+def _mutmut_paths_are_set(root: Path) -> bool:
+    """Has this repository told mutmut what to mutate?
 
+    The question is not whether mutmut is mentioned somewhere. It is whether
+    ``paths_to_mutate`` is set, because that is the single setting that decides whether
+    ``mutmut run`` mutates this repository's code or goes looking for a ``src/`` directory
+    that may not exist.
 
-def _has_mutmut_config(root: Path) -> bool:
-    """Does this repository tell mutmut what to mutate?
+    Both files are parsed, never searched for a substring. ``[mutmut]`` appears inside a
+    comment, a docstring, or a line somebody commented out while debugging, and none of
+    those mean the tool is configured — a gate should not switch on over text nobody
+    intended as configuration.
 
-    ``mutmut run`` takes ``paths_to_mutate`` from a config section; given none it guesses
-    a ``src/``, ``lib/`` or project-named directory. A repo with neither the section nor
-    that layout gets a gate that errors or mutates the wrong tree, which is the
-    wrong-reason failure this detection exists to remove.
-
-    A ``mutmut_config.py`` counts on its own: it is mutmut's own hook file, and a repo
-    that wrote one has thought about mutation testing.
+    A ``mutmut_config.py`` is deliberately not a signal. It is mutmut's hook file, holding
+    ``pre_mutation`` and ``post_mutation``, and it sets no paths: a repository can have one
+    and still be a repository where ``mutmut run`` finds nothing to mutate.
     """
-    if (root / "mutmut_config.py").is_file():
-        return True
-    for filename, section in MUTMUT_CONFIG_MARKERS:
+    setup_cfg = root / "setup.cfg"
+    if setup_cfg.is_file():
+        parser = configparser.ConfigParser()
         try:
-            text = (root / filename).read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            continue
-        if section in text:
+            parser.read(setup_cfg, encoding="utf-8")
+        except (configparser.Error, OSError, UnicodeDecodeError):
+            pass  # Unreadable is not configured: never switch the gate on from a guess.
+        else:
+            if parser.has_option("mutmut", "paths_to_mutate"):
+                return True
+
+    pyproject = root / "pyproject.toml"
+    if pyproject.is_file():
+        try:
+            with open(pyproject, "rb") as handle:
+                data = tomllib.load(handle)
+        except (OSError, ValueError):
+            return False
+        tool = data.get("tool")
+        mutmut = tool.get("mutmut") if isinstance(tool, dict) else None
+        if isinstance(mutmut, dict) and mutmut.get("paths_to_mutate"):
             return True
+
     return False
 
 
@@ -274,7 +289,7 @@ def _python_profile(root: Path) -> StackProfile:
     ``mutation_command`` is written either way, so turning the gate on later is a one-word
     edit rather than a lookup.
     """
-    if _has_mutmut_config(root):
+    if _mutmut_paths_are_set(root):
         return StackProfile(
             stacks=("python",),
             test_command="pytest -q",
@@ -289,10 +304,11 @@ def _python_profile(root: Path) -> StackProfile:
         require_mutation_check=False,
         mutation_command="mutmut run",
         mutation_note=(
-            "The mutation gate is off because nothing here tells mutmut what to mutate. "
-            "To turn it on, add a [mutmut] section to setup.cfg (or [tool.mutmut] to "
-            "pyproject.toml) setting paths_to_mutate, then set require_mutation_check to "
-            "true. Scope it narrowly: mutmut runs the whole suite again for every mutant."
+            "The mutation gate is off because nothing here sets mutmut's paths_to_mutate, so "
+            "`mutmut run` would guess at a directory this repository may not have. To turn "
+            "it on, set paths_to_mutate in a [mutmut] section of setup.cfg (or [tool.mutmut] "
+            "in pyproject.toml), then set require_mutation_check to true. Scope it narrowly: "
+            "mutmut runs the whole suite again for every mutant."
         ),
     )
 

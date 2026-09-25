@@ -58,7 +58,7 @@ class PythonGateProfileTest(unittest.TestCase):
         self.assertEqual(profile.mutation_command, "mutmut run")
         self.assertIn('mutation_command = "mutmut run"', setup._format_loop_toml(profile, self.root))
 
-    def test_setup_cfg_section_turns_the_gate_on(self):
+    def test_setup_cfg_paths_to_mutate_turns_the_gate_on(self):
         (self.root / "setup.cfg").write_text(
             "[mutmut]\npaths_to_mutate=studio/\n", encoding="utf-8"
         )
@@ -66,24 +66,58 @@ class PythonGateProfileTest(unittest.TestCase):
         self.assertTrue(profile.require_mutation_check)
         self.assertEqual(profile.mutation_note, "")
 
-    def test_pyproject_section_turns_the_gate_on(self):
+    def test_pyproject_paths_to_mutate_turns_the_gate_on(self):
         (self.root / "pyproject.toml").write_text(
             '[tool.mutmut]\npaths_to_mutate = ["src/"]\n', encoding="utf-8"
         )
         self.assertTrue(impl_loop.resolve_profile(self.root).require_mutation_check)
 
-    def test_a_mutmut_config_module_turns_the_gate_on(self):
-        (self.root / "mutmut_config.py").write_text("def pre_mutation(context):\n    pass\n", encoding="utf-8")
-        self.assertTrue(impl_loop.resolve_profile(self.root).require_mutation_check)
+    def test_a_mutmut_section_without_paths_does_not(self):
+        """`paths_to_mutate` is the setting that decides what `mutmut run` mutates.
+
+        A section holding only a runner leaves mutmut guessing at a `src/` directory, which
+        is the failure this probe exists to prevent.
+        """
+        (self.root / "setup.cfg").write_text(
+            "[mutmut]\nrunner=python -m pytest -q\n", encoding="utf-8"
+        )
+        self.assertFalse(impl_loop.resolve_profile(self.root).require_mutation_check)
+
+    def test_a_mutmut_config_module_alone_does_not(self):
+        """It is mutmut's hook file. It holds pre_mutation/post_mutation and sets no paths."""
+        (self.root / "mutmut_config.py").write_text(
+            "def pre_mutation(context):\n    pass\n", encoding="utf-8"
+        )
+        self.assertFalse(impl_loop.resolve_profile(self.root).require_mutation_check)
+
+    def test_the_setting_commented_out_does_not_count(self):
+        """Parsed, not substring-matched: a line somebody disabled is not configuration."""
+        (self.root / "setup.cfg").write_text(
+            "# [mutmut]\n# paths_to_mutate=studio/\n", encoding="utf-8"
+        )
+        self.assertFalse(impl_loop.resolve_profile(self.root).require_mutation_check)
+
+    def test_the_words_inside_a_pyproject_string_do_not_count(self):
+        (self.root / "pyproject.toml").write_text(
+            '[project]\nname = "x"\ndescription = "see [tool.mutmut] paths_to_mutate for details"\n',
+            encoding="utf-8",
+        )
+        self.assertFalse(impl_loop.resolve_profile(self.root).require_mutation_check)
 
     def test_a_pyproject_without_a_mutmut_section_does_not(self):
-        """The marker is the section, not the file — pyproject.toml is in every Python repo."""
+        """pyproject.toml is in every Python repo; its presence says nothing about mutmut."""
         (self.root / "pyproject.toml").write_text('[project]\nname = "x"\n', encoding="utf-8")
         self.assertFalse(impl_loop.resolve_profile(self.root).require_mutation_check)
 
-    def test_an_unreadable_config_file_does_not_turn_the_gate_on(self):
+    def test_an_unparsable_config_file_does_not_turn_the_gate_on(self):
         """Refusing to guess: unreadable is not the same as configured."""
         (self.root / "setup.cfg").write_bytes(b"\xff\xfe[mutmut]\x00")
+        self.assertFalse(impl_loop.resolve_profile(self.root).require_mutation_check)
+
+    def test_a_malformed_pyproject_does_not_turn_the_gate_on(self):
+        (self.root / "pyproject.toml").write_text(
+            '[tool.mutmut\npaths_to_mutate = ["src/"]\n', encoding="utf-8"
+        )
         self.assertFalse(impl_loop.resolve_profile(self.root).require_mutation_check)
 
     def test_studio_itself_still_gets_the_gate(self):
