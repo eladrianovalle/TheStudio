@@ -97,6 +97,7 @@ from obligations import (
 )
 from stats import (
     PlannedUnit,
+    UnitLedger,
     _parse_usage_log,
     aggregate_stats,
     built_unit_ids,
@@ -106,7 +107,6 @@ from stats import (
     parse_build_plan,
     parse_frontmatter,
     reconcile_units,
-    UnitLedger,
     summarize_session_health,
     summarize_shipped_specs,
 )
@@ -3161,10 +3161,6 @@ def _obligations_and_ledger(
 
     built_ids = _built_unit_ids(target)
     built, escalated = built_ids if built_ids is not None else (None, set())
-    # Only the planned-and-unbuilt direction is an obligation, so the audit direction is
-    # deliberately not computed: `mentioned_ids` is empty and `ledger.unplanned` is never
-    # read here. "What was built that no spec ever planned" is a question somebody asks
-    # `stats`, and the dashboard computes it there.
     ledger = reconcile_units(planned, built, escalated, mentioned_ids or set())
     return derive(views, ledger, today=today), ledger
 
