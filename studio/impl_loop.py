@@ -282,7 +282,7 @@ def _mutmut_paths_are_set(root: Path) -> bool:
             # value rather than asking whether the key exists: `has_option` is true for a
             # bare `paths_to_mutate=`, which would switch the gate on over a setting
             # somebody started and did not finish.
-            if parser.get("mutmut", "paths_to_mutate", fallback="").strip():
+            if _is_set(parser.get("mutmut", "paths_to_mutate", fallback="")):
                 return True
 
     pyproject = root / "pyproject.toml"

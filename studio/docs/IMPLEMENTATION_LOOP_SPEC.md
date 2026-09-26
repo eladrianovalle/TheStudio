@@ -252,8 +252,9 @@ A repo with no file, or with a blank `test_command`, is refused at load — and 
 file it read and says whether the key was blank or the file was missing.
 
 `/studio-setup` is what leaves that file behind, on every path: pre-filled where it recognises the
-project (`impl_loop.STACK_MARKERS` → `resolve_profile` — a Python repo gets `pytest -q` + `ruff`,
-a Node repo with a `test` script gets `npm test`), and blank with instructions where it does not.
+project (`impl_loop.STACK_MARKERS` → `resolve_profile` — a Python repo gets `pytest -q` plus
+`ruff`, a Node repo with a `test` script gets `npm test`), and blank with instructions where it
+does not.
 The mutation gate is the one part it does not assume: `mutmut run` is written either way, but
 `require_mutation_check` is on only for a repo that sets mutmut's `paths_to_mutate`, because
 without it `mutmut run` guesses at a `src/` directory the repo may not have. Everywhere else the
