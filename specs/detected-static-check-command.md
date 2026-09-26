@@ -29,10 +29,10 @@ level down, and the fix is the same shape: the command comes from what's in the 
 
 There's a second, quieter problem this fixes. The setting that holds this — `static_checks` — has
 two meanings in the wild. Studio's own documentation says it holds tool *names* (`["ruff"]`), and
-the code only ever checks whether the list is empty. But Alfred's config holds a *command*
+the code only ever checks whether the list is empty. But one install's config holds a *command*
 (`["make lint"]`), with a careful comment explaining what it does. Nothing has ever run it. After
-this change the list holds commands and they actually run, so Alfred's lint starts working without
-Alfred changing a line.
+this change the list holds commands and they actually run, so that lint starts working without
+anyone changing a line there.
 
 One honest limit, stated up front because it would otherwise read as more than it is: the paths the
 lint command is scoped to are **predicted** when the unit's arguments are built, before the writer
@@ -156,13 +156,13 @@ word is accepted verbatim: Studio owes migration only for values it authored, an
 name" heuristic would refuse someone's legitimate one-word script.
 
 **The justification is the wizard, not the fleet, and the difference decides the message.** No
-project override on this machine holds a bare name — only `_Alfred` (`["make lint"]`) and
-`Orkid Garden` (`[]`), both already valid. But `/studio-setup` in any Python repo writes
+project override on this machine holds a bare name — only a Makefile-driven one (`["make lint"]`)
+and one that disables the check (`[]`), both already valid. But `/studio-setup` in any Python repo writes
 `static_checks = ["ruff"]` today and never overwrites it, so every wizard run between now and this
 change plants one that no update will clean up. The refusal therefore points at
 `.studio/implementation_loop.toml`, which is where a wizard-written value lives.
 
-Two installed repos (`_Cerebro`, `OrcPunk-biz`) *do* carry a bare `ruff`, in the shipped-config
+Two installs *do* carry a bare `ruff`, in the shipped-config
 snapshot at `.studio/source/config/implementation_loop.toml`. That is harmless and needs no shim:
 `impl_loop.py` and the shipped config are both in `SOURCE_FILES` (`install.py:67`), so they update in
 lockstep and no repo can get the new semantics without the new config. Stated here so nobody builds
@@ -182,7 +182,7 @@ current design. It gets a line saying this spec supersedes that reasoning — no
 ## Key Decisions
 
 - **One field, holding commands.** Collapses a documented duality that had already produced two
-  incompatible readings in the wild. Alfred's `["make lint"]` starts running as written.
+  incompatible readings in the wild. The `["make lint"]` override starts running as written.
 - **`{paths}` token over provenance**, because the wizard's detected→override round-trip destroys
   provenance and no amount of care at the merge point survives it.
 - **No paths → skip, not `.`**, so the check never widens to code the unit didn't touch.
@@ -235,7 +235,7 @@ where one is in and the other is not.
 **Acceptance criteria:**
 - [ ] `resolve_profile` on a Python repo returns `static_checks == ("ruff check {paths}",)`, and `_node_profile` returns `("npm run lint",)` for a non-blank `lint` script, `("npx eslint {paths}",)` for an `eslint` devDependency with no usable script, and `()` for neither — with a test proving a `"lint": ""` or whitespace-only script takes the third case, not the first.
 - [ ] `load_loop_config` raises `LoopConfigError` on a `static_checks` entry equal to `ruff`, `eslint` or `mypy`, naming the config file, the entry, and the replacement; a one-word entry Studio never shipped (e.g. `pylint`) is accepted verbatim and raises nothing.
-- [ ] `_Alfred`'s exact override (`static_checks = ["make lint"]`, `test_command = "make test"`) and `Orkid Garden`'s (`static_checks = []`) both load unchanged and raise nothing.
+- [ ] The Makefile-driven override (`static_checks = ["make lint"]`, `test_command = "make test"`) and the disabled one (`static_checks = []`) both load unchanged and raise nothing.
 - [ ] No `static_check` (singular) identifier remains in `.claude/workflows/implementation-loop.js` or `.claude/commands/forge.md`; `writerPrompt` renders every element of `static_checks`, and behaviour on `[]` is unchanged.
 - [ ] `.claude/workflows/tests/fixtures/prompts-no-work-dir.json` and the in-file `UNIT` are regenerated for the removed key, and the workflow suite passes via `node --test .claude/workflows/tests/workflow-shells.test.mjs`.
 - [ ] `cd studio && python -m pytest tests/ -q` passes, `ruff check .` is clean, and `_require_gate_commands`'s docstring no longer says the command is authored per unit by `/forge`.
@@ -258,22 +258,22 @@ where one is in and the other is not.
 
 Added during the build of units 1 and 2, not at design time. Units 1 and 2 fix what the wizard
 writes from now on and nothing about the files it already wrote. Measured against the ten installed
-repos on 2026-08-31 by running the new `load_loop_config` against each: **`_Cerebro` and
-`OrcPunk-biz` now raise `LoopConfigError`**, because their `.studio/source/config/implementation_loop.toml`
-snapshot still carries `static_checks = ["ruff"]`. `_Alfred` (`["make lint"]`) and `Orkid Garden`
-(`[]`) load unchanged; the other six carry no config and fall through to detection.
+repos on 2026-08-31 by running the new `load_loop_config` against each: **the two installs carrying a
+bare `ruff` now raise `LoopConfigError`**, because their `.studio/source/config/implementation_loop.toml`
+snapshot still carries `static_checks = ["ruff"]`. The Makefile-driven override (`["make lint"]`) and
+the disabled one (`[]`) load unchanged; the other six carry no config and fall through to detection.
 
 The refusal is doing its job — the point is that nobody should meet it by surprise, mid-`/forge`, in
 a repo they did not know was stale. Studio's own shipped `config/implementation_loop.toml` has no
 `static_checks` line at all, so a plain `update` replaces the stale snapshot and detection supplies
 the command.
 
-**"No hand-editing is needed" holds for both repos** (measured 2026-09-12; an earlier reading of
+**"No hand-editing is needed" holds for both installs** (measured 2026-09-12; an earlier reading of
 2026-09-03 said otherwise and was wrong). `update` refuses to clobber any installed file whose
-on-disk content has drifted from the checksum written at install. `OrcPunk-biz`'s config had not
-drifted, so a plain `update` rewrote it.
+on-disk content has drifted from the checksum written at install. One of the two had not drifted, so
+a plain `update` rewrote it.
 
-`_Cerebro` looked like the expensive case — `update` returned BLOCKED over seventeen files, up from
+The other looked like the expensive case — `update` returned BLOCKED over seventeen files, up from
 twelve on 2026-09-03 — but the drift was not local edits. Its `.studio/source/` snapshot is
 **gitignored**; only `MANIFEST.json`, `VERSION` and `CLAUDE.md` are tracked. The snapshot had moved
 while the tracked record of it stayed behind, so every file was flagged against a stale checksum.
@@ -288,29 +288,28 @@ is tracked, the two drift apart silently, and the drift presents as "someone han
 files". Diff the flagged files against the install commit before believing that report.
 
 **Acceptance criteria:**
-- [x] Running `update` against a repo whose snapshot carries `static_checks = ["ruff"]` leaves a tree where `load_loop_config` returns `["ruff check {paths}"]` and raises nothing. **Met** — `_Cerebro`, measured 2026-09-12, returns exactly that.
-- [x] Neither `_Cerebro` nor `OrcPunk-biz` raises the stale-config refusal, verified by running `load_loop_config` against each after the update. **Met**, measured 2026-09-21 against the repositories themselves. `_Cerebro` loads to `['ruff check {paths}']` raising nothing. `OrcPunk-biz` raises `gate.test_command is not set` — a different refusal, and the one this criterion was narrowed to exclude: it is a notes repository with no test suite and no stack marker, so no test command can be detected and that refusal predates this unit. It no longer raises on the stale setting. **Provenance, because this tick was wrong once:** it was first marked Met on 2026-09-12 against the contents of `OrcPunk-biz` PR #19 rather than the repository, while that PR was still open; re-measuring on 2026-09-21 found the repo still carrying `static_checks = ["ruff"]` and the tick was removed. #19 merged the same day and the criterion is now true on the repository, not on a pull request. **This criterion was narrowed after measuring — the original wording and the reasoning are below.**
-- [x] `_Alfred` and `Orkid Garden` still load to `["make lint"]` and `[]` respectively — an update must not overwrite a project's own override. **Met**, measured 2026-09-12.
+- [x] Running `update` against a repo whose snapshot carries `static_checks = ["ruff"]` leaves a tree where `load_loop_config` returns `["ruff check {paths}"]` and raises nothing. **Met** — measured 2026-09-12 against the install that carries a test suite; it returns exactly that.
+- [x] Neither of the two installs carrying a bare `ruff` raises the stale-config refusal, verified by running `load_loop_config` against each after the update. **Met**, measured 2026-09-21 against the repositories themselves. The one with a test suite loads to `['ruff check {paths}']` raising nothing. The other raises `gate.test_command is not set` — a different refusal, and the one this criterion was narrowed to exclude: it is a notes repository with no test suite and no stack marker, so no test command can be detected and that refusal predates this unit. It no longer raises on the stale setting. **Provenance, because this tick was wrong once:** it was first marked Met on 2026-09-12 against the contents of an open pull request rather than the repository itself; re-measuring on 2026-09-21 found the repo still carrying `static_checks = ["ruff"]` and the tick was removed. That pull request merged the same day and the criterion is now true on the repository, not on a proposal. **This criterion was narrowed after measuring — the original wording and the reasoning are below.**
+- [x] The two hand-written overrides still load to `["make lint"]` and `[]` respectively — an update must not overwrite a project's own override. **Met**, measured 2026-09-12.
 
 **What the second criterion used to say, and why it changed.** As written, it read:
 
-> `_Cerebro` and `OrcPunk-biz` both load without raising, verified by running `load_loop_config`
+> Both installs carrying a bare `ruff` load without raising, verified by running `load_loop_config`
 > against each after the update.
 
-`_Cerebro` loads. `OrcPunk-biz` raises — but on `gate.test_command`, not on the stale setting. It is
+The first loads. The second raises — but on `gate.test_command`, not on the stale setting. It is
 a notes repository with no test suite and no marker file identifying its stack, so no test command
 can be detected and the loop refuses to invent one. That refusal predates this unit and no update can
 clear it: as written, the criterion could never pass in that repository.
 
 The behaviour this unit exists to deliver is confirmed in both. The original wording assumed the only
-reason either repo could raise was the stale setting — wrong about a repository with no tests, not
+reason either install could raise was the stale setting — wrong about a repository with no tests, not
 wrong about the unit.
 
 Narrowing a criterion after measuring against it is normally how a criterion stops meaning anything,
 which is why the original is quoted here rather than replaced silently. Anyone auditing this can see
 both the bar that was set and the bar that was met, and disagree with the change.
 
-**Out of scope:** any further change to detection, the refusal, or the wizard. `_Cerebro` is not
-blocked after all — `eladrianovalle/cerebro#226` supersedes its stale
-`eladrianovalle/cerebro#224` and `eladrianovalle/cerebro#225`, both now closed. Repo-qualified
-because a bare `#NNN` here auto-links to TheStudio.
+**Out of scope:** any further change to detection, the refusal, or the wizard. The install with a
+test suite is not blocked after all: a later pull request in that repo supersedes the two stale ones
+that were open when this was written, and both of those are now closed.

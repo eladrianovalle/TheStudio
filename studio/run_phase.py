@@ -17,7 +17,7 @@ import os
 import subprocess
 import sys
 import textwrap
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -88,8 +88,16 @@ from integrations.slack_digest import (
 )
 
 from config_loading import tomllib
+from obligations import (
+    EVIDENCE_PLACEHOLDER,
+    Obligation,
+    SpecView,
+    derive,
+    evidence_file_for,
+)
 from stats import (
     PlannedUnit,
+    UnitLedger,
     _parse_usage_log,
     aggregate_stats,
     built_unit_ids,
@@ -2472,25 +2480,6 @@ def _shipped_spec_records() -> List[Dict]:
     return records
 
 
-def _approved_spec_units(specs_dir: Optional[Path] = None) -> List[PlannedUnit]:
-    """Every unit planned by a spec whose frontmatter says ``status: approved``.
-
-    Approved is the whole filter, and it is deliberate on both sides. A draft spec is an
-    argument in progress and owes nobody a build; a shipped one is finished, and its units are
-    history. Specs are read in slug order and units keep their document order inside a spec, so
-    the same unit is named in the same place every time the dashboard is printed.
-
-    Returns an empty list when there is no specs directory, the normal state of a repo that has
-    never run /spec. An unreadable spec is skipped rather than fatal, the same as
-    ``_shipped_spec_records`` does.
-    """
-    return [
-        unit
-        for spec_path, slug, spec_text in _approved_specs(specs_dir)
-        for unit in parse_build_plan(spec_text, slug, str(spec_path))
-    ]
-
-
 def _approved_specs(specs_dir: Optional[Path] = None) -> List[Tuple[Path, str, str]]:
     """Each approved spec as ``(path, slug, text)``, in filename order.
 
@@ -2641,10 +2630,14 @@ def show_stats(args: argparse.Namespace) -> None:
     # stale "done" nobody can see is wrong. A `None` built set means git could not be read at
     # all: `reconcile_units` reconciles nothing and records that it could not see, and the block
     # is then left out of the dashboard entirely rather than printed with nothing under it.
-    built_ids = _built_unit_ids(root)
-    built, escalated = built_ids if built_ids is not None else (None, set())
-    unit_ledger = reconcile_units(
-        _approved_spec_units(), built, escalated, _mentioned_unit_ids()
+    # One read answers both: the queue says what to do next, and the ledger it came from
+    # carries the audit direction the queue has no opinion about — escalations, drops, and
+    # ids git says were built that no spec planned.
+    obligations, unit_ledger = _obligations_and_ledger(
+        root,
+        today=date.today(),
+        specs_dir=get_specs_dir(),
+        mentioned_ids=_mentioned_unit_ids(),
     )
 
     usage = None
@@ -2662,7 +2655,7 @@ def show_stats(args: argparse.Namespace) -> None:
 
     print(format_stats(
         agg, usage=usage, clarity_note=clarity_note, shipped_specs=shipped_specs,
-        session_health=session_health, unit_ledger=unit_ledger,
+        session_health=session_health, unit_ledger=unit_ledger, obligations=obligations,
     ))
 
 
@@ -3035,14 +3028,11 @@ def _do_check_install(args: argparse.Namespace) -> None:
 # `--spec` takes the spec's path rather than its slug: /forge resolves a path that exists
 # before it falls back to slug lookup, and the slug is the one thing that cannot identify a
 # spec — two approved specs may share one, so a slug here could continue the wrong file's unit.
-UNFINISHED_ADDITIONAL_CONTEXT = (
-    "Unfinished planned work: {units} in {specs}. The next one is `{unit_id}` in "
-    "{spec_file}{title}. Tell the user they can continue it with: "
-    "/forge --spec {spec_file} --unit {unit_id}. If it was dropped on purpose, open a PR adding "
-    "`- **Dropped:** YYYY-MM-DD \u2014 <reason>` under that unit's heading in the spec and it "
-    "stops being counted. Built work is read from all branches including unmerged ones, so a "
-    "teammate who has not fetched may see a different count. Run `{entrypoint} stats` for the "
-    "full list, both directions."
+OBLIGATION_ADDITIONAL_CONTEXT = (
+    "Unfinished work: this repository owes {count}, most important first. The top one: "
+    "{detail}. {action}{escape}Built work is read from all branches including unmerged ones, "
+    "so a teammate who has not fetched may see a different count. Run `{entrypoint} stats` "
+    "for the full list, both directions."
 )
 
 
@@ -3079,50 +3069,138 @@ def _spec_display_path(spec_path: Path, target: Path) -> str:
         return spec_path.as_posix()
 
 
+def _project_root_for_specs(specs_dir: Path) -> Path:
+    """The directory a spec's path is shown relative to: the project root.
+
+    ``specs/`` sits at the project root in the Studio source repo and under ``.studio/`` in a
+    repo that installed Studio, so the root is one level up in the first case and two in the
+    second. Every path in the queue is then one the reader can open, and one ``/forge --spec``
+    resolves from where they are standing.
+    """
+    return specs_dir.parent.parent if specs_dir.parent.name == ".studio" else specs_dir.parent
+
+
+def _evidence_is_blank(spec_path: Path) -> bool:
+    """Whether a spec's evidence file still has nothing in it.
+
+    Missing and unreadable both read as blank, which is the safe direction: it can produce an
+    obligation to go and look, never a claim that evidence exists. A file still carrying the
+    skeleton's placeholders is blank too — that is what the spec-verification suite refuses a
+    ``shipped`` flip over.
+    """
+    evidence_path = spec_path.with_name(evidence_file_for(spec_path.name))
+    try:
+        return EVIDENCE_PLACEHOLDER in evidence_path.read_text(encoding="utf-8")
+    except OSError:
+        return True
+
+
+def _obligations_and_ledger(
+    target: Path,
+    *,
+    today: date,
+    specs_dir: Optional[Path] = None,
+    mentioned_ids: Optional[set] = None,
+) -> Tuple[List[Obligation], UnitLedger]:
+    """Everything *target* owes, and the ledger it was worked out from.
+
+    Both come back because they are one read. The dashboard needs the ledger too — it
+    carries the audit direction the queue has no opinion about, the escalations, the drops
+    and the ids git says were built that no spec planned — and computing it separately
+    meant reading every spec and calling ``git log`` twice for one answer. Two reads of the
+    same thing can disagree, and these two already did: one recorded an absolute path on
+    each planned unit and the other a repo-relative one.
+
+    *mentioned_ids* is the audit direction's other half, and it is empty by default. The
+    session brief never asks "what was built that nothing planned", so it does not pay for
+    the extra spec read that question needs.
+
+    Reads the specs directory and the commit log, builds a :class:`SpecView` per approved
+    spec, and hands both to ``obligations.derive``. Nothing is stored — the answer is worked
+    out again every time it is asked for, so it cannot hold a stale "done".
+
+    A spec that cannot be read or parsed contributes no view and takes nothing else down with
+    it. That is the per-source isolation ``_do_check_updates`` already uses so one bad spec
+    cannot eat the update nudge, applied one level down: here it is so one bad spec cannot eat
+    the other specs' obligations.
+
+    *specs_dir* is handed in by the dashboard, which resolves it from the artifact root the
+    same way every other reader of that directory does. The session brief lets it default to
+    the target's own, because a SessionStart hook runs from wherever the session opened and
+    the working directory is no evidence of anything.
+    """
+    specs_dir = specs_dir or _specs_dir_for(target)
+    display_root = _project_root_for_specs(specs_dir)
+
+    views: List[SpecView] = []
+    planned: List[PlannedUnit] = []
+    for spec_path, slug, spec_text in _approved_specs(specs_dir):
+        try:
+            spec_file = _spec_display_path(spec_path, display_root)
+            units = tuple(parse_build_plan(spec_text, slug, spec_file))
+            views.append(SpecView(
+                slug=slug,
+                spec_file=spec_file,
+                status="approved",
+                # Matched by prefix, the same reading the spec-verification suite gives it,
+                # so a heading someone widened to `## Verification & Evidence` still counts.
+                promises_evidence=any(
+                    line.startswith("## Verification") for line in spec_text.splitlines()
+                ),
+                verification_due=parse_frontmatter(spec_text).get("verification_due", ""),
+                evidence_is_blank=_evidence_is_blank(spec_path),
+                units=units,
+            ))
+            planned.extend(units)
+        except Exception:
+            # Every spec on its own: one file nothing can read or parse must not decide what
+            # the other specs owe. Broad on purpose — the reasons a spec fails to parse are
+            # not a list anybody can finish writing, and the cost of guessing wrong is the
+            # whole queue rather than one file's share of it.
+            continue
+
+    built_ids = _built_unit_ids(target)
+    built, escalated = built_ids if built_ids is not None else (None, set())
+    ledger = reconcile_units(planned, built, escalated, mentioned_ids or set())
+    return derive(views, ledger, today=today), ledger
+
+
+def _collect_obligations(
+    target: Path, *, today: date, specs_dir: Optional[Path] = None
+) -> List[Obligation]:
+    """Everything *target* owes, for a caller that wants only the queue."""
+    queue, _ = _obligations_and_ledger(target, today=today, specs_dir=specs_dir)
+    return queue
+
+
 def _unfinished_context(target: Path) -> str:
-    """One sentence naming the next unfinished unit, or ``""`` when there is nothing to say.
+    """One sentence naming the most important thing this repository owes, or ``""``.
 
     Silence answers every "cannot tell" — no specs directory, no approved spec, or a built set
     git would not produce. That last one matters most: with no built set every planned unit
     reads unbuilt, so the brief would tell a repo that nothing in it was ever built. Silence
     beats a lie.
 
-    One unit is named, never a list. A list is a status report people skim; a single named
-    action with the command that continues it is what biases a fresh session toward doing the
-    work. Specs sort by slug and units keep their document order inside a spec, so the same
-    unit is named every session until somebody builds it or drops it.
+    One obligation is named, never a list. A list is a status report people skim; a single
+    named action with the command or the edit that discharges it is what biases a fresh
+    session toward doing the work. The count says how much else is waiting, so naming one is
+    not the same as claiming it is the only one.
     """
-    planned: List[PlannedUnit] = []
-    # Every unit carries the file that planned it, rather than a map keyed by slug: two
-    # approved specs may carry the same slug — rule 7 forbids a duplicate unit_id, not a
-    # duplicate slug — and a slug key would put the other spec's path in front of the reader.
-    for spec_path, slug, spec_text in _approved_specs(_specs_dir_for(target)):
-        planned.extend(parse_build_plan(spec_text, slug, str(spec_path)))
-    if not planned:
+    queue = _collect_obligations(target, today=date.today())
+    if not queue:
         return ""
 
-    built_ids = _built_unit_ids(target)
-    if built_ids is None:
-        return ""
-    built, escalated = built_ids
-
-    # Only the planned-and-unbuilt direction belongs at session start, so the audit direction
-    # is deliberately not computed: `mentioned_ids` is empty and `ledger.unplanned` is never
-    # read. "What was built that no spec ever planned" is a question somebody asks `stats`,
-    # and putting its dozens of lines in front of every session would bury the one action.
-    ledger = reconcile_units(planned, built, escalated, set())
-    unbuilt = sorted(ledger.unbuilt, key=lambda unit: unit.slug)
-    if not unbuilt:
-        return ""
-
-    unit = unbuilt[0]
-    spec_count = len({owed.spec_file for owed in unbuilt})
-    return UNFINISHED_ADDITIONAL_CONTEXT.format(
-        units=format_count(len(unbuilt)),
-        specs=format_count(spec_count, "approved spec"),
-        unit_id=unit.unit_id,
-        spec_file=_spec_display_path(Path(unit.spec_file), target),
-        title=f' \u2014 "{unit.title}"' if unit.title else "",
+    top = queue[0]
+    if top.command:
+        action = f"Tell the user they can discharge it with: {top.command}. "
+    else:
+        action = "Discharging it is an edit to the spec, not a command. "
+    escape = f"To close it on purpose instead, {top.silence}. " if top.silence else ""
+    return OBLIGATION_ADDITIONAL_CONTEXT.format(
+        count=format_count(len(queue), "obligation"),
+        detail=top.detail,
+        action=action,
+        escape=escape,
         entrypoint=_entrypoint(),
     )
 

@@ -67,6 +67,19 @@ class TestInstallStudio:
         )
         assert result.returncode == 0, result.stderr
 
+    def test_ships_the_obligation_queue(self, target_dir, studio_dir):
+        """`obligations.py` reaches a consuming repo, or its session brief has nothing to say.
+
+        The import guard above would catch it too, but only as a stack trace from a fresh
+        interpreter — this says which file is missing.
+        """
+        import install as install_module
+
+        install_studio(target_dir, studio_dir)
+
+        assert "obligations.py" in install_module.SOURCE_FILES
+        assert (target_dir / ".studio" / "source" / "obligations.py").is_file()
+
     def test_creates_slash_commands(self, target_dir, studio_dir):
         """Install creates .claude/commands/ with rewritten slash commands."""
         install_studio(target_dir, studio_dir)
