@@ -1,3 +1,8 @@
+---
+description: "Use to pressure-test one decision through a structured advocate/contrarian debate in a single discipline: market, design, or tech. Triggers include 'debate this', 'pressure-test this idea', and 'what are we missing about X'. Use /run-studio-phase when the question cuts across several disciplines, and /spec when the question is a feature's architecture, which is this machinery already aimed at producing a spec."
+argument-hint: '--phase <market|design|tech> --text "<idea>" [--max-iterations N]'
+---
+
 # Studio Phase Run
 
 Execute a structured advocate/contrarian debate for game development decisions.

@@ -596,6 +596,31 @@ def scan_existing_docs(companion_root: str) -> list[dict]:
     return results
 
 
+def _command_body(text: str) -> str:
+    """A command file without its YAML frontmatter.
+
+    The question this scan answers is whether offloading a CLAUDE.md section would break a
+    command's *instructions*, and instructions live in the body. Frontmatter is metadata —
+    a one-line description and an argument hint — where a section name is far likelier to
+    be a coincidence of wording than a dependency. Measured when descriptions were added:
+    scanning them produced exactly one new match, `/run-phase` against the "Architecture"
+    section, because its description says "for a feature's architecture use /spec". That is
+    the word, not the section.
+
+    A file with no frontmatter is returned whole, which is what every command looked like
+    before descriptions existed.
+
+    Line endings are normalised first. On a CRLF checkout there is no ``"---\n"`` to find, so
+    the frontmatter would be scanned after all and the fix would quietly not apply for that
+    reader — the worst kind of failure, because nothing says it happened.
+    """
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    if not text.startswith("---\n"):
+        return text
+    parts = text.split("\n---\n", 1)
+    return parts[1] if len(parts) == 2 else text
+
+
 def scan_slash_commands(
     commands_dir: str, offloaded_sections: list[dict]
 ) -> list[dict]:
@@ -621,7 +646,7 @@ def scan_slash_commands(
         except (OSError, UnicodeDecodeError):
             continue
 
-        text_lower = text.lower()
+        text_lower = _command_body(text).lower()
         references: list[str] = []
 
         for section in offloaded_sections:

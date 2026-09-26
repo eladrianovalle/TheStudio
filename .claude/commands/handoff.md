@@ -1,5 +1,5 @@
 ---
-description: Save the in-flight thread to a durable note so you can /clear safely — or resume one
+description: "Use when a session is running out of room or has just been cleared, to save the state of the work in flight to a durable note so the thread survives the conversation, and to resume a saved thread later by name. Triggers include 'we are running out of context', 'save where we are before I clear', and naming a thread to pick back up. It records where things stand, not the story of how they got there."
 argument-hint: "[a note to add] | <slug to resume>"
 ---
 

@@ -1,3 +1,8 @@
+---
+description: "Use when the documentation no longer matches what the code does, which is most often right after shipping something. Audits the whole project for stale docs, outdated references, wrong counts, dead links and missing coverage, then fixes them in one pass. Triggers include 'the docs are out of date', 'update the README', 'bring the docs back in line', and finishing work that changed documented behavior. Use /detest for the test suite and /offload when CLAUDE.md is merely too long."
+argument-hint: "[--focus docs|memory|<path>]"
+---
+
 # Unstale: Align All Docs to Current Reality
 
 Audit the entire project for stale documentation, outdated references, wrong counts, dead links, and missing coverage, then fix everything in one pass.

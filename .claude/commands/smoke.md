@@ -1,3 +1,8 @@
+---
+description: "Use when someone needs to hand-test the running product rather than watch tests pass. Detects what the repo builds and stands up a live version of it, then hands over the entry point and a short golden path to click through. Triggers include 'let me try it', 'can I see it running', and 'stand it up'. This is not an automated test; it exists for the checks only a person at the screen can make."
+argument-hint: "[--focus <target>] [--teardown]"
+---
+
 # Smoke: Stand Up a Live Version to Hand-Test
 
 Build and launch a live, running version of whatever this repo produces so the user can smoke test it by hand, then hand them the entry point and a short golden path to click through.

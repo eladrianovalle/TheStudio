@@ -1,3 +1,8 @@
+---
+description: "Use to audit and fix this repo's tests against the AI-TDD methodology: scenario-first tests, human-owned assertions, mutation verification, anti-pattern detection. Triggers include 'audit the tests', 'are these tests any good', and 'the tests pass but they do not test anything'. It is /unstale aimed at the test suite, so it changes test code rather than documentation."
+argument-hint: "[--focus unit|integration|<path>]"
+---
+
 # Detest: Audit Tests Against AI-TDD Methodology
 
 Audit the current repo's test suite against the Studio's AI-TDD methodology, find violations, and fix them. Like `/unstale` but specifically for tests.
