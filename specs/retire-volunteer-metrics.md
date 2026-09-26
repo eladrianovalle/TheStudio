@@ -239,7 +239,7 @@ appending to a ledger. `run.json` loses `hours`, `cost`, and `metrics`.
 ```json
 {
   "run_id": "run_tech_20260812_202226",
-  "repo": "TheGameStudio",
+  "repo": "<repo dir name>",
   "phase": "tech",
   "mode": "deliverables",
   "finalized_iso": "2026-08-12T21:40:11",
