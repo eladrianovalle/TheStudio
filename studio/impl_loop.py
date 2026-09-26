@@ -268,7 +268,11 @@ def _mutmut_paths_are_set(root: Path) -> bool:
     """
     setup_cfg = root / "setup.cfg"
     if setup_cfg.is_file():
-        parser = configparser.ConfigParser()
+        # Raw, so a `%` in a path is a `%`. The interpolating parser expands values at
+        # `get()` and raises on a lone `%` — `paths_to_mutate=src/%s` is enough — and that
+        # call would be outside the try below. A gate probe must not be able to crash the
+        # wizard over a character in somebody's path.
+        parser = configparser.RawConfigParser()
         try:
             parser.read(setup_cfg, encoding="utf-8")
         except (configparser.Error, OSError, UnicodeDecodeError):

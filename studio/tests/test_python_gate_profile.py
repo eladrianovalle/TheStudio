@@ -150,9 +150,21 @@ class PythonGateProfileTest(unittest.TestCase):
         repo_root = Path(__file__).resolve().parent.parent.parent
         studio_dir = repo_root / "studio"
 
-        self.assertEqual(impl_loop.resolve_profile(repo_root).stacks, ())
+        self.assertEqual(
+            impl_loop.resolve_profile(repo_root).stacks, (),
+            "This repository's top level is expected to carry no stack marker. If one has "
+            "been added, move this assertion rather than deleting it: what it guards is that "
+            "the gate question is only ever asked of a directory where a stack was found.",
+        )
         self.assertEqual(impl_loop.resolve_profile(studio_dir).stacks, ("python",))
         self.assertTrue(impl_loop.resolve_profile(studio_dir).require_mutation_check)
+
+    def test_a_percent_in_a_path_does_not_crash_the_probe(self):
+        """The interpolating parser raises on a lone `%`, and it raises at get(), not read()."""
+        (self.root / "setup.cfg").write_text(
+            "[mutmut]\npaths_to_mutate=src/%s\n", encoding="utf-8"
+        )
+        self.assertTrue(impl_loop.resolve_profile(self.root).require_mutation_check)
 
     def test_studio_itself_still_gets_the_gate(self):
         """This repo has a scoped [mutmut] in studio/setup.cfg, so nothing regresses here."""
