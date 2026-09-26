@@ -1,11 +1,19 @@
 name: PR triage (heuristic)
 
 # Phase 1 of the agent-driven PR review pipeline. This workflow is the cheap
-# gate: every open non-draft PR gets one of the `triage:*` labels based on
-# size + which paths it touches. NO LLM calls; NO merges; NO comments. The
-# label is the audit trail. Phase 2 (the external review agent) consumes the
-# labels: only `triage:small` PRs get an LLM review; `triage:trivial` is
-# mergeable with green checks; `triage:medium`/`large` ping a human.
+# gate: every PR gets one of the `triage:*` labels from its size and the paths
+# it touches. NO LLM calls; NO merges; NO comments.
+#
+# What the labels actually route, which is less than it looks:
+#
+#   triage:skip  - the review agent does not engage. This is the ONLY label
+#                  that changes what happens. It is set for a draft PR, or one
+#                  labelled `wip` or `do-not-review` (see below).
+#   everything   - advisory. trivial, small, medium and large all get the same
+#     else         full agent review; none of them auto-merges and none of them
+#                  pings anyone. Read them as a size at a glance, nothing more.
+#
+# Merging stays a human's step regardless of label. Keep this comment honest.
 #
 # Stack-agnostic: file-type heuristics below match docs/tests across TS, C#,
 # Rust, Python. Only HIGH_RISK_GLOBS is tuned per repo.
