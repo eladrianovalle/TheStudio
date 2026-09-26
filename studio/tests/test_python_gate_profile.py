@@ -159,6 +159,19 @@ class PythonGateProfileTest(unittest.TestCase):
         self.assertEqual(impl_loop.resolve_profile(studio_dir).stacks, ("python",))
         self.assertTrue(impl_loop.resolve_profile(studio_dir).require_mutation_check)
 
+    def test_a_value_that_is_not_a_path_is_not_configuration(self):
+        """TOML can hand back a table, a number or a boolean; none of them name a path.
+
+        The rest of this probe treats "unclear" as "not configured", and so does this: the
+        gate switches on for an answer, never for the absence of a clear no.
+        """
+        for value in ("{}", "0", "true", "1979-05-27"):
+            with self.subTest(value=value):
+                (self.root / "pyproject.toml").write_text(
+                    f"[tool.mutmut]\npaths_to_mutate = {value}\n", encoding="utf-8"
+                )
+                self.assertFalse(impl_loop.resolve_profile(self.root).require_mutation_check)
+
     def test_a_percent_in_a_path_does_not_crash_the_probe(self):
         """The interpolating parser raises on a lone `%`, and it raises at get(), not read()."""
         (self.root / "setup.cfg").write_text(

@@ -241,12 +241,18 @@ def _is_set(value: object) -> bool:
     nothing: they leave mutmut guessing. The two config formats reach this from different
     directions — TOML gives a list or a string, an INI file gives a string — so the emptiness
     test lives in one place rather than being spelled twice and drifting.
+
+    Anything that is neither a string nor a list of them is **not** configuration. TOML will
+    happily hand back ``paths_to_mutate = {}``, ``0`` or ``true``, and none of those name a
+    path mutmut could mutate. The rest of this probe treats "unclear" as "not configured" —
+    an unreadable file, a section with no value — and this is the same rule: a gate switches
+    on for an answer, never for the absence of a clear no.
     """
     if isinstance(value, str):
         return bool(value.strip())
     if isinstance(value, (list, tuple)):
         return any(_is_set(item) for item in value)
-    return value is not None and value is not False
+    return False
 
 
 def _mutmut_paths_are_set(root: Path) -> bool:
