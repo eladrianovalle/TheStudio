@@ -3,7 +3,7 @@ feature: Obligation Queue
 slug: obligation-queue
 ticket: https://github.com/eladrianovalle/TheStudio/issues/196
 # status: draft → approved (a human approved it) → shipped (built AND verified)
-status: approved
+status: shipped
 studio_run: studio/output/tech/run_tech_20260923_163901
 # verification_due: the date the evidence is due (YYYY-MM-DD). Required once this spec is
 # `approved`, and only if it carries a `## Verification` section — no section, no deadline.
@@ -14,8 +14,8 @@ verification_due:
 # satisfy the gate having edited nothing.
 # shipped_impact: one of none | minor | major — how much it changed downstream
 # shipped_changed: one line, in plain words, on what this actually changed
-shipped_impact:
-shipped_changed:
+shipped_impact: minor
+shipped_changed: Two kinds of unfinished work that had no voice — a spec whose units are all built but still says `approved`, and promised evidence past its date — now show up in `stats` and in the session brief, each with the command or edit that clears it.
 ---
 
 # Obligation Queue — Architecture Spec
