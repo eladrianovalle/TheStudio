@@ -102,7 +102,7 @@ nothing else. There is no longer a merge between a file and a runtime guess.
 safe only because *"No production path reads them — the loader always passes the gate keys in"* —
 which is true today precisely because the loader builds its merge base from `resolve_profile`. Take
 detection out of the loader without removing those literals and every key a config omits falls
-through to them. `Multica`'s live file sets only `test_command`, so it would start being told to run
+through to them. One install's live file sets only `test_command`, so it would start being told to run
 `ruff` and `mutmut` in a repository that has neither. That is the original complaint reappearing
 through its own fix, so the two changes are inseparable: the defaults become `""`, `[]`, `False`,
 `""`, and a bare `LoopConfig()` is refused rather than silently gating on nothing.
@@ -138,7 +138,7 @@ harness has none and adding one for a single assertion is not worth a dependency
 
 - **Detection is demoted, not improved.** Its success rate across the four heaviest `/forge` users
   is zero. Growing it is open-ended, because every repository is shaped differently, and a confident
-  wrong guess is worse than none — that is Orkid Garden's literal complaint, where Python defaults
+  wrong guess is worse than none — that is one install's literal complaint, where Python defaults
   would run `pytest` and `mutmut` against a Unity project and "every unit fails the gate for the
   wrong reason." The repository owner knows the answer for certain; ask once instead of guessing
   every run.
@@ -149,7 +149,7 @@ harness has none and adding one for a single assertion is not worth a dependency
   always-writing safe: without it, writing a template looks indistinguishable from clobbering
   somebody's work. This is also the live half of issue #133.
 - **The config file is authoritative; a missing key is empty, not a default.** Verified there are no
-  live casualties — `Multica` holds the only partial config and detection finds nothing there, so
+  live casualties — one install holds the only partial config and detection finds nothing there, so
   its resolved values do not change.
 - **The stack-specific warning moves into the template.** `_detected_line` loses its runtime home
   when the loader stops calling `resolve_profile`, and the warning is more use sitting in the file
@@ -185,7 +185,7 @@ harness has none and adding one for a single assertion is not worth a dependency
 - **Test churn is real and worth naming.** Deleting the gate literals re-points about 3 tests;
   taking detection out of the loader re-points roughly 15 more. None are deleted, but that is a
   meaningful diff to review.
-- **`cemetery-security` arrives cold.** It has 53 `/forge` units, no config, and detection that
+- **One install, a Rust/wasm game, arrives cold.** It has 53 `/forge` units, no config, and detection that
   returns two stacks at once. Nothing here fixes it automatically — it needs the wizard run, which
   is why the sweep is called out as deployment rather than assumed.
 - **The build order is load-bearing, not cosmetic.** See the Build Plan: the loader unit cannot go
@@ -227,8 +227,8 @@ committed config, plus `IMPLEMENTATION_LOOP_SPEC.md` §4, `forge.md` Step 5 and 
 config paragraph.
 
 - **Acceptance criteria:**
-  - [ ] A file whose `[gate]` holds only `test_command` — `Multica`'s exact shape — resolves with `require_mutation_check` false and `static_checks` and `mutation_command` empty.
-  - [ ] `Orkid Garden`'s and `_Alfred`'s exact files load to the values they write, raising nothing.
+  - [ ] A file whose `[gate]` holds only `test_command` — the one partial config found in the wild — resolves with `require_mutation_check` false and `static_checks` and `mutation_command` empty.
+  - [ ] The two installs that carry a hand-written override load to the values those files write, raising nothing.
   - [ ] With `resolve_profile` patched to raise, a repo with no marker files and a filled config still loads — proving the loader never calls it.
   - [ ] A `LoopConfig()` built with no arguments is refused rather than gating on the old literals.
   - [ ] The refusal chooses its wording from **whether the file exists**, not from which resolution branch supplied the path: a blank `test_command` in a file passed explicitly to `load_loop_config(path=...)` says that file's key is blank, not that the path does not exist.

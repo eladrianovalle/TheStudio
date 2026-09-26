@@ -25,7 +25,7 @@ ships — and that file names `pytest`, `ruff` and `mutmut`. Those are Python to
 Studio is installed in ten repositories. Three are Node projects, one is a Rust game, one is Unity,
 and several are neither. In every one of those, `/forge` runs `pytest`, `pytest` isn't there, the
 command fails, and the unit is marked failed — not because the work was wrong, but because the gate
-was asking the wrong question. Orkid Garden's config file says so in its opening comment: the shipped
+was asking the wrong question. One install's config file says so in its opening comment: the shipped
 defaults assume a Python project, so *"every unit fails the gate for the wrong reason."*
 
 This change makes the gate look at the repository first. If it finds `package.json` with a test
@@ -35,7 +35,7 @@ and the exact lines to write, instead of guessing and failing later for a reason
 do with your code.
 
 Two things worth saying plainly at the start. **This does not auto-fix the repository that reported
-the problem**: Orkid Garden keeps its Unity project in a `unity/` subdirectory, so nothing at its
+the problem**: the motivating install keeps its Unity project in a `unity/` subdirectory, so nothing at its
 root identifies it, and Unity has no honest test command to ship anyway — its hand-written override
 stays the right answer, and this change is careful not to break it. And **six of the ten repos will
 still get no automatic answer**; five of them will newly refuse where they used to fail confusingly.
@@ -136,10 +136,10 @@ Unity keys on `ProjectSettings/ProjectVersion.txt`, narrower than the bare `Proj
 check the existing helpers use (`setup.py:358`, `:409`, `:539`) — a directory by that name is a
 plausible thing for a non-Unity repo to have; that file is not.
 
-`conftest.py` is in the Python list for a specific repo: `_Cerebro` has a root `conftest.py` and none
+`conftest.py` is in the Python list for a specific install: one has a root `conftest.py` and none
 of the other three Python markers. Without it, a Python project is undetectable.
 
-**`rust` is load-bearing and stays.** Without it, `cemetery-security` matches only `package.json` and
+**`rust` is load-bearing and stays.** Without it, the Rust/wasm game matches only `package.json` and
 gets `npm test` — which runs its CI release-gate tooling and reports green while testing none of the
 game. That wrong-reason *pass* is worse than the failure being fixed. **`go` was proposed and cut**:
 no consuming repo is Go, and the row can be restored in one line the day one appears.
@@ -155,7 +155,7 @@ Zero matches and two matches are both refusals, with different messages. Ranking
 another is exactly the choice the three existing `setup.py` ladders made inconsistently, and every
 ranking is wrong for some real repo:
 
-- Rank `package.json` first and `cemetery-security`, a Rust/wasm game, gets a green gate over its
+- Rank `package.json` first and the Rust/wasm game gets a green gate over its
   release-gate tooling and nothing else.
 - Rank `Cargo.toml` first and a Node repo vendoring a Rust helper crate is refused for the wrong
   reason.
@@ -175,8 +175,8 @@ Node is the one stack whose profile is a function of the repo rather than a cons
 `package.json` and offers `npm test` only when a `test` script is declared, and `["eslint"]` only when
 a `lint` script or an `eslint` devDependency is present. A `package.json` with no `test` script makes
 `npm test` exit with *"missing script: test"* — the wrong-reason failure this feature exists to
-remove. Verified across all three Node consumers: `miresu` and `OrcPunk-dotcom` declare
-`"test": "vitest run"`, `Arkadium/solitaire-game` declares a `node --test` script; all three declare
+remove. Verified across all three Node consumers: two declare
+`"test": "vitest run"` and one declares a `node --test` script; all three declare
 `lint` and carry `eslint`.
 
 The wizard computes nothing of its own — it calls `resolve_profile` and serializes the result. One
@@ -243,13 +243,13 @@ instead of going dark, plus one sentence in both file headers.
 ```
 gate.test_command is not set, and Studio has no default for this repository.
 
-  Looked in:  /Users/x/Repos/Multica
+  Looked in:  /Users/x/Repos/example-app
   Detected:   nothing — no marker file Studio recognises is present here.
 
 /forge runs a test gate; without a command it would ask the writer agent to invent
 one and then believe whatever it reported back. It will not do that.
 
-Set the command in /Users/x/Repos/Multica/.studio/implementation_loop.toml:
+Set the command in /Users/x/Repos/example-app/.studio/implementation_loop.toml:
 
     [gate]
     test_command = "<the command that runs this repo's tests>"
@@ -279,21 +279,21 @@ Eleven rows — the ten consumers, plus the Studio source repo, which is listed 
 root is `studio/` rather than the repo root (`project_artifact_root` returns the source root when the
 layout is not `.studio/source`, `impl_loop.py:120-126`).
 
-| Outcome | Count | Repos |
+| Outcome | Count | What they are |
 |---|---|---|
-| Detects cleanly | 4 | `miresu`, `OrcPunk-dotcom`, `Arkadium/solitaire-game` (node); `_Cerebro` (python, via `conftest.py`) |
-| Matches nothing | 5 | `Orkid Garden`, `_Alfred`, `Multica`, `CREA`, `OrcPunk-biz` |
-| Ambiguous | 1 | `cemetery-security` (Cargo.toml + package.json) |
-| Source repo | — | `_TheGameStudio`, detected python at `studio/pyproject.toml` |
+| Detects cleanly | 4 | three Node installs; one Python, via a root `conftest.py` |
+| Matches nothing | 5 | no marker file Studio recognises at the root |
+| Ambiguous | 1 | a Rust/wasm game — `Cargo.toml` and `package.json` both present |
+| Source repo | — | this one, detected python at `studio/pyproject.toml` |
 
-So **six of ten get no automatic answer, and five newly refuse** — Orkid's existing override spares it
-from the refusal.
+So **six of ten get no automatic answer, and five newly refuse** — the motivating install's existing
+override spares it from the refusal.
 
 ### Does it still earn its keep?
 
 Yes, and not marginally. Three Node repos go from a guaranteed wrong-reason fail to a working gate.
 Six go from a silent wrong-reason fail to a refusal naming the file to edit. The merge fix removes a
-second-order copy of the same bug. Orkid keeps working unchanged. The motivating repo not being
+second-order copy of the same bug. That install keeps working unchanged. The motivating repo not being
 auto-fixed is a real dent, said out loud here — but it is one repo in ten and it already has its
 answer.
 
@@ -302,7 +302,7 @@ answer.
 - **The table lives in `impl_loop.py`; no new module.** A new file would need adding to
   `install.SOURCE_FILES` or every installed repo hits an `ImportError` — an argument against creating
   one.
-- **Refuse on ambiguity rather than rank markers.** Established by a real repo: `cemetery-security`
+- **Refuse on ambiguity rather than rank markers.** Established by a real repo: the Rust/wasm game
   carries `Cargo.toml` and `package.json` side by side, its `package.json` describing itself as CI
   tooling for a Rust/wasm game. Any ranking gives some real repo a wrong answer, and the
   `package.json`-first ranking gives that one a green gate over nothing.
@@ -316,12 +316,12 @@ answer.
   semantics, because a partial gate override is a normal thing to write.
 - **Keep `rust`, drop `go`.** `rust` prevents a wrong-reason green in a live repo; `go` earns nothing
   by the same standard and costs one line to restore.
-- **Leave the three `setup.py` marker ladders alone.** They disagree today — `cemetery-security`
+- **Leave the three `setup.py` marker ladders alone.** They disagree today — the Rust/wasm game
   resolves as Rust to the unstale ladder and Node to the smoke ladder — so unifying them is a live
   behaviour change to two working features, ridden in on an unrelated spec. A pointer comment at
   `setup.py:326` naming `impl_loop.STACK_MARKERS` and the one-clause reason the policies differ (best
   guess versus refusal) is the right size of fix.
-- **Root-only detection, no subdirectory search.** Orkid Garden already has a working override, and
+- **Root-only detection, no subdirectory search.** The motivating install already has a working override, and
   searching subdirectories would start matching `tools/package.json` in unrelated repos.
 
 ## Non-Goals / Cut Scope
@@ -329,7 +329,7 @@ answer.
 - **A `stack_profiles.py` module** — cut; the table goes in `impl_loop.py`.
 - **A `go` profile** — cut; no consumer would exercise it.
 - **Collapsing the three `setup.py` ladders into one** — cut; live behaviour change, unrelated spec.
-- **Subdirectory marker search** — cut; would not help Orkid and would create false matches.
+- **Subdirectory marker search** — cut; would not help that install and would create false matches.
 - **Rewriting `_resolve_config_path` into a two-file merge** — cut in favour of one equality test.
   The moment the shipped and dataclass values need to diverge, that becomes its own small spec.
 - **The wizard writing a commented-out file when detection fails** — cut. It changes no behaviour and
@@ -339,13 +339,13 @@ answer.
 
 ## Risks & Open Questions
 
-- **The motivating repo is not auto-fixed.** Orkid Garden is undetectable at its root and Unity has no
+- **The motivating repo is not auto-fixed.** It is undetectable at its root and Unity has no
   shippable test command. Its override remains the answer. If more Unity repos appear with the same
   shape, a `unity/` convention might earn its place — not yet.
 - **Five repos newly refuse.** That is intended (a loud refusal beats a confusing failure), but it
   means five repos cannot run `/forge` until someone writes three lines. The refusal text is the
   mitigation, which is why it is specified this precisely.
-- **`Arkadium/solitaire-game` will lint twice per unit** — its `npm test` already runs `eslint .`, and
+- **One Node install will lint twice per unit** — its `npm test` already runs `eslint .`, and
   the Node profile also declares `["eslint"]`. Harmless, just slower; the array gates only *whether* a
   static check is required.
 - **The `[loop]`/`[editor]` shadowing is mitigated, not removed.** The equality test catches divergence
@@ -378,7 +378,7 @@ six repos with no config file, which are the repos this feature is for.
 - [ ] `load_loop_config` against a fixture containing only `pyproject.toml` returns `test_command == "pytest -q"`, `static_checks == ["ruff"]` and `require_mutation_check is True`.
 - [ ] `load_loop_config` against a fixture whose override sets only `gate.test_command`, in a repo detected as Unity, returns that command with `static_checks == []` and `require_mutation_check is False` — no Python value inherited through the gap.
 - [ ] A marker-less fixture raises `LoopConfigError` naming the fixture path and `.studio/implementation_loop.toml`; a fixture with both `Cargo.toml` and `package.json` raises one naming both markers; a `Cargo.toml`-only fixture raises the recognised-but-unserved variant. All five `Detected:` variants have a test.
-- [ ] A fixture reproducing Orkid Garden's shape and its exact override resolves to its wrapper command with `static_checks == []` and `require_mutation_check is False`, and raises nothing.
+- [ ] A fixture reproducing the motivating install's shape and its exact override resolves to its wrapper command with `static_checks == []` and `require_mutation_check is False`, and raises nothing.
 - [ ] `config/implementation_loop.toml` parses with no `gate` table, `install.py:SOURCE_FILES` is unchanged from `origin/main`, and a test asserts the shipped `[loop]`/`[editor]` values equal `LoopConfig()`'s defaults.
 - [ ] The full suite is green — including the seven repaired loader tests — and `IMPLEMENTATION_LOOP_SPEC.md` still carries all four gate keys as TOML assignments (reframed as what a repo may set, not what ships) so `test_doc_parity.TestLoopConfigParity` passes; `CLAUDE_CODE_USAGE.md` no longer presents `pytest`/`ruff` as shipped defaults.
 
@@ -399,7 +399,7 @@ both of which write nothing when they have nothing to say.
 **Acceptance criteria:**
 - [ ] Against a Node fixture it writes `.studio/implementation_loop.toml` containing `test_command = "npm test"`, and feeding that file back through `load_loop_config` yields a config equal to what detection alone produced.
 - [ ] Against a marker-less fixture and against an ambiguous one it writes no file at all, and `load_loop_config` on those repos still raises `LoopConfigError`.
-- [ ] An existing `.studio/implementation_loop.toml` is never overwritten — proven with a fixture holding Orkid Garden's file, compared byte-for-byte after the step runs.
+- [ ] An existing `.studio/implementation_loop.toml` is never overwritten — proven with a fixture holding that install's real file, compared byte-for-byte after the step runs.
 - [ ] `pending_steps` on a state at `setup_version: 4` with all v1–v4 steps complete returns exactly one step, named `implementation_loop_config`.
 - [ ] `apply_defaults` marks the new step complete, `show_status` prints a row for it, and no `.claude/commands/*.md` or `studio/docs/*.md` still describes the loop's gates as Python-only.
 

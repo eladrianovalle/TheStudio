@@ -301,21 +301,25 @@ start of each Claude Code session it runs `check-updates`, which has two things 
 **1. An update is available.** A quick, cached check: has the Studio source moved past the commit
 you installed from? If so, you get a single line telling you to run `/studio-update`.
 
-**2. Planned work nobody finished.** It compares the Build Plans of your `approved` specs against
-what your commit log says was built, and names **one** unfinished unit — the spec it came from, its
-one-line outcome, how many units are still owed, and the exact `/forge --spec <spec-path> --unit <id>`
-command that continues it. Nothing is stored: it re-derives the answer from your specs and your git
-log every time, so it can never hold a stale "done" nobody can see is wrong. The two ways to make it
-stop are to build the unit, or to open a PR adding a line under that unit in the spec:
+**2. Something this repository owes.** It works out everything unfinished — a unit an `approved`
+spec planned that nothing built, a spec whose work is all done while its frontmatter still says
+`approved`, a spec whose promised evidence is past its date — and names **one**: the most important,
+with the command that discharges it or, when it is a frontmatter edit, what to change. It says how
+many there are in total and never prints the list. Nothing is stored: it re-derives the answer from
+your specs and your git log every time, so it can never hold a stale "done" nobody can see is wrong.
+For an unbuilt unit the two ways to make it stop are to build it, or to open a PR adding a line under
+that unit in the spec:
 
 ```markdown
 - **Dropped:** 2026-09-18 — superseded by `the_other_unit`.
 ```
 
 Both the date and the reason are required — a bare "dropped" is a way to silence the nudge without
-deciding anything. Built work is read from **all** branches, unmerged ones included, so a teammate
-who hasn't fetched can see a different count. For the whole picture, including work that was built
-without any spec planning it, run `python studio/run_phase.py stats`.
+deciding anything. A spec left at `approved` with all its work done is silenced by the edit it is
+asking for: `status: shipped`, plus the `shipped_impact` and `shipped_changed` lines. Built work is
+read from **all** branches, unmerged ones included, so a teammate who hasn't fetched can see a
+different count. For the whole list, including work that was built without any spec planning it, run
+`python studio/run_phase.py stats`.
 
 - **Quiet and cheap.** The update half checks the network at most once a day (bounded, best-effort
   `git fetch`, cached in `.studio/update-check.json`) and is near-instant on repeat sessions; the
@@ -324,8 +328,8 @@ without any spec planning it, run `python studio/run_phase.py stats`.
   stays silent. The two halves are guarded separately, so a spec it can't parse can't take the
   update nudge down with it.
 - **Nudges once per update.** After it points out a given update, it stays quiet until either a
-  newer update appears or you actually run `/studio-update`. The unfinished-unit line is not
-  latched that way: it names the same unit every session until that unit is built or dropped.
+  newer update appears or you actually run `/studio-update`. The obligation line is not latched that
+  way: it names the same thing every session until somebody discharges it or closes it on purpose.
 - **Turn it off** two ways: `studio init --no-hook` / `studio update --no-hook` skips (or removes)
   the hook, and creating an empty `.studio/update-check.off` file disables the check durably, even
   if a future `update` would otherwise re-add the hook.

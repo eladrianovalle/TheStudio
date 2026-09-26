@@ -21,6 +21,7 @@ import json
 import subprocess
 import sys
 import types
+from datetime import date
 from pathlib import Path
 
 import install
@@ -337,13 +338,14 @@ def _init_repo(path):
     return path
 
 
-def _spec_text(build_plan, *, status="approved", slug="a-feature"):
+def _spec_text(build_plan, *, status="approved", slug="a-feature", verification_due=""):
     """A spec file's text: frontmatter, a little prose, then the plan under test."""
     return (
         "---\n"
         "feature: A Feature\n"
         f"slug: {slug}\n"
         f"status: {status}\n"
+        f"verification_due: {verification_due}\n"
         "---\n\n"
         "# A Feature\n\nSome prose.\n\n"
         f"{build_plan}"
@@ -360,11 +362,14 @@ _TWO_OWED = (
 )
 
 
-def _seed_spec(target, build_plan, *, status="approved", name="a-feature.md"):
+def _seed_spec(target, build_plan, *, status="approved", name="a-feature.md",
+               verification_due=""):
     specs = target / "specs"
     specs.mkdir(exist_ok=True)
     (specs / name).write_text(
-        _spec_text(build_plan, status=status, slug=name[:-3]), encoding="utf-8"
+        _spec_text(build_plan, status=status, slug=name[:-3],
+                   verification_due=verification_due),
+        encoding="utf-8",
     )
     return specs / name
 
@@ -388,27 +393,31 @@ def _context(capsys):
 
 # --- 9. the brief names one unit and the command that continues it ---
 
-def test_brief_names_the_next_unit_its_spec_and_the_forge_command(tmp_path, capsys):
-    """Criterion 1: everything a fresh session needs to act, in one sentence.
+def test_brief_names_one_obligation_its_spec_and_the_forge_command(tmp_path, capsys):
+    """Criterion 7: everything a fresh session needs to act, in one sentence.
 
-    There is no Studio update here (the target has no VERSION), so the unfinished block is
+    There is no Studio update here (the target has no VERSION), so the obligation block is
     speaking entirely on its own — which is the day-one case, since every install is current.
+
+    Two units are owed and the brief names the first of them by id: obligations sort by kind,
+    then by spec path, then by subject, so the same one is named every session until somebody
+    builds it or drops it.
     """
     target = _brief(tmp_path, _TWO_OWED, "already_built")
 
     _do_check_updates(types.SimpleNamespace(target=str(target)))
     context = _context(capsys)
 
-    assert "Unfinished planned work: 2 units in 1 approved spec." in context
-    assert "`still_owed`" in context
+    assert "this repository owes 2 obligations" in context
+    assert "`also_owed`" in context
     assert "specs/a-feature.md" in context
-    assert "the one nobody built" in context
-    assert "/forge --spec specs/a-feature.md --unit still_owed" in context
+    assert "the one after that" in context
+    assert "/forge --spec specs/a-feature.md --unit also_owed" in context
     assert "open a PR adding `- **Dropped:** YYYY-MM-DD — <reason>`" in context
     assert "all branches including unmerged ones" in context
     # One named action, not a list: the second owed unit is counted, never listed, and the
     # built one is not mentioned at all.
-    assert "also_owed" not in context
+    assert "still_owed" not in context
     assert "already_built" not in context
 
 
@@ -434,8 +443,8 @@ def test_two_specs_sharing_a_slug_each_keep_their_own_path(tmp_path, capsys):
     assert "`first_owed`" in context
     assert "specs/a-feature.md" in context
     assert "specs/b-feature.md" not in context
-    # And the count reads the files too: counted by slug these two would read as one spec.
-    assert "in 2 approved specs" in context
+    # Both are counted, and the one named is the one whose spec path sorts first.
+    assert "this repository owes 2 obligations" in context
 
 
 # --- 10. update-only output is byte-identical to what shipped a month ago ---
@@ -475,15 +484,26 @@ def test_both_sources_share_one_object_update_first(tmp_path, monkeypatch, capsy
     context = json.loads(out)["hookSpecificOutput"]["additionalContext"]
     update, unfinished = context.split("\n\n")
     assert update == install.UPDATE_ADDITIONAL_CONTEXT
-    assert unfinished.startswith("Unfinished planned work:")
-    assert "/forge --spec specs/a-feature.md --unit still_owed" in unfinished
+    assert unfinished.startswith("Unfinished work:")
+    assert "/forge --spec specs/a-feature.md --unit also_owed" in unfinished
 
 
 # --- 12. neither source has news: nothing at all, and the process still exits 0 ---
 
 def test_no_news_prints_nothing_and_exits_zero(tmp_path, capsys):
-    """Not an empty JSON object: a nudge that fires with no news is one people learn to skip."""
-    target = _brief(tmp_path, _TWO_OWED, "already_built", "still_owed", "also_owed")
+    """Not an empty JSON object: a nudge that fires with no news is one people learn to skip.
+
+    Every unit here is built, which normally leaves the spec owing a flip to `shipped` — but
+    this one promised evidence that is not due yet, so it owes nothing at all today.
+    """
+    target = _init_repo(tmp_path / "quiet")
+    _seed_spec(
+        target,
+        _TWO_OWED + "\n## Verification\n\nEvidence is promised by the date above.\n",
+        verification_due="2099-01-01",
+    )
+    for unit_id in ("already_built", "still_owed", "also_owed"):
+        _git(target, "commit", "-q", "--allow-empty", "-m", f"writer: {unit_id}")
 
     _do_check_updates(types.SimpleNamespace(target=str(target)))
     assert capsys.readouterr().out == ""
@@ -525,14 +545,19 @@ def test_a_broken_update_check_still_prints_the_unfinished_work(tmp_path, monkey
     _do_check_updates(types.SimpleNamespace(target=str(target)))
 
     context = _context(capsys)
-    assert context.startswith("Unfinished planned work:")
+    assert context.startswith("Unfinished work:")
     assert install.UPDATE_ADDITIONAL_CONTEXT not in context
 
 
 # --- 14. the escape hatch: a dropped unit stops being counted ---
 
-def test_dropping_a_unit_moves_the_brief_on_and_then_silences_it(tmp_path, capsys):
-    """Criterion 4: the only two honest ways to stop the nudge are build it or drop it."""
+def test_dropping_a_unit_moves_the_brief_on_and_then_to_the_frontmatter(tmp_path, capsys):
+    """Criterion 4 of the ledger, and criterion 2 of the queue, in one sequence.
+
+    The only two honest ways to stop the nudge about a unit are to build it or to drop it —
+    and once every unit is one or the other, what the spec owes is the flip to `shipped` that
+    puts it in the shipped-features block. Silence comes when that flip lands.
+    """
     target = _brief(tmp_path, _TWO_OWED, "already_built")
     spec_path = target / "specs" / "a-feature.md"
 
@@ -540,17 +565,17 @@ def test_dropping_a_unit_moves_the_brief_on_and_then_silences_it(tmp_path, capsy
         _spec_text(
             "## Build Plan\n\n"
             "### 1. `already_built` — the one that is done\n\n"
-            "### 2. `still_owed` — the one nobody built\n"
-            "- **Dropped:** 2026-09-18 — superseded by `also_owed`.\n\n"
+            "### 2. `still_owed` — the one nobody built\n\n"
             "### 3. `also_owed` — the one after that\n"
+            "- **Dropped:** 2026-09-18 — not wanted after all.\n"
         ),
         encoding="utf-8",
     )
     _do_check_updates(types.SimpleNamespace(target=str(target)))
     context = _context(capsys)
-    assert "Unfinished planned work: 1 unit in 1 approved spec." in context
-    assert "/forge --spec specs/a-feature.md --unit also_owed" in context
-    assert "still_owed" not in context
+    assert "this repository owes 1 obligation" in context
+    assert "/forge --spec specs/a-feature.md --unit still_owed" in context
+    assert "also_owed" not in context
 
     spec_path.write_text(
         _spec_text(
@@ -560,6 +585,21 @@ def test_dropping_a_unit_moves_the_brief_on_and_then_silences_it(tmp_path, capsy
             "- **Dropped:** 2026-09-18 — superseded.\n\n"
             "### 3. `also_owed` — the one after that\n"
             "- **Dropped:** 2026-09-18 — not wanted after all.\n"
+        ),
+        encoding="utf-8",
+    )
+    _do_check_updates(types.SimpleNamespace(target=str(target)))
+    context = _context(capsys)
+    assert "this repository owes 1 obligation" in context
+    assert "`status: shipped`" in context
+    assert "an edit to the spec, not a command" in context
+    assert "/forge" not in context
+
+    spec_path.write_text(
+        _spec_text(
+            "## Build Plan\n\n"
+            "### 1. `already_built` — the one that is done\n",
+            status="shipped",
         ),
         encoding="utf-8",
     )
@@ -589,7 +629,7 @@ def test_specs_are_read_from_the_target_not_the_working_directory(tmp_path):
 
     assert proc.returncode == 0
     context = json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
-    assert "/forge --spec specs/a-feature.md --unit still_owed" in context
+    assert "/forge --spec specs/a-feature.md --unit also_owed" in context
     assert "someone_elses_unit" not in context
 
 
@@ -616,7 +656,34 @@ def test_an_unreadable_spec_is_skipped_rather_than_fatal(tmp_path, capsys):
     _do_check_updates(types.SimpleNamespace(target=str(target)))
     context = _context(capsys)
 
-    assert "/forge --spec specs/b-feature.md --unit readable_unit" in context
+    assert context.startswith("Unfinished work:")
+    # Two obligations, so the readable spec's unbuilt unit is still counted: the directory
+    # named like a spec cost only itself. A prefix match alone would pass with it eaten.
+    assert "this repository owes 2 obligations" in context
+
+
+def test_one_unparseable_spec_takes_only_its_own_obligations_down(tmp_path, monkeypatch):
+    """Criterion 6: per-source isolation, one level below the two guards in the brief.
+
+    The same discipline `_do_check_updates` uses so a bad spec cannot eat the update nudge:
+    here it is so a bad spec cannot eat the *other specs'* obligations.
+    """
+    target = _brief(tmp_path, _TWO_OWED, "already_built", "still_owed", "also_owed")
+    _seed_spec(target, "## Build Plan\n\n### 1. `readable_unit` — still readable\n",
+               name="b-feature.md")
+    real_parse = run_phase.parse_build_plan
+
+    def _explode_on_one(spec_text, slug, spec_file):
+        if slug == "a-feature":
+            raise RuntimeError("a spec this repo cannot parse")
+        return real_parse(spec_text, slug, spec_file)
+
+    monkeypatch.setattr(run_phase, "parse_build_plan", _explode_on_one)
+    queue = run_phase._collect_obligations(target, today=date(2026, 9, 25))
+
+    # The readable spec still owes its unit; the unparseable one contributes nothing at all,
+    # not even the `stale_status` its three built units would otherwise imply.
+    assert [(owed.kind, owed.subject) for owed in queue] == [("unbuilt_unit", "readable_unit")]
 
 
 def test_an_installed_repo_reads_its_studio_specs_directory(tmp_path, capsys):

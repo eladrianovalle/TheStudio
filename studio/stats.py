@@ -12,7 +12,9 @@ import re
 from dataclasses import dataclass
 from pathlib import PurePath
 from statistics import median
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Sequence
+
+from obligations import Obligation, format_queue
 
 # How much a shipped feature changed downstream, in three coarse buckets. Kept
 # small on purpose: a bucket someone will actually pick beats a scale nobody fills.
@@ -785,43 +787,49 @@ def _unit_line(unit: PlannedUnit, shared_slugs: set[str]) -> str:
     return f"    [{label}] {unit.unit_id}" + (f" — {title}" if title else "")
 
 
-def format_unit_ledger(ledger: UnitLedger) -> List[str]:
-    """Render the completion ledger: planned work still owed, and built work no plan proposed.
+def format_obligations(
+    obligations: Sequence[Obligation], ledger: UnitLedger
+) -> List[str]:
+    """Render what this repository owes: the obligation queue, then the audit direction.
 
-    Silent states are left out rather than printed as zeroes, and a ledger with nothing in it
-    gets one line saying so instead of a block of empty headings — a report that looks the same
-    whether or not it has news is one people stop reading.
+    The queue carries the three kinds of unfinished work, each with the command or the edit
+    that discharges it. The ledger adds what an obligation is not: a unit whose writer
+    stopped on purpose, the units closed on purpose, and ids git says were built that no
+    spec ever planned.
 
-    A ledger whose built set is unknown gets no block at all. It has not reconciled anything,
-    so every line it could print would be a claim it cannot support — and the emptiest of them,
-    "nothing unfinished", is exactly the lie the unknown built set exists to prevent.
+    Silent states are left out rather than printed as zeroes, and nothing owed gets one line
+    saying so instead of a block of empty headings — a report that looks the same whether or
+    not it has news is one people stop reading.
+
+    A ledger whose built set is unknown gets no block at all. It has not reconciled
+    anything, so every line it could print would be a claim it cannot support — and the
+    emptiest of them, "nothing owed", is exactly the lie the unknown built set exists to
+    prevent.
     """
     if not ledger.built_known:
         return []
 
-    lines = ["", "Planned work (approved specs vs. git):"]
+    lines = ["", "What this repository owes (approved specs vs. git):"]
 
-    if not (ledger.unbuilt or ledger.escalated or ledger.dropped or ledger.unplanned):
+    if not (obligations or ledger.escalated or ledger.dropped or ledger.unplanned):
         lines.append(
-            "  Nothing unfinished — every unit an approved spec plans is built or dropped."
+            "  Nothing owed — every unit an approved spec plans is built or dropped, and "
+            "every finished spec says so."
         )
         return lines
 
-    shared = _shared_slugs(ledger.unbuilt + ledger.escalated)
-
-    if ledger.unbuilt:
-        specs = len({unit.spec_file for unit in ledger.unbuilt})
+    if obligations:
         lines.append(
-            f"  Planned and never built: {format_count(len(ledger.unbuilt))} "
-            f"across {format_count(specs, 'approved spec')}"
+            f"  {format_count(len(obligations), 'obligation')}, most important first:"
         )
-        lines.extend(_unit_line(unit, shared) for unit in ledger.unbuilt)
+        lines.extend(format_queue(obligations))
 
     if ledger.escalated:
         lines.append(
             f"  Started and escalated — a writer stopped on purpose: "
             f"{format_count(len(ledger.escalated))}"
         )
+        shared = _shared_slugs(ledger.escalated)
         lines.extend(_unit_line(unit, shared) for unit in ledger.escalated)
 
     if ledger.dropped:
@@ -901,6 +909,7 @@ def format_stats(
     shipped_specs: Optional[Dict] = None,
     session_health: Optional[Dict] = None,
     unit_ledger: Optional[UnitLedger] = None,
+    obligations: Sequence[Obligation] = (),
 ) -> str:
     """Render an aggregate_stats() result as a terminal dashboard."""
     bar = "=" * 60
@@ -915,7 +924,7 @@ def format_stats(
         if shipped_specs is not None:
             lines.extend(_format_shipped_specs(shipped_specs))
         if unit_ledger is not None:
-            lines.extend(format_unit_ledger(unit_ledger))
+            lines.extend(format_obligations(obligations, unit_ledger))
         lines.append(bar)
         return "\n".join(lines)
 
@@ -934,7 +943,7 @@ def format_stats(
         lines.extend(_format_shipped_specs(shipped_specs))
 
     if unit_ledger is not None:
-        lines.extend(format_unit_ledger(unit_ledger))
+        lines.extend(format_obligations(obligations, unit_ledger))
 
     d = agg["decisions"]
     lines.append("")
