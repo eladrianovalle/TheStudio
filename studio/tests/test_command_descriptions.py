@@ -72,10 +72,7 @@ def malformed_quoted_values(command_file: Path) -> list[str]:
     whole frontmatter block with it. The suite has no YAML dependency, so this
     checks for that one mistake.
     """
-    text = command_file.read_text(encoding="utf-8")
-    if not text.startswith("---\n"):
-        return []
-    frontmatter = text[4:].split("\n---\n", 1)[0]
+    frontmatter, _ = split_frontmatter(command_file)
     bad = []
     for line in frontmatter.splitlines():
         _, sep, value = line.partition(":")
@@ -214,9 +211,6 @@ class TestCommandDescriptions(unittest.TestCase):
                 )
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class TestTheReadersDoNotSilentlySkip(unittest.TestCase):
     """Every way these helpers can return "nothing" is a test that passes without checking.
@@ -258,8 +252,23 @@ class TestTheReadersDoNotSilentlySkip(unittest.TestCase):
             "flags, which skips it silently instead of checking it",
         )
 
+    def test_crlf_frontmatter_is_still_checked_for_bad_quoting(self):
+        """The quoting guard is a reader too, and it skipped the same way the others did."""
+        path = self._write(
+            '---\r\ndescription: "closes early" and then keeps going\r\n---\r\n\r\n# Body\r\n'
+        )
+        self.assertTrue(
+            malformed_quoted_values(path),
+            "a CRLF checkout made the YAML-quoting guard return nothing, which reads as "
+            "'this file is fine' rather than 'I could not look'",
+        )
+
     def test_a_longer_flag_does_not_satisfy_a_shorter_one(self):
         """`--plan` is a prefix of `--planner`; a substring test cannot tell them apart."""
         self.assertNotIn("--plan", flags_in("[--planner <name>]"))
         self.assertEqual(flags_in("[--planner <name>]"), {"--planner"})
         self.assertEqual(flags_in("[--plan] [--planner <name>]"), {"--plan", "--planner"})
+
+
+if __name__ == "__main__":
+    unittest.main()
