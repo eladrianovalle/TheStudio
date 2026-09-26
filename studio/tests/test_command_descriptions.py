@@ -14,6 +14,7 @@ a person actually says when they want this command.
 
 import re
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -30,12 +31,34 @@ COMMANDS_DIR = Path(__file__).resolve().parent.parent.parent / ".claude" / "comm
 MINIMUM_DESCRIPTION_LENGTH = 150
 
 
+def split_frontmatter(command_file: Path) -> tuple[str, str]:
+    """Return ``(frontmatter, body)`` for a command file, or ``("", whole file)``.
+
+    Line endings are normalised first. A checkout with CRLF endings has no ``"---\n"`` to
+    find, and every reader here would then quietly fall back to treating the frontmatter as
+    body — which reads as "this command has no description" and skips the test instead of
+    failing it. A guard that disappears on someone else's checkout is worse than no guard.
+    """
+    text = command_file.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    if not text.startswith("---\n"):
+        return "", text
+    parts = text.split("\n---\n", 1)
+    return (parts[0], parts[1]) if len(parts) == 2 else ("", text)
+
+
+def flags_in(text: str) -> set[str]:
+    """Every ``--flag`` token in *text*, as whole words.
+
+    Whole words because a substring test cannot tell ``--plan`` from ``--planner``: a hint
+    offering the second would satisfy a command documenting the first, and the check would
+    pass on a flag nobody can type.
+    """
+    return set(re.findall(r"--[a-z][a-z-]*", text))
+
+
 def read_description(command_file: Path) -> str:
     """Return the ``description`` from a command's frontmatter, or ""."""
-    text = command_file.read_text(encoding="utf-8")
-    if not text.startswith("---\n"):
-        return ""
-    frontmatter = text.split("\n---\n", 1)[0]
+    frontmatter, _ = split_frontmatter(command_file)
     match = re.search(r"^description:\s*([\"']?)(.*?)\1(\s+#.*)?\s*$", frontmatter, re.MULTILINE)
     return match.group(2) if match else ""
 
@@ -69,19 +92,17 @@ def malformed_quoted_values(command_file: Path) -> list[str]:
 
 def read_argument_hint(command_file: Path) -> str | None:
     """Return the ``argument-hint`` from a command's frontmatter, or None if absent."""
-    text = command_file.read_text(encoding="utf-8")
-    if not text.startswith("---\n"):
-        return None
-    frontmatter = text.split("\n---\n", 1)[0]
+    frontmatter, _ = split_frontmatter(command_file)
     match = re.search(r"""^argument-hint:\s*(["'])(.*)\1\s*$""", frontmatter, re.MULTILINE)
     return match.group(2) if match else None
 
 
 def documented_flags(command_file: Path) -> list[str]:
     """Every ``--flag`` the command's own Arguments section documents."""
-    text = command_file.read_text(encoding="utf-8")
-    body = text.split("\n---\n", 1)[1] if text.startswith("---\n") else text
-    section = re.search(r"^## Arguments\n(.*?)(?=^## )", body, re.MULTILINE | re.DOTALL)
+    _, body = split_frontmatter(command_file)
+    # `(?=^## |\Z)` so a file whose Arguments section runs to the end of the file is read
+    # rather than returning nothing — which would have skipped that command silently.
+    section = re.search(r"^## Arguments\n(.*?)(?=^## |\Z)", body, re.MULTILINE | re.DOTALL)
     if not section:
         return []
     # Flags are read out of inline-code spans, not the prose around them. Some commands
@@ -89,9 +110,7 @@ def documented_flags(command_file: Path) -> list[str]:
     # (`--phase <market|design|tech> --text "..."`); both count, while a flag merely
     # mentioned in a sentence does not.
     code_spans = re.findall(r"`([^`]+)`", section.group(1))
-    return sorted({
-        flag for span in code_spans for flag in re.findall(r"(--[a-z][a-z-]*)", span)
-    })
+    return sorted({flag for span in code_spans for flag in flags_in(span)})
 
 
 class TestArgumentHints(unittest.TestCase):
@@ -109,7 +128,7 @@ class TestArgumentHints(unittest.TestCase):
             if not flags:
                 continue
             hint = read_argument_hint(path) or ""
-            missing = [flag for flag in flags if flag not in hint]
+            missing = sorted(set(flags) - flags_in(hint))
             with self.subTest(command=name):
                 self.assertEqual(
                     missing, [],
@@ -125,10 +144,7 @@ class TestArgumentHints(unittest.TestCase):
             if hint is None:
                 continue
             documented = documented_flags(path)
-            invented = [
-                flag for flag in sorted(set(re.findall(r"(--[a-z][a-z-]*)", hint)))
-                if flag not in documented
-            ]
+            invented = sorted(flags_in(hint) - set(documented))
             with self.subTest(command=name):
                 self.assertEqual(
                     invented, [],
@@ -200,3 +216,50 @@ class TestCommandDescriptions(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheReadersDoNotSilentlySkip(unittest.TestCase):
+    """Every way these helpers can return "nothing" is a test that passes without checking.
+
+    The checks above iterate real command files and `continue` when a helper finds no
+    frontmatter or no documented flags. That is right for a command with nothing to check and
+    wrong for a helper that failed to read one — and the two are indistinguishable from the
+    outside, so each way of failing to read gets pinned here.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+
+    def _write(self, text: str) -> Path:
+        path = self.dir / "cmd.md"
+        path.write_text(text, encoding="utf-8", newline="")
+        return path
+
+    def test_crlf_frontmatter_is_still_read(self):
+        path = self._write(
+            '---\r\ndescription: "Use to do a thing. Triggers include \'do the thing\'."\r\n'
+            'argument-hint: "[--plan]"\r\n---\r\n\r\n'
+            "## Arguments\r\n\r\n- Optional `--plan`: dry run.\r\n"
+        )
+        self.assertIn("Triggers include", read_description(path))
+        self.assertEqual(read_argument_hint(path), "[--plan]")
+        self.assertEqual(documented_flags(path), ["--plan"])
+
+    def test_arguments_as_the_final_section_is_still_read(self):
+        path = self._write(
+            '---\ndescription: "x"\nargument-hint: "[--plan]"\n---\n\n'
+            "## Arguments\n\n- Optional `--plan`: dry run.\n"
+        )
+        self.assertEqual(
+            documented_flags(path), ["--plan"],
+            "a command whose Arguments section runs to the end of the file read as having no "
+            "flags, which skips it silently instead of checking it",
+        )
+
+    def test_a_longer_flag_does_not_satisfy_a_shorter_one(self):
+        """`--plan` is a prefix of `--planner`; a substring test cannot tell them apart."""
+        self.assertNotIn("--plan", flags_in("[--planner <name>]"))
+        self.assertEqual(flags_in("[--planner <name>]"), {"--planner"})
+        self.assertEqual(flags_in("[--plan] [--planner <name>]"), {"--plan", "--planner"})

@@ -539,6 +539,15 @@ class TestScanSkipsFrontmatter:
         conflicts = scan_slash_commands(commands, [{"name": "Architecture"}])
         assert [c["references"] for c in conflicts] == [["Architecture"]]
 
+    def test_a_crlf_checkout_still_skips_the_frontmatter(self, tmp_path):
+        """Windows line endings must not quietly turn the skip off."""
+        commands = _command(
+            tmp_path, "example.md",
+            '---\r\ndescription: "Use when the Architecture needs explaining."\r\n---\r\n\r\n'
+            "# Example\r\n\r\nThis command explains nothing in particular.\r\n",
+        )
+        assert scan_slash_commands(commands, [{"name": "Architecture"}]) == []
+
     def test_a_command_with_no_frontmatter_is_scanned_whole(self, tmp_path):
         """Every command looked like this before descriptions existed."""
         commands = _command(

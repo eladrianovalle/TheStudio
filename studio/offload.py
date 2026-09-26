@@ -609,7 +609,12 @@ def _command_body(text: str) -> str:
 
     A file with no frontmatter is returned whole, which is what every command looked like
     before descriptions existed.
+
+    Line endings are normalised first. On a CRLF checkout there is no ``"---\n"`` to find, so
+    the frontmatter would be scanned after all and the fix would quietly not apply for that
+    reader — the worst kind of failure, because nothing says it happened.
     """
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
     if not text.startswith("---\n"):
         return text
     parts = text.split("\n---\n", 1)
