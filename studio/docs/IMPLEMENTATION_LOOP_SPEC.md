@@ -257,8 +257,9 @@ a Node repo with a `test` script gets `npm test`), and blank with instructions w
 The mutation gate is the one part it does not assume: `mutmut run` is written either way, but
 `require_mutation_check` is on only for a repo that sets mutmut's `paths_to_mutate`, because
 without it `mutmut run` guesses at a `src/` directory the repo may not have. Everywhere else the
-gate is off, and the file says what to add to turn it on. It never modifies a file that is already there. Detection is that one opening guess and
-nothing more; a wrong guess costs one edit instead of a silently mis-gated build.
+gate is off, and the file says what to add to turn it on. It never modifies a file that is
+already there. Detection is that one opening guess and nothing more; a wrong guess costs one
+edit instead of a silently mis-gated build.
 
 A project file is read **instead of** the shipped one, never merged with it — so copy over any
 `[loop]`/`[editor]` value you want to keep. Those two tables match the dataclass defaults exactly,

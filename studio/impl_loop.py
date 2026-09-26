@@ -234,6 +234,21 @@ def _node_profile(root: Path) -> StackProfile:
     )
 
 
+def _is_set(value: object) -> bool:
+    """Is this a `paths_to_mutate` value mutmut could actually act on?
+
+    An empty string, an empty list, and a list of blanks all say the same thing as saying
+    nothing: they leave mutmut guessing. The two config formats reach this from different
+    directions — TOML gives a list or a string, an INI file gives a string — so the emptiness
+    test lives in one place rather than being spelled twice and drifting.
+    """
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, tuple)):
+        return any(_is_set(item) for item in value)
+    return value is not None and value is not False
+
+
 def _mutmut_paths_are_set(root: Path) -> bool:
     """Has this repository told mutmut what to mutate?
 
@@ -259,7 +274,11 @@ def _mutmut_paths_are_set(root: Path) -> bool:
         except (configparser.Error, OSError, UnicodeDecodeError):
             pass  # Unreadable is not configured: never switch the gate on from a guess.
         else:
-            if parser.has_option("mutmut", "paths_to_mutate"):
+            # An empty value tells mutmut nothing, so it is not configuration. Read the
+            # value rather than asking whether the key exists: `has_option` is true for a
+            # bare `paths_to_mutate=`, which would switch the gate on over a setting
+            # somebody started and did not finish.
+            if parser.get("mutmut", "paths_to_mutate", fallback="").strip():
                 return True
 
     pyproject = root / "pyproject.toml"
@@ -271,7 +290,7 @@ def _mutmut_paths_are_set(root: Path) -> bool:
             return False
         tool = data.get("tool")
         mutmut = tool.get("mutmut") if isinstance(tool, dict) else None
-        if isinstance(mutmut, dict) and mutmut.get("paths_to_mutate"):
+        if isinstance(mutmut, dict) and _is_set(mutmut.get("paths_to_mutate")):
             return True
 
     return False

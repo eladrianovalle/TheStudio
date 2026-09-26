@@ -120,6 +120,40 @@ class PythonGateProfileTest(unittest.TestCase):
         )
         self.assertFalse(impl_loop.resolve_profile(self.root).require_mutation_check)
 
+    def test_an_empty_setting_is_not_configuration(self):
+        """A key somebody started and did not finish leaves mutmut guessing, same as none."""
+        for value in ("", "   "):
+            with self.subTest(value=repr(value)):
+                (self.root / "setup.cfg").write_text(
+                    f"[mutmut]\npaths_to_mutate={value}\n", encoding="utf-8"
+                )
+                self.assertFalse(impl_loop.resolve_profile(self.root).require_mutation_check)
+
+    def test_an_empty_setting_reads_the_same_in_both_formats(self):
+        """The two config files must not disagree about what "empty" means."""
+        (self.root / "setup.cfg").unlink(missing_ok=True)
+        for value in ('""', "[]", '[" "]'):
+            with self.subTest(value=value):
+                (self.root / "pyproject.toml").write_text(
+                    f"[tool.mutmut]\npaths_to_mutate = {value}\n", encoding="utf-8"
+                )
+                self.assertFalse(impl_loop.resolve_profile(self.root).require_mutation_check)
+
+    def test_the_probe_looks_where_the_stack_was_detected(self):
+        """One root answers both questions, so the two can never point at different trees.
+
+        This repository is the case worth pinning: its Python markers and its mutmut config
+        both sit under `studio/`, and its top level has neither. Asked about the top level,
+        detection finds no stack at all and the gate question never arises; asked about
+        `studio/`, it finds the stack and the config together.
+        """
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        studio_dir = repo_root / "studio"
+
+        self.assertEqual(impl_loop.resolve_profile(repo_root).stacks, ())
+        self.assertEqual(impl_loop.resolve_profile(studio_dir).stacks, ("python",))
+        self.assertTrue(impl_loop.resolve_profile(studio_dir).require_mutation_check)
+
     def test_studio_itself_still_gets_the_gate(self):
         """This repo has a scoped [mutmut] in studio/setup.cfg, so nothing regresses here."""
         studio_root = Path(__file__).resolve().parent.parent
