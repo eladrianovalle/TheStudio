@@ -43,7 +43,11 @@ def split_frontmatter(command_file: Path) -> tuple[str, str]:
     if not text.startswith("---\n"):
         return "", text
     parts = text.split("\n---\n", 1)
-    return (parts[0], parts[1]) if len(parts) == 2 else ("", text)
+    if len(parts) != 2:
+        return "", text
+    # The opening `---` is a delimiter, not frontmatter. Returning it means every caller
+    # has to know to skip a line that parses as neither a key nor a value.
+    return parts[0][len("---\n"):], parts[1]
 
 
 def flags_in(text: str) -> set[str]:
