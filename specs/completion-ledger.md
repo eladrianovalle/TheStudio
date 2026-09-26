@@ -171,7 +171,7 @@ Strict writing, tolerant reading, and the split is the difference between a feat
 repository and one that works in four. Measured across the 24 approved specs in the five consuming
 installs on this machine: the strict shape-A regex finds **zero units in 23 of them**, and zero units
 is indistinguishable from "nothing is unfinished" — the exact silence this feature exists to end. The
-tolerant opener finds **61 units instead of 9**. Orkid Garden goes from 0 to 45, hand-checked and all
+tolerant opener finds **61 units instead of 9**. One install goes from 0 to 45, hand-checked and all
 real handles. The cost is roughly 3 percent false positives (see Risks).
 
 Under either opener an entry runs from its opener to the next unit opener of either form, or the next
@@ -228,7 +228,7 @@ subprocess.run(
 - `%x1e` (record separator), never `%x00`. A NUL separator makes `git log` output binary, and any
   shell pipeline over it prints "Binary file matches" and nothing else — a silently empty built set
   that looks exactly like "no units were ever built." This is not hypothetical: it is the most likely
-  cause of the debate's first solitaire measurement reading 19 built ids where the real count is 71.
+  cause of the debate's first measurement of one install reading 19 built ids where the real count is 71.
   Parse in Python; never pipe this through `grep`.
 - Nothing is cached. The 24-hour update-check cache is deliberately not reused: a cache is a second
   source of truth that can disagree with git, and this feature exists because two sources of truth
@@ -265,7 +265,7 @@ unbuilt nor built — it is closed, counted in `stats`, and never nagged about. 
 is in git, human-editable, reviewed like any other commit, and cannot drift from the plan it
 describes. A separate state file is the machinery that turns this into a second Studio.
 
-This is already a live need. `move-advancement.md` in the solitaire install records a withdrawn unit
+This is already a live need. A spec in one install records a withdrawn unit
 as prose, because there was nowhere to put it — and that unit would nag forever.
 
 ### Contracts
@@ -484,7 +484,7 @@ added.
 
 - **The tolerant reader has roughly a 3 percent false-positive rate, by measurement.** Over the 24
   approved specs in the consuming installs it accepts 61 ids, of which 2 are not units at all —
-  `propose` and `prior_review_for` in Multica, function names that happen to be backticked inside a
+  `propose` and `prior_review_for` in one install, function names that happen to be backticked inside a
   numbered list. The failure is visible and cheap: the brief names a unit that does not exist, and
   the `/forge` command fails to resolve. It is the price of not being silent in 23 of 24 specs, and
   it is the right trade, but it is a real error rate and should be stated wherever the count prints.
@@ -503,7 +503,7 @@ added.
   command someone chose to run.
 
 - **Duplicate `unit_id`s are enforced where the problem does not exist and absent where it does.**
-  Rule 7's directory-wide check runs in Studio's CI, which has zero collisions. The solitaire install
+  Rule 7's directory-wide check runs in Studio's CI, which has zero collisions. One consuming install
   has six, will never run Studio's suite, and has no clean exit: renaming an id in an approved spec
   makes a built unit read unbuilt and nag forever, while leaving it means one build silences two
   units. *Open question:* add a reconciler-side guard — when two specs plan the same id, decline to
