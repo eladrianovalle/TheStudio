@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from config_loading import tomllib
 import argparse
+import configparser
 import json
 import os
 import string
@@ -125,19 +126,13 @@ class StackProfile:
     static_checks: tuple[str, ...] = ()
     require_mutation_check: bool = False
     mutation_command: str | None = None
+    mutation_note: str = ""
 
 
-# The gate commands for each stack whose answer is the same in every repository. Node is
-# missing on purpose: what it can offer depends on what package.json declares, so
-# _node_profile works it out per repo.
+# The gate commands for each stack whose answer is the same in every repository. Node and
+# Python are missing on purpose: what each can offer depends on what the repository itself
+# declares, so _node_profile and _python_profile work them out per repo.
 PROFILES: dict[str, StackProfile] = {
-    "python": StackProfile(
-        stacks=("python",),
-        test_command="pytest -q",
-        static_checks=("ruff check {paths}",),
-        require_mutation_check=True,
-        mutation_command="mutmut run",
-    ),
     # Recognised, deliberately unserved. A Unity test run needs a wrapper that reads the
     # result file (the editor reports success even when it discovered no tests at all),
     # and no Rust profile is shipped, so both fall through to the refusal.
@@ -239,6 +234,114 @@ def _node_profile(root: Path) -> StackProfile:
     )
 
 
+def _is_set(value: object) -> bool:
+    """Is this a `paths_to_mutate` value mutmut could actually act on?
+
+    An empty string, an empty list, and a list of blanks all say the same thing as saying
+    nothing: they leave mutmut guessing. The two config formats reach this from different
+    directions — TOML gives a list or a string, an INI file gives a string — so the emptiness
+    test lives in one place rather than being spelled twice and drifting.
+
+    Anything that is neither a string nor a list of them is **not** configuration. TOML will
+    happily hand back ``paths_to_mutate = {}``, ``0`` or ``true``, and none of those name a
+    path mutmut could mutate. The rest of this probe treats "unclear" as "not configured" —
+    an unreadable file, a section with no value — and this is the same rule: a gate switches
+    on for an answer, never for the absence of a clear no.
+    """
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, tuple)):
+        return any(_is_set(item) for item in value)
+    return False
+
+
+def _mutmut_paths_are_set(root: Path) -> bool:
+    """Has this repository told mutmut what to mutate?
+
+    The question is not whether mutmut is mentioned somewhere. It is whether
+    ``paths_to_mutate`` is set, because that is the single setting that decides whether
+    ``mutmut run`` mutates this repository's code or goes looking for a ``src/`` directory
+    that may not exist.
+
+    Both files are parsed, never searched for a substring. ``[mutmut]`` appears inside a
+    comment, a docstring, or a line somebody commented out while debugging, and none of
+    those mean the tool is configured — a gate should not switch on over text nobody
+    intended as configuration.
+
+    A ``mutmut_config.py`` is deliberately not a signal. It is mutmut's hook file, holding
+    ``pre_mutation`` and ``post_mutation``, and it sets no paths: a repository can have one
+    and still be a repository where ``mutmut run`` finds nothing to mutate.
+    """
+    setup_cfg = root / "setup.cfg"
+    if setup_cfg.is_file():
+        # Raw, so a `%` in a path is a `%`. The interpolating parser expands values at
+        # `get()` and raises on a lone `%` — `paths_to_mutate=src/%s` is enough — and that
+        # call would be outside the try below. A gate probe must not be able to crash the
+        # wizard over a character in somebody's path.
+        parser = configparser.RawConfigParser()
+        try:
+            parser.read(setup_cfg, encoding="utf-8")
+        except (configparser.Error, OSError, UnicodeDecodeError):
+            pass  # Unreadable is not configured: never switch the gate on from a guess.
+        else:
+            # An empty value tells mutmut nothing, so it is not configuration. Read the
+            # value rather than asking whether the key exists: `has_option` is true for a
+            # bare `paths_to_mutate=`, which would switch the gate on over a setting
+            # somebody started and did not finish.
+            if _is_set(parser.get("mutmut", "paths_to_mutate", fallback="")):
+                return True
+
+    pyproject = root / "pyproject.toml"
+    if pyproject.is_file():
+        try:
+            with open(pyproject, "rb") as handle:
+                data = tomllib.load(handle)
+        except (OSError, ValueError):
+            return False
+        tool = data.get("tool")
+        mutmut = tool.get("mutmut") if isinstance(tool, dict) else None
+        if isinstance(mutmut, dict) and _is_set(mutmut.get("paths_to_mutate")):
+            return True
+
+    return False
+
+
+def _python_profile(root: Path) -> StackProfile:
+    """Python's gate commands, with the mutation gate decided by this repository.
+
+    ``pytest -q`` and ``ruff check`` mean the same thing everywhere. ``mutmut run`` does
+    not: it needs the repository to say what to mutate. So the gate is offered only to a
+    repo that has said, and every other repo gets it switched off with a note saying what
+    to add — rather than a gate that fails on the first unit for a reason that has nothing
+    to do with the code being built.
+
+    ``mutation_command`` is written either way, so turning the gate on later is a one-word
+    edit rather than a lookup.
+    """
+    if _mutmut_paths_are_set(root):
+        return StackProfile(
+            stacks=("python",),
+            test_command="pytest -q",
+            static_checks=("ruff check {paths}",),
+            require_mutation_check=True,
+            mutation_command="mutmut run",
+        )
+    return StackProfile(
+        stacks=("python",),
+        test_command="pytest -q",
+        static_checks=("ruff check {paths}",),
+        require_mutation_check=False,
+        mutation_command="mutmut run",
+        mutation_note=(
+            "The mutation gate is off because nothing here sets mutmut's paths_to_mutate, so "
+            "`mutmut run` would guess at a directory this repository may not have. To turn "
+            "it on, set paths_to_mutate in a [mutmut] section of setup.cfg (or [tool.mutmut] "
+            "in pyproject.toml), then set require_mutation_check to true. Scope it narrowly: "
+            "mutmut runs the whole suite again for every mutant."
+        ),
+    )
+
+
 def resolve_profile(root: Path) -> StackProfile:
     """The gate commands Studio would offer the repository at ``root``.
 
@@ -252,6 +355,8 @@ def resolve_profile(root: Path) -> StackProfile:
         return StackProfile(stacks=stacks)
     if stacks[0] == "node":
         return _node_profile(root)
+    if stacks[0] == "python":
+        return _python_profile(root)
     return PROFILES[stacks[0]]
 
 

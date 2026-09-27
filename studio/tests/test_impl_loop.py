@@ -852,17 +852,20 @@ def test_a_blank_lint_script_is_no_lint_script(tmp_path, lint_script):
     assert resolve_profile(_node_repo(tmp_path / "bare", bare)).static_checks == ()
 
 
-def test_python_repo_is_offered_pytest_ruff_and_the_mutation_gate(tmp_path):
-    """A Python project is offered exactly the commands that used to be hard-coded.
+def test_python_repo_is_offered_pytest_and_ruff(tmp_path):
+    """A Python project is offered the two commands that mean the same thing everywhere.
 
     Offered, not applied: the wizard puts these in the repo's file, where a person can
     disagree with them, and the loader reads the file.
+
+    The mutation gate is deliberately not among them. It depends on the repository having
+    told mutmut what to mutate, so it is decided per repo — see
+    tests/test_python_gate_profile.py.
     """
     profile = resolve_profile(_python_repo(tmp_path / "py"))
 
     assert profile.test_command == "pytest -q"
     assert profile.static_checks == ("ruff check {paths}",)
-    assert profile.require_mutation_check is True
     assert profile.mutation_command == "mutmut run"
 
 
@@ -1143,24 +1146,32 @@ def test_every_marked_stack_resolves_to_a_profile():
 
     STACK_MARKERS and PROFILES are two lists that could drift apart; adding a marker row
     with no profile behind it would be a KeyError at load in a real repository.
+
+    Node and Python are the exceptions by design: both are worked out from what the
+    repository itself declares, so neither has a row in PROFILES to drift from.
     """
+    computed_per_repo = {"node", "python"}
     for stack, _ in STACK_MARKERS:
-        assert stack == "node" or stack in PROFILES, f"{stack} has no profile"
+        assert stack in computed_per_repo or stack in PROFILES, f"{stack} has no profile"
 
 
 def test_a_profiles_static_checks_cannot_be_mutated_by_a_caller(tmp_path):
-    """PROFILES is shared module state, so its lists must not be handed out by reference.
+    """A profile's lists must not be handed out by reference.
 
     A tuple makes that structural instead of something every caller has to remember. The
     wizard is the caller that matters now: it serializes a profile into a file, and a
-    profile it could edit in place would change what the next repo is offered.
+    profile it could edit in place would change what the next repo is offered. PROFILES is
+    still shared module state, and a computed profile is still frozen.
     """
-    assert isinstance(PROFILES["python"].static_checks, tuple)
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        PROFILES["python"].test_command = "npm test"
+    for stack, profile in PROFILES.items():
+        assert isinstance(profile.static_checks, tuple), f"{stack} hands out a mutable list"
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            profile.test_command = "npm test"
 
-    assert PROFILES["python"].static_checks == ("ruff check {paths}",)
-    assert resolve_profile(_python_repo(tmp_path / "py2")).static_checks == ("ruff check {paths}",)
+    computed = resolve_profile(_python_repo(tmp_path / "py2"))
+    assert computed.static_checks == ("ruff check {paths}",)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        computed.test_command = "npm test"
 
 
 def test_cli_exits_with_the_refusal_and_no_traceback(tmp_path):
