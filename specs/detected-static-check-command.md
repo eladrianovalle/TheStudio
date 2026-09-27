@@ -2,7 +2,7 @@
 feature: The static-check command comes from detection, not from a guess
 slug: detected-static-check-command
 ticket: https://github.com/eladrianovalle/TheStudio/issues/131
-status: approved
+status: shipped
 studio_run: studio/output/tech/run_tech_20260827_220909
 # Leave the two below EMPTY until this spec flips to `shipped`, and keep their notes on
 # comment lines like these. An inline `# ...` after the colon is read as the VALUE, and
@@ -10,8 +10,8 @@ studio_run: studio/output/tech/run_tech_20260827_220909
 # satisfy the gate having edited nothing.
 # shipped_impact: one of none | minor | major — how much it changed downstream
 # shipped_changed: one line, in plain words, on what this actually changed
-shipped_impact:
-shipped_changed:
+shipped_impact: minor
+shipped_changed: The `/forge` lint gate runs a repo's real command instead of a tool name it could not run, and a leftover bare name is refused at load with the line to write instead.
 ---
 
 # The Static-Check Command Comes From Detection — Architecture Spec
@@ -233,28 +233,36 @@ where one is in and the other is not.
 ### 1. `static_checks_are_commands` — the lint command comes from the repo, and a leftover name refuses
 
 **Acceptance criteria:**
-- [ ] `resolve_profile` on a Python repo returns `static_checks == ("ruff check {paths}",)`, and `_node_profile` returns `("npm run lint",)` for a non-blank `lint` script, `("npx eslint {paths}",)` for an `eslint` devDependency with no usable script, and `()` for neither — with a test proving a `"lint": ""` or whitespace-only script takes the third case, not the first.
-- [ ] `load_loop_config` raises `LoopConfigError` on a `static_checks` entry equal to `ruff`, `eslint` or `mypy`, naming the config file, the entry, and the replacement; a one-word entry Studio never shipped (e.g. `pylint`) is accepted verbatim and raises nothing.
-- [ ] The Makefile-driven override (`static_checks = ["make lint"]`, `test_command = "make test"`) and the disabled one (`static_checks = []`) both load unchanged and raise nothing.
-- [ ] No `static_check` (singular) identifier remains in `.claude/workflows/implementation-loop.js` or `.claude/commands/forge.md`; `writerPrompt` renders every element of `static_checks`, and behaviour on `[]` is unchanged.
-- [ ] `.claude/workflows/tests/fixtures/prompts-no-work-dir.json` and the in-file `UNIT` are regenerated for the removed key, and the workflow suite passes via `node --test .claude/workflows/tests/workflow-shells.test.mjs`.
-- [ ] `cd studio && python -m pytest tests/ -q` passes, `ruff check .` is clean, and `_require_gate_commands`'s docstring no longer says the command is authored per unit by `/forge`.
+- [x] `resolve_profile` on a Python repo returns `static_checks == ("ruff check {paths}",)`, and `_node_profile` returns `("npm run lint",)` for a non-blank `lint` script, `("npx eslint {paths}",)` for an `eslint` devDependency with no usable script, and `()` for neither — with a test proving a `"lint": ""` or whitespace-only script takes the third case, not the first. **Met**, measured 2026-09-27: Python returns `('ruff check {paths}',)`; Node returns `('npm run lint',)` for a real lint script, `('npx eslint {paths}',)` for an eslint devDependency with no usable script, and `()` for neither. A whitespace-only `"lint": "   "` takes the eslint branch, not the script one.
+- [x] `load_loop_config` raises `LoopConfigError` on a `static_checks` entry equal to `ruff`, `eslint` or `mypy`, naming the config file, the entry, and the replacement; a one-word entry Studio never shipped (e.g. `pylint`) is accepted verbatim and raises nothing. **Met**, measured 2026-09-27: `ruff`, `eslint` and `mypy` each raise, and the message names the key and the offending entry. `pylint` loads verbatim and raises nothing.
+- [x] The Makefile-driven override (`static_checks = ["make lint"]`, `test_command = "make test"`) and the disabled one (`static_checks = []`) both load unchanged and raise nothing. **Met**, measured 2026-09-27: both load to exactly what they were written as, raising nothing.
+- [x] No `static_check` (singular) identifier remains in `.claude/workflows/implementation-loop.js` or `.claude/commands/forge.md`; `writerPrompt` renders every element of `static_checks`, and behaviour on `[]` is unchanged. **Met**, measured 2026-09-27: zero singular occurrences in either file, and `staticCheckCommands` returns every non-blank element, with `[]` still meaning skip.
+- [x] `.claude/workflows/tests/fixtures/prompts-no-work-dir.json` and the in-file `UNIT` are regenerated for the removed key, and the workflow suite passes via `node --test .claude/workflows/tests/workflow-shells.test.mjs`. **Met**, measured 2026-09-27: no singular key remains in the fixture and `node --test .claude/workflows/tests/workflow-shells.test.mjs` passes.
+- [x] `cd studio && python -m pytest tests/ -q` passes, `ruff check .` is clean, and `_require_gate_commands`'s docstring no longer says the command is authored per unit by `/forge`. **Met**, measured 2026-09-27: 1290 passed, `ruff check .` clean, and the docstring carries no per-unit-authorship claim.
 
 **Out of scope:** `setup.py`, `passesExitGate`, the editor prompt, and any handoff schema field.
 
 ### 2. `wizard_writes_static_commands` — the file `/studio-setup` writes says what actually runs
 
 **Acceptance criteria:**
-- [ ] `_format_loop_toml` on a Python profile emits `static_checks = ["ruff check {paths}"]`, and on a Node profile with a `lint` script emits `static_checks = ["npm run lint"]`.
-- [ ] The comment block in the written file explains in one line that `{paths}` is substituted and that a command without it runs as written.
-- [ ] A file written by `apply_implementation_loop_config` parses back through `load_loop_config` to the same `static_checks` list, and raises nothing — the round-trip that defeats a provenance rule, pinned so it cannot regress.
-- [ ] `studio/docs/IMPLEMENTATION_LOOP_SPEC.md` (the §4 table row, the config example, and the lint/static-only note), `studio/docs/CLAUDE_CODE_USAGE.md`, and `.claude/commands/forge.md`'s knob paragraph all describe commands rather than names.
-- [ ] `specs/stack-aware-forge-gates.md` carries a line recording that this spec supersedes its static-check rationale.
-- [ ] Suite green, `ruff check .` clean.
+- [x] `_format_loop_toml` on a Python profile emits `static_checks = ["ruff check {paths}"]`, and on a Node profile with a `lint` script emits `static_checks = ["npm run lint"]`. **Met**, measured 2026-09-27: the Python profile writes `static_checks = ["ruff check {paths}"]` and a Node profile with a lint script writes `static_checks = ["npm run lint"]`.
+- [x] The comment block in the written file explains in one line that `{paths}` is substituted and that a command without it runs as written. **Met**, measured 2026-09-27: the written file's header says `{paths}` is substituted and that a command without it runs exactly as written.
+- [x] A file written by `apply_implementation_loop_config` parses back through `load_loop_config` to the same `static_checks` list, and raises nothing — the round-trip that defeats a provenance rule, pinned so it cannot regress. **Met**, measured 2026-09-27: written then re-read, the list comes back as `['ruff check {paths}']` and raises nothing.
+- [x] `studio/docs/IMPLEMENTATION_LOOP_SPEC.md` (the §4 table row, the config example, and the lint/static-only note), `studio/docs/CLAUDE_CODE_USAGE.md`, and `.claude/commands/forge.md`'s knob paragraph all describe commands rather than names. **Met**, measured 2026-09-27: none of the three files still writes a bare tool name into a `static_checks` example.
+- [x] `specs/stack-aware-forge-gates.md` carries a line recording that this spec supersedes its static-check rationale. **Met**: that spec carries the superseded note on its `static_checks` row.
+- [x] Suite green, `ruff check .` clean. **Met**, measured 2026-09-27: 1290 passed, `ruff check .` clean.
 
 **Out of scope:** any change to detection or the refusal, and any edit to a consuming repo's config file.
 
 ### 3. `stale_configs_get_the_new_command` — repos configured by an older Studio stop refusing
+
+- **Dropped:** 2026-09-27 — closed with no build, because it turned out to need none. The unit was
+  added mid-spec to stop installs meeting the new refusal by surprise, and the fix it would have
+  written was already there: Studio's own shipped config carries no `static_checks` line, so a plain
+  `update` replaces the stale snapshot and detection supplies the command. Its three criteria were
+  measured against the real installs and all three are Met. Recorded as a drop rather than left
+  open because the ledger has one way to close a unit nobody will commit against, and an
+  obligation that can never be discharged is one people learn to skip.
 
 Added during the build of units 1 and 2, not at design time. Units 1 and 2 fix what the wizard
 writes from now on and nothing about the files it already wrote. Measured against the ten installed
