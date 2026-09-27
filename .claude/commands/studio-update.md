@@ -1,3 +1,7 @@
+---
+description: "Use to bring this project's installed Studio source and slash commands up to the upstream version. Triggers include 'update Studio', the session-start notice saying an update is available, and a Studio command behaving like an older version of itself. It changes the installed copy under .studio/, never the project's own code."
+---
+
 # Studio Update
 
 Update this project's installed Studio source and slash commands from the upstream repo.
