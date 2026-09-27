@@ -1034,14 +1034,21 @@ class TestBuildPlanShape:
         """
         spec = _approved_specs()[0]
         original = spec.read_text(encoding="utf-8")
-        assert _violations(spec.name, original, "unused.md", None) == []
+        # The spec's real evidence file, not a stand-in. An approved spec that promises
+        # evidence is violating nothing by having it, and a fabricated name makes the
+        # baseline read as a violation of a rule this case is not about. Which spec is
+        # first here changes whenever one ships, so the call cannot assume this one has no
+        # Verification section.
+        results = SPECS_DIR / f"{spec.stem}{_RESULTS_SUFFIX}"
+        results_text = results.read_text(encoding="utf-8") if results.exists() else None
+        assert _violations(spec.name, original, results.name, results_text) == []
 
         rewritten = _as_a_list_item(original)
         assert rewritten != original, (
             f"specs/{spec.name} has no `### N. `id` — title` entry to rewrite, so this case "
             "cannot show the rule firing."
         )
-        problems = _violations(spec.name, rewritten, "unused.md", None)
+        problems = _violations(spec.name, rewritten, results.name, results_text)
         assert problems, f"rewriting an entry of specs/{spec.name} as a list item was accepted"
         assert all(f"specs/{spec.name}" in problem for problem in problems)
         assert any("instead of a heading" in problem for problem in problems)
