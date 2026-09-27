@@ -1422,3 +1422,62 @@ class TestIsWizardTemplate:
 
     def test_false_for_a_file_that_is_not_there(self, project: Path) -> None:
         assert not setup.is_wizard_template(project / ".studio" / "nope.toml")
+
+
+# ---------------------------------------------------------------------------
+# --defaults fills the gaps; it does not reset the project
+# ---------------------------------------------------------------------------
+
+
+class TestDefaultsLeaveExistingChoicesAlone:
+    """A default is for a question nobody answered, never a reason to discard an answer.
+
+    `--status` recommends running `--defaults` the moment a new step ships, so this is the
+    command a configured project is told to run to configure one new thing. It used to apply
+    all seven steps and rewrite `choices` wholesale — role pack, role overrides, role
+    customizations and personas replaced with defaults for the sake of one pending step
+    (issue #179). That happened for real across several installs on 2026-09-16.
+    """
+
+    def _configured(self, project: Path) -> dict:
+        """A project that answered everything, then had a new step appear beneath it."""
+        setup.apply_defaults(project)
+        state = setup.load_setup_state(project)
+        state["choices"]["role_pack"] = "custom_pack"
+        state["choices"]["role_customizations"] = {"engineering": {"focus": "hand-written"}}
+        state["choices"]["persona_customizations"] = {"tech": {"advocate": "hand-written"}}
+        # The new step: completed at a version older than the one that introduced it.
+        state["completed_steps"]["implementation_loop_config"] = 0
+        setup.save_setup_state(project, state)
+        return state
+
+    def test_a_pending_step_does_not_reset_the_answered_ones(self, project: Path) -> None:
+        self._configured(project)
+
+        after = setup.apply_defaults(project)
+
+        assert after["choices"]["role_pack"] == "custom_pack", (
+            "running --defaults for one pending step replaced the project's chosen role pack"
+        )
+        assert after["choices"]["role_customizations"] == {
+            "engineering": {"focus": "hand-written"}
+        }
+        assert after["choices"]["persona_customizations"] == {
+            "tech": {"advocate": "hand-written"}
+        }
+
+    def test_the_pending_step_is_still_applied(self, project: Path) -> None:
+        """Leaving answered steps alone must not mean doing nothing."""
+        self._configured(project)
+
+        after = setup.apply_defaults(project)
+
+        assert "implementation_loop_config" in after["choices"]
+        assert not setup.pending_steps(after), "the pending step was skipped, not applied"
+
+    def test_an_unconfigured_project_still_gets_every_default(self, project: Path) -> None:
+        """Every step is pending in a fresh project, so all of them are filled in."""
+        state = setup.apply_defaults(project)
+
+        assert not setup.pending_steps(state)
+        assert state["choices"]["role_pack"]

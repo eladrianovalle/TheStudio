@@ -881,7 +881,18 @@ def apply_cleanup(
 
 
 def apply_defaults(target: Path) -> Dict[str, Any]:
-    """Apply all setup steps with default values.
+    """Fill in the setup steps this project has not answered, and leave the rest alone.
+
+    Only **pending** steps are defaulted. A step somebody already answered keeps its answer,
+    because a default is what you want when there is no choice on record — never a reason to
+    discard one there is.
+
+    This used to apply all seven steps every time, and ``--status`` recommends running it the
+    moment a new step appears (issue #179). So a project that had picked a role pack, written
+    role overrides and customised its personas was told to run one command to configure one
+    new step, and that command replaced all of it with defaults. It happened for real on
+    2026-09-16, across several installs, and the only reason it was recoverable is that one of
+    them tracks ``SETUP.json`` in git.
 
     Returns the resulting state.
     """
@@ -889,14 +900,22 @@ def apply_defaults(target: Path) -> Dict[str, Any]:
     state = load_setup_state(target)
     studio_dir = _find_studio_dir(target)
 
-    default_pack = get_default_pack_name(studio_dir)
-    apply_role_pack(target, default_pack, state=state, _save=False)
-    apply_role_customization(target, {}, state=state, _save=False)
-    apply_persona_customization(target, {}, state=state, _save=False)
-    apply_cleanup(target, state=state, _save=False)
-    apply_unstale_config(target, {}, state=state, _save=False)
-    apply_smoke_config(target, {}, state=state, _save=False)
-    apply_implementation_loop_config(target, state=state, _save=False)
+    pending = {step["name"] for step in pending_steps(state)}
+
+    if "role_pack" in pending:
+        apply_role_pack(target, get_default_pack_name(studio_dir), state=state, _save=False)
+    if "role_customization" in pending:
+        apply_role_customization(target, {}, state=state, _save=False)
+    if "persona_customization" in pending:
+        apply_persona_customization(target, {}, state=state, _save=False)
+    if "cleanup" in pending:
+        apply_cleanup(target, state=state, _save=False)
+    if "unstale_config" in pending:
+        apply_unstale_config(target, {}, state=state, _save=False)
+    if "smoke_config" in pending:
+        apply_smoke_config(target, {}, state=state, _save=False)
+    if "implementation_loop_config" in pending:
+        apply_implementation_loop_config(target, state=state, _save=False)
 
     save_setup_state(target, state)
     return state
@@ -983,7 +1002,10 @@ def show_status(target: Path) -> str:
         lines.append("Studio setup: NOT CONFIGURED")
         lines.append(f"  {len(pend)} step(s) pending: {', '.join(s['label'] for s in pend)}")
         lines.append("")
-        lines.append("Run /studio-setup or: python run_phase.py setup --target . --defaults")
+        lines.append(
+            "Run /studio-setup to answer them, or accept defaults for the pending ones "
+            "with: python run_phase.py setup --target . --defaults"
+        )
         return "\n".join(lines)
 
     lines.append("Studio setup status:")
