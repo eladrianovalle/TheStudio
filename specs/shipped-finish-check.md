@@ -247,6 +247,14 @@ a pointer line so the reversal is discoverable from the document that recorded i
 
 ## Risks & Open Questions
 
+**Unit 1 breaks the author's own finish-check the moment it merges.** `~/.claude/hooks/finish-check.py`
+is a symlink into `.claude/hooks/`, and unit 1 deletes the file it points at. From the next `git pull`
+the global registration invokes a dangling path: the hook stops running, and it stops silently,
+because a Stop hook that cannot start is one the harness lets through. Whoever builds unit 1 must, in
+the same sitting, repoint that symlink at `studio/finish_check.py` or delete the global entry and
+install the per-repo one. The order is: build, repoint, then verify a stop is still refused — not
+"merge and find out."
+
 **A global registration already exists and will double-fire.** `~/.claude/settings.json` on the
 author's machine registers this hook under `hooks.Stop` for *every* project. Once a per-repo entry is
 installed, both fire on the same stop: two processes racing one marker, one writing it while the other
@@ -306,7 +314,7 @@ nothing in that directory reaches a consuming repo. Tests in `studio/tests/test_
 - [ ] For each hostile `session_id` — `"../../x"`, `"/etc/passwd"`, `"a/b"`, `".."`, `"\\..\\x"`, one containing `\x00`, and a 4 KB string — `marker_path` returns a direct child of `<tempdir>/studio-finish-check/` whose name is 64 hex characters plus `.fired`; and a block-then-allow run with each of them writes and deletes only that file, leaving a sentinel file planted at the path the raw id would have resolved to untouched.
 - [ ] Every marker resolves under the temp directory and no test run writes any file inside the repository — the override cases copy the module into a temporary `.studio/source/` rather than writing at the repo root.
 - [ ] With a readable non-empty override beside the copied module the printed `reason` equals that file's text, and for each of absent, empty, unreadable and over-cap it equals `DEFAULT_REASON`.
-- [ ] `.claude/hooks/finish-check.py` is deleted, its README no longer claims the installer ships nothing from that directory, and no file in the repo other than `studio/finish_check.py` contains the default paragraph.
+- [ ] `.claude/hooks/finish-check.py` is deleted, its README no longer claims the installer ships nothing from that directory, no file in the repo other than `studio/finish_check.py` contains the default paragraph, and the unit's delivery note says in plain words that any symlink or global registration pointing at the deleted path must be repointed in the same sitting — a Stop hook that cannot start fails open and stops silently.
 
 **Out of scope:** the installer, the settings entry, the flag, the sentinel, and any use of payload fields beyond `session_id` and `stop_hook_active`.
 
