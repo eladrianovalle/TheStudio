@@ -179,7 +179,7 @@ blocking finish-check is a real person.
 
 ### Dependencies
 
-`json`, `os`, `sys`, `tempfile`, `time`. No `pathlib` — `os.path` throughout, matching the reference
+`hashlib`, `json`, `os`, `sys`, `tempfile`, `time`. No `pathlib` — `os.path` throughout, matching the reference
 and saving an import. No Studio module, which is the property that rules out making this a
 `run_phase.py` subcommand: that module imports `config_loading`, `tomllib`, `stats` and `obligations`,
 any of which can raise at import time, *before* argparse could reach a handler that exits 0.
