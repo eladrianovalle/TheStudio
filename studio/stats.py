@@ -282,9 +282,10 @@ def near_miss_build_plan_section(spec_text: str) -> str | None:
 # How a Build Plan entry opens, read tolerantly: a level-3 heading carrying an ordinal, or a
 # bare numbered list item, either of them free to wrap the id in bold markers. Rule 7 in
 # `tests/test_spec_verification.py` holds new approved specs to the heading form alone; this
-# reader has to read what is already on disk, and across the approved specs in the installs on
-# this machine the strict shape finds nothing at all in 23 of 24 of them. Zero units is
-# indistinguishable from "nothing is unfinished", which is the silence this ledger exists to end.
+# reader has to read what is already on disk, and most approved specs written before rule 7
+# existed use the list-item form — so the strict shape alone reads them as planning nothing. Zero
+# units is indistinguishable from "nothing is unfinished", which is the silence this ledger
+# exists to end.
 #
 # The `snake_case` demand is not a style preference. It is what stops the reader handing a
 # caller `/forge --spec doc-parity-tests --unit studio/tests/test_doc_parity.py` — a command
@@ -450,8 +451,8 @@ def mentioned_unit_ids(spec_text: str) -> set[str]:
     This answers a different question from :func:`parse_build_plan` and so it needs a different
     reader. "Which approved spec still owes this unit?" reads Build Plans; "was this id ever
     planned anywhere?" reads the whole document of every spec, because a unit planned under a
-    spec that has since shipped is finished work, not undisciplined work. Without it the
-    built-but-never-planned count in this repository reads 41 against a truth near 20, and a
+    spec that has since shipped is finished work, not undisciplined work. Without it every unit a
+    shipped spec ever planned is counted as unplanned, which roughly doubles the figure — and a
     count twice the truth is one people learn to ignore.
     """
     return set(_BACKTICKED_ID.findall(spec_text))
