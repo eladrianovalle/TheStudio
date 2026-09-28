@@ -252,11 +252,11 @@ is a symlink into `.claude/hooks/`, and unit 1 deletes the file it points at. Fr
 the global registration invokes a dangling path: the hook stops running, and it stops silently,
 because a Stop hook that cannot start is one the harness lets through. Whoever builds unit 1 must, in
 the same sitting, repoint that symlink at `studio/finish_check.py` or delete the global entry and
-install the per-repo one. The order is: build, repoint or remove, then verify a stop is still refused — not
-"merge and find out." Repointing is a **stopgap until unit 2 rolls out**, not an end state: it keeps
-the global registration alive, which the next paragraph says has to go, and the runtime hook never
-reads `.studio/finish-check.off` — only the installer does — so a repointed global entry keeps firing
-in the baseline arm. No measured stop may be taken while it stands.
+install the per-repo one. The order is: build, repoint or remove, then verify a stop is still
+refused — not "merge and find out." Repointing is a **stopgap until unit 2 rolls out**, not an end
+state: it keeps the global registration alive, which the next paragraph says has to go, and the
+runtime hook never reads `.studio/finish-check.off` — only the installer does — so a repointed global
+entry keeps firing in the baseline arm. No measured stop may be taken while it stands.
 
 **A global registration already exists and will double-fire.** `~/.claude/settings.json` on the
 author's machine registers this hook under `hooks.Stop` for *every* project. Once a per-repo entry is
