@@ -48,7 +48,7 @@ flowchart TD
     PARSE -- "no, or not an object" --> EMPTY["payload = {}"]
     PARSE -- yes --> OK[payload]
     EMPTY --> KEY
-    OK --> KEY["session_id, else 'unknown-session'<br/>marker = tempdir/studio-finish-check/&lt;id&gt;.fired"]
+    OK --> KEY["session_id, else 'unknown-session'<br/>marker = tempdir/studio-finish-check/&lt;sha256(id)&gt;.fired"]
     KEY --> SWEEP[sweep markers older than the cap]
     SWEEP --> ACTIVE{"stop_hook_active true?"}
     ACTIVE -- yes --> ALLOW
@@ -123,7 +123,11 @@ The per-session marker file is the backstop for that field being absent or renam
 makes "block at most once per session per turn" true rather than hoped for. If a retry ever arrives
 later than the marker's cap, `stop_hook_active` is true on it and the stop is allowed regardless.
 
-The marker is `<tempdir>/studio-finish-check/<session_id>.fired`, in one place always. `scratchpad_dir`
+The marker is `<tempdir>/studio-finish-check/<sha256(session_id) hex>.fired`, in one place always.
+The id is hashed, never used raw: stdin is untrusted, and a `session_id` holding `/`, `..` or an
+absolute path would otherwise let the delete on `stop_hook_active` or the write on block reach
+outside the marker directory. A hex digest cannot contain a separator, so every marker is a direct
+child of `studio-finish-check/` whatever the payload says. `scratchpad_dir`
 appears in the payload but is **per-session, not per-invocation** — present in 92 of 182 real
 payloads and in only 6 of 47 sessions, with none mixed — so a branch reading it would be two code
 paths for one outcome. The temp directory also sidesteps `.studio/` being tracked in some installs
@@ -137,7 +141,7 @@ DEFAULT_REASON: str            # the shipped paragraph
 MARKER_MAX_AGE_SECONDS = 600   # marker debris older than this is swept and ignored
 OVERRIDE_MAX_BYTES: int        # a paragraph, not a document
 
-def marker_path(session_id: str) -> str: ...
+def marker_path(session_id: str) -> str: ...  # <tempdir>/studio-finish-check/<sha256 hex>.fired
 def reason_text() -> str:       # override if readable and non-empty, else DEFAULT_REASON
 def main() -> None: ...         # reads stdin, exits 0 on every path
 ```
@@ -290,9 +294,10 @@ nothing in that directory reaches a consuming repo. Tests in `studio/tests/test_
 
 **Acceptance criteria:**
 
-- [ ] `studio/finish_check.py` imports only `json`, `os`, `sys`, `tempfile` and `time`, and a test asserts directly that it imports no Studio module — not by way of `test_stdlib_only.py`, whose `_is_local` deliberately permits them.
+- [ ] `studio/finish_check.py` imports only `hashlib`, `json`, `os`, `sys`, `tempfile` and `time`, and a test asserts directly that it imports no Studio module — not by way of `test_stdlib_only.py`, whose `_is_local` deliberately permits them.
 - [ ] Given a payload with a `session_id` and `stop_hook_active` false, the process exits 0 and stdout is exactly one JSON object whose `decision` is `block`; given the same `session_id` again it exits 0 with empty stdout, and the marker file is gone from disk.
 - [ ] Each of `""`, `"not json"`, `"[]"`, `"\"x\""`, `"3"` and 8 KB of binary noise exits 0 with empty stderr, and a test that forces an exception inside `main` also exits 0.
+- [ ] For each hostile `session_id` — `"../../x"`, `"/etc/passwd"`, `"a/b"`, `".."`, `"\\..\\x"`, one containing `\x00`, and a 4 KB string — `marker_path` returns a direct child of `<tempdir>/studio-finish-check/` whose name is 64 hex characters plus `.fired`; and a block-then-allow run with each of them writes and deletes only that file, leaving a sentinel file planted at the path the raw id would have resolved to untouched.
 - [ ] Every marker resolves under the temp directory and no test run writes any file inside the repository — the override cases copy the module into a temporary `.studio/source/` rather than writing at the repo root.
 - [ ] With a readable non-empty override beside the copied module the printed `reason` equals that file's text, and for each of absent, empty, unreadable and over-cap it equals `DEFAULT_REASON`.
 - [ ] `.claude/hooks/finish-check.py` is deleted, its README no longer claims the installer ships nothing from that directory, and no file in the repo other than `studio/finish_check.py` contains the default paragraph.
