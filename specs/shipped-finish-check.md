@@ -313,6 +313,6 @@ global-registration removal step.
 - [ ] A `settings.local.json` that is a JSON array, one whose `hooks` is a string, and one whose `hooks.Stop` is a dict each produce one warning and a byte-identical file from both `init` and `update`, raising nothing.
 - [ ] `init` writes `.studio/source/finish_check.py`, and `MANIFEST.json` records no entry for it; a subsequent `update` overwrites a locally-edited copy of it and reports no BLOCKED state over that file.
 - [ ] `.studio/finish-check.txt` and `.studio/finish-check.off` are written by neither `init` nor `update`, and appear in no manifest.
-- [ ] README, `studio/docs/CLAUDE_CODE_USAGE.md`, `studio/docs/API.md` and `studio/docs/ARCHITECTURE.md` document the flag, the sentinel, the override file, the one-extra-round-trip-per-turn cost, and the instruction to remove any global `Stop` registration of this hook before rollout; `studio/tests/test_doc_parity.py` passes.
+- [ ] README, `studio/docs/CLAUDE_CODE_USAGE.md`, `studio/docs/API.md` and `studio/docs/ARCHITECTURE.md` document the flag, the sentinel, the override file, the one-extra-round-trip-per-turn cost, and the instruction to remove any global `Stop` registration before rollout; `specs/obligation-queue.md`'s "No Stop hook" Non-Goal carries a line pointing at this spec so the reversal is discoverable from the document that recorded the cut; `studio/tests/test_doc_parity.py` passes.
 
 **Out of scope:** removing anyone's global registration automatically, and any cross-install measurement.
