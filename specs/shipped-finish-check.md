@@ -3,11 +3,11 @@ feature: Shipped Finish-Check Stop Hook
 slug: shipped-finish-check
 ticket: https://github.com/eladrianovalle/TheStudio/issues/209
 # status: draft → approved (a human approved it) → shipped (built AND verified)
-status: draft
+status: approved
 studio_run: studio/output/tech/run_tech_20260928_163630
 # verification_due: the date the evidence is due (YYYY-MM-DD). Required once this spec is
 # `approved`, and only if it carries a `## Verification` section — no section, no deadline.
-verification_due:
+verification_due: 2026-10-28
 # Leave the two below EMPTY until this spec flips to `shipped`, and keep their notes on
 # comment lines like these. An inline `# ...` after the colon is read as the VALUE, and
 # `shipped_changed` has no vocabulary check to catch it — so a spec could otherwise
