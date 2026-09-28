@@ -16,31 +16,26 @@ suite once this spec says `status: shipped` — every heading here needs an answ
 > in the turn that follows the block. Anything less and the hook is a tax that buys a reworded message.
 
 ## What happened
-
 | Condition | What was run | Times | Criterion met | Notes |
 |---|---|---|---|---|
 | Baseline (feature off) | FILL_ME | FILL_ME | FILL_ME | FILL_ME |
 | With the feature | FILL_ME | FILL_ME | FILL_ME | FILL_ME |
 
-"Feature off" here means `.studio/finish-check.off` in place and the update re-run. The baseline row should read "no". If work deferred at a stop got finished anyway with the hook off,
-stop and say so: a hook that catches what something else already catches has not been shown to do
-anything.
-
-**Before trusting either row, check that neither arm was void.** A baseline is only a baseline if the
-behaviour under test cannot reach the agent another way — and here that is a real hazard, because a
-global `Stop` registration of this same hook covers every project on the author's machine. If it is
-still installed, the "hook off" arm is not off. Confirm it is gone before the first measured stop, and
-say in the Notes column how you confirmed it.
+The baseline row should read "no". If the criterion was already met with the feature off, stop and
+say so: a feature that fixes a problem you could never trigger has not been shown to do anything.
+**Before trusting either row, check that neither arm was void.** Four of the six runs behind
+`specs/find-before-you-grep-eval-results.md` (in the Studio repo) were, and both failure modes
+generalise: a baseline is only a baseline if the behaviour under test cannot reach the agent by
+another route (a skill, a hook, an MCP server, CLAUDE.md), and a treatment is only a treatment if
+the file carrying it actually loads.
 
 ## What this doesn't prove
-
 Required — this section is the point of the file.
 - Did the criterion pass *as written*, un-rewritten after the fact? Name every number that moved the
-  wrong way, cost included — one extra model round-trip per turn is the price, and it should appear
-  here as a figure rather than an aside.
-- What could a reader wrongly conclude from that table? At minimum: how many distinct repos and
-  sessions the 30 stops came from, whether one long session dominated, who judged "a concrete change"
-  and whether they knew which arm they were reading.
+  wrong way, cost included.
+- What could a reader wrongly conclude from that table? At minimum: the sample size, the conditions
+  you did not test, and the alternative explanation you can't rule out. "Nothing" is not an answer;
+  if you can't name a limit, you haven't looked yet.
 
 FILL_ME
 

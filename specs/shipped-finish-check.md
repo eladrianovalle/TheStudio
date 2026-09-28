@@ -278,6 +278,12 @@ testable and are covered by the Build Plan; this section is about the only thing
 - **Baseline.** The same sessions with the hook off, via `.studio/finish-check.off`. Reproduce on
   demand by touching that sentinel and re-running `update`. The baseline expectation is that work
   deferred at a stop stays deferred: the whole claim is that nothing else catches it.
+- **The specific way this measurement goes void.** A global `Stop` registration of this same hook
+  covers every project on the author's machine. Leave it installed and the "feature off" arm is
+  not off — it is a second copy of the treatment, and the comparison measures nothing. Confirm it
+  is gone before the first measured stop and record how you confirmed it. The per-turn cost also
+  belongs in the results as a figure, not an aside: one extra model round-trip per turn is what
+  the hit rate is being bought with.
 - **Where the evidence goes.** `specs/shipped-finish-check-eval-results.md`, created from the skeleton
   when this spec is approved.
 - **Stop condition.** While that file still says `FILL_ME`, nobody may call this feature working and
