@@ -132,9 +132,10 @@ const WRITER_HANDOFF = {
     },
     static_ok: { type: 'boolean', description: 'true only if every configured static_checks command is clean — the AND across them' },
     mvi_claimed: { type: 'boolean', description: 'writer\'s DECLARATION it finished a complete thought — a trigger, not a verdict' },
-    // Required, not optional: a handoff that simply omits this object is how 31 records
-    // ended up saying nothing at all about the mutation check, and another 81 said
-    // `performed: false` without ever saying why. `reason` is what closes that.
+    // Required, not optional. When this object was optional, handoffs simply omitted it and
+    // said nothing about the mutation check at all; when it was present, `performed: false`
+    // arrived without a why, so "not configured" and "skipped" were the same record. `reason`
+    // is what closes that.
     mutation_check: {
       type: 'object',
       required: ['performed'],
@@ -415,8 +416,8 @@ if (entryGate && staticOkUnreported(writer, staticRequired)) {
 // A skipped mutation check has to say why. The schema can require `performed`, but it cannot say
 // "and when that is false, a reason is required" — JSON Schema expresses that only through if/then,
 // which this shell does not use. So the check lives here, where the handoff has already landed.
-// `{"performed": false}` with no reason is the exact shape of the 81 records this field exists to
-// replace. It is a transcript line only: it does not flag the unit or change the returned result.
+// `{"performed": false}` with no reason is the exact shape this field exists to replace. It is a
+// transcript line only: it does not flag the unit or change the returned result.
 if (skippedMutationCheckWithoutReason(writer)) {
   log('Writer skipped the mutation check and recorded no reason — one of not_configured, nothing_to_mutate, not_reached was required.')
 }
