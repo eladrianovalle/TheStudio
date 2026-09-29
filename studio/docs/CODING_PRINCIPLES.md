@@ -91,6 +91,12 @@ Mind the word collision. Studio's contrarian also ends with `VERDICT: APPROVED` 
 - Cut the tells of machine-written prose: inflated phrasing, filler, hedging, and padding add length without adding meaning.
 - Say what a thing does and why it matters, not just its name. "Refuses to overwrite your local edits" beats "enforces the clobber-guard precondition."
 - Match the voice already in the file instead of importing your own.
+- **A number in a comment is a claim, and a claim needs a source that ships.** Counts, dates, line
+  numbers and "measured across N repos" read as evidence, so a reader will act on them — but a
+  measurement taken on one machine on one day is reproducible by nobody once the code is
+  installed somewhere else. Cite an artifact that travels with the file (a test or a fixture), or
+  say the thing the number was evidence *for* and drop the number. The reasoning rarely needed
+  the figure: "slow on 3 of the 5 machines I tried" says less than "slow when the cache is cold."
 - Match the length of a file to what it actually has to say — no filler sections, no restating one point three ways. CLAUDE.md and architecture docs drift toward bloat because appending is easier than editing, so prefer editing a line over appending a section.
 - The test: could a teammate who is new to the code read it once and understand it, without asking you to translate?
 
