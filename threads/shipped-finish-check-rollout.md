@@ -23,7 +23,7 @@ blocking sits undone. Done when the eleven installs carry it and
   sentinel, docs in four files, and the pointer in `obligation-queue.md`'s Non-Goal.
 - The comment rule that two downstream reviewers had to teach us is in the shipped coding
   principles (#214), so it reaches every install's `CLAUDE.md`.
-- `main` is `8a16a4a`, clean, **no open Studio PRs**, suite 1359, `ruff check .` clean.
+- `main` is `8a16a4a`, clean, **no open Studio PRs besides this handoff**, suite 1359, `ruff check .` clean.
 - The obligation queue reports **nothing owed**.
 - `~/.claude/hooks/finish-check.py` was repointed at `studio/finish_check.py` and verified live
   (first stop refused with the paragraph intact, second allowed).
@@ -78,6 +78,15 @@ After that, sweep per `project_cross_repo_push_procedure`.
 - **The evidence file's skeleton is pinned.** While `## What happened` says `FILL_ME`, every line of
   that section must match what `/spec` prints — table rows and guidance prose both. Put anything
   feature-specific in the spec's Verification section instead.
+- **Subagents dispatched into `_Alfred` must be told `Vault/Private/` is off-limits.** It is decrypted
+  and plaintext at rest on this machine; the encryption protects the remote only.
+- **`_Alfred` cannot take a plain worktree.** `git worktree add` dies with
+  `smudge filter git-crypt failed` because a worktree has no key. Use a sparse checkout that never
+  materialises the vault: `git worktree add --no-checkout`, then `git sparse-checkout init --no-cone`,
+  `git sparse-checkout set '/*' '!/Vault/'`, then `git checkout`.
+- **Seeding a worktree's `.studio/` with `cp -R` silently no-ops** when the repo tracks any file
+  under `.studio/` — `update` then says "Studio not installed". Copy `source`, `VERSION` and
+  `MANIFEST.json`, not the directory.
 - **The finish-check's own failure mode is silence.** A Stop hook that cannot start is one the
   harness lets through, so a dangling symlink or a bad path disables it with no error anywhere.
 
@@ -96,7 +105,7 @@ After that, sweep per `project_cross_repo_push_procedure`.
 
 | behind `main` | installs |
 |---|---|
-| 29 | Orkid Garden, OrcPunk-dotcom, CREA, cemetery-security, miresu, Multica, _Cerebro |
+| 29 | Orkid Garden, OrcPunk-dotcom, CREA, cemetery-security, miresu, Multica, _Cerebro *(stale checkout; its update PR merged)* |
 | 193 | Tycho *(stale checkout; its update PR merged)* |
 | 225 | _Alfred |
 | 235 | OrcPunk-biz |
