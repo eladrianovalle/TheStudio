@@ -461,9 +461,11 @@ def test_mentioned_ids_are_read_from_anywhere_in_a_spec():
 def test_the_audit_count_against_this_repo_stays_near_the_truth():
     """Measured against the captured log and this repo's specs, not the live tree.
 
-    Without the "does any spec mention this id?" check the same input reports roughly twice as
-    many orphans, because every unit planned under a spec that has since shipped is counted as
-    work nobody proposed. A count twice the truth is one people learn to ignore.
+    Without the "does any spec mention this id?" check the same input reports materially more
+    orphans, because every unit planned under a spec that has since shipped is counted as work
+    nobody proposed. An inflated count is one people learn to ignore. The final assertion below
+    is what pins the direction; this docstring deliberately does not put a multiplier on it,
+    because nothing here measures one.
     """
     built, escalated = built_unit_ids(GIT_LOG_FIXTURE.read_text(encoding="utf-8"))
     mentioned: set = set()
