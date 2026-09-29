@@ -374,7 +374,7 @@ class TestFinishCheckEntry:
         cmd = _finish_check_command()
         # Interpreter absolute AND quoted: on a stock macOS a bare `python` is
         # command not found, and a space in the path must not split the command.
-        assert cmd.startswith(f'"{sys.executable}"')
+        assert f' "{sys.executable}" ' in cmd
         # Script anchored to the project dir, not cwd-relative: Claude Code runs
         # hooks from the session's working dir, which may be a subdirectory.
         assert '"$CLAUDE_PROJECT_DIR/.studio/source/finish_check.py"' in cmd
@@ -402,6 +402,9 @@ class TestFinishCheckEntry:
             {"hooks": [{"type": "command", "command": "echo someone-elses-stop"}]}
         ]}}
         settings.write_text(json.dumps(seed, indent=2), encoding="utf-8")
+        # The entry is only registered when the script it runs is in place.
+        _installed_script(target_dir).parent.mkdir(parents=True)
+        _installed_script(target_dir).write_text("", encoding="utf-8")
 
         _install_stop_hook(target_dir, enabled=True)
 
@@ -413,6 +416,86 @@ class TestFinishCheckEntry:
             for inner in entry["hooks"]
         ]
         assert "echo someone-elses-stop" in commands
+
+
+class TestFinishCheckMissingScript:
+    """An entry must never point at a script that isn't there.
+
+    Python exits 2 on a missing file, and a Stop hook exiting 2 blocks the stop —
+    so a dangling entry would refuse every stop in the session, indefinitely.
+    """
+
+    def _pre_unit_2_install(self, target: Path, studio_dir: Path) -> None:
+        """An install from before the finish-check shipped: no script, no entry."""
+        install_studio(target, studio_dir)
+        _installed_script(target).unlink()
+        _install_stop_hook(target, enabled=False)
+        assert _stop_hooks_of(target) == []
+
+    def test_no_source_update_registers_nothing(self, target_dir, studio_dir, monkeypatch):
+        """The reviewer's repro: a pre-unit-2 install whose source checkout is gone."""
+        import install
+        from install import update_studio
+
+        self._pre_unit_2_install(target_dir, studio_dir)
+        version_path = target_dir / ".studio" / "VERSION"
+        version = json.loads(version_path.read_text(encoding="utf-8"))
+        version["source_path"] = str(target_dir / "gone")
+        version_path.write_text(json.dumps(version), encoding="utf-8")
+        snapshot = target_dir / ".studio" / "source"
+        monkeypatch.setattr(install, "_get_studio_root", lambda: snapshot)
+
+        result = update_studio(target_dir)
+
+        assert result.get("skipped_no_source") is True  # really took that return
+        assert not _installed_script(target_dir).exists()
+        assert _stop_hooks_of(target_dir) == []
+
+    def test_up_to_date_update_registers_once_the_script_lands(self, target_dir, studio_dir):
+        """Same install, source available: the copy lands the script, then the entry."""
+        from install import update_studio
+
+        self._pre_unit_2_install(target_dir, studio_dir)
+
+        result = update_studio(target_dir, studio_dir)
+
+        assert result["updated"] == 0  # the short-circuit path
+        assert _installed_script(target_dir).is_file()
+        assert len(_stop_hooks_of(target_dir)) == 1
+
+    def test_install_from_a_source_without_the_script_registers_nothing(
+        self, target_dir, studio_dir, monkeypatch
+    ):
+        import install
+
+        monkeypatch.setattr(install, "_copy_finish_check", lambda *_: None)
+
+        install_studio(target_dir, studio_dir)
+
+        assert not _installed_script(target_dir).exists()
+        assert _stop_hooks_of(target_dir) == []
+
+    def test_install_stop_hook_removes_an_entry_whose_script_is_gone(self, target_dir, studio_dir):
+        install_studio(target_dir, studio_dir)
+        _installed_script(target_dir).unlink()
+
+        _install_stop_hook(target_dir, enabled=True)
+
+        assert _stop_hooks_of(target_dir) == []
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="needs a POSIX sh")
+    def test_command_exits_0_when_the_script_is_deleted_later(self, target_dir):
+        """The command itself fails open, for a script removed after install."""
+        import os
+        import subprocess
+
+        result = subprocess.run(
+            ["sh", "-c", _finish_check_command()],
+            env={**os.environ, "CLAUDE_PROJECT_DIR": str(target_dir)},
+            input="{}", capture_output=True, text=True,
+        )
+
+        assert result.returncode == 0, result.stderr
 
 
 class TestFinishCheckOptOut:

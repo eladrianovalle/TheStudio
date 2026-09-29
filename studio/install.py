@@ -782,15 +782,25 @@ def _finish_check_command() -> str:
     ``_hook_command`` spells out above: on a stock macOS a bare ``python`` is
     ``command not found``, and Claude Code runs hook commands from the session's
     working directory, which may be a subdirectory rather than the project root.
+
+    The leading ``[ ! -f ... ] ||`` makes a missing script a clean exit 0. Without
+    it Python exits 2 ("can't open file"), and for a Stop hook exit 2 means *block
+    the stop* — so a script deleted after install would refuse every stop, forever.
     """
-    return (
-        f'"{sys.executable}" '
-        f'"$CLAUDE_PROJECT_DIR/.studio/source/finish_check.py"'
-    )
+    script = '"$CLAUDE_PROJECT_DIR/.studio/source/finish_check.py"'
+    return f'[ ! -f {script} ] || "{sys.executable}" {script}'
 
 
 def _install_stop_hook(target: Path, *, enabled: bool) -> None:
-    """Merge (or remove) our Stop finish-check hook in the target."""
+    """Merge (or remove) our Stop finish-check hook in the target.
+
+    Registered only when the script is actually in ``.studio/source/``: an entry
+    pointing at a file that isn't there is removed, not written, whatever the flag
+    says. An install that never received the script (no source to copy from, or a
+    source without one) must not gain a hook that runs nothing.
+    """
+    script = target / ".studio" / "source" / "finish_check.py"
+    enabled = enabled and script.is_file()
     _merge_hook_entry(
         target,
         event="Stop",
@@ -1547,6 +1557,10 @@ def update_studio(
         # local edit to it leaves the install looking up to date — and an edited copy
         # would then survive every future update instead of being replaced by each.
         _copy_finish_check(effective_dir, target)
+        # Register again now the script is in place: the call above skipped the
+        # entry on an install that had never had the script, and the up-to-date
+        # return below would otherwise leave it unregistered.
+        _install_stop_hook(target, enabled=finish_check_enabled)
 
         # Check what needs updating (explicit dir, so check_studio won't re-materialize).
         status = check_studio(target, effective_dir)
