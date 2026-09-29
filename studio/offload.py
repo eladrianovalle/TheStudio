@@ -602,10 +602,11 @@ def _command_body(text: str) -> str:
     The question this scan answers is whether offloading a CLAUDE.md section would break a
     command's *instructions*, and instructions live in the body. Frontmatter is metadata —
     a one-line description and an argument hint — where a section name is far likelier to
-    be a coincidence of wording than a dependency. Measured when descriptions were added:
-    scanning them produced exactly one new match, `/run-phase` against the "Architecture"
-    section, because its description says "for a feature's architecture use /spec". That is
-    the word, not the section.
+    be a coincidence of wording than a dependency. A description that happens to use a
+    section's word matches without depending on the section: `/run-phase`'s says "for a
+    feature's architecture use /spec", which is the word "architecture", not the Architecture
+    section. Scanning frontmatter would surface that kind of match and nothing a command's
+    instructions actually rely on.
 
     A file with no frontmatter is returned whole, which is what every command looked like
     before descriptions existed.

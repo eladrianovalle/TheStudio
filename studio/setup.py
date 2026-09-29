@@ -890,9 +890,10 @@ def apply_defaults(target: Path) -> Dict[str, Any]:
     This used to apply all seven steps every time, and ``--status`` recommends running it the
     moment a new step appears (issue #179). So a project that had picked a role pack, written
     role overrides and customised its personas was told to run one command to configure one
-    new step, and that command replaced all of it with defaults. It happened for real on
-    2026-09-16, across several installs, and the only reason it was recoverable is that one of
-    them tracks ``SETUP.json`` in git.
+    new step, and that command replaced all of it with defaults. That is not hypothetical — it
+    happened to real installs, and recovery depended on one of them tracking ``SETUP.json`` in
+    git. Issue #179 carries the record; the lesson that survives without it is that defaulting
+    is only safe on a step with no answer on record.
 
     Returns the resulting state.
     """

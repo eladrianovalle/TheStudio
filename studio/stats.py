@@ -151,9 +151,12 @@ def build_plan_section(spec_text: str) -> str | None:
 
     Both halves of that are load-bearing. A spec that documents the Build Plan format
     contains a *fenced* ``## Build Plan`` heading, and a line-anchored regex cannot see the
-    fence, so the phantom heading would win on line order: ``specs/unit-acceptance-criteria.md``
-    has one at line 77 and its real plan at line 415, and a first-match slice grabs 283 wrong
-    lines and then reports a plan with no units against a spec whose plan is fine.
+    fence, so the phantom heading wins on line order: a first-match slice takes the fenced one
+    and then reports a plan with no units against a spec whose plan is fine.
+    ``specs/unit-acceptance-criteria.md`` is such a spec, and
+    ``test_a_fenced_build_plan_does_not_hide_the_real_one`` reads it and asserts the shape —
+    which is where to look rather than trusting line numbers quoted here, because those move
+    every time the spec is edited.
 
     One reader, shared, so the rule that polices Build Plans and the code that reads them can
     never disagree about where the Build Plan is.
@@ -452,8 +455,10 @@ def mentioned_unit_ids(spec_text: str) -> set[str]:
     reader. "Which approved spec still owes this unit?" reads Build Plans; "was this id ever
     planned anywhere?" reads the whole document of every spec, because a unit planned under a
     spec that has since shipped is finished work, not undisciplined work. Without it every unit a
-    shipped spec ever planned is counted as unplanned, which roughly doubles the figure — and a
-    count twice the truth is one people learn to ignore.
+    shipped spec ever planned is counted as unplanned, and an inflated count is one people learn
+    to ignore. ``test_the_audit_count_against_this_repo_stays_near_the_truth`` measures the
+    difference against a frozen git-log fixture and asserts the check strictly lowers the count;
+    that test, not a figure quoted here, is the source for how much.
     """
     return set(_BACKTICKED_ID.findall(spec_text))
 

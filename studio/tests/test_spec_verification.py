@@ -1055,9 +1055,11 @@ class TestBuildPlanShape:
 
     def test_a_fenced_build_plan_does_not_hide_the_real_one(self):
         """`specs/unit-acceptance-criteria.md` carries two `## Build Plan` lines — one inside a
-        fenced template near the top of the file, the real one some 340 lines below it (77 and
-        415 as this was written). A first-match slice takes the fenced one and then reports a
-        plan with no units against a spec whose plan is fine.
+        fenced template near the top of the file, the real one much further down. A first-match
+        slice takes the fenced one and then reports a plan with no units against a spec whose
+        plan is fine. This test reads the file and asserts that shape, so no line numbers are
+        quoted here: they would be a second copy of the file's layout, stale as soon as it is
+        edited.
         """
         spec = SPECS_DIR / "unit-acceptance-criteria.md"
         raw = spec.read_text(encoding="utf-8")
