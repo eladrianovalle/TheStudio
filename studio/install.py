@@ -657,23 +657,41 @@ def _hook_command() -> str:
     )
 
 
-def _install_sessionstart_hook(target: Path, *, enabled: bool) -> None:
-    """Merge (or remove) our SessionStart update-check hook in the target.
+def _merge_hook_entry(
+    target: Path,
+    *,
+    event: str,
+    marker: str,
+    label: str,
+    entry: dict,
+    enabled: bool,
+) -> None:
+    """Merge (or remove) one hook entry of ours in the target's settings.
 
-    Writes to ``<target>/.claude/settings.local.json`` — the per-user, gitignored
-    settings file, NOT the shared ``settings.json``. The check is machine-local
-    (both the source path and the interpreter path are absolute to the installer's
-    box), so committing the hook would inflict an unresolvable command on every
-    teammate.
+    Both hooks Studio installs come through here. They write the same file, find
+    their own entry the same way and guard the same three shapes; only the event
+    name, the marker substring and the entry itself differ.
 
-    Best-effort and NEVER raises. Identifies our own entry by the ``check-updates``
-    substring so it stays idempotent across re-installs and refreshes the command
-    (interpreter/version) on re-install. Every other key and hook in the file is
-    left untouched. If the file exists but doesn't hold a JSON object, prints a
-    one-line warning and returns rather than clobbering a file it can't read.
+    Writes ``<target>/.claude/settings.local.json`` — the per-user, gitignored
+    settings file, NOT the shared ``settings.json``. Our commands are machine-local
+    (both the interpreter and the script path are absolute to the installer's box),
+    so committing one would inflict an unresolvable command on every teammate.
 
-    When ``enabled`` is False (``--no-hook`` or the opt-out sentinel), any existing
-    entry of ours is removed and none is added.
+    ``marker`` is a substring that appears in our command and in nobody else's, so
+    a re-install finds its own entry and stays idempotent. That entry is removed
+    and re-added rather than edited in place, which refreshes the command in one
+    path — the interpreter or the source path can change between installs. Every
+    other key and hook in the file is left untouched. ``label`` names this hook in
+    the warnings, e.g. ``"update-check hook"``.
+
+    Best-effort and NEVER raises. A settings file that isn't a JSON object, a
+    ``hooks`` that isn't an object, or a ``hooks.<event>`` that isn't a list each
+    get one warning and are left byte-for-byte as they were. Without those guards
+    ``hooks.setdefault(...)`` on a list, or iterating a dict, would raise straight
+    out of ``install_studio`` despite the never-raises contract.
+
+    When ``enabled`` is False (the hook's own ``--no-...`` flag or its own opt-out
+    sentinel), any entry of ours is removed and none is added.
     """
     settings_path = target / ".claude" / "settings.local.json"
 
@@ -685,56 +703,46 @@ def _install_sessionstart_hook(target: Path, *, enabled: bool) -> None:
         except (json.JSONDecodeError, ValueError):
             print(
                 f"  WARNING: {settings_path} is not a JSON object; "
-                "left it untouched and skipped the update-check hook."
+                f"left it untouched and skipped the {label}."
             )
             return
     else:
         data = {}
 
-    # Guard the fields the same way as the top-level object: if the user's file
-    # already has a `hooks` that isn't an object, or a `SessionStart` that isn't a
-    # list, don't clobber their unexpected shape — warn and leave it be. (Without
-    # this, `hooks.setdefault(...)` on a list or iterating a dict `SessionStart`
-    # would raise out of install_studio, despite the never-raises contract.)
     if "hooks" in data and not isinstance(data["hooks"], dict):
         print(
             f"  WARNING: {settings_path} has a non-object 'hooks'; "
-            "left it untouched and skipped the update-check hook."
+            f"left it untouched and skipped the {label}."
         )
         return
     hooks = data.setdefault("hooks", {})
-    if "SessionStart" in hooks and not isinstance(hooks["SessionStart"], list):
+    if event in hooks and not isinstance(hooks[event], list):
         print(
-            f"  WARNING: {settings_path} has a non-list 'hooks.SessionStart'; "
-            "left it untouched and skipped the update-check hook."
+            f"  WARNING: {settings_path} has a non-list 'hooks.{event}'; "
+            f"left it untouched and skipped the {label}."
         )
         return
-    entries = hooks.setdefault("SessionStart", [])
+    entries = hooks.setdefault(event, [])
 
     # Find our own entry (the group whose command contains the marker).
     our_entry = None
-    for entry in entries:
-        commands = (inner.get("command", "") for inner in entry.get("hooks", []))
-        if any(_HOOK_MARKER in command for command in commands):
-            our_entry = entry
+    for existing in entries:
+        commands = (inner.get("command", "") for inner in existing.get("hooks", []))
+        if any(marker in command for command in commands):
+            our_entry = existing
             break
 
     if our_entry is None and not enabled:
         return  # Nothing of ours, and none wanted: leave the file as-is.
 
-    # Remove any stale entry of ours, then re-add fresh when enabled. Re-adding
-    # (rather than editing in place) refreshes the command in one path — the
-    # interpreter or source path can change across updates.
     if our_entry is not None:
         entries.remove(our_entry)
     if enabled:
-        entries.append(
-            {"hooks": [{"type": "command", "command": _hook_command()}]}
-        )
+        entries.append({"hooks": [entry]})
 
     # Drop now-empty containers we own, so we leave no empty scaffolding behind.
     if not entries:
-        hooks.pop("SessionStart", None)
+        hooks.pop(event, None)
     if not hooks:
         data.pop("hooks", None)
 
@@ -747,20 +755,24 @@ def _install_sessionstart_hook(target: Path, *, enabled: bool) -> None:
         pass
 
 
+def _install_sessionstart_hook(target: Path, *, enabled: bool) -> None:
+    """Merge (or remove) our SessionStart update-check hook in the target."""
+    _merge_hook_entry(
+        target,
+        event="SessionStart",
+        marker=_HOOK_MARKER,
+        label="update-check hook",
+        entry={"type": "command", "command": _hook_command()},
+        enabled=enabled,
+    )
+
+
 # Substring that identifies OUR Stop finish-check entry among any others the user
 # has configured — the job `_HOOK_MARKER` does for the SessionStart nudge. The
 # script's basename is unique enough to recognize our own entry on re-install.
 # Mind the underscore: a hand-wired global entry naming the older `finish-check.py`
 # does NOT match this, and has to be removed by hand (specs/shipped-finish-check.md).
 _FINISH_CHECK_MARKER = "finish_check.py"
-
-# Shown while the hook runs, so a stop that pauses says what is holding it.
-_FINISH_CHECK_STATUS = "Finish-check: anything left undone?"
-
-# Seconds the harness gives the hook before it gives up and lets the stop through.
-# The hook is a few milliseconds of stdlib; this is only here so a wedged process
-# can never hold a turn open.
-_FINISH_CHECK_TIMEOUT = 10
 
 
 def _finish_check_command() -> str:
@@ -778,96 +790,24 @@ def _finish_check_command() -> str:
 
 
 def _install_stop_hook(target: Path, *, enabled: bool) -> None:
-    """Merge (or remove) our Stop finish-check hook in the target.
-
-    The sibling of ``_install_sessionstart_hook``, aimed at ``hooks.Stop``: it
-    writes the same per-user, gitignored ``<target>/.claude/settings.local.json``
-    for the same reason (both paths in the command are absolute to the installer's
-    machine, so committing the entry would inflict an unresolvable command on every
-    teammate), identifies our own entry by a marker substring so re-installing
-    stays idempotent and refreshes the interpreter path, and leaves every other key
-    and hook in the file alone.
-
-    Best-effort and NEVER raises. A settings file that isn't a JSON object, a
-    ``hooks`` that isn't an object, or a ``hooks.Stop`` that isn't a list each get
-    one warning and are left byte-for-byte as they were.
-
-    When ``enabled`` is False (``--no-finish-check`` or the opt-out sentinel), any
-    entry of ours is removed and none is added.
-    """
-    settings_path = target / ".claude" / "settings.local.json"
-
-    if settings_path.exists():
-        try:
-            data = json.loads(settings_path.read_text(encoding="utf-8"))
-            if not isinstance(data, dict):
-                raise ValueError
-        except (json.JSONDecodeError, ValueError):
-            print(
-                f"  WARNING: {settings_path} is not a JSON object; "
-                "left it untouched and skipped the finish-check hook."
-            )
-            return
-    else:
-        data = {}
-
-    # Same two shape guards as the SessionStart installer, and for the same reason:
-    # `hooks.setdefault(...)` on a list, or iterating a dict `Stop`, would raise
-    # straight out of install_studio despite the never-raises contract.
-    if "hooks" in data and not isinstance(data["hooks"], dict):
-        print(
-            f"  WARNING: {settings_path} has a non-object 'hooks'; "
-            "left it untouched and skipped the finish-check hook."
-        )
-        return
-    hooks = data.setdefault("hooks", {})
-    if "Stop" in hooks and not isinstance(hooks["Stop"], list):
-        print(
-            f"  WARNING: {settings_path} has a non-list 'hooks.Stop'; "
-            "left it untouched and skipped the finish-check hook."
-        )
-        return
-    entries = hooks.setdefault("Stop", [])
-
-    # Find our own entry (the group whose command contains the marker).
-    our_entry = None
-    for entry in entries:
-        commands = (inner.get("command", "") for inner in entry.get("hooks", []))
-        if any(_FINISH_CHECK_MARKER in command for command in commands):
-            our_entry = entry
-            break
-
-    if our_entry is None and not enabled:
-        return  # Nothing of ours, and none wanted: leave the file as-is.
-
-    # Remove any stale entry of ours, then re-add fresh when enabled. Re-adding
-    # rather than editing in place refreshes the command in one path — the
-    # interpreter path can change between installs.
-    if our_entry is not None:
-        entries.remove(our_entry)
-    if enabled:
-        entries.append(
-            {"hooks": [{
-                "type": "command",
-                "command": _finish_check_command(),
-                "timeout": _FINISH_CHECK_TIMEOUT,
-                "statusMessage": _FINISH_CHECK_STATUS,
-            }]}
-        )
-
-    # Drop now-empty containers we own, so we leave no empty scaffolding behind.
-    if not entries:
-        hooks.pop("Stop", None)
-    if not hooks:
-        data.pop("hooks", None)
-
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        settings_path.write_text(
-            json.dumps(data, indent=2) + "\n", encoding="utf-8"
-        )
-    except OSError:
-        pass
+    """Merge (or remove) our Stop finish-check hook in the target."""
+    _merge_hook_entry(
+        target,
+        event="Stop",
+        marker=_FINISH_CHECK_MARKER,
+        label="finish-check hook",
+        entry={
+            "type": "command",
+            "command": _finish_check_command(),
+            # Seconds the harness gives the hook before it gives up and lets the
+            # stop through. The hook is a few milliseconds of stdlib; the cap is
+            # here only so a wedged process can never hold a turn open.
+            "timeout": 10,
+            # Shown while the hook runs, so a stop that pauses says what holds it.
+            "statusMessage": "Finish-check: anything left undone?",
+        },
+        enabled=enabled,
+    )
 
 
 def _copy_finish_check(studio_dir: Path, target: Path) -> None:
