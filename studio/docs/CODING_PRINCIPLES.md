@@ -94,11 +94,9 @@ Mind the word collision. Studio's contrarian also ends with `VERDICT: APPROVED` 
 - **A number in a comment is a claim, and a claim needs a source that ships.** Counts, dates, line
   numbers and "measured across N repos" read as evidence, so a reader will act on them — but a
   measurement taken on one machine on one day is reproducible by nobody once the code is
-  installed somewhere else. Cite an artifact that travels with the file (a test, a fixture, an
-  issue), or say the thing the number was evidence *for* and drop the number. The reasoning is
-  almost never what the figure was holding up: "a count twice the truth is one people ignore"
-  survives losing the count. This applies hardest to shipped source, where the comment outlives
-  its evidence by years and travels to repositories that never saw it.
+  installed somewhere else. Cite an artifact that travels with the file (a test or a fixture), or
+  say the thing the number was evidence *for* and drop the number. The reasoning rarely needed
+  the figure: "slow on 3 of the 5 machines I tried" says less than "slow when the cache is cold."
 - Match the length of a file to what it actually has to say — no filler sections, no restating one point three ways. CLAUDE.md and architecture docs drift toward bloat because appending is easier than editing, so prefer editing a line over appending a section.
 - The test: could a teammate who is new to the code read it once and understand it, without asking you to translate?
 
