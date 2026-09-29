@@ -49,9 +49,12 @@ costs the evidence file.
 | OrcPunk-dotcom | #83 | `CLAUDE.md` only |
 | Alfred | #396 | full snapshot, plus the `Owns:` fork re-applied by hand |
 
-Three installs are hook-registered but the script is not on disk yet, because their `.studio/` is
-tracked and the file arrives when the PR merges: **OrcPunk-biz, Orkid Garden, Tycho**. Their hook is
-a clean no-op until then, by design — the command starts with `[ ! -f … ] ||`.
+Four installs are hook-registered but the script is not on disk yet, because their `.studio/` is
+tracked and the file arrives when the PR merges: **OrcPunk-biz, Orkid Garden, Tycho, Alfred**. Their
+hook is a clean no-op until then, by design — the command starts with `[ ! -f … ] ||`. Alfred is in
+that list on purpose: the script was deliberately removed from its checkout again, because an
+untracked copy of a file the incoming merge also adds is how a merge into a 76-commit-behind branch
+stops with a confusing error.
 
 **Next action.** Merge the nine. Then the only thing left is the evidence file.
 
