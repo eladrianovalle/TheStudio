@@ -472,6 +472,10 @@ def _fast_forward_source(source_dir: Path, staleness: SourceStaleness) -> Source
 
 UPDATE_CHECK_CACHE = "update-check.json"
 UPDATE_CHECK_SENTINEL = "update-check.off"
+# The finish-check Stop hook's own opt-out, read exactly like the one above and
+# deliberately separate from it: wanting the session-start update nudge but not a
+# hook that refuses your first stop is a perfectly ordinary position to hold.
+FINISH_CHECK_SENTINEL = "finish-check.off"
 UPDATE_CHECK_TTL_SECONDS = 24 * 3600
 UPDATE_ADDITIONAL_CONTEXT = (
     "A Studio update is available upstream. Tell the user: run /studio-update "
@@ -653,23 +657,41 @@ def _hook_command() -> str:
     )
 
 
-def _install_sessionstart_hook(target: Path, *, enabled: bool) -> None:
-    """Merge (or remove) our SessionStart update-check hook in the target.
+def _merge_hook_entry(
+    target: Path,
+    *,
+    event: str,
+    marker: str,
+    label: str,
+    entry: dict,
+    enabled: bool,
+) -> None:
+    """Merge (or remove) one hook entry of ours in the target's settings.
 
-    Writes to ``<target>/.claude/settings.local.json`` — the per-user, gitignored
-    settings file, NOT the shared ``settings.json``. The check is machine-local
-    (both the source path and the interpreter path are absolute to the installer's
-    box), so committing the hook would inflict an unresolvable command on every
-    teammate.
+    Both hooks Studio installs come through here. They write the same file, find
+    their own entry the same way and guard the same three shapes; only the event
+    name, the marker substring and the entry itself differ.
 
-    Best-effort and NEVER raises. Identifies our own entry by the ``check-updates``
-    substring so it stays idempotent across re-installs and refreshes the command
-    (interpreter/version) on re-install. Every other key and hook in the file is
-    left untouched. If the file exists but doesn't hold a JSON object, prints a
-    one-line warning and returns rather than clobbering a file it can't read.
+    Writes ``<target>/.claude/settings.local.json`` — the per-user, gitignored
+    settings file, NOT the shared ``settings.json``. Our commands are machine-local
+    (both the interpreter and the script path are absolute to the installer's box),
+    so committing one would inflict an unresolvable command on every teammate.
 
-    When ``enabled`` is False (``--no-hook`` or the opt-out sentinel), any existing
-    entry of ours is removed and none is added.
+    ``marker`` is a substring that appears in our command and in nobody else's, so
+    a re-install finds its own entry and stays idempotent. That entry is removed
+    and re-added rather than edited in place, which refreshes the command in one
+    path — the interpreter or the source path can change between installs. Every
+    other key and hook in the file is left untouched. ``label`` names this hook in
+    the warnings, e.g. ``"update-check hook"``.
+
+    Best-effort and NEVER raises. A settings file that isn't a JSON object, a
+    ``hooks`` that isn't an object, or a ``hooks.<event>`` that isn't a list each
+    get one warning and are left byte-for-byte as they were. Without those guards
+    ``hooks.setdefault(...)`` on a list, or iterating a dict, would raise straight
+    out of ``install_studio`` despite the never-raises contract.
+
+    When ``enabled`` is False (the hook's own ``--no-...`` flag or its own opt-out
+    sentinel), any entry of ours is removed and none is added.
     """
     settings_path = target / ".claude" / "settings.local.json"
 
@@ -681,56 +703,46 @@ def _install_sessionstart_hook(target: Path, *, enabled: bool) -> None:
         except (json.JSONDecodeError, ValueError):
             print(
                 f"  WARNING: {settings_path} is not a JSON object; "
-                "left it untouched and skipped the update-check hook."
+                f"left it untouched and skipped the {label}."
             )
             return
     else:
         data = {}
 
-    # Guard the fields the same way as the top-level object: if the user's file
-    # already has a `hooks` that isn't an object, or a `SessionStart` that isn't a
-    # list, don't clobber their unexpected shape — warn and leave it be. (Without
-    # this, `hooks.setdefault(...)` on a list or iterating a dict `SessionStart`
-    # would raise out of install_studio, despite the never-raises contract.)
     if "hooks" in data and not isinstance(data["hooks"], dict):
         print(
             f"  WARNING: {settings_path} has a non-object 'hooks'; "
-            "left it untouched and skipped the update-check hook."
+            f"left it untouched and skipped the {label}."
         )
         return
     hooks = data.setdefault("hooks", {})
-    if "SessionStart" in hooks and not isinstance(hooks["SessionStart"], list):
+    if event in hooks and not isinstance(hooks[event], list):
         print(
-            f"  WARNING: {settings_path} has a non-list 'hooks.SessionStart'; "
-            "left it untouched and skipped the update-check hook."
+            f"  WARNING: {settings_path} has a non-list 'hooks.{event}'; "
+            f"left it untouched and skipped the {label}."
         )
         return
-    entries = hooks.setdefault("SessionStart", [])
+    entries = hooks.setdefault(event, [])
 
     # Find our own entry (the group whose command contains the marker).
     our_entry = None
-    for entry in entries:
-        commands = (inner.get("command", "") for inner in entry.get("hooks", []))
-        if any(_HOOK_MARKER in command for command in commands):
-            our_entry = entry
+    for existing in entries:
+        commands = (inner.get("command", "") for inner in existing.get("hooks", []))
+        if any(marker in command for command in commands):
+            our_entry = existing
             break
 
     if our_entry is None and not enabled:
         return  # Nothing of ours, and none wanted: leave the file as-is.
 
-    # Remove any stale entry of ours, then re-add fresh when enabled. Re-adding
-    # (rather than editing in place) refreshes the command in one path — the
-    # interpreter or source path can change across updates.
     if our_entry is not None:
         entries.remove(our_entry)
     if enabled:
-        entries.append(
-            {"hooks": [{"type": "command", "command": _hook_command()}]}
-        )
+        entries.append({"hooks": [entry]})
 
     # Drop now-empty containers we own, so we leave no empty scaffolding behind.
     if not entries:
-        hooks.pop("SessionStart", None)
+        hooks.pop(event, None)
     if not hooks:
         data.pop("hooks", None)
 
@@ -741,6 +753,99 @@ def _install_sessionstart_hook(target: Path, *, enabled: bool) -> None:
         )
     except OSError:
         pass
+
+
+def _install_sessionstart_hook(target: Path, *, enabled: bool) -> None:
+    """Merge (or remove) our SessionStart update-check hook in the target."""
+    _merge_hook_entry(
+        target,
+        event="SessionStart",
+        marker=_HOOK_MARKER,
+        label="update-check hook",
+        entry={"type": "command", "command": _hook_command()},
+        enabled=enabled,
+    )
+
+
+# Substring that identifies OUR Stop finish-check entry among any others the user
+# has configured — the job `_HOOK_MARKER` does for the SessionStart nudge. The
+# script's basename is unique enough to recognize our own entry on re-install.
+# Mind the underscore: a hand-wired global entry naming the older `finish-check.py`
+# does NOT match this, and has to be removed by hand (specs/shipped-finish-check.md).
+_FINISH_CHECK_MARKER = "finish_check.py"
+
+
+def _finish_check_command() -> str:
+    """The exact shell command our Stop finish-check hook runs.
+
+    Absolute interpreter and absolute script path, both quoted, for the reasons
+    ``_hook_command`` spells out above: on a stock macOS a bare ``python`` is
+    ``command not found``, and Claude Code runs hook commands from the session's
+    working directory, which may be a subdirectory rather than the project root.
+
+    The leading ``[ ! -f ... ] ||`` makes a missing script a clean exit 0. Without
+    it Python exits 2 ("can't open file"), and for a Stop hook exit 2 means *block
+    the stop* — so a script deleted after install would refuse every stop, forever.
+    """
+    script = '"$CLAUDE_PROJECT_DIR/.studio/source/finish_check.py"'
+    return f'[ ! -f {script} ] || "{sys.executable}" {script}'
+
+
+def _install_stop_hook(target: Path, *, enabled: bool) -> None:
+    """Merge (or remove) our Stop finish-check hook in the target.
+
+    Registered only when the script is actually in ``.studio/source/``: an entry
+    pointing at a file that isn't there is removed, not written, whatever the flag
+    says. An install that never received the script (no source to copy from, or a
+    source without one) must not gain a hook that runs nothing.
+    """
+    script = target / ".studio" / "source" / "finish_check.py"
+    enabled = enabled and script.is_file()
+    _merge_hook_entry(
+        target,
+        event="Stop",
+        marker=_FINISH_CHECK_MARKER,
+        label="finish-check hook",
+        entry={
+            "type": "command",
+            "command": _finish_check_command(),
+            # Seconds the harness gives the hook before it gives up and lets the
+            # stop through. The hook is a few milliseconds of stdlib; the cap is
+            # here only so a wedged process can never hold a turn open.
+            "timeout": 10,
+            # Shown while the hook runs, so a stop that pauses says what holds it.
+            "statusMessage": "Finish-check: anything left undone?",
+        },
+        enabled=enabled,
+    )
+
+
+def _copy_finish_check(studio_dir: Path, target: Path) -> None:
+    """Copy the finish-check hook script into the target's ``.studio/source/``.
+
+    It is copied like any other source file and then deliberately left OUT of
+    ``SOURCE_FILES``, so it never reaches ``MANIFEST.json``. That asymmetry is the
+    point, and it is worth stating plainly because nothing else in this installer
+    works that way: manifest membership is what the clobber guard reads, and a
+    guarded hook means one local edit to it freezes that repo's ENTIRE update
+    stream (issue #207 is a live case of exactly that, with a slash command).
+    Copied-but-unrecorded means ``update`` overwrites this file every run and it
+    can never block one. Losing an unsanctioned edit to the hook beats freezing
+    every other improvement Studio ships to that repo.
+
+    The sanctioned place to customise the hook is ``.studio/finish-check.txt``,
+    which Studio never writes and never overwrites.
+    """
+    src = studio_dir / "finish_check.py"
+    if not src.is_file():
+        return
+    dst = target / ".studio" / "source" / "finish_check.py"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    # Skip when src and dst are the same file, exactly as the source-file copy
+    # above does: update run from the installed copy would otherwise truncate it.
+    if dst.exists() and src.samefile(dst):
+        return
+    shutil.copy2(src, dst)
 
 
 @contextmanager
@@ -1056,6 +1161,7 @@ def install_studio(
     studio_dir: Optional[Path] = None,
     source_path_override: Optional[Path] = None,
     install_hook: bool = True,
+    install_finish_check: bool = True,
 ) -> Path:
     """Install Studio into a target project directory.
 
@@ -1094,6 +1200,10 @@ def install_studio(
         if dst.exists() and src.samefile(dst):
             continue
         shutil.copy2(src, dst)
+
+    # The finish-check Stop hook's script. Copied beside the files above but kept
+    # out of the manifest on purpose — _copy_finish_check says why.
+    _copy_finish_check(studio_dir, target)
 
     # Copy slash commands verbatim (they use .studio/source/ paths directly).
     # mkdir inside the loop, like the workflows below: a source with no
@@ -1174,6 +1284,12 @@ def install_studio(
     # entry a prior install left behind.
     hook_enabled = install_hook and not (dot_studio / UPDATE_CHECK_SENTINEL).exists()
     _install_sessionstart_hook(target, enabled=hook_enabled)
+
+    # And the Stop finish-check hook, on its own flag and its own sentinel.
+    finish_check_enabled = (
+        install_finish_check and not (dot_studio / FINISH_CHECK_SENTINEL).exists()
+    )
+    _install_stop_hook(target, enabled=finish_check_enabled)
 
     return dot_studio
 
@@ -1316,6 +1432,7 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None, fetch: bool = 
 def update_studio(
     target: Path, studio_dir: Optional[Path] = None, force: bool = False, fetch: bool = True,
     install_hook: bool = True, pull_source: bool = False,
+    install_finish_check: bool = True,
 ) -> dict:
     """Update an installed Studio from the source.
 
@@ -1368,6 +1485,16 @@ def update_studio(
     # handle even when a re-install is blocked on local edits.
     hook_enabled = install_hook and not (dot_studio / UPDATE_CHECK_SENTINEL).exists()
     _install_sessionstart_hook(target, enabled=hook_enabled)
+
+    # The finish-check Stop hook gets the same treatment in the same place, and the
+    # position matters for the same reason: every early return below this line — no
+    # source, already up to date, blocked on local edits — would otherwise make
+    # `update --no-finish-check` a silent no-op on a current repo, leaving the hook
+    # firing on every turn with nothing to say the flag had done anything.
+    finish_check_enabled = (
+        install_finish_check and not (dot_studio / FINISH_CHECK_SENTINEL).exists()
+    )
+    _install_stop_hook(target, enabled=finish_check_enabled)
 
     # Resolve the live source up front so both the check and the re-install copy
     # from upstream, not from the (possibly stale) installed snapshot (#20).
@@ -1425,6 +1552,16 @@ def update_studio(
     # branch the source checkout is parked on. One materialization covers both
     # the check and the re-install so they agree on the source.
     with _source_at_default_branch(source_dir, enabled, override_ref) as (effective_dir, source_note):
+        # Rewrite the finish-check script before the short-circuits below, not only
+        # on the updates that reach the re-install. It is outside the manifest, so a
+        # local edit to it leaves the install looking up to date — and an edited copy
+        # would then survive every future update instead of being replaced by each.
+        _copy_finish_check(effective_dir, target)
+        # Register again now the script is in place: the call above skipped the
+        # entry on an install that had never had the script, and the up-to-date
+        # return below would otherwise leave it unregistered.
+        _install_stop_hook(target, enabled=finish_check_enabled)
+
         # Check what needs updating (explicit dir, so check_studio won't re-materialize).
         status = check_studio(target, effective_dir)
 
@@ -1447,7 +1584,9 @@ def update_studio(
         # this flag — it never reads it as "leave the hook alone" — so hard-coding
         # False here told it to DELETE the hook update_studio had just written
         # (#120). Handing it the same intent makes the second pass idempotent.
-        install_studio(target, effective_dir, source_path_override=override, install_hook=install_hook)
+        install_studio(target, effective_dir, source_path_override=override,
+                       install_hook=install_hook,
+                       install_finish_check=install_finish_check)
 
         # Delete the commands and workflows Studio has stopped shipping. Only files
         # the manifest records — ones this installer wrote — so a command the project

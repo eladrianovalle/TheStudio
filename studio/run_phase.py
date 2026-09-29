@@ -2025,6 +2025,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Do not install the SessionStart update-check hook.",
     )
+    init_parser.add_argument(
+        "--no-finish-check",
+        action="store_true",
+        help="Do not install the Stop finish-check hook, which refuses the first "
+             "stop of each turn to ask whether anything was left undone.",
+    )
 
     check_install_parser = subparsers.add_parser(
         "check-install", help="Check if installed Studio is up to date."
@@ -2079,6 +2085,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-hook",
         action="store_true",
         help="Do not install the SessionStart update-check hook.",
+    )
+    update_parser.add_argument(
+        "--no-finish-check",
+        action="store_true",
+        help="Remove (or skip installing) the Stop finish-check hook, which "
+             "refuses the first stop of each turn to ask whether anything was "
+             "left undone.",
     )
     update_parser.add_argument(
         "--pull-source",
@@ -2895,6 +2908,7 @@ def _do_init(args: argparse.Namespace) -> None:
         dot_studio = install_studio(
             target, effective_dir, source_path_override=override,
             install_hook=not args.no_hook,
+            install_finish_check=not args.no_finish_check,
         )
         # `.claude/` sits ABOVE the source dir, so a source that is an installed
         # snapshot (`init --target <other>` run from `.studio/source/`) has none and
@@ -3259,6 +3273,7 @@ def _do_update(args: argparse.Namespace) -> None:
         force=getattr(args, "force", False),
         fetch=not getattr(args, "no_fetch", False),
         install_hook=not getattr(args, "no_hook", False),
+        install_finish_check=not getattr(args, "no_finish_check", False),
         pull_source=getattr(args, "pull_source", False),
     )
     if result.get("warning"):

@@ -14,6 +14,8 @@ import inspect
 import re
 from pathlib import Path
 
+import pytest
+
 from impl_loop import LoopConfig
 from run_phase import build_parser, get_artifact_root
 from scopes import ScopeConfig
@@ -376,3 +378,32 @@ class TestCodingPrinciplesMirror:
             f"Only in CLAUDE.md: {only_in_claude_md}\n"
             f"Only in CODING_PRINCIPLES.md: {only_in_shipped}"
         )
+
+
+class TestFinishCheckIsDocumented:
+    """The finish-check's names must appear in all four docs that describe an install.
+
+    It costs every repo an extra model round-trip per turn, so the way to switch it
+    off and the place to reword it have to be findable from whichever doc someone
+    happens to open — not from the one the person who built it had in mind.
+    """
+
+    FINISH_CHECK_NAMES = ["--no-finish-check", "finish-check.off", "finish-check.txt"]
+
+    @pytest.mark.parametrize("doc", [
+        "../../README.md", "CLAUDE_CODE_USAGE.md", "API.md", "ARCHITECTURE.md",
+    ])
+    def test_doc_names_the_flag_the_sentinel_and_the_override(self, doc):
+        text = (_DOCS / doc).read_text(encoding="utf-8")
+        missing = [name for name in self.FINISH_CHECK_NAMES if name not in text]
+        assert not missing, f"{doc} documents no {missing}"
+
+    def test_the_cut_points_at_the_reversal(self):
+        """The Non-Goal that cut a Stop hook has to say one now ships, or the
+        reversal is discoverable only to whoever remembers it."""
+        spec = (_DOCS.parent.parent / "specs" / "obligation-queue.md").read_text(
+            encoding="utf-8"
+        )
+        cut = spec.index("**No Stop hook.**")
+        next_non_goal = spec.index("**No `docs_untouched` obligation.**")
+        assert "specs/shipped-finish-check.md" in spec[cut:next_non_goal]

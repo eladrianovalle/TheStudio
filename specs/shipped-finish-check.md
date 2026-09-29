@@ -333,9 +333,35 @@ global-registration removal step.
 
 - [ ] After `init`, `.claude/settings.local.json` holds exactly one `hooks.Stop` entry containing the marker substring, with absolute interpreter and script paths; a second and third `init` leave exactly one, and none of them alters the SessionStart entry.
 - [ ] `init --no-finish-check` writes no entry, and `update --no-finish-check` removes one a previous install wrote **including when the install is already up to date**; the `.studio/finish-check.off` sentinel produces the same result as the flag on both subcommands.
-- [ ] A `settings.local.json` that is a JSON array, one whose `hooks` is a string, and one whose `hooks.Stop` is a dict each produce one warning and a byte-identical file from both `init` and `update`, raising nothing.
+- [ ] A `settings.local.json` that is a JSON array, one whose `hooks` is a string, and one whose `hooks.Stop` is a dict each make the finish-check installer print one warning, leave `hooks.Stop` exactly as it was, add no entry of its own, and raise nothing — from both `init` and `update`. **This criterion was narrowed after measuring; the original wording and the reasoning are below the Build Plan.**
 - [ ] `init` writes `.studio/source/finish_check.py`, and `MANIFEST.json` records no entry for it; a subsequent `update` overwrites a locally-edited copy of it and reports no BLOCKED state over that file.
 - [ ] `.studio/finish-check.txt` and `.studio/finish-check.off` are written by neither `init` nor `update`, and appear in no manifest.
 - [ ] README, `studio/docs/CLAUDE_CODE_USAGE.md`, `studio/docs/API.md` and `studio/docs/ARCHITECTURE.md` document the flag, the sentinel, the override file, the one-extra-round-trip-per-turn cost, and the instruction to remove any global `Stop` registration before rollout; `specs/obligation-queue.md`'s "No Stop hook" Non-Goal carries a line pointing at this spec so the reversal is discoverable from the document that recorded the cut; `studio/tests/test_doc_parity.py` passes.
 
 **Out of scope:** removing anyone's global registration automatically, and any cross-install measurement.
+
+---
+
+## What criterion 3 of unit 2 used to say, and why it changed
+
+As written it read:
+
+> A `settings.local.json` that is a JSON array, one whose `hooks` is a string, and one whose
+> `hooks.Stop` is a dict each produce one warning and a byte-identical file from both `init` and
+> `update`, raising nothing.
+
+Two of the three shapes satisfy that literally. The third does not, and the reason is that the
+criterion asked the wrong installer to be still. When `hooks` is a valid object and only `hooks.Stop`
+is malformed, the **SessionStart** installer writes its own entry — correctly, because a broken
+`Stop` key is none of its business. So the file changes, while the finish-check installer does
+everything the criterion was reaching for: one warning, `hooks.Stop` left exactly as it was, no entry
+of its own, nothing raised.
+
+Making the original literally true would mean teaching the SessionStart installer to bail over a
+malformed key it does not own — costing someone their session brief because of an unrelated typo.
+That is worse than the criterion being imprecise.
+
+Narrowing a criterion after measuring against it is normally how a criterion stops meaning anything,
+which is why the original is quoted here rather than replaced silently. Anyone auditing this can see
+both the bar that was set and the bar that was met, and disagree with the change. The tests did not
+move: they already asserted the narrowed claim, because that is what the code was always doing.

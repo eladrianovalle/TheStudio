@@ -253,6 +253,12 @@ created. That argument is structurally true and it still did not survive:
   mid-session — and two sessions in one repo would attribute each other's commits.
 - It would have blocked on nothing in this repository today.
 
+**Reversed in part, and worth knowing about:** Studio now ships a Stop hook after all — the
+finish-check in `specs/shipped-finish-check.md`. It is not this one coming back. What died here was a
+hook that had to *derive* a blocking condition (an unreachable predicate, a session baseline no
+compaction survives, nothing to fire on); the finish-check derives nothing, holds no baseline, and
+refuses the first stop of every turn unconditionally. That cut a judge; this is a metronome.
+
 **No `docs_untouched` obligation.** This was to fire when a unit's commits touched no documentation
 path. The idea survived two rounds and died on measurement. Under the doc-path rule the design
 actually specified, **25 of 51 units** touch no doc path, **2 of them are planned by specs that say
