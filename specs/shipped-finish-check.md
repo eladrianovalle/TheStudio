@@ -3,11 +3,11 @@ feature: Shipped Finish-Check Stop Hook
 slug: shipped-finish-check
 ticket: https://github.com/eladrianovalle/TheStudio/issues/209
 # status: draft → approved (a human approved it) → shipped (built AND verified)
-status: draft
+status: approved
 studio_run: studio/output/tech/run_tech_20260928_163630
 # verification_due: the date the evidence is due (YYYY-MM-DD). Required once this spec is
 # `approved`, and only if it carries a `## Verification` section — no section, no deadline.
-verification_due:
+verification_due: 2026-10-28
 # Leave the two below EMPTY until this spec flips to `shipped`, and keep their notes on
 # comment lines like these. An inline `# ...` after the colon is read as the VALUE, and
 # `shipped_changed` has no vocabulary check to catch it — so a spec could otherwise
@@ -247,6 +247,17 @@ a pointer line so the reversal is discoverable from the document that recorded i
 
 ## Risks & Open Questions
 
+**Unit 1 breaks the author's own finish-check the moment it merges.** `~/.claude/hooks/finish-check.py`
+is a symlink into `.claude/hooks/`, and unit 1 deletes the file it points at. From the next `git pull`
+the global registration invokes a dangling path: the hook stops running, and it stops silently,
+because a Stop hook that cannot start is one the harness lets through. Whoever builds unit 1 must, in
+the same sitting, repoint that symlink at `studio/finish_check.py` or delete the global entry and
+install the per-repo one. The order is: build, repoint or remove, then verify a stop is still
+refused — not "merge and find out." Repointing is a **stopgap until unit 2 rolls out**, not an end
+state: it keeps the global registration alive, which the next paragraph says has to go, and the
+runtime hook never reads `.studio/finish-check.off` — only the installer does — so a repointed global
+entry keeps firing in the baseline arm. No measured stop may be taken while it stands.
+
 **A global registration already exists and will double-fire.** `~/.claude/settings.json` on the
 author's machine registers this hook under `hooks.Stop` for *every* project. Once a per-repo entry is
 installed, both fire on the same stop: two processes racing one marker, one writing it while the other
@@ -278,6 +289,13 @@ testable and are covered by the Build Plan; this section is about the only thing
 - **Baseline.** The same sessions with the hook off, via `.studio/finish-check.off`. Reproduce on
   demand by touching that sentinel and re-running `update`. The baseline expectation is that work
   deferred at a stop stays deferred: the whole claim is that nothing else catches it.
+- **The specific way this measurement goes void.** A global `Stop` registration of this same hook
+  covers every project on the author's machine. Leave it installed and the "feature off" arm is
+  not off — it is a second copy of the treatment, and the comparison measures nothing. Confirm it
+  is gone before the first measured stop and record how you confirmed it — in the baseline row's
+  Notes cell. The per-turn cost also belongs in the results as a figure, not an aside: one extra
+  model round-trip per turn is what the hit rate is being bought with. It goes under "What this
+  doesn't prove", which already asks for every number that moved the wrong way, cost included.
 - **Where the evidence goes.** `specs/shipped-finish-check-eval-results.md`, created from the skeleton
   when this spec is approved.
 - **Stop condition.** While that file still says `FILL_ME`, nobody may call this feature working and
@@ -300,7 +318,7 @@ nothing in that directory reaches a consuming repo. Tests in `studio/tests/test_
 - [ ] For each hostile `session_id` — `"../../x"`, `"/etc/passwd"`, `"a/b"`, `".."`, `"\\..\\x"`, one containing `\x00`, and a 4 KB string — `marker_path` returns a direct child of `<tempdir>/studio-finish-check/` whose name is 64 hex characters plus `.fired`; and a block-then-allow run with each of them writes and deletes only that file, leaving a sentinel file planted at the path the raw id would have resolved to untouched.
 - [ ] Every marker resolves under the temp directory and no test run writes any file inside the repository — the override cases copy the module into a temporary `.studio/source/` rather than writing at the repo root.
 - [ ] With a readable non-empty override beside the copied module the printed `reason` equals that file's text, and for each of absent, empty, unreadable and over-cap it equals `DEFAULT_REASON`.
-- [ ] `.claude/hooks/finish-check.py` is deleted, its README no longer claims the installer ships nothing from that directory, and no file in the repo other than `studio/finish_check.py` contains the default paragraph.
+- [ ] `.claude/hooks/finish-check.py` is deleted, its README no longer claims the installer ships nothing from that directory, no file in the repo other than `studio/finish_check.py` contains the default paragraph, and the unit's delivery note says in plain words that any symlink or global registration pointing at the deleted path must be repointed in the same sitting — a Stop hook that cannot start fails open and stops silently. *(That last clause is a manual reviewer check; `test_finish_check` cannot enforce it.)*
 
 **Out of scope:** the installer, the settings entry, the flag, the sentinel, and any use of payload fields beyond `session_id` and `stop_hook_active`.
 
