@@ -1,51 +1,31 @@
 # Claude Code hooks
 
-Hooks kept here are tracked so they have a history and a home. Unlike `.claude/commands/` and
-`.claude/workflows/`, **the installer does not ship them** — nothing in this directory reaches a
-consuming repo. Installation is manual and machine-local.
+There are no hooks left in this directory, and that is the point of the change that emptied it.
 
-## `finish-check.py`
+## Where `finish-check.py` went
 
-A Stop hook that enforces the "finish the task" rule in `CLAUDE.md`: don't end a turn with work
-you just described still undone. Instructions in `CLAUDE.md` are read *before* the work, while the
-loose ends are still hypothetical. This fires *after* the message is written, when they are
-concrete and countable.
+`finish-check.py` was a Stop hook: it refuses the first stop of every turn with one paragraph asking
+the assistant to re-read its own message for work it deferred that nothing is blocking, then lets the
+second stop through. It now lives in the set of files Studio ships, as **`studio/finish_check.py`**,
+and the installer writes it into each consuming repo at `.studio/source/finish_check.py`. The design,
+including the override paragraph a repo can supply in `.studio/finish-check.txt`, is in
+`specs/shipped-finish-check.md`.
 
-It blocks the first stop of every turn with a short reason and lets the second through, so the
-cost is one re-read per turn. Two guards keep it from looping: the `stop_hook_active` flag the
-harness sets on a hook-caused stop, and a per-session marker file under `state/`.
+It moved because a hook kept here reached exactly one machine. The old rule was that nothing kept
+here reached a consuming repo, so the hook had to be registered by hand in one person's global
+settings; every other machine, Studio installed or not, ran without it. That rule no longer holds
+for the finish-check.
 
-### Installing it
+## If you had the old hook wired up
 
-It belongs in **global** settings (`~/.claude/settings.json`), not in a repo — a Stop hook is a
-habit you want in every project, and registering it once covers all of them:
+**Repoint or remove it now, in the same sitting as pulling this change.** A symlink at
+`~/.claude/hooks/finish-check.py`, or any global `hooks.Stop` entry naming that path, is now pointing
+at a file that does not exist. A Stop hook that cannot start fails open: it stops running and it
+stops *silently*, with nothing to tell you the check is gone. Point it at `studio/finish_check.py`
+as a stopgap, or drop the global entry and let the installer write the per-repo one.
 
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 $HOME/.claude/hooks/finish-check.py",
-            "timeout": 10,
-            "statusMessage": "Finish-check: anything left undone?"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
+## What this directory is still for
 
-To keep this tracked copy as the live one rather than letting the two drift, point the global path
-at it:
-
-```bash
-mkdir -p ~/.claude/hooks
-ln -sf "$PWD/.claude/hooks/finish-check.py" ~/.claude/hooks/finish-check.py
-```
-
-Python resolves `__file__` to the path it was invoked by, so the log and `state/` markers still
-land in `~/.claude/hooks/` and never touch this repo.
+A hook belongs here only if it is specific to developing Studio itself and should never reach a
+consuming repo. Anything worth having in every repo belongs in the shipped set instead, next to
+`finish_check.py`.
