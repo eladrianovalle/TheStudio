@@ -368,6 +368,44 @@ nothing and falls back to today's behavior (install from the remote, print the m
 never does a merge, a force, or a rebase. The `update.toml` lives in the source repo's gitignored
 `.studio/`, so it's a per-machine preference — one line covers all your consumer repos.
 
+### The finish-check (automatic, at the end of a turn)
+
+`init` and `update` install a second hook, separate from the session brief above and with its own
+switches. This one runs at the *end* of a turn, and it **refuses the first stop, every time**. What
+comes back is one paragraph asking the assistant to re-read the message it just wrote for work it
+said it would do and then didn't — work nothing was blocking. Then the second stop goes through, so
+a turn is never held up more than once.
+
+Refusing is the whole mechanism. The instructions telling an assistant to finish what it starts live
+in `CLAUDE.md`, which it reads *before* the work, when the loose ends are still hypothetical. The
+finish-check asks at the one moment they are concrete and countable.
+
+- **What it costs.** One extra model round-trip per turn, in every repo, forever. That is not small,
+  and it is worth deciding on deliberately rather than discovering later. There is no cleverness
+  making it cheaper: it does not try to work out whether *this* turn left anything undone, because a
+  keyword matcher is a worse judge of that than the model re-reading its own message.
+- **Turn it off** two ways, and neither touches the session brief: `studio init --no-finish-check` /
+  `studio update --no-finish-check` skips (or removes) the hook, and an empty
+  `.studio/finish-check.off` file disables it durably, even when a later `update` would otherwise
+  re-add it.
+- **Reword it for one repo.** Write the paragraph you want in `.studio/finish-check.txt`. Studio
+  never writes that file and never overwrites it; when it is missing, empty or unreadable the shipped
+  paragraph is used instead, and that shipped one improves with each update.
+- **Before you roll it out, remove any global registration.** If you wired this hook up by hand for
+  every project — a `hooks.Stop` entry in `~/.claude/settings.json`, which is how it ran before
+  Studio shipped it — delete that entry *first*. Otherwise both copies fire on the same stop: two
+  processes racing the same marker file, one writing it while the other reads it and deletes it. The
+  installer cannot spot the global one for you (the old path spells the name with a hyphen,
+  `finish-check.py`, and the shipped one with an underscore), so it has to go by hand.
+- **Where it lives.** The script installs at `.studio/source/finish_check.py` and the entry at
+  `.claude/settings.local.json` (per-user and gitignored, like the session brief's). Unlike every
+  other installed file, the script is recorded in no manifest: editing it in place never blocks an
+  update, and every `update` overwrites it. Customise the paragraph, not the script.
+- **It can't break a session.** Every path that isn't a clean "block this once" — unreadable input,
+  an unwritable temp directory, any unexpected error — lets the stop through and exits 0.
+
+Design and rationale: `specs/shipped-finish-check.md`.
+
 ## Artifacts
 
 When running from the Studio repo, outputs go to `studio/output/<phase>/run_<phase>_<timestamp>/`.

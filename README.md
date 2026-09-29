@@ -247,6 +247,18 @@ The first run in that project auto-scaffolds its `.studio/` and creates a bridge
 
 Keep installed copies current: `python studio/run_phase.py check-install --target <path>` and `update --target <path>`. `init`/`update` also install a per-user SessionStart hook that opens each session with a short brief: it nudges you to run `/studio-update` when your installed Studio falls behind upstream, and it names one unit an approved spec planned that nothing ever built, with the `/forge` command that continues it. Silent when there's neither — offline-safe, and never able to break a session. Opt out with `--no-hook` or an empty `.studio/update-check.off`. See [CLAUDE_CODE_USAGE.md](./studio/docs/CLAUDE_CODE_USAGE.md#the-session-brief-automatic-at-session-start). If you develop Studio and consume it elsewhere, set `[update] auto_pull_source = true` in your source repo's `.studio/update.toml` (or pass `update --pull-source`) and `update` will safely fast-forward your source checkout when it's cleanly behind — so it stops nagging you to `git pull` it by hand.
 
+`init`/`update` also install a second, separate hook: the **finish-check**. It runs when a turn ends
+and refuses the first stop every time, with one paragraph asking the assistant to re-read its own
+message for work it said it would do and then didn't — work nothing is blocking. The second stop goes
+through. Know the cost before you roll it out: **every turn in every repo now takes one extra model
+round-trip.** Opt out with `--no-finish-check` on `init`/`update`, or an empty
+`.studio/finish-check.off`. To reword the paragraph for one repo, write your own in
+`.studio/finish-check.txt` — Studio never writes or overwrites that file. **If you already have this
+hook registered globally** (a `hooks.Stop` entry in `~/.claude/settings.json`, which is how it ran
+before Studio shipped it), remove that entry *before* the first install, or both copies fire on the
+same stop and race each other. See
+[CLAUDE_CODE_USAGE.md](./studio/docs/CLAUDE_CODE_USAGE.md#the-finish-check-automatic-at-the-end-of-a-turn).
+
 ---
 
 ## Run Directory Anatomy

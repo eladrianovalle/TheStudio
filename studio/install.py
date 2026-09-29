@@ -472,6 +472,10 @@ def _fast_forward_source(source_dir: Path, staleness: SourceStaleness) -> Source
 
 UPDATE_CHECK_CACHE = "update-check.json"
 UPDATE_CHECK_SENTINEL = "update-check.off"
+# The finish-check Stop hook's own opt-out, read exactly like the one above and
+# deliberately separate from it: wanting the session-start update nudge but not a
+# hook that refuses your first stop is a perfectly ordinary position to hold.
+FINISH_CHECK_SENTINEL = "finish-check.off"
 UPDATE_CHECK_TTL_SECONDS = 24 * 3600
 UPDATE_ADDITIONAL_CONTEXT = (
     "A Studio update is available upstream. Tell the user: run /studio-update "
@@ -741,6 +745,157 @@ def _install_sessionstart_hook(target: Path, *, enabled: bool) -> None:
         )
     except OSError:
         pass
+
+
+# Substring that identifies OUR Stop finish-check entry among any others the user
+# has configured — the job `_HOOK_MARKER` does for the SessionStart nudge. The
+# script's basename is unique enough to recognize our own entry on re-install.
+# Mind the underscore: a hand-wired global entry naming the older `finish-check.py`
+# does NOT match this, and has to be removed by hand (specs/shipped-finish-check.md).
+_FINISH_CHECK_MARKER = "finish_check.py"
+
+# Shown while the hook runs, so a stop that pauses says what is holding it.
+_FINISH_CHECK_STATUS = "Finish-check: anything left undone?"
+
+# Seconds the harness gives the hook before it gives up and lets the stop through.
+# The hook is a few milliseconds of stdlib; this is only here so a wedged process
+# can never hold a turn open.
+_FINISH_CHECK_TIMEOUT = 10
+
+
+def _finish_check_command() -> str:
+    """The exact shell command our Stop finish-check hook runs.
+
+    Absolute interpreter and absolute script path, both quoted, for the reasons
+    ``_hook_command`` spells out above: on a stock macOS a bare ``python`` is
+    ``command not found``, and Claude Code runs hook commands from the session's
+    working directory, which may be a subdirectory rather than the project root.
+    """
+    return (
+        f'"{sys.executable}" '
+        f'"$CLAUDE_PROJECT_DIR/.studio/source/finish_check.py"'
+    )
+
+
+def _install_stop_hook(target: Path, *, enabled: bool) -> None:
+    """Merge (or remove) our Stop finish-check hook in the target.
+
+    The sibling of ``_install_sessionstart_hook``, aimed at ``hooks.Stop``: it
+    writes the same per-user, gitignored ``<target>/.claude/settings.local.json``
+    for the same reason (both paths in the command are absolute to the installer's
+    machine, so committing the entry would inflict an unresolvable command on every
+    teammate), identifies our own entry by a marker substring so re-installing
+    stays idempotent and refreshes the interpreter path, and leaves every other key
+    and hook in the file alone.
+
+    Best-effort and NEVER raises. A settings file that isn't a JSON object, a
+    ``hooks`` that isn't an object, or a ``hooks.Stop`` that isn't a list each get
+    one warning and are left byte-for-byte as they were.
+
+    When ``enabled`` is False (``--no-finish-check`` or the opt-out sentinel), any
+    entry of ours is removed and none is added.
+    """
+    settings_path = target / ".claude" / "settings.local.json"
+
+    if settings_path.exists():
+        try:
+            data = json.loads(settings_path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                raise ValueError
+        except (json.JSONDecodeError, ValueError):
+            print(
+                f"  WARNING: {settings_path} is not a JSON object; "
+                "left it untouched and skipped the finish-check hook."
+            )
+            return
+    else:
+        data = {}
+
+    # Same two shape guards as the SessionStart installer, and for the same reason:
+    # `hooks.setdefault(...)` on a list, or iterating a dict `Stop`, would raise
+    # straight out of install_studio despite the never-raises contract.
+    if "hooks" in data and not isinstance(data["hooks"], dict):
+        print(
+            f"  WARNING: {settings_path} has a non-object 'hooks'; "
+            "left it untouched and skipped the finish-check hook."
+        )
+        return
+    hooks = data.setdefault("hooks", {})
+    if "Stop" in hooks and not isinstance(hooks["Stop"], list):
+        print(
+            f"  WARNING: {settings_path} has a non-list 'hooks.Stop'; "
+            "left it untouched and skipped the finish-check hook."
+        )
+        return
+    entries = hooks.setdefault("Stop", [])
+
+    # Find our own entry (the group whose command contains the marker).
+    our_entry = None
+    for entry in entries:
+        commands = (inner.get("command", "") for inner in entry.get("hooks", []))
+        if any(_FINISH_CHECK_MARKER in command for command in commands):
+            our_entry = entry
+            break
+
+    if our_entry is None and not enabled:
+        return  # Nothing of ours, and none wanted: leave the file as-is.
+
+    # Remove any stale entry of ours, then re-add fresh when enabled. Re-adding
+    # rather than editing in place refreshes the command in one path — the
+    # interpreter path can change between installs.
+    if our_entry is not None:
+        entries.remove(our_entry)
+    if enabled:
+        entries.append(
+            {"hooks": [{
+                "type": "command",
+                "command": _finish_check_command(),
+                "timeout": _FINISH_CHECK_TIMEOUT,
+                "statusMessage": _FINISH_CHECK_STATUS,
+            }]}
+        )
+
+    # Drop now-empty containers we own, so we leave no empty scaffolding behind.
+    if not entries:
+        hooks.pop("Stop", None)
+    if not hooks:
+        data.pop("hooks", None)
+
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        settings_path.write_text(
+            json.dumps(data, indent=2) + "\n", encoding="utf-8"
+        )
+    except OSError:
+        pass
+
+
+def _copy_finish_check(studio_dir: Path, target: Path) -> None:
+    """Copy the finish-check hook script into the target's ``.studio/source/``.
+
+    It is copied like any other source file and then deliberately left OUT of
+    ``SOURCE_FILES``, so it never reaches ``MANIFEST.json``. That asymmetry is the
+    point, and it is worth stating plainly because nothing else in this installer
+    works that way: manifest membership is what the clobber guard reads, and a
+    guarded hook means one local edit to it freezes that repo's ENTIRE update
+    stream (issue #207 is a live case of exactly that, with a slash command).
+    Copied-but-unrecorded means ``update`` overwrites this file every run and it
+    can never block one. Losing an unsanctioned edit to the hook beats freezing
+    every other improvement Studio ships to that repo.
+
+    The sanctioned place to customise the hook is ``.studio/finish-check.txt``,
+    which Studio never writes and never overwrites.
+    """
+    src = studio_dir / "finish_check.py"
+    if not src.is_file():
+        return
+    dst = target / ".studio" / "source" / "finish_check.py"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    # Skip when src and dst are the same file, exactly as the source-file copy
+    # above does: update run from the installed copy would otherwise truncate it.
+    if dst.exists() and src.samefile(dst):
+        return
+    shutil.copy2(src, dst)
 
 
 @contextmanager
@@ -1056,6 +1211,7 @@ def install_studio(
     studio_dir: Optional[Path] = None,
     source_path_override: Optional[Path] = None,
     install_hook: bool = True,
+    install_finish_check: bool = True,
 ) -> Path:
     """Install Studio into a target project directory.
 
@@ -1094,6 +1250,10 @@ def install_studio(
         if dst.exists() and src.samefile(dst):
             continue
         shutil.copy2(src, dst)
+
+    # The finish-check Stop hook's script. Copied beside the files above but kept
+    # out of the manifest on purpose — _copy_finish_check says why.
+    _copy_finish_check(studio_dir, target)
 
     # Copy slash commands verbatim (they use .studio/source/ paths directly).
     # mkdir inside the loop, like the workflows below: a source with no
@@ -1174,6 +1334,12 @@ def install_studio(
     # entry a prior install left behind.
     hook_enabled = install_hook and not (dot_studio / UPDATE_CHECK_SENTINEL).exists()
     _install_sessionstart_hook(target, enabled=hook_enabled)
+
+    # And the Stop finish-check hook, on its own flag and its own sentinel.
+    finish_check_enabled = (
+        install_finish_check and not (dot_studio / FINISH_CHECK_SENTINEL).exists()
+    )
+    _install_stop_hook(target, enabled=finish_check_enabled)
 
     return dot_studio
 
@@ -1316,6 +1482,7 @@ def check_studio(target: Path, studio_dir: Optional[Path] = None, fetch: bool = 
 def update_studio(
     target: Path, studio_dir: Optional[Path] = None, force: bool = False, fetch: bool = True,
     install_hook: bool = True, pull_source: bool = False,
+    install_finish_check: bool = True,
 ) -> dict:
     """Update an installed Studio from the source.
 
@@ -1368,6 +1535,16 @@ def update_studio(
     # handle even when a re-install is blocked on local edits.
     hook_enabled = install_hook and not (dot_studio / UPDATE_CHECK_SENTINEL).exists()
     _install_sessionstart_hook(target, enabled=hook_enabled)
+
+    # The finish-check Stop hook gets the same treatment in the same place, and the
+    # position matters for the same reason: every early return below this line — no
+    # source, already up to date, blocked on local edits — would otherwise make
+    # `update --no-finish-check` a silent no-op on a current repo, leaving the hook
+    # firing on every turn with nothing to say the flag had done anything.
+    finish_check_enabled = (
+        install_finish_check and not (dot_studio / FINISH_CHECK_SENTINEL).exists()
+    )
+    _install_stop_hook(target, enabled=finish_check_enabled)
 
     # Resolve the live source up front so both the check and the re-install copy
     # from upstream, not from the (possibly stale) installed snapshot (#20).
@@ -1425,6 +1602,12 @@ def update_studio(
     # branch the source checkout is parked on. One materialization covers both
     # the check and the re-install so they agree on the source.
     with _source_at_default_branch(source_dir, enabled, override_ref) as (effective_dir, source_note):
+        # Rewrite the finish-check script before the short-circuits below, not only
+        # on the updates that reach the re-install. It is outside the manifest, so a
+        # local edit to it leaves the install looking up to date — and an edited copy
+        # would then survive every future update instead of being replaced by each.
+        _copy_finish_check(effective_dir, target)
+
         # Check what needs updating (explicit dir, so check_studio won't re-materialize).
         status = check_studio(target, effective_dir)
 
@@ -1447,7 +1630,9 @@ def update_studio(
         # this flag — it never reads it as "leave the hook alone" — so hard-coding
         # False here told it to DELETE the hook update_studio had just written
         # (#120). Handing it the same intent makes the second pass idempotent.
-        install_studio(target, effective_dir, source_path_override=override, install_hook=install_hook)
+        install_studio(target, effective_dir, source_path_override=override,
+                       install_hook=install_hook,
+                       install_finish_check=install_finish_check)
 
         # Delete the commands and workflows Studio has stopped shipping. Only files
         # the manifest records — ones this installer wrote — so a command the project

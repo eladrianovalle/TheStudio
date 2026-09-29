@@ -1688,7 +1688,8 @@ class TestInitInstallsCommittedMain:
 
         captured = {}
 
-        def fake_install(target, studio_dir=None, source_path_override=None, install_hook=True):
+        def fake_install(target, studio_dir=None, source_path_override=None,
+                         install_hook=True, install_finish_check=True):
             captured["marker"] = (studio_dir / "marker.txt").read_text(encoding="utf-8")
             captured["override"] = source_path_override
             return target / ".studio"
@@ -1698,7 +1699,7 @@ class TestInitInstallsCommittedMain:
 
         target = tmp_path / "consumer"
         target.mkdir()
-        run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True))
+        run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True, no_finish_check=True))
 
         assert captured["marker"] == "main version\n", (
             "init copied the parked branch's tree; a new install must take committed main"
@@ -1737,7 +1738,8 @@ class TestInitInstallsCommittedMain:
 
         captured = {}
 
-        def fake_install(target, studio_dir=None, source_path_override=None, install_hook=True):
+        def fake_install(target, studio_dir=None, source_path_override=None,
+                         install_hook=True, install_finish_check=True):
             captured["files"] = sorted(str(p) for p in install._collect_source_files(studio_dir))
             captured["marker"] = (studio_dir / "marker.txt").read_text(encoding="utf-8")
             return target / ".studio"
@@ -1747,7 +1749,7 @@ class TestInitInstallsCommittedMain:
 
         target = tmp_path / "consumer"
         target.mkdir()
-        run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True))
+        run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True, no_finish_check=True))
 
         assert captured["marker"] == "live version\n"
         assert captured["files"] == ["run_phase.py"], (
@@ -1785,7 +1787,8 @@ class TestInitInstallsCommittedMain:
 
         monkeypatch.setattr(
             install, "install_studio",
-            lambda target, studio_dir=None, source_path_override=None, install_hook=True: (
+            lambda target, studio_dir=None, source_path_override=None,
+                   install_hook=True, install_finish_check=True: (
                 target / ".studio"
             ),
         )
@@ -1793,7 +1796,7 @@ class TestInitInstallsCommittedMain:
 
         target = tmp_path / "consumer"
         target.mkdir()
-        run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True))
+        run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True, no_finish_check=True))
 
         out = capsys.readouterr().out
         assert "Slash commands:" not in out, "the banner named a command dir nothing landed in"
@@ -1806,7 +1809,7 @@ class TestInitInstallsCommittedMain:
         monkeypatch.setattr(install, "_get_studio_root", lambda: host / "studio")
         (host / "studio").mkdir()
         (host / "studio" / "run_phase.py").write_text("# stand-in\n", encoding="utf-8")
-        run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True))
+        run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True, no_finish_check=True))
         assert "Slash commands:" in capsys.readouterr().out
 
     def test_the_no_commands_warning_names_the_tree_it_was_checked_against(
@@ -1829,7 +1832,8 @@ class TestInitInstallsCommittedMain:
 
         monkeypatch.setattr(
             install, "install_studio",
-            lambda target, studio_dir=None, source_path_override=None, install_hook=True: (
+            lambda target, studio_dir=None, source_path_override=None,
+                   install_hook=True, install_finish_check=True: (
                 target / ".studio"
             ),
         )
@@ -1837,7 +1841,7 @@ class TestInitInstallsCommittedMain:
 
         target = tmp_path / "consumer"
         target.mkdir()
-        run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True))
+        run_phase._do_init(SimpleNamespace(target=str(target), no_hook=True, no_finish_check=True))
 
         out = capsys.readouterr().out
         assert "no slash command was installed" in out
