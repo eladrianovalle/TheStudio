@@ -1436,7 +1436,8 @@ class TestDefaultsLeaveExistingChoicesAlone:
     command a configured project is told to run to configure one new thing. It used to apply
     all seven steps and rewrite `choices` wholesale — role pack, role overrides, role
     customizations and personas replaced with defaults for the sake of one pending step
-    (issue #179). That happened for real across several installs on 2026-09-16.
+    (issue #179). That happened for real, which is why this class exists; issue #179 carries
+    the record, and no count or date is restated here.
     """
 
     def _configured(self, project: Path) -> dict:
