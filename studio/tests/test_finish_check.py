@@ -86,15 +86,19 @@ def _raw_marker_path(marker_dir, session_id: str) -> str:
     return os.path.join(str(marker_dir), "%s.fired" % session_id)
 
 
-def _plant_sentinel(marker_dir, session_id: str):
-    """Put a file where an unhashed session id would have pointed, if we are allowed to.
+def _plant_sentinel(marker_dir, session_id: str, inside: Path):
+    """Put a file where an unhashed session id would have pointed, if that path is ours to write.
 
-    Some of the hostile ids point somewhere no test may write (`/etc/passwd.fired`) or
-    cannot be a path at all (a NUL byte, a 4 KB name). For those the test falls back to
-    asserting the hook created nothing there.
+    Some of the hostile ids point clean out of *inside*, the test's own directory — `/etc/passwd`
+    resolves to `/etc/passwd.fired`, which a run as root would really create — and some cannot be a
+    path at all (a NUL byte, a 4 KB name). For those the test falls back to asserting the hook
+    created nothing there.
     """
     raw = _raw_marker_path(marker_dir, session_id)
+    boundary = str(inside)
     try:
+        if os.path.commonpath([os.path.abspath(raw), boundary]) != boundary:
+            return None
         os.makedirs(os.path.dirname(raw), exist_ok=True)
         with open(raw, "wb") as handle:
             handle.write(SENTINEL_BYTES)
@@ -261,17 +265,15 @@ def test_a_second_session_is_blocked_even_while_another_marker_is_fresh(hook_tmp
     ["", "not json", "[]", '"x"', "3"],
     ids=["empty", "not-json", "json-list", "json-string", "json-number"],
 )
-def test_unusable_stdin_still_exits_zero_and_says_nothing_on_stderr(raw, hook_tmp):
+def test_unusable_stdin_still_blocks_cleanly(raw, hook_tmp):
+    """None of these five is a payload, and the check still has to happen on every one of them.
+
+    The last three parse as valid JSON and would make `payload.get` raise without the `isinstance`
+    check — so each would reach the user as a traceback on stderr instead of blocking the stop.
+    """
     result = _run_hook(raw, tmpdir=hook_tmp)
     assert result.returncode == 0
     assert result.stderr == b""
-
-
-@pytest.mark.parametrize("raw", ["[]", '"x"', "3"], ids=["list", "string", "number"])
-def test_valid_json_that_is_not_an_object_still_blocks(raw, hook_tmp):
-    """These three parse fine and would make `payload.get` raise without the type check."""
-    result = _run_hook(raw, tmpdir=hook_tmp)
-    assert result.returncode == 0
     assert json.loads(result.stdout.decode("utf-8"))["decision"] == "block"
 
 
@@ -320,7 +322,7 @@ def test_a_hostile_session_id_touches_only_its_own_hashed_marker(
 ):
     marker_dir = hook_tmp / "studio-finish-check"
     marker_dir.mkdir()
-    sentinel = _plant_sentinel(marker_dir, session_id)
+    sentinel = _plant_sentinel(marker_dir, session_id, inside=tmp_path)
     before = _files_under(tmp_path)
 
     blocked = _run_hook({"session_id": session_id}, tmpdir=hook_tmp)
@@ -348,10 +350,11 @@ def test_a_hostile_session_id_touches_only_its_own_hashed_marker(
 # Criterion 5 — markers live in the temp directory, never in a repository
 # ---------------------------------------------------------------------------
 
-def test_the_marker_directory_is_under_the_system_temp_directory():
-    assert finish_check.MARKER_DIR == os.path.join(
-        tempfile.gettempdir(), "studio-finish-check"
-    )
+def test_every_marker_resolves_under_the_system_temp_directory():
+    """Containment, not a copy of the constant: a real marker path lands inside the temp directory."""
+    system_temp = tempfile.gettempdir()
+    path = finish_check.marker_path("any-session")
+    assert os.path.commonpath([system_temp, path]) == system_temp
 
 
 def test_running_the_hook_leaves_the_repository_untouched(hook_tmp):
