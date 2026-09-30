@@ -328,7 +328,8 @@ def test_a_symlink_left_at_the_marker_path_is_not_written_through(hook_tmp, tmp_
     The symlink has to dangle to reach the write at all. One pointing at a file
     that exists is either spent as a fresh marker or swept as a stale one, and
     both of those delete the link rather than follow it. A fresh dangling one is
-    neither — it is too new to sweep — and lands on the open, where following it
+    neither — `getmtime` in `already_fired_this_turn` raises for it and it is too
+    new to sweep — and lands on the open, where following it
     would create a file of our choosing at a path of the attacker's.
 
     The per-user marker directory is the first defence; this is the second.
