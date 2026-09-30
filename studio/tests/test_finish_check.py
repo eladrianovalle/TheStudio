@@ -329,8 +329,10 @@ def test_the_hook_survives_a_platform_without_the_posix_names(hook_tmp):
     reach: an `AttributeError` there would print a traceback and exit 1, and a Stop
     hook's stderr is shown to the user as an error. Deleting both from `os` before
     the import is the closest this suite can get to running on Windows. The hook is
-    expected to do nothing at all — with no real uid the marker directory cannot be
-    shown to be ours — but it must do nothing quietly.
+    expected to do nothing at all, and it is the mode check that stops it: Windows
+    reports `st_uid` as 0, which matches the fallback, and reports directories as
+    0o777, which fails the no-group-no-other test. Doing nothing is fine. Doing it
+    quietly is the part worth asserting.
     """
     driver = (
         "import os, runpy, sys;"

@@ -53,8 +53,11 @@ import time
 # time on a platform without it raises before `run`'s guard exists, which is the one
 # way this file could print a traceback and exit non-zero -- the two things the module
 # docstring promises it never does. Read through `getattr` so the import always
-# succeeds; where they are missing the privacy check below simply fails and the stop
-# goes through, which is the same direction as every other failure here.
+# succeeds. Where they are missing the privacy check below still fails and the stop
+# still goes through -- but on the mode half, not the uid half: Windows reports
+# `st_uid` as 0, which matches this fallback, and reports directories as 0o777, which
+# does not match the no-group-no-other test. Same direction as every other failure
+# here.
 UID = getattr(os, "getuid", lambda: 0)()
 O_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 
