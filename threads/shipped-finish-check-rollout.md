@@ -79,7 +79,7 @@ stops with a confusing error.
 
 ## Blocked on
 
-- **Adriano, to merge the nine pull requests.** Three installs' hooks stay inert until then.
+- **Adriano, to merge the nine pull requests.** Four installs' hooks stay inert until then.
 - **The evidence file**, `specs/shipped-finish-check-eval-results.md`, still four `FILL_ME`s.
   `verification_due: 2026-10-28`; once that passes with it blank the suite goes red. The spec stays
   `approved` until it is filled. Pass criterion: across 30 consecutive blocked stops outside this
@@ -103,8 +103,8 @@ stops with a confusing error.
 - **A branch switch takes the snapshot back with it.** In a repo whose `.studio/` is tracked,
   committing the update on a branch and returning to the default branch removes
   `.studio/source/finish_check.py` from disk again. That is why three installs read
-  "script not on disk" above. Do not hand-copy it back — the merge would then refuse to overwrite an
-  untracked file.
+  "script not on disk" above (Alfred's was removed deliberately). Do not hand-copy it back — the
+  merge would then refuse to overwrite an untracked file.
 - **`/forge --work-dir` loses the handoff records.** The loop writes them to the worktree's gitignored
   `.studio/output/impl_loop/<unit_id>/`, so `git worktree remove` takes them. `reviewer-concerns/`
   survives because it is deliberately tracked. Copy the handoffs out first.
