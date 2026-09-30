@@ -23,7 +23,8 @@ costs the evidence file.
   sentinel, docs in four files, and the pointer in `obligation-queue.md`'s Non-Goal.
 - The comment rule that two downstream reviewers had to teach us is in the shipped coding
   principles (#214), so it reaches every install's `CLAUDE.md`.
-- `main` is `1535c6a` (the #216 merge), clean, suite 1364, `ruff check .` clean. The obligation
+- `main` is clean and green — read the commit and the suite count from the repo rather than from
+  here (`git log -1`, `cd studio && python -m pytest tests/ -q`). The obligation
   queue reports nothing owed beyond its rough "built but never planned" figure.
 - **The rollout ran on 2026-09-29. All eleven installs now carry the registration** —
   `grep -c finish_check.py <repo>/.claude/settings.local.json` returns 1 in every one.
@@ -58,7 +59,7 @@ stops with a confusing error.
 
 **Every one of the eight has to be re-vendored, not merged as it stands.** Reviewers on two of them
 raised seven Considers about the snapshot they carry, and the answers are upstream in
-[#217](https://github.com/eladrianovalle/TheStudio/pull/217) — approved through `942e19e7`, waiting
+[#217](https://github.com/eladrianovalle/TheStudio/pull/217) — approved, waiting
 on a person. The principle in `CLAUDE.md` is one line there instead of six, and `finish_check.py` is
 hardened. So all eight branches carry text that #217 supersedes. Patching them locally would be a
 fork the next update clobbers.
