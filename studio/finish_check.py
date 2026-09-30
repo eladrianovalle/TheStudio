@@ -96,6 +96,10 @@ def marker_dir_is_private():
     `makedirs` with `exist_ok` accepts a directory someone else made first, so the
     `lstat` is what makes the per-user directory a defence: it must be a real
     directory, not a symlink to one, owned by us, with no group or other bits.
+
+    When it fails, the check is silently off for this user for as long as the
+    squatted directory exists -- stderr is off limits here. If the finish check
+    never fires on a machine, look at who owns this directory first.
     """
     try:
         os.makedirs(MARKER_DIR, mode=0o700, exist_ok=True)
