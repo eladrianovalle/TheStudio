@@ -66,7 +66,9 @@ fork the next update clobbers.
 **Next action.** Merge #217, then rebuild all eight branches from the merged source: re-run
 `update --target` for the five carrying Studio files (Cerebro, Tycho, OrcPunk-biz, Orkid Garden,
 Alfred), re-splice the marker block for the three carrying only `CLAUDE.md` (cemetery-security,
-Multica, OrcPunk-dotcom). Then merge those, and the evidence file is the only thing left.
+Multica, OrcPunk-dotcom). Alfred's update needs `--force` again, which drops its `Owns:` fork, so
+re-apply the fork by hand afterwards, as #396 did. Then merge those, and the evidence file is the
+only thing left.
 
 ## Decisions made
 
@@ -89,7 +91,8 @@ Multica, OrcPunk-dotcom). Then merge those, and the evidence file is the only th
 
 ## Blocked on
 
-- **Adriano, to merge #217, then the eight rebuilt pull requests.** Four installs' hooks stay inert until then.
+- **Adriano, to merge #217, then the eight rebuilt pull requests.** Four installs' hooks stay
+  inert until then.
 - **The evidence file**, `specs/shipped-finish-check-eval-results.md`, still four `FILL_ME`s.
   `verification_due: 2026-10-28`; once that passes with it blank the suite goes red. The spec stays
   `approved` until it is filled. Pass criterion: across 30 consecutive blocked stops outside this
