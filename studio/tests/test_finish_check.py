@@ -379,6 +379,7 @@ def test_a_symlink_at_the_marker_directory_is_not_trusted(hook_tmp, tmp_path):
     result = _run_hook({"session_id": "linked-dir-session"}, tmpdir=hook_tmp)
 
     assert result.returncode == 0
+    assert result.stderr == b""
     assert result.stdout == b""
     assert list(elsewhere.iterdir()) == []
 
