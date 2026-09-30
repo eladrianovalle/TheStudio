@@ -32,21 +32,36 @@ never break a session has to fail open:
 
 Zero Studio imports, deliberately: every Studio module can raise while being
 imported, which would happen before any of our own error handling exists.
-
-The design is in `specs/shipped-finish-check.md`.
 """
 
 import hashlib
 import json
 import os
+import stat
 import sys
 import tempfile
 import time
 
 # Markers live in the system temp directory rather than beside this file: some
 # repos track `.studio/`, and per-turn state written there would dirty their
-# `git status` forever.
-MARKER_DIR = os.path.join(tempfile.gettempdir(), "studio-finish-check")
+# `git status` forever. The directory is per-user and private: on a shared Linux
+# `/tmp`, a world-writable directory plus the predictable `unknown-session` digest
+# would let anyone pre-create another user's marker and cost them the check. The
+# name alone guarantees nothing -- anyone can create it first -- so
+# `marker_dir_is_private` checks ownership and mode before a marker is trusted.
+# `os.getuid` and `os.O_NOFOLLOW` exist only on POSIX. Reading either one at import
+# time on a platform without it raises before `run`'s guard exists, which is the one
+# way this file could print a traceback and exit non-zero -- the two things the module
+# docstring promises it never does. Read through `getattr` so the import always
+# succeeds. Where they are missing the privacy check below still fails and the stop
+# still goes through -- but on the mode half, not the uid half: Windows reports
+# `st_uid` as 0, which matches this fallback, and reports directories as 0o777, which
+# does not match the no-group-no-other test. Same direction as every other failure
+# here.
+UID = getattr(os, "getuid", lambda: 0)()
+O_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
+
+MARKER_DIR = os.path.join(tempfile.gettempdir(), "studio-finish-check-%d" % UID)
 
 # If a marker is older than this, treat it as debris from an abandoned turn
 # rather than as "we already fired this turn".
@@ -55,8 +70,9 @@ MARKER_MAX_AGE_SECONDS = 600
 # The repo's optional replacement for DEFAULT_REASON. Resolved from this file's
 # own location -- once installed at `.studio/source/finish_check.py`, up two
 # directories is `.studio/`, so the override is `.studio/finish-check.txt`. It is
-# deliberately not resolved from the working directory (six logged invocations
-# ran with a cwd of `/`) nor from an environment variable.
+# deliberately not resolved from the working directory (a hook runs from wherever
+# the session happens to be, which is often not the project root) nor from an
+# environment variable.
 OVERRIDE_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "finish-check.txt"
 )
@@ -84,6 +100,29 @@ def marker_path(session_id):
     return os.path.join(MARKER_DIR, "%s.fired" % digest)
 
 
+def marker_dir_is_private():
+    """Create the marker directory if needed, then confirm nobody else controls it.
+
+    `makedirs` with `exist_ok` accepts a directory someone else made first, so the
+    `lstat` is what makes the per-user directory a defence: it must be a real
+    directory, not a symlink to one, owned by us, with no group or other bits.
+
+    When it fails, the check is silently off for this user for as long as the
+    squatted directory exists -- stderr is off limits here. If the finish check
+    never fires on a machine, look at who owns this directory first.
+    """
+    try:
+        os.makedirs(MARKER_DIR, mode=0o700, exist_ok=True)
+        info = os.lstat(MARKER_DIR)
+    except OSError:
+        return False
+    return (
+        stat.S_ISDIR(info.st_mode)
+        and info.st_uid == UID
+        and stat.S_IMODE(info.st_mode) & 0o077 == 0
+    )
+
+
 def sweep_stale_markers():
     """Delete markers left behind by sessions that were abandoned mid-block.
 
@@ -98,14 +137,24 @@ def sweep_stale_markers():
     cutoff = time.time() - MARKER_MAX_AGE_SECONDS
     for name in names:
         stale_path = os.path.join(MARKER_DIR, name)
+        # `lstat`, so a dangling symlink is aged and swept like any other entry
+        # instead of raising here and surviving every sweep.
         try:
-            if os.path.getmtime(stale_path) < cutoff:
+            if os.lstat(stale_path).st_mtime < cutoff:
                 os.remove(stale_path)
         except OSError:
             pass
 
 
 def already_fired_this_turn(path):
+    """Did we already block this turn?
+
+    Age is the only evidence, which leaves one gap: if a session is interrupted
+    between the block and the retry, the marker outlives the turn that wrote it,
+    and the next turn's first stop spends it instead of firing. That turn goes
+    unchecked. It fails open, which is the right direction, and closing it would
+    mean pinning the marker to a turn identity the payload does not carry.
+    """
     try:
         age = time.time() - os.path.getmtime(path)
     except OSError:
@@ -140,8 +189,10 @@ def allow_stop(path):
 
 def block_stop(path):
     try:
-        os.makedirs(MARKER_DIR, exist_ok=True)
-        with open(path, "w") as marker:
+        # O_NOFOLLOW so a symlink left at this path is an error rather than a
+        # write to wherever it points.
+        flags = os.O_CREAT | os.O_WRONLY | os.O_TRUNC | O_NOFOLLOW
+        with os.fdopen(os.open(path, flags, 0o600), "w") as marker:
             marker.write(str(time.time()))
     except OSError:
         # If we cannot record that we fired, we cannot guarantee we won't loop.
@@ -165,9 +216,18 @@ def main():
 
     session_id = str(payload.get("session_id") or "unknown-session")
     path = marker_path(session_id)
+    if not marker_dir_is_private():
+        # A marker in a directory someone else controls proves nothing, and one we
+        # write there could be spent by them. Without a marker we cannot guarantee
+        # we won't loop, so let the stop through.
+        sys.exit(0)
     sweep_stale_markers()
 
-    if payload.get("stop_hook_active"):
+    # `is True` rather than truthiness: a payload carrying the string "false" would
+    # otherwise read as true and let the stop through. That direction is the safe one
+    # -- every unhandled condition here allows the stop -- so this is about saying what
+    # the field means, not about closing a hole.
+    if payload.get("stop_hook_active") is True:
         allow_stop(path)
     if already_fired_this_turn(path):
         allow_stop(path)

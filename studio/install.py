@@ -672,10 +672,17 @@ def _merge_hook_entry(
     their own entry the same way and guard the same three shapes; only the event
     name, the marker substring and the entry itself differ.
 
-    Writes ``<target>/.claude/settings.local.json`` — the per-user, gitignored
-    settings file, NOT the shared ``settings.json``. Our commands are machine-local
-    (both the interpreter and the script path are absolute to the installer's box),
-    so committing one would inflict an unresolvable command on every teammate.
+    Writes ``<target>/.claude/settings.local.json`` — the per-user settings file,
+    NOT the shared ``settings.json``. Our commands are machine-local (both the
+    interpreter and the script path are absolute to the installer's box), so
+    committing one would inflict an unresolvable command on every teammate.
+
+    **It is only ignored if the consuming repo ignores it.** Claude Code does not
+    ignore it for you, and a global ``~/.gitignore`` covering it makes the file
+    invisible on one machine and committable on every other. So a repo that takes
+    this installer should carry ``.claude/settings.local.json`` in its own
+    ``.gitignore``; until it does, the machine-local commands this function writes
+    are one ``git add -A`` away from a diff.
 
     ``marker`` is a substring that appears in our command and in nobody else's, so
     a re-install finds its own entry and stays idempotent. That entry is removed
@@ -771,7 +778,7 @@ def _install_sessionstart_hook(target: Path, *, enabled: bool) -> None:
 # has configured — the job `_HOOK_MARKER` does for the SessionStart nudge. The
 # script's basename is unique enough to recognize our own entry on re-install.
 # Mind the underscore: a hand-wired global entry naming the older `finish-check.py`
-# does NOT match this, and has to be removed by hand (specs/shipped-finish-check.md).
+# does NOT match this, and has to be removed by hand.
 _FINISH_CHECK_MARKER = "finish_check.py"
 
 
@@ -828,7 +835,8 @@ def _copy_finish_check(studio_dir: Path, target: Path) -> None:
     point, and it is worth stating plainly because nothing else in this installer
     works that way: manifest membership is what the clobber guard reads, and a
     guarded hook means one local edit to it freezes that repo's ENTIRE update
-    stream (issue #207 is a live case of exactly that, with a slash command).
+    stream (Studio issue #207 is a live case of exactly that, with a slash command;
+    the number is this repository's, not the consuming repo's).
     Copied-but-unrecorded means ``update`` overwrites this file every run and it
     can never block one. Losing an unsanctioned edit to the hook beats freezing
     every other improvement Studio ships to that repo.

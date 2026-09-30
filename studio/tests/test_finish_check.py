@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -33,7 +34,7 @@ STUDIO_DIR = Path(finish_check.__file__).resolve().parent
 REPO_ROOT = STUDIO_DIR.parent
 MODULE_PATH = STUDIO_DIR / "finish_check.py"
 
-STDLIB_IMPORTS = {"hashlib", "json", "os", "sys", "tempfile", "time"}
+STDLIB_IMPORTS = {"hashlib", "json", "os", "stat", "sys", "tempfile", "time"}
 
 MARKER_NAME = re.compile(r"[0-9a-f]{64}\.fired")
 
@@ -75,10 +76,15 @@ def _run_hook(payload, *, tmpdir, script=None, cwd=None) -> subprocess.Completed
     )
 
 
+# Restated independently of the module, like the digest below it: the directory is
+# per-user so that a shared /tmp cannot be used to plant one session's marker.
+MARKER_DIR_NAME = "studio-finish-check-%d" % os.getuid()
+
+
 def _expected_marker(tmpdir, session_id: str) -> Path:
     """Where the marker for *session_id* belongs, restated independently of the module."""
     digest = hashlib.sha256(session_id.encode("utf-8", "replace")).hexdigest()
-    return Path(tmpdir) / "studio-finish-check" / ("%s.fired" % digest)
+    return Path(tmpdir) / MARKER_DIR_NAME / ("%s.fired" % digest)
 
 
 def _raw_marker_path(marker_dir, session_id: str) -> str:
@@ -189,7 +195,7 @@ def repository_stays_clean():
 # Criterion 1 — stdlib only, and no Studio module
 # ---------------------------------------------------------------------------
 
-def test_the_hook_imports_only_the_six_standard_library_modules():
+def test_the_hook_imports_only_the_seven_standard_library_modules():
     assert _imported_roots(MODULE_PATH) == STDLIB_IMPORTS
 
 
@@ -316,12 +322,122 @@ def test_every_marker_is_a_direct_child_of_one_directory(session_id):
     assert MARKER_NAME.fullmatch(name)
 
 
+def test_the_hook_survives_a_platform_without_the_posix_names(hook_tmp):
+    """`os.getuid` and `os.O_NOFOLLOW` are POSIX-only, and this file must still import.
+
+    They are read at module level, which is the one place `run`'s catch-all cannot
+    reach: an `AttributeError` there would print a traceback and exit 1, and a Stop
+    hook's stderr is shown to the user as an error. Deleting both from `os` before
+    the import is the closest this suite can get to running on Windows. The hook is
+    expected to do nothing at all, and it is the mode check that stops it: Windows
+    reports `st_uid` as 0, which matches the fallback, and reports directories as
+    0o777, which fails the no-group-no-other test. Doing nothing is fine. Doing it
+    quietly is the part worth asserting.
+    """
+    driver = (
+        "import os, runpy, sys;"
+        " del os.getuid; del os.O_NOFOLLOW;"
+        " runpy.run_path(%r, run_name='__main__')" % str(MODULE_PATH)
+    )
+    env = dict(os.environ)
+    for name in ("TMPDIR", "TEMP", "TMP"):
+        env[name] = str(hook_tmp)
+
+    result = subprocess.run(
+        [sys.executable, "-c", driver],
+        input=b'{"session_id": "no-posix-names"}',
+        capture_output=True,
+        env=env,
+        cwd=str(hook_tmp),
+    )
+
+    assert result.returncode == 0
+    assert result.stderr == b""
+    assert result.stdout == b""
+
+
+def test_a_symlink_left_at_the_marker_path_is_not_written_through(hook_tmp, tmp_path):
+    """On a shared /tmp, somebody else's symlink must not become our write target.
+
+    The symlink has to dangle to reach the write at all. One pointing at a file
+    that exists is either spent as a fresh marker or swept as a stale one, and
+    both of those delete the link rather than follow it. A fresh dangling one is
+    neither — `getmtime` in `already_fired_this_turn` raises for it and it is too
+    new to sweep — and lands on the open, where following it
+    would create a file of our choosing at a path of the attacker's.
+
+    The per-user marker directory is the first defence; this is the second.
+    Refusing to write also costs us the marker, so the hook lets the stop
+    through: a marker it cannot record is one it cannot trust.
+    """
+    marker_dir = hook_tmp / MARKER_DIR_NAME
+    marker_dir.mkdir(mode=0o700)
+    target = tmp_path / "file-the-attacker-wants-created"
+    _expected_marker(hook_tmp, "symlinked-session").symlink_to(target)
+
+    result = _run_hook({"session_id": "symlinked-session"}, tmpdir=hook_tmp)
+
+    assert result.returncode == 0
+    assert result.stderr == b""
+    assert result.stdout == b""
+    assert not target.exists()
+
+
+@pytest.mark.parametrize("mode", [0o755, 0o777])
+def test_a_marker_directory_open_to_others_is_not_trusted(hook_tmp, mode):
+    """The directory name is predictable, so someone else may have created it first.
+
+    Only its mode can be set up here — faking another owner needs root — but the
+    ownership check sits on the same path. A fresh marker planted in it must not be
+    spent, and nothing new may be written there: the hook lets the stop through.
+    """
+    marker_dir = hook_tmp / MARKER_DIR_NAME
+    marker_dir.mkdir()
+    marker_dir.chmod(mode)
+    planted = _expected_marker(hook_tmp, "planted-session")
+    planted.write_text(str(time.time()))
+
+    result = _run_hook({"session_id": "planted-session"}, tmpdir=hook_tmp)
+
+    assert result.returncode == 0
+    assert result.stderr == b""
+    assert result.stdout == b""
+    assert planted.exists()
+
+
+def test_a_symlink_at_the_marker_directory_is_not_trusted(hook_tmp, tmp_path):
+    elsewhere = tmp_path / "private-looking-directory"
+    elsewhere.mkdir(mode=0o700)
+    (hook_tmp / MARKER_DIR_NAME).symlink_to(elsewhere)
+
+    result = _run_hook({"session_id": "linked-dir-session"}, tmpdir=hook_tmp)
+
+    assert result.returncode == 0
+    assert result.stderr == b""
+    assert result.stdout == b""
+    assert list(elsewhere.iterdir()) == []
+
+
+def test_a_stale_dangling_symlink_is_swept(hook_tmp, tmp_path):
+    """`getmtime` raises for a dangling link, so only an `lstat` sweep ever clears it."""
+    marker_dir = hook_tmp / MARKER_DIR_NAME
+    marker_dir.mkdir(mode=0o700)
+    link = marker_dir / ("%s.fired" % ("0" * 64))
+    link.symlink_to(tmp_path / "does-not-exist")
+    old = time.time() - finish_check.MARKER_MAX_AGE_SECONDS - 60
+    os.utime(link, (old, old), follow_symlinks=False)
+
+    _run_hook({"session_id": "sweeping-session"}, tmpdir=hook_tmp)
+
+    assert not os.path.lexists(link)
+
+
 @pytest.mark.parametrize("session_id", HOSTILE_SESSION_IDS, ids=HOSTILE_IDS)
 def test_a_hostile_session_id_touches_only_its_own_hashed_marker(
     session_id, hook_tmp, tmp_path
 ):
-    marker_dir = hook_tmp / "studio-finish-check"
-    marker_dir.mkdir()
+    marker_dir = hook_tmp / MARKER_DIR_NAME
+    marker_dir.mkdir(mode=0o700)
     sentinel = _plant_sentinel(marker_dir, session_id, inside=tmp_path)
     before = _files_under(tmp_path)
 
@@ -361,7 +477,7 @@ def test_running_the_hook_leaves_the_repository_untouched(hook_tmp):
     """The autouse fixture checks the tree; this is the run that gives it something to catch."""
     _run_hook({"session_id": "repo-cleanliness"}, tmpdir=hook_tmp, cwd=REPO_ROOT)
     _run_hook({"session_id": "repo-cleanliness"}, tmpdir=hook_tmp, cwd=REPO_ROOT)
-    assert _files_under(hook_tmp / "studio-finish-check") == set()
+    assert _files_under(hook_tmp / MARKER_DIR_NAME) == set()
 
 
 # ---------------------------------------------------------------------------
