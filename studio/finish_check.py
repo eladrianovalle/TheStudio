@@ -37,6 +37,7 @@ imported, which would happen before any of our own error handling exists.
 import hashlib
 import json
 import os
+import stat
 import sys
 import tempfile
 import time
@@ -45,7 +46,9 @@ import time
 # repos track `.studio/`, and per-turn state written there would dirty their
 # `git status` forever. The directory is per-user and private: on a shared Linux
 # `/tmp`, a world-writable directory plus the predictable `unknown-session` digest
-# would let anyone pre-create another user's marker and cost them the check.
+# would let anyone pre-create another user's marker and cost them the check. The
+# name alone guarantees nothing -- anyone can create it first -- so
+# `marker_dir_is_private` checks ownership and mode before a marker is trusted.
 MARKER_DIR = os.path.join(
     tempfile.gettempdir(), "studio-finish-check-%d" % os.getuid()
 )
@@ -87,6 +90,25 @@ def marker_path(session_id):
     return os.path.join(MARKER_DIR, "%s.fired" % digest)
 
 
+def marker_dir_is_private():
+    """Create the marker directory if needed, then confirm nobody else controls it.
+
+    `makedirs` with `exist_ok` accepts a directory someone else made first, so the
+    `lstat` is what makes the per-user directory a defence: it must be a real
+    directory, not a symlink to one, owned by us, with no group or other bits.
+    """
+    try:
+        os.makedirs(MARKER_DIR, mode=0o700, exist_ok=True)
+        info = os.lstat(MARKER_DIR)
+    except OSError:
+        return False
+    return (
+        stat.S_ISDIR(info.st_mode)
+        and info.st_uid == os.getuid()
+        and stat.S_IMODE(info.st_mode) & 0o077 == 0
+    )
+
+
 def sweep_stale_markers():
     """Delete markers left behind by sessions that were abandoned mid-block.
 
@@ -101,8 +123,10 @@ def sweep_stale_markers():
     cutoff = time.time() - MARKER_MAX_AGE_SECONDS
     for name in names:
         stale_path = os.path.join(MARKER_DIR, name)
+        # `lstat`, so a dangling symlink is aged and swept like any other entry
+        # instead of raising here and surviving every sweep.
         try:
-            if os.path.getmtime(stale_path) < cutoff:
+            if os.lstat(stale_path).st_mtime < cutoff:
                 os.remove(stale_path)
         except OSError:
             pass
@@ -151,7 +175,6 @@ def allow_stop(path):
 
 def block_stop(path):
     try:
-        os.makedirs(MARKER_DIR, mode=0o700, exist_ok=True)
         # O_NOFOLLOW so a symlink left at this path is an error rather than a
         # write to wherever it points.
         flags = os.O_CREAT | os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW
@@ -179,6 +202,11 @@ def main():
 
     session_id = str(payload.get("session_id") or "unknown-session")
     path = marker_path(session_id)
+    if not marker_dir_is_private():
+        # A marker in a directory someone else controls proves nothing, and one we
+        # write there could be spent by them. Without a marker we cannot guarantee
+        # we won't loop, so let the stop through.
+        sys.exit(0)
     sweep_stale_markers()
 
     # `is True` rather than truthiness: a payload carrying the string "false" would
