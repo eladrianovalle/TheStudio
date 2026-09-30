@@ -49,9 +49,16 @@ import time
 # would let anyone pre-create another user's marker and cost them the check. The
 # name alone guarantees nothing -- anyone can create it first -- so
 # `marker_dir_is_private` checks ownership and mode before a marker is trusted.
-MARKER_DIR = os.path.join(
-    tempfile.gettempdir(), "studio-finish-check-%d" % os.getuid()
-)
+# `os.getuid` and `os.O_NOFOLLOW` exist only on POSIX. Reading either one at import
+# time on a platform without it raises before `run`'s guard exists, which is the one
+# way this file could print a traceback and exit non-zero -- the two things the module
+# docstring promises it never does. Read through `getattr` so the import always
+# succeeds; where they are missing the privacy check below simply fails and the stop
+# goes through, which is the same direction as every other failure here.
+UID = getattr(os, "getuid", lambda: 0)()
+O_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
+
+MARKER_DIR = os.path.join(tempfile.gettempdir(), "studio-finish-check-%d" % UID)
 
 # If a marker is older than this, treat it as debris from an abandoned turn
 # rather than as "we already fired this turn".
@@ -108,7 +115,7 @@ def marker_dir_is_private():
         return False
     return (
         stat.S_ISDIR(info.st_mode)
-        and info.st_uid == os.getuid()
+        and info.st_uid == UID
         and stat.S_IMODE(info.st_mode) & 0o077 == 0
     )
 
@@ -181,7 +188,7 @@ def block_stop(path):
     try:
         # O_NOFOLLOW so a symlink left at this path is an error rather than a
         # write to wherever it points.
-        flags = os.O_CREAT | os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW
+        flags = os.O_CREAT | os.O_WRONLY | os.O_TRUNC | O_NOFOLLOW
         with os.fdopen(os.open(path, flags, 0o600), "w") as marker:
             marker.write(str(time.time()))
     except OSError:

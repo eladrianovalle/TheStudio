@@ -322,6 +322,38 @@ def test_every_marker_is_a_direct_child_of_one_directory(session_id):
     assert MARKER_NAME.fullmatch(name)
 
 
+def test_the_hook_survives_a_platform_without_the_posix_names(hook_tmp):
+    """`os.getuid` and `os.O_NOFOLLOW` are POSIX-only, and this file must still import.
+
+    They are read at module level, which is the one place `run`'s catch-all cannot
+    reach: an `AttributeError` there would print a traceback and exit 1, and a Stop
+    hook's stderr is shown to the user as an error. Deleting both from `os` before
+    the import is the closest this suite can get to running on Windows. The hook is
+    expected to do nothing at all — with no real uid the marker directory cannot be
+    shown to be ours — but it must do nothing quietly.
+    """
+    driver = (
+        "import os, runpy, sys;"
+        " del os.getuid; del os.O_NOFOLLOW;"
+        " runpy.run_path(%r, run_name='__main__')" % str(MODULE_PATH)
+    )
+    env = dict(os.environ)
+    for name in ("TMPDIR", "TEMP", "TMP"):
+        env[name] = str(hook_tmp)
+
+    result = subprocess.run(
+        [sys.executable, "-c", driver],
+        input=b'{"session_id": "no-posix-names"}',
+        capture_output=True,
+        env=env,
+        cwd=str(hook_tmp),
+    )
+
+    assert result.returncode == 0
+    assert result.stderr == b""
+    assert result.stdout == b""
+
+
 def test_a_symlink_left_at_the_marker_path_is_not_written_through(hook_tmp, tmp_path):
     """On a shared /tmp, somebody else's symlink must not become our write target.
 
