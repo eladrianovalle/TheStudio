@@ -35,11 +35,11 @@ costs the evidence file.
   `studio/finish_check.py` — it has no `.studio/`, so the installer's path would not resolve here.
   That file is gitignored, so this is machine-local and not in any commit.
 
-**In flight.** Nine pull requests, all opened 2026-09-29, none merged:
+**In flight.** This repo's #216 merged on 2026-09-30, which is how this note reached `main`. Eight
+consuming-repo pull requests are open, all opened 2026-09-29, none merged:
 
 | repo | PR | what it carries |
 |---|---|---|
-| this repo | [#216](https://github.com/eladrianovalle/TheStudio/pull/216) | this thread note |
 | Cerebro | #228 | `CLAUDE.md`, `MANIFEST.json`, `VERSION` |
 | Tycho | #33 | full snapshot + `finish_check.py` |
 | OrcPunk-biz | #22 | full snapshot + commands (was 235 commits behind) |
@@ -56,7 +56,16 @@ that list on purpose: the script was deliberately removed from its checkout agai
 untracked copy of a file the incoming merge also adds is how a merge into a 76-commit-behind branch
 stops with a confusing error.
 
-**Next action.** Merge the nine. Then the only thing left is the evidence file.
+**Every one of the eight has to be re-vendored, not merged as it stands.** Reviewers on two of them
+raised seven Considers about the snapshot they carry, and the answers are upstream in
+[#217](https://github.com/eladrianovalle/TheStudio/pull/217) — approved, waiting on a person. The
+principle in `CLAUDE.md` is one line there instead of six, and `finish_check.py` is hardened. So all
+eight branches carry text that #217 supersedes. Patching them locally would be a fork the next
+update clobbers.
+
+**Next action.** Merge #217, then rebuild all eight branches from the merged source: re-run
+`update --target` for the five carrying a snapshot, re-splice the marker block for the three carrying
+only `CLAUDE.md`. Then merge those, and the evidence file is the only thing left.
 
 ## Decisions made
 
