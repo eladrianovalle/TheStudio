@@ -75,10 +75,15 @@ def _run_hook(payload, *, tmpdir, script=None, cwd=None) -> subprocess.Completed
     )
 
 
+# Restated independently of the module, like the digest below it: the directory is
+# per-user so that a shared /tmp cannot be used to plant one session's marker.
+MARKER_DIR_NAME = "studio-finish-check-%d" % os.getuid()
+
+
 def _expected_marker(tmpdir, session_id: str) -> Path:
     """Where the marker for *session_id* belongs, restated independently of the module."""
     digest = hashlib.sha256(session_id.encode("utf-8", "replace")).hexdigest()
-    return Path(tmpdir) / "studio-finish-check" / ("%s.fired" % digest)
+    return Path(tmpdir) / MARKER_DIR_NAME / ("%s.fired" % digest)
 
 
 def _raw_marker_path(marker_dir, session_id: str) -> str:
@@ -316,11 +321,37 @@ def test_every_marker_is_a_direct_child_of_one_directory(session_id):
     assert MARKER_NAME.fullmatch(name)
 
 
+def test_a_symlink_left_at_the_marker_path_is_not_written_through(hook_tmp, tmp_path):
+    """On a shared /tmp, somebody else's symlink must not become our write target.
+
+    The symlink has to dangle to reach the write at all. One pointing at a file
+    that exists is either spent as a fresh marker or swept as a stale one, and
+    both of those delete the link rather than follow it. A dangling one survives
+    both — `getmtime` raises for it — and lands on the open, where following it
+    would create a file of our choosing at a path of the attacker's.
+
+    The per-user marker directory is the first defence; this is the second.
+    Refusing to write also costs us the marker, so the hook lets the stop
+    through: a marker it cannot record is one it cannot trust.
+    """
+    marker_dir = hook_tmp / MARKER_DIR_NAME
+    marker_dir.mkdir()
+    target = tmp_path / "file-the-attacker-wants-created"
+    _expected_marker(hook_tmp, "symlinked-session").symlink_to(target)
+
+    result = _run_hook({"session_id": "symlinked-session"}, tmpdir=hook_tmp)
+
+    assert result.returncode == 0
+    assert result.stderr == b""
+    assert result.stdout == b""
+    assert not target.exists()
+
+
 @pytest.mark.parametrize("session_id", HOSTILE_SESSION_IDS, ids=HOSTILE_IDS)
 def test_a_hostile_session_id_touches_only_its_own_hashed_marker(
     session_id, hook_tmp, tmp_path
 ):
-    marker_dir = hook_tmp / "studio-finish-check"
+    marker_dir = hook_tmp / MARKER_DIR_NAME
     marker_dir.mkdir()
     sentinel = _plant_sentinel(marker_dir, session_id, inside=tmp_path)
     before = _files_under(tmp_path)
@@ -361,7 +392,7 @@ def test_running_the_hook_leaves_the_repository_untouched(hook_tmp):
     """The autouse fixture checks the tree; this is the run that gives it something to catch."""
     _run_hook({"session_id": "repo-cleanliness"}, tmpdir=hook_tmp, cwd=REPO_ROOT)
     _run_hook({"session_id": "repo-cleanliness"}, tmpdir=hook_tmp, cwd=REPO_ROOT)
-    assert _files_under(hook_tmp / "studio-finish-check") == set()
+    assert _files_under(hook_tmp / MARKER_DIR_NAME) == set()
 
 
 # ---------------------------------------------------------------------------

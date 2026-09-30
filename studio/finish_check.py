@@ -32,8 +32,6 @@ never break a session has to fail open:
 
 Zero Studio imports, deliberately: every Studio module can raise while being
 imported, which would happen before any of our own error handling exists.
-
-The design is in `specs/shipped-finish-check.md`.
 """
 
 import hashlib
@@ -45,8 +43,12 @@ import time
 
 # Markers live in the system temp directory rather than beside this file: some
 # repos track `.studio/`, and per-turn state written there would dirty their
-# `git status` forever.
-MARKER_DIR = os.path.join(tempfile.gettempdir(), "studio-finish-check")
+# `git status` forever. The directory is per-user and private: on a shared Linux
+# `/tmp`, a world-writable directory plus the predictable `unknown-session` digest
+# would let anyone pre-create another user's marker and cost them the check.
+MARKER_DIR = os.path.join(
+    tempfile.gettempdir(), "studio-finish-check-%d" % os.getuid()
+)
 
 # If a marker is older than this, treat it as debris from an abandoned turn
 # rather than as "we already fired this turn".
@@ -55,8 +57,9 @@ MARKER_MAX_AGE_SECONDS = 600
 # The repo's optional replacement for DEFAULT_REASON. Resolved from this file's
 # own location -- once installed at `.studio/source/finish_check.py`, up two
 # directories is `.studio/`, so the override is `.studio/finish-check.txt`. It is
-# deliberately not resolved from the working directory (six logged invocations
-# ran with a cwd of `/`) nor from an environment variable.
+# deliberately not resolved from the working directory (a hook runs from wherever
+# the session happens to be, which is often not the project root) nor from an
+# environment variable.
 OVERRIDE_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "finish-check.txt"
 )
@@ -106,6 +109,14 @@ def sweep_stale_markers():
 
 
 def already_fired_this_turn(path):
+    """Did we already block this turn?
+
+    Age is the only evidence, which leaves one gap: if a session is interrupted
+    between the block and the retry, the marker outlives the turn that wrote it,
+    and the next turn's first stop spends it instead of firing. That turn goes
+    unchecked. It fails open, which is the right direction, and closing it would
+    mean pinning the marker to a turn identity the payload does not carry.
+    """
     try:
         age = time.time() - os.path.getmtime(path)
     except OSError:
@@ -140,8 +151,11 @@ def allow_stop(path):
 
 def block_stop(path):
     try:
-        os.makedirs(MARKER_DIR, exist_ok=True)
-        with open(path, "w") as marker:
+        os.makedirs(MARKER_DIR, mode=0o700, exist_ok=True)
+        # O_NOFOLLOW so a symlink left at this path is an error rather than a
+        # write to wherever it points.
+        flags = os.O_CREAT | os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW
+        with os.fdopen(os.open(path, flags, 0o600), "w") as marker:
             marker.write(str(time.time()))
     except OSError:
         # If we cannot record that we fired, we cannot guarantee we won't loop.
@@ -167,7 +181,11 @@ def main():
     path = marker_path(session_id)
     sweep_stale_markers()
 
-    if payload.get("stop_hook_active"):
+    # `is True` rather than truthiness: a payload carrying the string "false" would
+    # otherwise read as true and let the stop through. That direction is the safe one
+    # -- every unhandled condition here allows the stop -- so this is about saying what
+    # the field means, not about closing a hole.
+    if payload.get("stop_hook_active") is True:
         allow_stop(path)
     if already_fired_this_turn(path):
         allow_stop(path)
