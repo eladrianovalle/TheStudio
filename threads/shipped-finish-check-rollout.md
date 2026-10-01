@@ -3,7 +3,7 @@ type: thread
 status: active
 slug: shipped-finish-check-rollout
 created: 2026-09-29
-updated: 2026-09-30
+updated: 2026-10-01
 ---
 
 # Ship the finish-check Stop hook to every install
@@ -56,11 +56,12 @@ thing not worth writing down — it changed three times while this note was in r
 | Alfred | #396 | the rollout, refreshed, `Owns:` fork re-applied by hand a second time |
 
 **The installs that get the hardened hook only through a merge** are the ones whose `.studio/` is
-tracked, where the script arrives only with the pull request: Tycho, which got it when #33 merged,
-and Alfred, OrcPunk-biz and Orkid Garden. Until theirs merges, Alfred and OrcPunk-biz have no script
-on disk, so their hook is registered and is a clean no-op, by design — the command starts with
-`[ ! -f … ] ||`. Orkid Garden is the odd one: until #145 merges it has a script on disk, but the
-superseded one, because #144 merged early.
+tracked, where the script reaches disk only once the pull request merges and the live checkout
+pulls it: Tycho, which got it when #33 merged and was pulled, and Alfred, OrcPunk-biz and Orkid
+Garden. Until theirs merges and is pulled, Alfred and OrcPunk-biz have no script on disk, so their
+hook is registered and is a clean no-op, by design — the command starts with `[ ! -f … ] ||`. Orkid
+Garden is the odd one: until #145 merges and is pulled it has a script on disk, but the superseded
+one, because #144 merged early.
 
 **What the rebuild was for.** Reviewers on two consuming repos raised seven Considers about the
 vendored text, and every answer went upstream rather than into a local patch, which would be a fork
