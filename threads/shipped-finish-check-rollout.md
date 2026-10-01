@@ -24,8 +24,8 @@ costs the evidence file.
 - The comment rule that two downstream reviewers had to teach us is in the shipped coding
   principles (#214), so it reaches every install's `CLAUDE.md`.
 - Check that `main` is clean and green rather than taking it from here (`git log -1`,
-  `cd studio && python -m pytest tests/ -q`). The obligation
-  queue reports nothing owed beyond its rough "built but never planned" figure.
+  `cd studio && python -m pytest tests/ -q`). The obligation queue reports nothing owed beyond its
+  rough "built but never planned" figure.
 - **The rollout ran on 2026-09-29. All eleven installs now carry the registration** —
   `grep -c finish_check.py <repo>/.claude/settings.local.json` returns 1 in every one.
 - **The hand-wired global `Stop` registration is gone** from `~/.claude/settings.json` (a backup of
@@ -37,9 +37,10 @@ costs the evidence file.
   That file is gitignored, so this is machine-local and not in any commit.
 
 **In flight.** Studio's #216 and #217 have both merged, and the rebuild they were blocking ran on
-2026-09-30. Every consuming-repo branch now carries the refreshed snapshot. Which of these are still
-open is the one thing not worth writing down — it changed three times while this note was in review.
-Run `gh pr list --repo <slug>` for that; what each pull request is for does not change:
+2026-09-30. Every consuming-repo branch but OrcPunk-dotcom's now carries the refreshed snapshot;
+that one merged before it was rebuilt, and its correction has not been opened. Which of the rest are
+still open is the one thing not worth writing down — it changed three times while this note was in
+review. Run `gh pr list --repo <slug>` for that; what each pull request is for does not change:
 
 | repo | PR | what it is |
 |---|---|---|
@@ -49,14 +50,14 @@ Run `gh pr list --repo <slug>` for that; what each pull request is for does not 
 | Cerebro | #228 | the rollout, refreshed in place |
 | OrcPunk-biz | #22 | the rollout, refreshed in place |
 | cemetery-security | #723 | the rollout, refreshed in place |
-| OrcPunk-dotcom | #83 | the rollout, refreshed in place |
+| OrcPunk-dotcom | #83, then **one still owed** | #83 merged carrying the superseded text, never rebuilt; no correction is open yet |
 | Alfred | #396 | the rollout, refreshed, `Owns:` fork re-applied by hand a second time |
 
-**Seven of the eleven installs now run the hardened hook.** The other four are the repos whose
-`.studio/` is tracked, where the script arrives only when the pull request merges: Alfred,
-OrcPunk-biz and Orkid Garden. Their hook is registered and is a clean no-op until then, by design —
-the command starts with `[ ! -f … ] ||`. Orkid Garden is the odd one: it has a script on disk, but
-the superseded one, because #144 merged early.
+**The installs still waiting on a merge for the hardened hook** are the ones whose `.studio/` is
+tracked, where the script arrives only with the pull request: Alfred, OrcPunk-biz and Orkid Garden.
+Alfred and OrcPunk-biz have no script on disk, so their hook is registered and is a clean no-op
+until then, by design — the command starts with `[ ! -f … ] ||`. Orkid Garden is the odd one: it has
+a script on disk, but the superseded one, because #144 merged early.
 
 **What the rebuild was for.** Reviewers on two consuming repos raised seven Considers about the
 vendored text, and every answer went upstream rather than into a local patch, which would be a fork
@@ -65,7 +66,10 @@ finish-check hook's marker directory is per-user and checked for ownership and m
 trusted; the marker write refuses to follow a symlink; and the POSIX-only names it needs cannot
 raise at import.
 
-**Next action.** Merge whatever is still open above. Then the evidence file is the only thing left.
+**Next action.** Open the correction OrcPunk-dotcom is owed: re-splice the marker block in its
+`CLAUDE.md` from Studio `main`, the way #159 did for Multica. `gh pr list` on that repo comes back
+empty, and that does not mean it is done. Then merge whatever is still open above, and the evidence
+file is the only thing left.
 
 ## Decisions made
 
@@ -91,6 +95,8 @@ raise at import.
 - **Adriano, to merge the consuming-repo pull requests still open above.** The installs whose
   `.studio/` is tracked keep an inert hook until theirs lands, and Orkid Garden runs a superseded
   copy until #145 does.
+- **OrcPunk-dotcom's correction, which nobody has opened.** Its `CLAUDE.md` keeps the superseded
+  six-line principle until a pull request re-splices it and that merges.
 - **The evidence file**, `specs/shipped-finish-check-eval-results.md`, still four `FILL_ME`s.
   `verification_due: 2026-10-28`; once that passes with it blank the suite goes red. The spec stays
   `approved` until it is filled. Pass criterion: across 30 consecutive blocked stops outside this
