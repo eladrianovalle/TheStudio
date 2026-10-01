@@ -37,19 +37,20 @@ costs the evidence file.
   That file is gitignored, so this is machine-local and not in any commit.
 
 **In flight.** Studio's #216 and #217 have both merged, and the rebuild they were blocking ran on
-2026-09-30. Three consuming-repo pull requests merged; seven are open and carry the refreshed
-snapshot:
+2026-09-30. Every consuming-repo branch now carries the refreshed snapshot. Which of these are still
+open is the one thing not worth writing down — it changed three times while this note was in review.
+Run `gh pr list --repo <slug>` for that; what each pull request is for does not change:
 
-| repo | PR | state |
+| repo | PR | what it is |
 |---|---|---|
-| Tycho | #33 | merged, re-vendored first — the only one that merged with the right text |
-| Orkid Garden | #144 → **#145** | #144 merged early with the superseded text; #145 is the follow-up |
-| Multica (orc-review) | #153 → **#159** | same story; #159 is the follow-up |
-| Cerebro | #228 | open, refreshed |
-| OrcPunk-biz | #22 | open, refreshed |
-| cemetery-security | #723 | open, refreshed |
-| OrcPunk-dotcom | #83 | open, refreshed |
-| Alfred | #396 | open, refreshed, `Owns:` fork re-applied by hand a second time |
+| Tycho | #33 | the rollout, re-vendored before it merged |
+| Orkid Garden | #144, then **#145** | #144 merged carrying the superseded text; #145 is the correction |
+| Multica (orc-review) | #153, then **#159** | same story; #159 is the correction |
+| Cerebro | #228 | the rollout, refreshed in place |
+| OrcPunk-biz | #22 | the rollout, refreshed in place |
+| cemetery-security | #723 | the rollout, refreshed in place |
+| OrcPunk-dotcom | #83 | the rollout, refreshed in place |
+| Alfred | #396 | the rollout, refreshed, `Owns:` fork re-applied by hand a second time |
 
 **Seven of the eleven installs now run the hardened hook.** The other four are the repos whose
 `.studio/` is tracked, where the script arrives only when the pull request merges: Alfred,
@@ -64,7 +65,7 @@ finish-check hook's marker directory is per-user and checked for ownership and m
 trusted; the marker write refuses to follow a symlink; and the POSIX-only names it needs cannot
 raise at import.
 
-**Next action.** Merge the seven. Then the evidence file is the only thing left.
+**Next action.** Merge whatever is still open above. Then the evidence file is the only thing left.
 
 ## Decisions made
 
@@ -87,8 +88,9 @@ raise at import.
 
 ## Blocked on
 
-- **Adriano, to merge the seven open pull requests.** Three installs' hooks stay inert until then,
-  and Orkid Garden runs a superseded copy until #145 lands.
+- **Adriano, to merge the consuming-repo pull requests still open above.** The installs whose
+  `.studio/` is tracked keep an inert hook until theirs lands, and Orkid Garden runs a superseded
+  copy until #145 does.
 - **The evidence file**, `specs/shipped-finish-check-eval-results.md`, still four `FILL_ME`s.
   `verification_due: 2026-10-28`; once that passes with it blank the suite goes red. The spec stays
   `approved` until it is filled. Pass criterion: across 30 consecutive blocked stops outside this
