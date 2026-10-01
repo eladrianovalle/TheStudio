@@ -37,10 +37,12 @@ costs the evidence file.
   That file is gitignored, so this is machine-local and not in any commit.
 
 **In flight.** Studio's #216 and #217 have both merged, and the rebuild they were blocking ran on
-2026-09-30. Every consuming-repo branch but OrcPunk-dotcom's now carries the refreshed snapshot;
-that one merged before it was rebuilt, and its correction has not been opened. Which of the rest are
-still open is the one thing not worth writing down — it changed three times while this note was in
-review. Run `gh pr list --repo <slug>` for that; what each pull request is for does not change:
+2026-09-30. Every consuming repo but OrcPunk-dotcom has a pull request carrying the refreshed
+snapshot: the rollout itself where it was rebuilt before it merged, or a correction (#145, #159)
+where the rollout had already merged with the earlier text. OrcPunk-dotcom's rollout merged before
+it was rebuilt, and its correction has not been opened. Which of the rest are still open is the one
+thing not worth writing down — it changed three times while this note was in review. Run
+`gh pr list --repo <slug>` for that; what each pull request is for does not change:
 
 | repo | PR | what it is |
 |---|---|---|
@@ -53,11 +55,11 @@ review. Run `gh pr list --repo <slug>` for that; what each pull request is for d
 | OrcPunk-dotcom | #83, then **one still owed** | #83 merged carrying the superseded text, never rebuilt; no correction is open yet |
 | Alfred | #396 | the rollout, refreshed, `Owns:` fork re-applied by hand a second time |
 
-**The installs still waiting on a merge for the hardened hook** are the ones whose `.studio/` is
+**The installs that get the hardened hook only through a merge** are the ones whose `.studio/` is
 tracked, where the script arrives only with the pull request: Alfred, OrcPunk-biz and Orkid Garden.
-Alfred and OrcPunk-biz have no script on disk, so their hook is registered and is a clean no-op
-until then, by design — the command starts with `[ ! -f … ] ||`. Orkid Garden is the odd one: it has
-a script on disk, but the superseded one, because #144 merged early.
+Until theirs merges, Alfred and OrcPunk-biz have no script on disk, so their hook is registered and
+is a clean no-op, by design — the command starts with `[ ! -f … ] ||`. Orkid Garden is the odd one:
+until #145 merges it has a script on disk, but the superseded one, because #144 merged early.
 
 **What the rebuild was for.** Reviewers on two consuming repos raised seven Considers about the
 vendored text, and every answer went upstream rather than into a local patch, which would be a fork
@@ -92,9 +94,8 @@ file is the only thing left.
 
 ## Blocked on
 
-- **Adriano, to merge the consuming-repo pull requests still open above.** The installs whose
-  `.studio/` is tracked keep an inert hook until theirs lands, and Orkid Garden runs a superseded
-  copy until #145 does.
+- **Adriano, to merge the consuming-repo pull requests still open above.** Alfred and OrcPunk-biz
+  keep an inert hook until theirs lands, and Orkid Garden runs a superseded copy until #145 does.
 - **OrcPunk-dotcom's correction, which nobody has opened.** Its `CLAUDE.md` keeps the superseded
   six-line principle until a pull request re-splices it and that merges.
 - **The evidence file**, `specs/shipped-finish-check-eval-results.md`, still four `FILL_ME`s.
