@@ -23,8 +23,8 @@ costs the evidence file.
   sentinel, docs in four files, and the pointer in `obligation-queue.md`'s Non-Goal.
 - The comment rule that two downstream reviewers had to teach us is in the shipped coding
   principles (#214), so it reaches every install's `CLAUDE.md`.
-- `main` is clean and green — read the commit and the suite count from the repo rather than from
-  here (`git log -1`, `cd studio && python -m pytest tests/ -q`). The obligation
+- Check that `main` is clean and green rather than taking it from here (`git log -1`,
+  `cd studio && python -m pytest tests/ -q`). The obligation
   queue reports nothing owed beyond its rough "built but never planned" figure.
 - **The rollout ran on 2026-09-29. All eleven installs now carry the registration** —
   `grep -c finish_check.py <repo>/.claude/settings.local.json` returns 1 in every one.
@@ -36,40 +36,35 @@ costs the evidence file.
   `studio/finish_check.py` — it has no `.studio/`, so the installer's path would not resolve here.
   That file is gitignored, so this is machine-local and not in any commit.
 
-**In flight.** This repo's #216 merged on 2026-09-30, which is how this note reached `main`. Eight
-consuming-repo pull requests are open, all opened 2026-09-29, none merged:
+**In flight.** Studio's #216 and #217 have both merged, and the rebuild they were blocking ran on
+2026-09-30. Three consuming-repo pull requests merged; seven are open and carry the refreshed
+snapshot:
 
-| repo | PR | what it carries |
+| repo | PR | state |
 |---|---|---|
-| Cerebro | #228 | `CLAUDE.md`, `MANIFEST.json`, `VERSION` |
-| Tycho | #33 | full snapshot + `finish_check.py` |
-| OrcPunk-biz | #22 | full snapshot + commands (was 235 commits behind) |
-| Orkid Garden | #144 | full snapshot + `finish_check.py` |
-| cemetery-security | #723 | `CLAUDE.md` only |
-| Multica (orc-review) | #153 | `CLAUDE.md` only |
-| OrcPunk-dotcom | #83 | `CLAUDE.md` only |
-| Alfred | #396 | full snapshot, plus the `Owns:` fork re-applied by hand |
+| Tycho | #33 | merged, re-vendored first — the only one that merged with the right text |
+| Orkid Garden | #144 → **#145** | #144 merged early with the superseded text; #145 is the follow-up |
+| Multica (orc-review) | #153 → **#159** | same story; #159 is the follow-up |
+| Cerebro | #228 | open, refreshed |
+| OrcPunk-biz | #22 | open, refreshed |
+| cemetery-security | #723 | open, refreshed |
+| OrcPunk-dotcom | #83 | open, refreshed |
+| Alfred | #396 | open, refreshed, `Owns:` fork re-applied by hand a second time |
 
-Four installs are hook-registered but the script is not on disk yet, because their `.studio/` is
-tracked and the file arrives when the PR merges: **OrcPunk-biz, Orkid Garden, Tycho, Alfred**. Their
-hook is a clean no-op until then, by design — the command starts with `[ ! -f … ] ||`. Alfred is in
-that list on purpose: the script was deliberately removed from its checkout again, because an
-untracked copy of a file the incoming merge also adds is how a merge into a 76-commit-behind branch
-stops with a confusing error.
+**Seven of the eleven installs now run the hardened hook.** The other four are the repos whose
+`.studio/` is tracked, where the script arrives only when the pull request merges: Alfred,
+OrcPunk-biz and Orkid Garden. Their hook is registered and is a clean no-op until then, by design —
+the command starts with `[ ! -f … ] ||`. Orkid Garden is the odd one: it has a script on disk, but
+the superseded one, because #144 merged early.
 
-**Every one of the eight has to be re-vendored, not merged as it stands.** Reviewers on two of them
-raised seven Considers about the snapshot they carry, and the answers are upstream in
-[#217](https://github.com/eladrianovalle/TheStudio/pull/217) — approved, waiting
-on a person. The principle in `CLAUDE.md` is one line there instead of six, and `finish_check.py` is
-hardened. So all eight branches carry text that #217 supersedes. Patching them locally would be a
-fork the next update clobbers.
+**What the rebuild was for.** Reviewers on two consuming repos raised seven Considers about the
+vendored text, and every answer went upstream rather than into a local patch, which would be a fork
+the next update clobbers. The principle in `CLAUDE.md` is one line now instead of six; the
+finish-check hook's marker directory is per-user and checked for ownership and mode before it is
+trusted; the marker write refuses to follow a symlink; and the POSIX-only names it needs cannot
+raise at import.
 
-**Next action.** Merge #217, then rebuild all eight branches from the merged source: re-run
-`update --target` for the five carrying Studio files (Cerebro, Tycho, OrcPunk-biz, Orkid Garden,
-Alfred), re-splice the marker block for the three carrying only `CLAUDE.md` (cemetery-security,
-Multica, OrcPunk-dotcom). Alfred's update needs `--force` again, which drops its `Owns:` fork, so
-re-apply the fork by hand afterwards, as #396 did. Then merge those, and the evidence file is the
-only thing left.
+**Next action.** Merge the seven. Then the evidence file is the only thing left.
 
 ## Decisions made
 
@@ -92,8 +87,8 @@ only thing left.
 
 ## Blocked on
 
-- **Adriano, to merge #217, then the eight rebuilt pull requests.** Four installs' hooks stay
-  inert until then.
+- **Adriano, to merge the seven open pull requests.** Three installs' hooks stay inert until then,
+  and Orkid Garden runs a superseded copy until #145 lands.
 - **The evidence file**, `specs/shipped-finish-check-eval-results.md`, still four `FILL_ME`s.
   `verification_due: 2026-10-28`; once that passes with it blank the suite goes red. The spec stays
   `approved` until it is filled. Pass criterion: across 30 consecutive blocked stops outside this
