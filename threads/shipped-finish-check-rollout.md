@@ -72,8 +72,8 @@ raise at import.
 
 **Next action.** Open the correction OrcPunk-dotcom is owed: re-splice the marker block in its
 `CLAUDE.md` from Studio `main`, the way #159 did for Multica. `gh pr list` on that repo comes back
-empty, and that does not mean it is done. Then merge whatever is still open above, and the evidence
-file is the only thing left.
+empty, and that does not mean it is done. Then merge whatever is still open above and pull each
+merge into its live checkout, and the evidence file is the only thing left.
 
 ## Decisions made
 
@@ -96,8 +96,9 @@ file is the only thing left.
 
 ## Blocked on
 
-- **Adriano, to merge the consuming-repo pull requests still open above.** Alfred and OrcPunk-biz
-  keep an inert hook until theirs lands, and Orkid Garden runs a superseded copy until #145 does.
+- **Adriano, to merge the consuming-repo pull requests still open above, then pull each merge into
+  its live checkout.** Merged on GitHub is not finished: Alfred and OrcPunk-biz keep an inert hook
+  until theirs is merged and pulled, and Orkid Garden runs a superseded copy until #145 is.
 - **OrcPunk-dotcom's correction, which nobody has opened.** Its `CLAUDE.md` keeps the superseded
   six-line principle until a pull request re-splices it and that merges.
 - **The evidence file**, `specs/shipped-finish-check-eval-results.md`, still four `FILL_ME`s.
