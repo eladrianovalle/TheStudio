@@ -56,10 +56,11 @@ thing not worth writing down — it changed three times while this note was in r
 | Alfred | #396 | the rollout, refreshed, `Owns:` fork re-applied by hand a second time |
 
 **The installs that get the hardened hook only through a merge** are the ones whose `.studio/` is
-tracked, where the script arrives only with the pull request: Alfred, OrcPunk-biz and Orkid Garden.
-Until theirs merges, Alfred and OrcPunk-biz have no script on disk, so their hook is registered and
-is a clean no-op, by design — the command starts with `[ ! -f … ] ||`. Orkid Garden is the odd one:
-until #145 merges it has a script on disk, but the superseded one, because #144 merged early.
+tracked, where the script arrives only with the pull request: Tycho, which got it when #33 merged,
+and Alfred, OrcPunk-biz and Orkid Garden. Until theirs merges, Alfred and OrcPunk-biz have no script
+on disk, so their hook is registered and is a clean no-op, by design — the command starts with
+`[ ! -f … ] ||`. Orkid Garden is the odd one: until #145 merges it has a script on disk, but the
+superseded one, because #144 merged early.
 
 **What the rebuild was for.** Reviewers on two consuming repos raised seven Considers about the
 vendored text, and every answer went upstream rather than into a local patch, which would be a fork
@@ -120,9 +121,9 @@ file is the only thing left.
   Tycho were once written up as "behind" when their own merged update PRs simply had not been pulled.
 - **A branch switch takes the snapshot back with it.** In a repo whose `.studio/` is tracked,
   committing the update on a branch and returning to the default branch removes
-  `.studio/source/finish_check.py` from disk again. That is why three installs read
-  "script not on disk" above (Alfred's was removed deliberately). Do not hand-copy it back — the
-  merge would then refuse to overwrite an untracked file.
+  `.studio/source/finish_check.py` from disk again. That is how an install above comes to have no
+  script on disk (Alfred's was removed deliberately). Do not hand-copy it back — the merge would
+  then refuse to overwrite an untracked file.
 - **`/forge --work-dir` loses the handoff records.** The loop writes them to the worktree's gitignored
   `.studio/output/impl_loop/<unit_id>/`, so `git worktree remove` takes them. `reviewer-concerns/`
   survives because it is deliberately tracked. Copy the handoffs out first.
