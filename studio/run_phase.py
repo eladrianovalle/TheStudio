@@ -2023,13 +2023,16 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument(
         "--no-hook",
         action="store_true",
-        help="Do not install the SessionStart update-check hook.",
+        help="Do not install the SessionStart update-check hook. This covers this "
+             "run only; to keep it off, create .studio/update-check.off.",
     )
     init_parser.add_argument(
         "--no-finish-check",
         action="store_true",
         help="Do not install the Stop finish-check hook, which refuses the first "
-             "stop of each turn to ask whether anything was left undone.",
+             "stop of each turn to ask whether anything was left undone. This "
+             "covers this run only; to keep it off, create "
+             ".studio/finish-check.off.",
     )
 
     check_install_parser = subparsers.add_parser(
@@ -2084,14 +2087,17 @@ def build_parser() -> argparse.ArgumentParser:
     update_parser.add_argument(
         "--no-hook",
         action="store_true",
-        help="Do not install the SessionStart update-check hook.",
+        help="Do not install the SessionStart update-check hook. This covers this "
+             "run only; the next plain update puts it back, so to keep it off "
+             "create .studio/update-check.off.",
     )
     update_parser.add_argument(
         "--no-finish-check",
         action="store_true",
         help="Remove (or skip installing) the Stop finish-check hook, which "
              "refuses the first stop of each turn to ask whether anything was "
-             "left undone.",
+             "left undone. This covers this run only; the next plain update puts "
+             "it back, so to keep it off create .studio/finish-check.off.",
     )
     update_parser.add_argument(
         "--pull-source",
