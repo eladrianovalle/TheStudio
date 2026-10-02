@@ -3,7 +3,7 @@ type: thread
 status: active
 slug: shipped-finish-check-rollout
 created: 2026-09-29
-updated: 2026-10-01
+updated: 2026-10-02
 ---
 
 # Ship the finish-check Stop hook to every install
@@ -100,7 +100,7 @@ merge into its live checkout, and the evidence file is the only thing left.
   its live checkout.** Merged on GitHub is not finished: Alfred and OrcPunk-biz keep an inert hook
   until theirs is merged and pulled, and Orkid Garden runs a superseded copy until #145 is.
 - **OrcPunk-dotcom's correction, which nobody has opened.** Its `CLAUDE.md` keeps the superseded
-  six-line principle until a pull request re-splices it and that merges.
+  six-line principle until a pull request re-splices it and that is merged and pulled.
 - **The evidence file**, `specs/shipped-finish-check-eval-results.md`, still four `FILL_ME`s.
   `verification_due: 2026-10-28`; once that passes with it blank the suite goes red. The spec stays
   `approved` until it is filled. Pass criterion: across 30 consecutive blocked stops outside this
