@@ -101,7 +101,8 @@ output. The repository owns everything below except the config key.
 
 **Writer prompt,** when the command is set, after the test-run line:
 "See the product: run `<cmd>` with the arguments this repo's docs give, Read every file path it
-prints, and fix what you see. Before committing, `git status` must show nothing the command wrote."
+prints, and fix what you see. Note `git status --porcelain` before you run it and compare afterwards;
+before committing, `git status` must show nothing the command wrote."
 
 **Editor prompt,** when the command is set:
 - Before grading: run `<cmd> <args>` here, after your last edit, and Read every image it prints
@@ -109,9 +110,13 @@ prints, and fix what you see. Before committing, `git status` must show nothing 
   before citing it: an image taken before the reset shows a tree that will not ship.
 - A pass from a capture names the image's absolute path and the commit it was taken at.
 - Nothing the command wrote may be committed. Your commit is `commit -am`, which stages every
-  tracked file the command modified, such as a lock file or an engine settings file. Before you
-  commit or finish, restore each file the command changed and remove anything it created, and keep
-  only your own edits. `git status` must then show nothing the command wrote.
+  tracked file the command modified, such as a lock file or an engine settings file. Note
+  `git status --porcelain`, and `git diff` of any file already changed, before you run the command,
+  and compare afterwards: that is how you tell what it wrote from your own edits. Before you commit
+  or finish, restore each tracked file it changed and remove each new untracked file that
+  `git status` shows. Leave ignored files alone: an engine cache such as Unity's `Library/` is
+  ignored, and deleting it makes the next capture pay the cold import. `git status` must then show
+  nothing the command wrote.
 - A criterion that compares against "before this unit" needs a capture at `<writer_sha>^` as well.
   Never take it by moving this checkout: no `checkout`, `switch`, `stash` or `reset` to the parent
   here, because the commits and resets that follow would then run against the wrong place. Use the
@@ -181,6 +186,9 @@ without a window is likely to work. Nobody has proved it yet.
   gate can prevent that. Only the verification's sabotaged arm measures it.
 - **Slow first import.** A game engine's first import in a fresh worktree can exceed the agent's
   10-minute command limit. Without a warmed cache the grade is `unverifiable`, never a silent pass.
+  A worktree added at `<writer_sha>^` for a before capture always starts cold, so on a Unity
+  adopter most before/after criteria will grade `unverifiable` unless the repository documents a
+  cached method. The usage doc should say so next to this risk.
 - **Engine project locks.** Without `--work-dir`, an editor a person has open on the same project
   can block a batch capture. The command fails and the grade is `unverifiable`. That outcome is
   honest, but it is worth saying in the usage doc.
@@ -246,7 +254,7 @@ no-work-dir fixture stays byte-unchanged.
 - [ ] An `observe_command` that is absent, empty, whitespace-only or not a string renders both prompts identically to a unit without the key, and the existing no-work-dir prompt fixture test passes with its fixture unchanged.
 - [ ] With the key set, the writer prompt only adds lines to the keyless prompt: it names the command and says nothing the command wrote may be committed.
 - [ ] With the key set and criteria present, the editor prompt no longer says "no browser and no Play mode", requires image evidence to name the file's absolute path, grades a failure the unit caused as `fail`, and grades a command that could not run as `unverifiable`.
-- [ ] With the key set, the editor prompt says nothing the command wrote may be committed: tracked files it modified are restored and files it created are removed before the editor commits or finishes.
+- [ ] With the key set, the editor prompt says nothing the command wrote may be committed: tracked files it modified are restored and untracked files it created that `git status` shows are removed before the editor commits or finishes, ignored files are left in place, and the editor compares `git status --porcelain` from before and after the command to tell its writes from the editor's own edits.
 - [ ] With the key set, the editor prompt says a capture at `<writer_sha>^` never changes the unit checkout's HEAD or working tree, and is taken by the repository's documented method or in a separate worktree outside the checkout.
 - [ ] `spec.md`'s criteria rule allows a player-visible criterion, naming the scene or state to observe and what must be visible, only when `[gate] observe_command` is set; otherwise it still sends the criterion to `/smoke`.
 - [ ] forge.md Step 5 passes `observe_command`, and `IMPLEMENTATION_LOOP_SPEC.md`, `CLAUDE_CODE_USAGE.md`, `README.md`, `ARCHITECTURE.md`, `CLAUDE.md` and `CHANGELOG.md` each describe the key.
