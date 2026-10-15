@@ -82,8 +82,9 @@ output. The repository owns everything below except the config key.
 - **Which code it observes.** The checkout in its current working directory. Under `--work-dir`
   the prompt's existing `cd` (`workDirPreamble`) makes that the tree under build. The command must
   take its project path from the working directory and never hard-code one.
-- **Output.** Text on stdout. A line that is an absolute path to a file is evidence the agent must
-  open with Read. Every other line is a readout, such as a frame time or a log excerpt.
+- **Output.** Text on stdout. A line that is an absolute path to a file, in the host's own form (a
+  drive-letter path counts on Windows), is evidence the agent must open with Read. Every other line
+  is a readout, such as a frame time or a log excerpt.
 - **Where captures go.** Outside the checkout, and nowhere else. The writer commits with
   `git add -A`, so anything written inside the tree lands on the unit's branch, and a capture inside
   a worktree is deleted when the worktree is removed, leaving evidence that points at nothing.
@@ -104,11 +105,19 @@ prints, and fix what you see. Before committing, `git status` must show nothing 
 
 **Editor prompt,** when the command is set:
 - Before grading: run `<cmd> <args>` here, after your last edit, and Read every image it prints
-  before grading anything a player sees.
-- A pass from a capture names the image's absolute path and the commit it was taken at. If
-  `git status` is not clean, say so in the evidence.
+  before grading anything a player sees. If you `reset --hard` after a capture, capture again
+  before citing it: an image taken before the reset shows a tree that will not ship.
+- A pass from a capture names the image's absolute path and the commit it was taken at.
+- Nothing the command wrote may be committed. Your commit is `commit -am`, which stages every
+  tracked file the command modified, such as a lock file or an engine settings file. Before you
+  commit or finish, restore each file the command changed and remove anything it created, and keep
+  only your own edits. `git status` must then show nothing the command wrote.
 - A criterion that compares against "before this unit" needs a capture at `<writer_sha>^` as well.
-  If the repository's docs give no way to take one, grade it `unverifiable`.
+  Never take it by moving this checkout: no `checkout`, `switch`, `stash` or `reset` to the parent
+  here, because the commits and resets that follow would then run against the wrong place. Use the
+  repository's documented method, or add a separate worktree at `<writer_sha>^` outside this
+  checkout, capture there, and remove it. If neither is possible, grade the criterion
+  `unverifiable`.
 - If the command fails, decide why. A failure the unit caused (a compile error, an exception from a
   touched file, a scene that no longer loads) is `fail`. A command that could not run for reasons
   outside the unit (a missing tool, a licence, a timeout) is `unverifiable`, with the error quoted.
@@ -175,6 +184,13 @@ without a window is likely to work. Nobody has proved it yet.
 - **Engine project locks.** Without `--work-dir`, an editor a person has open on the same project
   can block a batch capture. The command fails and the grade is `unverifiable`. That outcome is
   honest, but it is worth saying in the usage doc.
+- **Captures do not keep themselves.** A path outside the checkout is often a temporary folder on
+  the agent's machine, cleaned up later. The usage doc should say that keeping captures around, so
+  a person can open the picture a grade names, is the repository's job.
+- **The key can go away after the spec is written.** `/spec` allows a player-visible criterion
+  because the key is set at that moment. If the key is later removed or its command breaks, those
+  criteria grade `unverifiable` and the unit ships flagged. That is acceptable; the usage doc should
+  say so in one sentence.
 - **Image cost.** Every image read costs context. The repository's arguments should capture what
   the criterion names, not the whole game.
 - **Lenient grading.** 253 of the adopter's 257 graded criteria passed. A look-based pass inherits
@@ -230,6 +246,8 @@ no-work-dir fixture stays byte-unchanged.
 - [ ] An `observe_command` that is absent, empty, whitespace-only or not a string renders both prompts identically to a unit without the key, and the existing no-work-dir prompt fixture test passes with its fixture unchanged.
 - [ ] With the key set, the writer prompt only adds lines to the keyless prompt: it names the command and says nothing the command wrote may be committed.
 - [ ] With the key set and criteria present, the editor prompt no longer says "no browser and no Play mode", requires image evidence to name the file's absolute path, grades a failure the unit caused as `fail`, and grades a command that could not run as `unverifiable`.
+- [ ] With the key set, the editor prompt says nothing the command wrote may be committed: tracked files it modified are restored and files it created are removed before the editor commits or finishes.
+- [ ] With the key set, the editor prompt says a capture at `<writer_sha>^` never changes the unit checkout's HEAD or working tree, and is taken by the repository's documented method or in a separate worktree outside the checkout.
 - [ ] `spec.md`'s criteria rule allows a player-visible criterion, naming the scene or state to observe and what must be visible, only when `[gate] observe_command` is set; otherwise it still sends the criterion to `/smoke`.
 - [ ] forge.md Step 5 passes `observe_command`, and `IMPLEMENTATION_LOOP_SPEC.md`, `CLAUDE_CODE_USAGE.md`, `README.md`, `ARCHITECTURE.md`, `CLAUDE.md` and `CHANGELOG.md` each describe the key.
 
