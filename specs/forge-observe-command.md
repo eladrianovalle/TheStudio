@@ -101,8 +101,9 @@ output. The repository owns everything below except the config key.
 
 **Writer prompt,** when the command is set, after the test-run line:
 "See the product: run `<cmd>` with the arguments this repo's docs give, Read every file path it
-prints, and fix what you see. Note `git status --porcelain` before you run it and compare afterwards;
-before committing, `git status` must show nothing the command wrote."
+prints, and fix what you see. Note `git status --porcelain`, and `git diff` of any file you already
+changed, before you run it and compare afterwards; before committing, `git status` must show nothing
+the command wrote. A file you had already edited goes back to the state you noted, not to `HEAD`."
 
 **Editor prompt,** when the command is set:
 - Before grading: run `<cmd> <args>` here, after your last edit, and Read every image it prints
@@ -114,7 +115,8 @@ before committing, `git status` must show nothing the command wrote."
   `git status --porcelain`, and `git diff` of any file already changed, before you run the command,
   and compare afterwards: that is how you tell what it wrote from your own edits. Before you commit
   or finish, restore each tracked file it changed and remove each new untracked file that
-  `git status` shows. Leave ignored files alone: an engine cache such as Unity's `Library/` is
+  `git status` shows. A file you had already edited goes back to the state you noted, not to
+  `HEAD`, or your own edits are lost with the command's. Leave ignored files alone: an engine cache such as Unity's `Library/` is
   ignored, and deleting it makes the next capture pay the cold import. `git status` must then show
   nothing the command wrote.
 - A criterion that compares against "before this unit" needs a capture at `<writer_sha>^` as well.
@@ -252,9 +254,9 @@ no-work-dir fixture stays byte-unchanged.
 **Acceptance criteria:**
 - [ ] `observe_command` loads from `[gate]`, defaults to `""`, rejects a non-string with an error naming the key, and appears in `runtime_knobs`; an empty value never makes `/forge` refuse to start.
 - [ ] An `observe_command` that is absent, empty, whitespace-only or not a string renders both prompts identically to a unit without the key, and the existing no-work-dir prompt fixture test passes with its fixture unchanged.
-- [ ] With the key set, the writer prompt only adds lines to the keyless prompt: it names the command and says nothing the command wrote may be committed.
+- [ ] With the key set, the writer prompt only adds lines to the keyless prompt: it names the command, says nothing the command wrote may be committed, and says a file the writer had already edited is restored to its noted state rather than to `HEAD`.
 - [ ] With the key set and criteria present, the editor prompt no longer says "no browser and no Play mode", requires image evidence to name the file's absolute path, grades a failure the unit caused as `fail`, and grades a command that could not run as `unverifiable`.
-- [ ] With the key set, the editor prompt says nothing the command wrote may be committed: tracked files it modified are restored and untracked files it created that `git status` shows are removed before the editor commits or finishes, ignored files are left in place, and the editor compares `git status --porcelain` from before and after the command to tell its writes from the editor's own edits.
+- [ ] With the key set, the editor prompt says nothing the command wrote may be committed: tracked files it modified are restored and untracked files it created that `git status` shows are removed before the editor commits or finishes, ignored files are left in place, the editor compares `git status --porcelain` from before and after the command to tell its writes from the editor's own edits, and a file the editor had already edited is restored to its noted state rather than to `HEAD`.
 - [ ] With the key set, the editor prompt says a capture at `<writer_sha>^` never changes the unit checkout's HEAD or working tree, and is taken by the repository's documented method or in a separate worktree outside the checkout.
 - [ ] `spec.md`'s criteria rule allows a player-visible criterion, naming the scene or state to observe and what must be visible, only when `[gate] observe_command` is set; otherwise it still sends the criterion to `/smoke`.
 - [ ] forge.md Step 5 passes `observe_command`, and `IMPLEMENTATION_LOOP_SPEC.md`, `CLAUDE_CODE_USAGE.md`, `README.md`, `ARCHITECTURE.md`, `CLAUDE.md` and `CHANGELOG.md` each describe the key.
