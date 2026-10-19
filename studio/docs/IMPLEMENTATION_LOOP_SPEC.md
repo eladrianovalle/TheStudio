@@ -299,6 +299,8 @@ never runs the command or parses its output, and the repo owns everything else:
 - **Where captures go.** Outside the checkout only. The writer commits with `add -A`, and a capture
   inside a worktree dies with it.
 - **Exit code.** 0 means it observed; non-zero means it did not, and stderr says why.
+- **No backticks.** The string is placed in the prompts verbatim between backticks, so a backtick
+  in it (a shell substitution, say) breaks their formatting. Put such logic in a script and name that.
 
 Both agents are told that nothing the command writes may be committed: they note `git status
 --porcelain` before running it, restore what it modified, remove what it created, leave ignored

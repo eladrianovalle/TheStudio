@@ -566,7 +566,9 @@ if (editor && editor.tests && editor.tests.passed === false && !editor.reverted)
 // Safety net: if the editor kept its edits but didn't commit them, commit now so delivery is complete.
 // NOTE: `git commit -am` stages only tracked, modified files — intentional. The editor's contract is to
 // refine/cut EXISTING files; a new file is out-of-contract, so it's left uncommitted to surface (not
-// silently swept in via `git add -A`). Widen this only if editors are ever allowed to create files.
+// silently swept in via `git add -A`). One exception: with an observe command, the editor stages a file
+// the command generated for one of the unit's own new files (a `.meta`, say) itself, via `git add`.
+// Widen this only if editors are ever allowed to create files.
 if (editHeld && editor && !editor.committed) {
   log(`Editor kept edits but did not commit — committing now.`)
   await agent(
