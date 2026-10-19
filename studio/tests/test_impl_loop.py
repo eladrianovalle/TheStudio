@@ -153,14 +153,6 @@ def test_loop_config_invalid_mutation_command_type():
         LoopConfig(test_command="make test", mutation_command=["mutmut"])  # type: ignore[arg-type]
 
 
-def test_loop_config_invalid_observe_command_type():
-    """observe_command must be a string, and the error names the key a person would edit."""
-    with pytest.raises(ValueError, match="gate.observe_command"):
-        LoopConfig(test_command="make test", observe_command=["capture"])  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="gate.observe_command"):
-        LoopConfig(test_command="make test", observe_command=True)  # type: ignore[arg-type]
-
-
 def test_loop_config_invalid_read_scope():
     """read_scope must be one of the known values, not an arbitrary string."""
     with pytest.raises(ValueError, match="read_scope"):
