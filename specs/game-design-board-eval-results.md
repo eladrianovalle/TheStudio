@@ -20,7 +20,7 @@ did not see proposed first.
 |---|---|---|---|---|
 | Baseline (feature off) | One fresh headless session, one turn, in a clone with the discipline cut (diff below) | 1 | No | (a) partial, (b) mostly, (c) **failed**. It made the structural call first, but named no region and went straight to a board-wide text search. Its claims match what it read, but it never says where each one came from. It wrote to the board in the same turn the question was asked, creating a new frame, a summary note and a sticky, with no proposal. It did look at the empty canvas before placing them. 145 s, $2.85. |
 | With the feature | One fresh headless session, three turns: the question, then "go", then "go" again | 1 | No | (a) only on turns 2 and 3, (b) and (c) yes. Its first action was to read `DESIGN_BOARD.md`, so the treatment loaded. Every turn opened with the structural call. In turns 2 and 3 it named the region ("re-reading the Rebuild Questions frame") before opening it. In turn 1 it named only the subject ("find where Stamina lives") before a text search and a frame read, the same move the baseline made. It sourced every claim to a frame by name, and listed the regions it had **not** opened rather than answering from their titles. It proposed the exact sticky and destination, then stopped. On the first "go" it re-read the destination, found the baseline's frame now sitting where it had planned to write, and **halted with a revised proposal instead of writing**. On the second "go" it re-read the frame, saw nothing had changed, and wrote only the approved sticky. 225 s over three turns, $9.20. |
-| With the feature, (a) reworded | One fresh headless session, first turn only, in a new clone whose vendored `DESIGN_BOARD.md` carries this PR's rewording of step 1 | 1 | No | (a) still partial, (b) yes, (c) yes as far as turn 1 reaches. It read `DESIGN_BOARD.md`, then made the structural call. Next it searched by **frame title** rather than item text. It wrote "Now opening the **Stamina** frame" before reading that frame, which the first run never did. It still opened the **Rebuild Questions** frame, its write destination, without naming it first. It sourced every claim to one of the two frames it read. It labelled the earlier sessions' summary on the board as "agent-written" and declined to vouch for it, proposed one exact sticky that didn't repeat the existing two, and stopped. 2026-10-20, $1.17. The board already held both earlier arms' writes, so this turn saw a different board than the first runs. |
+| With the feature, (a) reworded | One fresh headless session, first turn only, in a new clone whose vendored `DESIGN_BOARD.md` carries this PR's rewording of step 1 without the sentence the next row adds | 1 | No | (a) still partial, (b) yes, (c) yes as far as turn 1 reaches. It read `DESIGN_BOARD.md`, then made the structural call. Next it searched by **frame title** rather than item text. It wrote "Now opening the **Stamina** frame" before reading that frame, which the first run never did. It still opened the **Rebuild Questions** frame, its write destination, without naming it first. It sourced every claim to one of the two frames it read. It labelled the earlier sessions' summary on the board as "agent-written" and declined to vouch for it, proposed one exact sticky that didn't repeat the existing two, and stopped. 2026-10-20, $1.17. The board already held both earlier arms' writes, so this turn saw a different board than the first runs. |
 | With the feature, (a) reworded twice | The same again, in a fresh clone, after adding "That holds for every region you open, including the one you mean to write to" | 1 | No | (a) still partial, (b) weakened, (c) yes as far as turn 1 reaches. It named **both** frames before opening them ("Now opening **Stamina** and **Rebuild Questions**"), which closes the destination gap. But before naming them it ran board-wide text searches for the mechanic and the frame. After the reads it paged those searches four more times and sourced five claims to "search snippets read this turn" instead of to regions it opened. It proposed one exact sticky that repeated neither existing question, and stopped. 2026-10-20, $1.92. |
 
 **Setup.** The run used a consuming repo whose `CLAUDE.md` declares a design board. The board is a
@@ -39,10 +39,12 @@ first turns ran in parallel, so neither could see the other's write.
 **Reproducing it.** Each arm was a `git clone` of the repo's first commit. That commit tracks the
 vendored Studio copy, so the baseline and the first treatment read `DESIGN_BOARD.md` exactly as
 `main` shipped it, which the baseline then deleted. Each re-run was a fresh clone with this PR's
-`DESIGN_BOARD.md` copied over the vendored file and nothing else changed. Nothing was cleaned off
-the board afterwards. The baseline's frame, note and sticky and the first treatment's approved
-sticky are all still there. The re-runs stopped at a proposal and wrote nothing, but they saw a
-board that already held those writes.
+`DESIGN_BOARD.md` copied over the vendored file and nothing else changed. For the first re-run,
+delete "That holds for every region you open, including the one you mean to write to" from step 1
+first, since the second rewording added it. Nothing was cleaned off the board afterwards. The
+baseline's frame, note and sticky and the first treatment's approved sticky are all still there.
+The re-runs stopped at a proposal and wrote nothing, but they saw a board that already held those
+writes.
 
 **The baseline's `CLAUDE.md` cut.** The vendored `.studio/source/docs/DESIGN_BOARD.md` was deleted
 as well. One sentence beyond the protocol was changed: "the first write proposes creating that frame"
@@ -113,18 +115,19 @@ the file carrying it actually loads.
 - **Cost moved the wrong way.** The treatment cost $9.20 over three turns against the baseline's
   $2.85 for one, and took 225 s against 145 s. Each turn re-reads the structure and the
   destination, and each approval is another round trip.
-- **The rewording moved (a) part of the way.** The re-run named the region it was answering from
-  before opening it, and it located by frame title instead of searching item text. But it opened its
-  write destination without naming it first, as if a frame it planned to write to didn't count as a
-  read. That's one session, and its board wasn't the one the first runs saw, so this shows the
-  direction of the change, not its size.
+- **The rewordings moved (a) part of the way.** The first re-run named the region it was answering
+  from before opening it, and it located by frame title instead of searching item text. But it
+  opened its write destination without naming it first, as if a frame it planned to write to didn't
+  count as a read. The second re-run named both frames before opening either, which closed that
+  gap, but it ran board-wide text searches before naming them. That's one session per rewording, and
+  neither saw the board the first runs saw, so this shows the direction of the change, not its size.
 - **The board tool's own guidance contradicts (a).** The board server tells the agent to "use canvas
   search beforehand to narrow down scope of a read", meaning search before you read. Step 1 now says
-  the opposite. Both rewordings fixed which regions got named, and neither stopped the search-first
-  habit. After the second rewording, the agent leaned on search snippets as sources more than it had
-  before. Either the vendor's instruction outranks ours for this tool, or (a) treats as a content
-  read something that, in practice, is how this board is located. A third rewording won't settle
-  which.
+  the opposite. The second rewording got every opened region named first, and neither rewording
+  stopped the search-first habit. After the second rewording, the agent leaned on search snippets as
+  sources more than it had before. Either the vendor's instruction outranks ours for this tool, or
+  (a) treats as a content read something that, in practice, is how this board is located. A third
+  rewording won't settle which.
 - **Headless sessions.** Here an approval was typed in as a resumed one-shot turn. A designer in an
   interactive session might phrase approvals differently, or approve a whole batch at once. Neither
   was tested.
@@ -132,9 +135,10 @@ the file carrying it actually loads.
 ## Verdict
 **Criterion not met as written.** Parts (b) and (c) held in the treatment, and the baseline failed
 (c) outright. Part (a) failed the treatment's first turn the same way it failed the baseline, so the
-discipline was not shown to change the opening move. Two rewordings of step 1 got every region named before it was opened, the write destination
-included. Neither stopped a board-wide text search from coming first, a habit the board tool's own
-instructions teach. (a) is still not met. What's left is a decision about the spec, not more wording:
-either count a text search as locating, or keep (a) and accept that this tool undermines it. It did change the write: the baseline wrote
+discipline was not shown to change the opening move. It did change the write: the baseline wrote
 unasked, while the treatment proposed, re-checked, halted when the destination moved, and wrote
-only what was approved.
+only what was approved. Two rewordings of step 1 got every region named before it was opened, the
+write destination included. Neither stopped a board-wide text search from coming first, a habit the
+board tool's own instructions teach. (a) is still not met. What's left is a decision about the spec,
+not more wording: either count a text search as locating, or keep (a) and accept that this tool
+undermines it.

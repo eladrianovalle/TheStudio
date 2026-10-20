@@ -25,10 +25,10 @@ which regions exist. Make it first, make it every turn, and never substitute a l
 from an earlier turn. It is the cheap call; the content read is the expensive one. Having listed the
 regions, write in your reply the name of the region you are about to open, as the listing gives it,
 and why. Only then open it. That holds for every region you open, including the one you mean to
-write to. Naming the subject ("where stamina lives") is not naming a region. A
-search over what the board's items say is a content read, not a way to locate, because it returns
-their text. So it comes after you name a region, never before. If the listing alone can't tell you
-which region holds the subject, name the region you'll try first, or ask the designer.
+write to. Naming the subject ("where stamina lives") is not naming a region. A search over what the
+board's items say is a content read, not a way to locate, because it returns their text. So it comes
+after you name a region, never before. If the listing alone can't tell you which region holds the
+subject, name the region you'll try first, or ask the designer.
 
 ### 2. Structure gives addresses, never content
 
