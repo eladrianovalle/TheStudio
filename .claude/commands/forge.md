@@ -286,6 +286,13 @@ wait for the completion notification.
 - **Invoke by `scriptPath`, never `name`.** `Workflow({name})` resolves a FROZEN registry snapshot
   captured early in the session; it ignores on-disk edits to the workflow file. `scriptPath` (the
   absolute path to `.claude/workflows/implementation-loop.js`) reads the live file.
+- **The Workflow tool can refuse a `scriptPath` outside the session's working directory**, which is
+  where a `--work-dir` worktree usually sits. When it does, check the main checkout's copy is
+  byte-identical (`cmp <repo>/.claude/workflows/implementation-loop.js <work_dir>/.claude/workflows/implementation-loop.js`)
+  and launch that copy instead. It is safe because the script is read once at launch, and the
+  `work_dir` arg, not where the script lives, decides where the agents work. If the two copies differ
+  (a unit that edits the loop itself), do not launch the main copy: stop and tell the user, since
+  that is exactly the build-against-the-old-loop the With `--work-dir` bullet above warns about.
 - **`args` reaches the workflow as a JSON string**, not an object; the workflow `JSON.parse`s it.
   Pass args as a normal object here; just don't be surprised the workflow normalizes a string.
 - If `editor_enabled` is false (config `mandate = "off"`), the loop skips the editor pass and
