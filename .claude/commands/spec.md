@@ -236,7 +236,10 @@ The criteria are the part `/forge` depends on, so write them with care:
 - **Three to six per unit.** If you need more, the unit is too big; split it.
 - **Keep them checkable from the code and its tests.** The `/forge` editor reads the diff and runs the
   unit's tests; it has no browser and no Play mode. A criterion that only a human at the screen can
-  judge belongs in `/smoke`, not here.
+  judge belongs in `/smoke`, not here. The one exception: when this repo's
+  `.studio/implementation_loop.toml` sets `[gate] observe_command`, the editor can capture the
+  running product, so a player-visible criterion is allowed. It must name the scene or state to
+  observe and what must be visible there. Without that key, it still goes to `/smoke`.
 - **`<unit_id>` is a short snake_case handle, unique repo-wide** — no other spec may plan the same id,
   because a commit subject carries no slug and two specs sharing an id cannot be told apart. `/forge
   --spec <slug> --unit <unit_id>` is how the builder pulls this unit's criteria, so don't rename it

@@ -101,11 +101,12 @@ def test_a_bare_loop_config_is_refused_rather_than_gating_on_a_literal():
 
 
 def test_loop_config_gate_defaults_are_empty():
-    """The three gate keys that still have defaults default to nothing at all."""
+    """The gate keys that still have defaults default to nothing at all."""
     config = LoopConfig(test_command="make test")
     assert config.static_checks == []
     assert config.require_mutation_check is False
     assert config.mutation_command == ""
+    assert config.observe_command == ""
 
 
 def test_loop_config_defaults_match_spec():
@@ -221,6 +222,52 @@ output_budget = 999
         assert config.static_checks == []
         assert config.require_mutation_check is False
         assert config.mutation_command == ""
+        assert config.observe_command == ""
+    finally:
+        config_path.unlink()
+
+
+def test_load_loop_config_reads_observe_command():
+    """observe_command is read from [gate] as written."""
+    config_path = _write_toml("""
+[gate]
+test_command = "make test"
+observe_command = "scripts/capture.sh"
+""")
+    try:
+        config = load_loop_config(config_path)
+        assert config.observe_command == "scripts/capture.sh"
+    finally:
+        config_path.unlink()
+
+
+def test_load_loop_config_empty_observe_command_is_not_refused():
+    """An empty observe_command means off, and never stops /forge from starting.
+
+    Unlike a blank test_command, which refuses, the observe key is optional.
+    """
+    config_path = _write_toml("""
+[gate]
+test_command = "make test"
+observe_command = ""
+""")
+    try:
+        config = load_loop_config(config_path)
+        assert config.observe_command == ""
+    finally:
+        config_path.unlink()
+
+
+def test_load_loop_config_rejects_non_string_observe_command():
+    """A non-string observe_command in the file is refused, naming the key."""
+    config_path = _write_toml("""
+[gate]
+test_command = "make test"
+observe_command = 42
+""")
+    try:
+        with pytest.raises(ValueError, match="gate.observe_command"):
+            load_loop_config(config_path)
     finally:
         config_path.unlink()
 
@@ -389,6 +436,7 @@ def test_runtime_knobs_default_config():
         "static_checks": [],
         "require_mutation_check": False,
         "mutation_command": "",
+        "observe_command": "",
         "read_scope": "touched+importers",
         "output_budget": 400,
     }
@@ -404,6 +452,7 @@ def test_runtime_knobs_reflects_loaded_override():
             'test_command = "python -m pytest tests/ -q"\n'
             'static_checks = ["ruff check {paths}", "mypy {paths}"]\n'
             "require_mutation_check = false\n"
+            'observe_command = "scripts/capture.sh"\n'
             "[editor]\n"
             'mandate = "off"\n'
             'read_scope = "touched"\n'
@@ -417,6 +466,7 @@ def test_runtime_knobs_reflects_loaded_override():
             "static_checks": ["ruff check {paths}", "mypy {paths}"],
             "require_mutation_check": False,
             "mutation_command": "",
+            "observe_command": "scripts/capture.sh",
             "read_scope": "touched",
             "output_budget": 250,
         }

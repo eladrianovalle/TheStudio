@@ -84,8 +84,8 @@ test('concernsDisplayPath stays a bare relative path without a work dir', () => 
 // and the editor grades each one. A spec-less run carries none and must behave exactly as before.
 // ---------------------------------------------------------------------------
 const unitCriteria = loadFunction('../implementation-loop.js', 'unitCriteria')
-const writerPrompt = loadFunction('../implementation-loop.js', 'writerPrompt', ['unitCriteria', 'staticCheckCommands', 'runDir', 'gitIn', 'workDirPreamble'])
-const editorPrompt = loadFunction('../implementation-loop.js', 'editorPrompt', ['unitCriteria', 'runDir', 'concernsDir', 'concernsPath', 'gitIn', 'workDirPreamble'])
+const writerPrompt = loadFunction('../implementation-loop.js', 'writerPrompt', ['unitCriteria', 'staticCheckCommands', 'runDir', 'gitIn', 'workDirPreamble', 'observeCommand', 'writerObserveLines'])
+const editorPrompt = loadFunction('../implementation-loop.js', 'editorPrompt', ['unitCriteria', 'runDir', 'concernsDir', 'concernsPath', 'gitIn', 'workDirPreamble', 'observeCommand', 'editorObserveLines'])
 
 // A unit with no acceptance_criteria key at all — the shape every run had before this feature.
 const UNIT = {
@@ -522,4 +522,98 @@ test('a malformed criteria payload leaves both prompts on the no-criteria path',
   const blank = { ...UNIT, acceptance_criteria: ['  ', ''] }
   assert.equal(writerPrompt(blank), writerPrompt(UNIT))
   assert.equal(editorPrompt(blank, WRITER), editorPrompt(UNIT, WRITER))
+})
+
+// ---------------------------------------------------------------------------
+// implementation-loop.js — observe_command. A repo can say how to look at its running product, and
+// both agents are told to run it. Off (absent or malformed) must render exactly what ran before.
+// Prompt text only: a test proves what the agents are told, not that they look.
+// ---------------------------------------------------------------------------
+const observeCommand = loadFunction('../implementation-loop.js', 'observeCommand')
+const OBSERVE = 'scripts/capture.sh'
+const CRITERIA = ['The plant renders as it did before', 'A deleted profile 404s']
+
+test('observeCommand returns the trimmed command, and nothing for anything malformed', () => {
+  assert.equal(observeCommand({ observe_command: `  ${OBSERVE}  ` }), OBSERVE)
+  for (const junk of ['', '   ', 42, null, undefined, ['x'], { cmd: 'x' }, true]) {
+    assert.equal(observeCommand({ observe_command: junk }), '', `junk ${JSON.stringify(junk)}`)
+  }
+  assert.equal(observeCommand({}), '')
+  assert.equal(observeCommand(null), '')
+  assert.equal(observeCommand(undefined), '')
+})
+
+test('an absent, empty, blank or non-string observe_command renders both prompts unchanged', () => {
+  for (const base of [UNIT, { ...UNIT, acceptance_criteria: CRITERIA }, { ...UNIT, work_dir: WORK_DIR }]) {
+    for (const junk of ['', '  ', 42, null]) {
+      const unit = { ...base, observe_command: junk }
+      assert.equal(writerPrompt(unit), writerPrompt(base), `writer, junk ${JSON.stringify(junk)}`)
+      assert.equal(editorPrompt(unit, WRITER), editorPrompt(base, WRITER), `editor, junk ${JSON.stringify(junk)}`)
+    }
+  }
+})
+
+test('with the key set the writer prompt only adds the look-at-the-product lines', () => {
+  const added = insertedLines(writerPrompt(UNIT), writerPrompt({ ...UNIT, observe_command: OBSERVE })).join('\n')
+  assert.ok(added.includes(`run \`${OBSERVE}\``))
+  assert.match(added, /Read every file path it\n {2}prints/)
+  assert.match(added, /Nothing the command wrote may be committed/)
+  assert.match(added, /`git status` must show nothing the command wrote/)
+  // An edit the writer made before capturing is restored to what it noted, not thrown away.
+  assert.match(added, /already edited or created goes back to the state you noted, not to `HEAD`/)
+  assert.match(added, /Keep a file the command\n {2}generated for one of your own new files, such as Unity's `.meta`/)
+  // It sits right after the test-run line, where the writer is iterating.
+  const lines = writerPrompt({ ...UNIT, observe_command: OBSERVE }).split('\n')
+  const runAt = lines.findIndex((line) => line.startsWith('- Run the unit tests:'))
+  assert.ok(lines[runAt + 1].startsWith('- See the product:'))
+})
+
+test('with the key set and criteria present the editor may grade from what it sees', () => {
+  const prompt = editorPrompt({ ...UNIT, acceptance_criteria: CRITERIA, observe_command: OBSERVE }, WRITER)
+  assert.ok(!prompt.includes('no browser and no Play mode'))
+  assert.match(prompt, /or from what the observe command shows/)
+  assert.ok(prompt.includes(`run \`${OBSERVE} <args>\` here`))
+  assert.match(prompt, /Read every image it prints before grading anything a player sees/)
+  assert.match(prompt, /A pass from a capture names the image's absolute path and the commit it was taken at/)
+  assert.match(prompt, /A failure the unit caused \(a compile error[^)]*\) is fail/)
+  assert.match(prompt, /A command that could not run for reasons outside\n {2}the unit \([^)]*\) is unverifiable, with the error quoted/)
+  // Without the key the old clause stands, so the swap is tied to the key and nothing else.
+  assert.match(editorPrompt({ ...UNIT, acceptance_criteria: CRITERIA }, WRITER), /you have no browser and no Play mode/)
+})
+
+test('with the key set the editor keeps everything the command wrote off its commit', () => {
+  const prompt = editorPrompt({ ...UNIT, observe_command: OBSERVE }, WRITER)
+  const flat = prompt.replace(/\n\s*/g, ' ')
+  assert.match(flat, /Nothing the command wrote may be committed/)
+  assert.match(flat, /Note `git status --porcelain`/)
+  assert.match(flat, /compare afterwards: that is how you tell what it wrote from your own edits/)
+  assert.match(flat, /restore each tracked file it changed and remove each new untracked file that `git status` shows/)
+  assert.match(flat, /Before you commit or finish/)
+  assert.match(flat, /Leave ignored files alone/)
+  assert.match(flat, /already edited or created goes back to the state you noted, not to `HEAD`/)
+  assert.match(flat, /Keep a file the command generated for one of the unit's own new files, such as Unity's `.meta`/)
+  assert.match(flat, /stage it with `git add`/)
+})
+
+test('with the key set a before capture never moves the unit checkout', () => {
+  const flat = editorPrompt({ ...UNIT, observe_command: OBSERVE }, WRITER).replace(/\n\s*/g, ' ')
+  assert.ok(flat.includes(`needs a capture at \`${WRITER.writer_sha}^\``))
+  assert.match(flat, /Never take it by moving this checkout: no `checkout`, `switch`, `stash` or `reset`/)
+  assert.match(flat, /HEAD and working tree never change for a before capture/)
+  assert.match(flat, /Use the repository's documented method, or add a separate worktree at `a1b2c3d\^` outside this checkout/)
+})
+
+test('with the key set the editor prompt only adds lines when the unit carries no criteria', () => {
+  // With criteria, the unverifiable clause is reworded on purpose; without them nothing else moves.
+  const added = insertedLines(editorPrompt(UNIT, WRITER), editorPrompt({ ...UNIT, observe_command: OBSERVE }, WRITER))
+  assert.ok(added[0].startsWith('Seeing the product: this repo declares an observe command'))
+})
+
+test('the observe lines pin every git command they name to the work dir', () => {
+  const unit = { ...UNIT, work_dir: WORK_DIR, observe_command: OBSERVE }
+  for (const prompt of [writerPrompt(unit), editorPrompt(unit, WRITER)]) {
+    const body = prompt.slice(prompt.indexOf('\n\n') + 2)
+    const bare = [...body.matchAll(/`git (?!-C)/g)].map((m) => body.slice(m.index, m.index + 44))
+    assert.deepEqual(bare, [], `unpinned git command found in a prompt: ${JSON.stringify(bare)}`)
+  }
 })

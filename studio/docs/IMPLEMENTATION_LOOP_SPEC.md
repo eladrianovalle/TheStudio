@@ -111,7 +111,10 @@ and returns `criteria_verdicts`, one entry per criterion:
 
 `unverifiable` exists so the editor never has to invent a grade: it reads a diff and runs the
 unit's tests, with no browser and no Play mode, and some criteria simply can't be checked from
-there. Anything short of `pass` means the unit ships **flagged** — nothing reverts, and there is no
+there. A repo that sets `[gate] observe_command` (below) gives it one way to look: the editor may
+then grade a player-visible criterion `pass` from a capture, naming the image's absolute path in
+the evidence. A capture the unit broke is `fail`; a command that could not run for reasons outside
+the unit is `unverifiable`. Anything short of `pass` means the unit ships **flagged** — nothing reverts, and there is no
 retry. A run with no criteria (no spec pointer) returns the field empty and the editor judges
 against the unit's `title`, exactly as it always did.
 
@@ -275,12 +278,35 @@ test_command = "pytest -q"       # what runs the unit-scoped tests here (a Node 
 static_checks = ["ruff check {paths}"]  # the lint commands to run; {paths} = the unit's paths, [] skips
 require_mutation_check = true    # writer runs the mutation check on the touched code and reports it
 mutation_command = "mutmut run"  # the tool that check runs (scope/runner in setup.cfg)
+observe_command = ""             # optional: the repo's command that captures the running product; "" is off
 
 [editor]
 mandate = "contrarian"        # reuse CONTRARIAN_MANDATE; "off" disables the editor pass
 read_scope = "touched+importers"  # bound the editor's reads: diff + files_touched + direct importers
 output_budget = 400           # word cap on the editor's rationale (matches scope output budgets)
 ```
+
+**The observe command contract.** `observe_command` is optional: empty or absent means off, and an
+empty value never makes `/forge` refuse. Studio stores the string and places it in both prompts; it
+never runs the command or parses its output, and the repo owns everything else:
+
+- **Arguments.** The agent appends free-form arguments chosen from the repo's own docs (which scene
+  or saved state to load, what to capture). Studio defines no argument syntax.
+- **Which code it observes.** The checkout in its working directory, so under `--work-dir` it sees
+  the tree under build. It must never hard-code a project path.
+- **Output.** Text on stdout. A line that is an absolute path to a file is evidence the agent opens
+  with Read; every other line is a readout, such as a frame time.
+- **Where captures go.** Outside the checkout only. The writer commits with `add -A`, and a capture
+  inside a worktree dies with it.
+- **Exit code.** 0 means it observed; non-zero means it did not, and stderr says why.
+- **No backticks.** The string is placed in the prompts verbatim between backticks, so a backtick
+  in it (a shell substitution, say) breaks their formatting. Put such logic in a script and name that.
+
+Both agents are told that nothing the command writes may be committed: they note `git status
+--porcelain` before running it, restore what it modified, remove what it created, leave ignored
+files alone, and keep only a file it generated for one of the unit's own new files (such as a
+`.meta`). A "before this unit" comparison is captured at `<writer_sha>^` by the repo's documented
+method or in a separate worktree, never by moving the unit's checkout.
 
 Notes on what was cut vs the first draft:
 

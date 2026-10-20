@@ -259,7 +259,8 @@ Workflow({ scriptPath: "<work_dir or repo>/.claude/workflows/implementation-loop
   test_command,            // per-unit inferred; if none, use the knob test_command
   static_checks,           // the knob list with {paths} substituted (Step 2)
   editor_enabled, read_scope, output_budget,           // from impl_loop.py
-  require_mutation_check, mutation_command             // from impl_loop.py
+  require_mutation_check, mutation_command,            // from impl_loop.py
+  observe_command                                      // from impl_loop.py; "" means off
 }})
 ```
 
@@ -270,7 +271,9 @@ runs render exactly as they always have.
 How the workflow consumes each knob: `editor_enabled=false` → skip the editor pass;
 `read_scope`/`output_budget` → shape the editor prompt; `require_mutation_check=false` → writer
 skips the mutation check; `mutation_command` → the command the writer runs for the mutation check
-(whatever this repo's config names — `mutmut run` in a Python one); `static_checks` → the lint **commands** the
+(whatever this repo's config names — `mutmut run` in a Python one); `observe_command` → the
+repo's own command for looking at the running product, which both agents are told to run and whose
+printed image paths they Read (empty → neither prompt mentions it); `static_checks` → the lint **commands** the
 writer runs, all of them, with `static_ok` the AND across the lot (`[]` → writer skips the static
 check and the entry gate doesn't require it). So passing all knobs makes
 `implementation_loop.toml` fully live.

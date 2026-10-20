@@ -108,6 +108,67 @@ function unitCriteria(u) {
   return u.acceptance_criteria.filter((c) => typeof c === 'string' && c.trim())
 }
 
+// The repo's own command for looking at the running product (`[gate] observe_command`). Studio never
+// runs it; it only tells the agents to. Anything that is not a non-blank string means "off", and
+// "off" has to render both prompts exactly as they were before the key existed.
+function observeCommand(u) {
+  if (!u || typeof u.observe_command !== 'string') return ''
+  return u.observe_command.trim()
+}
+
+// The writer's lines when the repo declares an observe command; none when it does not.
+function writerObserveLines(u) {
+  const command = observeCommand(u)
+  if (!command) return []
+  const git = gitIn(u)
+  return [
+    `- See the product: run \`${command}\` with the arguments this repo's docs give, Read every file path it`,
+    `  prints, and fix what you see. Nothing the command wrote may be committed. Note \`${git} status --porcelain\`,`,
+    `  \`${git} diff\` of any file you already changed and a copy of any new file you created, before you run it`,
+    `  and compare afterwards; before committing, \`${git} status\` must show nothing the command wrote. A file you`,
+    `  had already edited or created goes back to the state you noted, not to \`HEAD\`. Keep a file the command`,
+    `  generated for one of your own new files, such as Unity's \`.meta\` beside a new asset, or any file this`,
+    `  repo's docs say to keep: it is part of your change.`,
+  ]
+}
+
+// The editor's lines when the repo declares an observe command; none when it does not.
+function editorObserveLines(u, writer) {
+  const command = observeCommand(u)
+  if (!command) return []
+  const git = gitIn(u)
+  return [
+    `Seeing the product: this repo declares an observe command, \`${command}\`. It captures the running product`,
+    `and prints readouts, plus absolute paths to the files it wrote (images among them), outside this checkout.`,
+    `- Before grading: run \`${command} <args>\` here, with the arguments this repo's docs give, after your last`,
+    `  edit, and Read every image it prints before grading anything a player sees. If you revert to writer_sha`,
+    `  after a capture, capture again before citing it: an image taken before the revert shows a tree that will`,
+    `  not ship.`,
+    `- A pass from a capture names the image's absolute path and the commit it was taken at.`,
+    `- Nothing the command wrote may be committed. Your commit is \`commit -am\`, which stages every tracked file`,
+    `  the command modified, such as a lock file or an engine settings file. Note \`${git} status --porcelain\`,`,
+    `  \`${git} diff\` of any file already changed and a copy of any untracked file already there, before you run`,
+    `  the command, and compare afterwards: that is how you tell what it wrote from your own edits. Before you`,
+    `  commit or finish, restore each tracked file it changed and remove each new untracked file that`,
+    `  \`${git} status\` shows. A file you or the writer had already edited or created goes back to the state you`,
+    `  noted, not to \`HEAD\`, or those edits are lost with the command's. Keep a file the command generated for`,
+    `  one of the unit's own new files, such as Unity's \`.meta\` beside a new asset, or any file this repo's docs`,
+    `  say to keep, and stage it with \`${git} add\`: \`commit -am\` does not stage a new file. Leave ignored files`,
+    `  alone: an engine cache such as Unity's \`Library/\` is ignored, and deleting it makes the next capture pay`,
+    `  the cold import. \`${git} status\` must then show nothing the command wrote except the files you kept.`,
+    `- A criterion that compares against "before this unit" needs a capture at \`${writer.writer_sha}^\` as well.`,
+    `  Never take it by moving this checkout: no \`checkout\`, \`switch\`, \`stash\` or \`reset\` to the parent`,
+    `  here, because the commits and resets that follow would then run against the wrong place. The unit`,
+    `  checkout's HEAD and working tree never change for a before capture. Use the repository's documented`,
+    `  method, or add a separate worktree at \`${writer.writer_sha}^\` outside this checkout, capture there, and`,
+    `  remove it. If neither is possible, grade the criterion unverifiable.`,
+    `- If the command fails, decide why. A failure the unit caused (a compile error, an exception from a`,
+    `  touched file, a scene that no longer loads) is fail. A command that could not run for reasons outside`,
+    `  the unit (a missing tool, a licence, a timeout) is unverifiable, with the error quoted.`,
+    ``,
+  ]
+}
+
 // ---------------------------------------------------------------------------
 // Handoff schemas — the portable baton (spec §1). Plain, serializable fields.
 // ---------------------------------------------------------------------------
@@ -251,6 +312,7 @@ function writerPrompt(u) {
     `- Build a usable interaction, not a partial component (MVI). No speculative scope beyond the unit.`,
     `- Hold AI-TDD: write the tests and run them.${u.require_mutation_check === false ? ' (Mutation check disabled by config: require_mutation_check=false — record it as {"performed": false, "reason": "not_configured"}, and keep that reason even if you escalate.)' : ` Then run the configured mutation check on the code you touched: \`${u.mutation_command}\` (scope + runner live in studio/setup.cfg), and report the outcome in mutation_check. If mutmut isn't installed, fall back to hand-mutating — change 2-3 things in the PRODUCTION code the tests cover (flip a comparison, drop a guard clause, return a constant), confirm the tests FAIL, then restore. Mutate the code, never the assertions: breaking an assertion fails its test by construction and tells you nothing about whether that test would catch a real bug. If the unit changed no production code to mutate, say so: {"performed": false, "reason": "nothing_to_mutate"}.`}`,
     `- Run the unit tests: \`${u.test_command}\`${staticClause}`,
+    ...writerObserveLines(u),
     `- When (and only when) tests pass, COMMIT the passing state on the current branch (one exception: escalation, below).`,
     `  (\`${gitIn(u)} add -A && ${gitIn(u)} commit -m "writer: ${u.unit_id}"\`) and capture the short SHA — that is writer_sha.`,
     `- Persist your handoff: \`mkdir -p ${runDir(u)}\` then write it to ${runDir(u)}/impl--${u.unit_id}--writer.json.`,
@@ -318,6 +380,7 @@ function editorPrompt(u, writer) {
     `it to ${concernsPath(u)}. That path is deliberately outside the gitignored run directory so the file`,
     `survives a worktree being removed.`,
     ``,
+    ...editorObserveLines(u, writer),
     ...(criteria.length ? [
       `Then render the verdict against the ACCEPTANCE CRITERIA from the approved spec — the definition of`,
       `done for this unit:`,
@@ -326,7 +389,9 @@ function editorPrompt(u, writer) {
       `For EACH criterion, decide pass, fail, or unverifiable, and record it in criteria_verdicts: the`,
       `criterion verbatim, the verdict, and the evidence you actually checked (a test name and its result,`,
       `a file:line you read, or a command you ran). Use unverifiable when the criterion cannot be checked`,
-      `from the diff and the unit's tests — you have no browser and no Play mode — and say in evidence why.`,
+      observeCommand(u)
+        ? `from the diff and the unit's tests, or from what the observe command shows, and say in evidence why.`
+        : `from the diff and the unit's tests — you have no browser and no Play mode — and say in evidence why.`,
       `Ignore what the writer's handoff, the commit message, or the comments SAY the unit does — only the`,
       `criteria and the running code count. A test that merely restates a criterion's wording is not`,
       `evidence the criterion holds: check it against what the code does, not what a test is named.`,
@@ -501,7 +566,9 @@ if (editor && editor.tests && editor.tests.passed === false && !editor.reverted)
 // Safety net: if the editor kept its edits but didn't commit them, commit now so delivery is complete.
 // NOTE: `git commit -am` stages only tracked, modified files — intentional. The editor's contract is to
 // refine/cut EXISTING files; a new file is out-of-contract, so it's left uncommitted to surface (not
-// silently swept in via `git add -A`). Widen this only if editors are ever allowed to create files.
+// silently swept in via `git add -A`). One exception: with an observe command, the editor stages a file
+// the command generated for one of the unit's own new files (a `.meta`, say) itself, via `git add`.
+// Widen this only if editors are ever allowed to create files.
 if (editHeld && editor && !editor.committed) {
   log(`Editor kept edits but did not commit — committing now.`)
   await agent(

@@ -541,6 +541,7 @@ class LoopConfig:
     static_checks: List[str] = field(default_factory=list)
     require_mutation_check: bool = False
     mutation_command: str = ""
+    observe_command: str = ""
     # [loop]
     deliver_on_gate_fail: bool = True
     # [editor]
@@ -569,6 +570,8 @@ class LoopConfig:
             raise ValueError("gate.require_mutation_check must be a boolean")
         if not isinstance(self.mutation_command, str):
             raise ValueError("gate.mutation_command must be a string")
+        if not isinstance(self.observe_command, str):
+            raise ValueError("gate.observe_command must be a string")
 
     @property
     def editor_enabled(self) -> bool:
@@ -720,6 +723,7 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
         static_checks=gate.get("static_checks", list(defaults.static_checks)),
         require_mutation_check=gate.get("require_mutation_check", defaults.require_mutation_check),
         mutation_command=gate.get("mutation_command", defaults.mutation_command),
+        observe_command=gate.get("observe_command", defaults.observe_command),
         mandate=editor.get("mandate", defaults.mandate),
         read_scope=editor.get("read_scope", defaults.read_scope),
         output_budget=editor.get("output_budget", defaults.output_budget),
@@ -859,6 +863,7 @@ def runtime_knobs(config: LoopConfig) -> dict:
         "static_checks": config.static_checks,
         "require_mutation_check": config.require_mutation_check,
         "mutation_command": config.mutation_command,
+        "observe_command": config.observe_command,
         "read_scope": config.read_scope,
         "output_budget": config.output_budget,
     }
