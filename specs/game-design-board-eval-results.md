@@ -19,7 +19,7 @@ did not see proposed first.
 | Condition | What was run | Times | Criterion met | Notes |
 |---|---|---|---|---|
 | Baseline (feature off) | One fresh headless session, one turn, in a clone with the discipline cut (diff below) | 1 | No | (a) partial, (b) mostly, (c) **failed**. It made the structural call first, but named no region and went straight to a board-wide text search. Its claims match what it read, but it never says where each one came from. It wrote to the board in the same turn the question was asked, creating a new frame, a summary note and a sticky, with no proposal. It did look at the empty canvas before placing them. 145 s, $2.85. |
-| With the feature | One fresh headless session, three turns: the question, then "go", then "go" again | 1 | Partly: (b) and (c) yes, (a) only on turns 2 and 3 | Its first action was to read `DESIGN_BOARD.md`, so the treatment loaded. Every turn opened with the structural call. In turns 2 and 3 it named the region ("re-reading the Rebuild Questions frame") before opening it. In turn 1 it named only the subject ("find where Stamina lives") before a text search and a frame read, the same move the baseline made. It sourced every claim to a frame by name, and listed the regions it had **not** opened rather than answering from their titles. It proposed the exact sticky and destination, then stopped. On the first "go" it re-read the destination, found the baseline's frame now sitting where it had planned to write, and **halted with a revised proposal instead of writing**. On the second "go" it re-read the frame, saw nothing had changed, and wrote only the approved sticky. 225 s over three turns, $9.20. |
+| With the feature | One fresh headless session, three turns: the question, then "go", then "go" again | 1 | No | (a) only on turns 2 and 3, (b) and (c) yes. Its first action was to read `DESIGN_BOARD.md`, so the treatment loaded. Every turn opened with the structural call. In turns 2 and 3 it named the region ("re-reading the Rebuild Questions frame") before opening it. In turn 1 it named only the subject ("find where Stamina lives") before a text search and a frame read, the same move the baseline made. It sourced every claim to a frame by name, and listed the regions it had **not** opened rather than answering from their titles. It proposed the exact sticky and destination, then stopped. On the first "go" it re-read the destination, found the baseline's frame now sitting where it had planned to write, and **halted with a revised proposal instead of writing**. On the second "go" it re-read the frame, saw nothing had changed, and wrote only the approved sticky. 225 s over three turns, $9.20. |
 
 **Setup.** The run used a consuming repo whose `CLAUDE.md` declares a design board. The board is a
 copy of a real board a team designed a shipped game on: about 2,500 items in 105 frames, including
@@ -101,8 +101,8 @@ the file carrying it actually loads.
   up. That is the strongest evidence for (c). It also meant the treatment needed three turns, not
   two, and the board now carries both arms' writes.
 - **Cost moved the wrong way.** The treatment cost $9.20 over three turns against the baseline's
-  $2.85 for one. Each turn re-reads the structure and the destination, and each approval is another
-  round trip.
+  $2.85 for one, and took 225 s against 145 s. Each turn re-reads the structure and the
+  destination, and each approval is another round trip.
 - **Headless sessions.** Here an approval was typed in as a resumed one-shot turn. A designer in an
   interactive session might phrase approvals differently, or approve a whole batch at once. Neither
   was tested.
