@@ -23,12 +23,14 @@ The repository names the actual tool, the board itself, and the destinations for
 Every turn that touches the board opens with the board's structural listing — the call that returns
 which regions exist. Make it first, make it every turn, and never substitute a listing remembered
 from an earlier turn. It is the cheap call; the content read is the expensive one. Having listed the
-regions, write in your reply the name of the region you are about to open, as the listing gives it,
-and why. Only then open it. That holds for every region you open, including the one you mean to
-write to. Naming the subject ("where stamina lives") is not naming a region. A search over what the
-board's items say is a content read, not a way to locate, because it returns their text. So it comes
-after you name a region, never before. If the listing alone can't tell you which region holds the
-subject, name the region you'll try first, or ask the designer.
+regions, find the one you need, either from the listing or, when the listing alone can't say, with
+a search over what the board's items say. A search counts only if it returns a region. One that
+returns nothing, or fails, has located nothing: go back to the listing or ask the designer, and never
+take it as the board having nothing on the subject. Then write in your reply the name of each region
+you are about to open, as the board gives it, and why. Only then open it. That holds for every region
+you open, including the one you mean to write to. Naming the subject ("where stamina lives") is not
+naming a region. A search's snippets tell you where to look, never what the board says, so open the
+region before you claim anything from it.
 
 ### 2. Structure gives addresses, never content
 

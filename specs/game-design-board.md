@@ -87,7 +87,7 @@ minute ago.
 | 2 | **A conditional pointer in `studio/docs/CODING_PRINCIPLES.md`** (~3 lines) | Rides the existing CLAUDE.md injection into every consuming repo. Says: if this repo keeps a design board, the discipline is in `DESIGN_BOARD.md`. Inert otherwise. |
 | 3 | **One entry in `SOURCE_FILES`** (`studio/install.py`) | Ships `DESIGN_BOARD.md` to consuming repos. `_collect_source_files` and the manifest follow for free. |
 | 4 | **The repo's board declaration** (its own `CLAUDE.md`) | Names the board tool, the destination for agent writes, and optionally destinations by purpose. Written by the repo, read by the agent, parsed by nothing. |
-| 5 | **The locate step** — the board tool's free structural call, per request | Decides which region to pull. No cache. Returns addresses, never content. |
+| 5 | **The locate step**: the board tool's free structural call, per request, plus a search when the listing alone can't say where | Decides which region to pull. No cache. Its output is addresses. A search's snippets are addresses too, never a source. A search that returns no region has located nothing. |
 | 6 | **The read step** — one targeted content call at the located ids | The only source of any claim about the game. Costs credits; justified aloud against the locate result first. |
 | 7 | **The write step** — at the designated destination, after a same-turn re-read | The single write path shared by every write-shaped use. Proposes before it writes. |
 | 8 | **A board-citation clause in `.claude/commands/spec.md`** | A spec cites the board region it was scoped against. It never copies the board, and `/spec` never writes to it. |
@@ -173,6 +173,16 @@ lookup at a stale id — was the paid one. It cached the wrong side of the cost 
 change notifications retired it could never be invalidated anyway. Deleting it also removed two
 open questions that existed only to support it.
 
+**A search that returns a region counts as locating; one that returns nothing does not.** The first
+version of (a) treated any search over item text as a content read, so it had to wait until a region
+was named. The eval (`specs/game-design-board-eval-results.md`) showed that rule losing to the board
+tool's own instruction to search before reading. Two rewordings got every opened region named first,
+but neither stopped the search coming before the naming. A search that returns a region is doing the
+locating, so it counts. What still matters is that a region is named before anything is read from it
+or written to it, and that a snippet is never cited as what the board says. A search that returns
+nothing, or fails, has located nothing. It is also not evidence that the board is silent: in one run
+a search for a mechanic timed out on a board with a frame named after it.
+
 **The repo designates where writes land — Studio does not.** A proposed "one agent-owned landing
 frame" was cut because *frame* is a Miro noun, and shipping vendor nouns in Studio's text is what
 this design exists to avoid. `find-before-you-grep` settled the pattern: naming the tool is the
@@ -234,7 +244,9 @@ Verification section below.
 This feature is prompt-shaped: no failing pytest can tell us it stopped working.
 
 - **Pass criterion.** This works if and only if, in a repo that declares a design board, the agent
-  (a) makes the free structural call and names the region it will open *before* any content read,
+  (a) makes the free structural call first, locates by that listing or by a search that returns a
+  region, and names each region before reading from it or writing to it (a search that returns
+  nothing or fails locates nothing, and is never cited as the board being silent),
   (b) sources every claim about the game to a region it read in that turn, and (c) re-reads the
   destination region in the same turn before every write, with no write occurring that the designer
   did not see proposed first.
@@ -295,7 +307,9 @@ still undecided about some part of the game, what has already been settled about
 new question to the board.
 
 **Score the three parts separately**; they come apart. (a) was the first call the structural one,
-and did it name the region before opening it — a content read as the opening move is a fail. (b) is
+and was every region named in the reply before it was opened, the write destination included? A
+search before the naming is fine if it returned a region. Treating an empty or failed search as "the
+board doesn't cover this" is a fail. (b) is
 every claim traceable to a region opened that turn — answering from a region's title is the fail to
 watch for. (c) did it re-read the destination in the same turn, and did the designer see the exact
 item and destination proposed first.
