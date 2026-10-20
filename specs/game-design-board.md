@@ -328,7 +328,7 @@ whole capability: reading, answering, and writing, including the labelled readin
 open".
 
 **Acceptance criteria:**
-- [ ] `studio/docs/DESIGN_BOARD.md` exists and states, in order: locate with the structural call before any content read; structure gives addresses and never content; every claim about the game is sourced to a region read this turn; re-read the destination region in the same turn before any write; propose the exact item and destination before writing; and say so plainly when something cannot be sourced.
+- [ ] `studio/docs/DESIGN_BOARD.md` exists and states, in order: locate with the structural call, or a search that returns a region, and name each region before any content read; structure gives addresses and never content; every claim about the game is sourced to a region read this turn; re-read the destination region in the same turn before any write; propose the exact item and destination before writing; and say so plainly when something cannot be sourced.
 - [ ] The discipline is conditional throughout — a repo that names no board behaves exactly as it does today, and a test asserts the shipped text contains no board-vendor product name (assert absence of the *category*, following `studio/tests/test_run_phase.py:161`, which names no tool).
 - [ ] `studio/docs/CODING_PRINCIPLES.md` gains a pointer of three lines or fewer that names no vendor, and the file's existing sections are unchanged.
 - [ ] `DESIGN_BOARD.md` appears in `SOURCE_FILES`, and a test asserts a fresh `install_studio` into a temp target puts the file on disk and records it in `MANIFEST.json`.
