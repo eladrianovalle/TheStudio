@@ -42,9 +42,10 @@ vendored Studio copy, so the baseline and the first treatment read `DESIGN_BOARD
 `main` shipped it, which the baseline then deleted. Each re-run was a fresh clone with one version
 of `DESIGN_BOARD.md` copied over the vendored file and nothing else changed. The two (a)-reworded
 re-runs used the file as it stood at `cb16fec`, whose step 1 this PR has since replaced: get it with
-`git show cb16fec:studio/docs/DESIGN_BOARD.md`. That commit only stays reachable if this PR lands
-as a merge commit. If it is gone, the rest of that file matches this PR's final one, so take the
-final file and replace everything in step 1 after "the content read is the expensive one." with:
+`git show cb16fec:studio/docs/DESIGN_BOARD.md`. A squash or rebase merge drops that commit from
+`main`, but `git fetch origin pull/224/head` still finds it. If neither works, the rest of that file
+matches this PR's final one, so take the final file and replace everything in step 1 after "the
+content read is the expensive one." with:
 
 > Having listed the regions, write in your reply the name of the region you are about to open, as
 > the listing gives it, and why. Only then open it. That holds for every region you open, including
@@ -55,10 +56,10 @@ final file and replace everything in step 1 after "the content read is the expen
 
 For the first of them, delete "That holds for every region you open, including the one you mean to
 write to" from step 1 first, since the second rewording added it. The run under the revised (a)
-used this PR's final `DESIGN_BOARD.md`. Nothing
-was cleaned off the board afterwards. The baseline's frame, note and sticky and the first
-treatment's approved sticky are all still there. The re-runs stopped at a proposal and wrote
-nothing, but they saw a board that already held those writes.
+used this PR's final `DESIGN_BOARD.md`. Nothing was cleaned off the board afterwards. The
+baseline's frame, note and sticky and the first treatment's approved sticky are all still there.
+The re-runs stopped at a proposal and wrote nothing, but they saw a board that already held those
+writes.
 
 **The baseline's `CLAUDE.md` cut.** The vendored `.studio/source/docs/DESIGN_BOARD.md` was deleted
 as well. One sentence beyond the protocol was changed: "the first write proposes creating that frame"
