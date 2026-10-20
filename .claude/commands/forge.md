@@ -291,7 +291,8 @@ wait for the completion notification.
   byte-identical (`cmp <repo>/.claude/workflows/implementation-loop.js <work_dir>/.claude/workflows/implementation-loop.js`)
   and launch that copy instead. It is safe because the script is read once at launch, and the
   `work_dir` arg, not where the script lives, decides where the agents work. If the two copies differ
-  (a unit that edits the loop itself), do not launch the main copy: stop and tell the user, since
+  (a unit that edits the loop itself), or `cmp` fails because the main checkout has no copy at that
+  path, treat it the same way: do not launch the main copy; stop and tell the user, since
   that is exactly the build-against-the-old-loop the **With `--work-dir`:** bullet above warns about.
   The way forward is to restart the session with the worktree as its working directory, so the
   worktree's `scriptPath` is in scope.
