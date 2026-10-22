@@ -118,8 +118,11 @@ tick never escalates on a contributor's unreviewed PR and never pushes to a cont
 for the next loop.
 
 **Decision table.** The grace period is 30 minutes from the review. In row 1 it runs from when the
-head was pushed, read from the PR timeline, never from the commit's own date: a commit made an hour
-before it was pushed is not an hour overdue for review.
+head was pushed. The PR timeline doesn't record that for an ordinary push (a `committed` event
+carries only the commit's own dates), so read it from the `created_at` of the earliest check suite
+on the head commit, or failing that from the `PushEvent` for that head in the repo events API. If
+neither exists, use the later of the commit date and the latest review. Never use the commit date
+alone: a commit made an hour before it was pushed is not an hour overdue for review.
 
 | # | Situation | Action | Push? |
 |---|---|---|---|
