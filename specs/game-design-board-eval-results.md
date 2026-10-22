@@ -18,8 +18,86 @@ did not see proposed first.
 ## What happened
 | Condition | What was run | Times | Criterion met | Notes |
 |---|---|---|---|---|
-| Baseline (feature off) | FILL_ME | FILL_ME | FILL_ME | FILL_ME |
-| With the feature | FILL_ME | FILL_ME | FILL_ME | FILL_ME |
+| Baseline (feature off) | One fresh headless session, one turn, in a clone with the discipline cut (diff below) | 1 | No | (a) partial, (b) mostly, (c) **failed**. It made the structural call first, but named no region and went straight to a board-wide text search. Its claims match what it read, but it never says where each one came from. It wrote to the board in the same turn the question was asked, creating a new frame, a summary note and a sticky, with no proposal. It did look at the empty canvas before placing them. 145 s, $2.85. |
+| With the feature | One fresh headless session, three turns: the question, then "go", then "go" again | 1 | No | (a) only on turns 2 and 3, (b) and (c) yes. Its first action was to read `DESIGN_BOARD.md`, so the treatment loaded. Every turn opened with the structural call. In turns 2 and 3 it named the region ("re-reading the Rebuild Questions frame") before opening it. In turn 1 it named only the subject ("find where Stamina lives") before a text search and a frame read, the same move the baseline made. It sourced every claim to a frame by name, and listed the regions it had **not** opened rather than answering from their titles. It proposed the exact sticky and destination, then stopped. On the first "go" it re-read the destination, found the baseline's frame now sitting where it had planned to write, and **halted with a revised proposal instead of writing**. On the second "go" it re-read the frame, saw nothing had changed, and wrote only the approved sticky. 225 s over three turns, $9.20. |
+| With the feature, (a) reworded | One fresh headless session, first turn only, in a new clone whose vendored `DESIGN_BOARD.md` carries step 1 as reworded in `cb16fec`, without the sentence the next row adds | 1 | No | (a) still partial, (b) yes, (c) yes as far as turn 1 reaches. It read `DESIGN_BOARD.md`, then made the structural call. Next it searched by **frame title** rather than item text. It wrote "Now opening the **Stamina** frame" before reading that frame, which the first run never did. It still opened the **Rebuild Questions** frame, its write destination, without naming it first. It sourced every claim to one of the two frames it read. It labelled the earlier sessions' summary on the board as "agent-written" and declined to vouch for it, proposed one exact sticky that didn't repeat the existing two, and stopped. 73 s, $1.17. The board already held both earlier arms' writes, so this turn saw a different board than the first runs. |
+| With the feature, (a) reworded twice | The same again, in a fresh clone, with step 1 exactly as in `cb16fec`, which adds "That holds for every region you open, including the one you mean to write to" | 1 | No | (a) still partial, (b) **no**: five claims cite search snippets, not regions it opened. (c) yes as far as turn 1 reaches. It named **both** frames before opening them ("Now opening **Stamina** and **Rebuild Questions**"), which closes the destination gap. But before naming them it ran board-wide text searches for the mechanic and the frame. After the reads it paged those searches four more times and sourced five claims to "search snippets read this turn" instead of to regions it opened. It proposed one exact sticky that repeated neither existing question, and stopped. 140 s, $1.92. |
+| With the feature, revised (a) | One fresh headless session, first turn only, with step 1 as revised in this PR (a search that returns a region counts as locating). **Scored against the revised (a) in the spec, not the criterion quoted above** | 1 | No | (a) for 4 of the 5 regions it opened: it named **Stamina** and **Rebuild Questions** from the listing before searching or reading, and named **Movement System** and **Controls** before opening them. It opened **Core Game Loop**, which a search had turned up, without naming it first. When a search missed the frames it needed, it said so and located them by title rather than concluding the board was silent. (b) yes: it listed the five regions it read, and flagged one claim as relayed from a sticky it had not confirmed. (c) yes as far as turn 1 reaches. 116 s, $2.05. |
+
+**Setup.** The run used a consuming repo whose `CLAUDE.md` declares a design board. The board is a
+copy of a real board a team designed a shipped game on: about 2,500 items in 105 frames, including
+four playtest frames and frames for plans that were later replaced. Both arms were clones of the
+repo's first commit, run 2026-10-20 as `claude -p` sessions allowed only the Miro tools plus Read,
+Grep and Glob. The repo has no code index, and its hooks file is gitignored, so neither clone had an
+index or hooks to move aside. In the baseline, `grep` for `DESIGN_BOARD` and `structural listing`
+over `CLAUDE.md` and `.claude/` found one hit, in the `/spec` command file, which loads only when
+`/spec` runs. The user-level `CLAUDE.md`, the global skills and the parent directories carry none of
+the discipline. The board answered a structural listing outside both sessions before either arm ran.
+Both arms got the same message: *"What's still undecided about [a named mechanic], and what's
+already been settled about it? Then add a new open question about [it] to the board."* The two
+first turns ran in parallel, so neither could see the other's write.
+
+**Reproducing it.** Each arm was a `git clone` of the repo's first commit. That commit tracks the
+vendored Studio copy, so the baseline and the first treatment read `DESIGN_BOARD.md` exactly as
+`main` shipped it, which the baseline then deleted. Each re-run was a fresh clone with one version
+of `DESIGN_BOARD.md` copied over the vendored file and nothing else changed. The two (a)-reworded
+re-runs used the file as it stood at `cb16fec`, whose step 1 this PR has since replaced: get it with
+`git show cb16fec:studio/docs/DESIGN_BOARD.md`. A squash or rebase merge drops that commit from
+`main`, but `git fetch origin pull/224/head` still finds it. If neither works, the rest of that file
+matches this PR's final one, so take the final file and replace everything in step 1 after "the
+content read is the expensive one." with:
+
+> Having listed the regions, write in your reply the name of the region you are about to open, as
+> the listing gives it, and why. Only then open it. That holds for every region you open, including
+> the one you mean to write to. Naming the subject ("where stamina lives") is not naming a region. A
+> search over what the board's items say is a content read, not a way to locate, because it returns
+> their text. So it comes after you name a region, never before. If the listing alone can't tell you
+> which region holds the subject, name the region you'll try first, or ask the designer.
+
+For the first of them, delete "That holds for every region you open, including the one you mean to
+write to" from step 1 first, since the second rewording added it. The run under the revised (a)
+used this PR's final `DESIGN_BOARD.md`. Nothing was cleaned off the board afterwards. The
+baseline's frame, note and sticky and the first treatment's approved sticky are all still there.
+The re-runs stopped at a proposal and wrote nothing, but they saw a board that already held those
+writes.
+
+**The baseline's `CLAUDE.md` cut.** The vendored `.studio/source/docs/DESIGN_BOARD.md` was deleted
+as well. One sentence beyond the protocol was changed: "the first write proposes creating that frame"
+became "creates that frame", because the word *proposes* carries the discipline.
+
+```diff
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 55204fc..2850022 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -128,12 +128,6 @@ Building without a spec means the architecture gets decided implicitly, one comm
+ 
+ The test: if someone asked "what are we building and why is it shaped this way?", is there an approved document that answers it — or does the answer only exist in your head and the diff?
+ 
+-### Design board
+-
+-If this repository keeps a design board, the discipline lives in `.studio/source/docs/DESIGN_BOARD.md`
+-— inside the gitignored snapshot, so a fresh clone gets it from `/studio-update`. Locate before you
+-read, source every claim to a region you read this turn, and name the item and destination before you write.
+-
+ ---
+ 
+ *These guidelines are working if:* fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and the questions that do get asked are the ones where guessing would have been unsafe or wasted the work.
+@@ -159,11 +153,6 @@ Miro MCP tools. It is the only place that says what the game is. Nothing here ke
+ copy starts lying the moment someone moves an item on the board. It is a copy of the original team's
+ board, made for this rebuild, so writing to it touches nothing the team relies on.
+ 
+-**Two rules hold the rest up.** Open every turn that touches the board with the structural listing,
+-the call that returns which regions exist, and name the region you are about to open before you open
+-it. And never claim anything about the game that you did not read on the board this turn: a region's
+-title tells you where to look and nothing about what it says.
+-
+-**Where writes go.** Propose the exact item and its destination before writing anything. A new
+-undecided item goes to a frame titled **Rebuild Questions**. The first write proposes creating that
++**Where writes go.** A new
++undecided item goes to a frame titled **Rebuild Questions**. The first write creates that
+ frame, because it doesn't exist yet. Anything settled goes to the frame that owns the subject.
+```
 
 The baseline row should read "no". If the criterion was already met with the feature off, stop and
 say so: a feature that fixes a problem you could never trigger has not been shown to do anything.
@@ -31,16 +109,55 @@ another route (a skill, a hook, an MCP server, CLAUDE.md), and a treatment is on
 the file carrying it actually loads.
 
 ## What this doesn't prove
-Required — this section is the point of the file.
-- Did the criterion pass *as written*, un-rewritten after the fact? Name every number that moved the
-  wrong way, cost included.
-- What could a reader wrongly conclude from that table? At minimum: the sample size, the conditions
-  you did not test, and the alternative explanation you can't rule out. "Nothing" is not an answer;
-  if you can't name a limit, you haven't looked yet.
 
-FILL_ME
+- **It did not pass as written.** Part (a) asks the agent to name the region *before any content
+  read*. In its first turn the treatment named a subject, not a region, and then ran a text search
+  and a frame read. The baseline did the same. So (a) does not tell the arms apart on a first turn.
+  With this board's tools, the structural call is the obvious first move with or without the rule.
+  What the rule changed is the later turns, where the treatment named the region every time before
+  opening it.
+- **n = 1 per arm.** One question, one board, one mechanic. The difference on (c) is stark: a write
+  with no proposal, against a proposal, a halt and a re-check. But it is still one pair of runs.
+- **Sourced is not the same as complete.** Every one of the treatment's claims names its frame, and
+  one of them is still wrong. It said the only way to refill was gaining a Supporter, which is true
+  of the frames it opened. The baseline read more widely and found two more refills plus a game-over
+  behaviour, in frames the treatment had listed as unopened. Reading less, and saying so, gives
+  honest answers, not complete ones. Criterion (b) as written can't see that gap.
+- **Turn 2 was not planned.** The baseline's write landed in the spot the treatment had proposed, so
+  the first "go" tested the destination re-check under a real conflict, which the protocol never set
+  up. That is the strongest evidence for (c). It also meant the treatment needed three turns, not
+  two, and the board now carries both arms' writes.
+- **Cost moved the wrong way.** The treatment cost $9.20 over three turns against the baseline's
+  $2.85 for one, and took 225 s against 145 s. Each turn re-reads the structure and the
+  destination, and each approval is another round trip.
+- **The rewordings moved (a) part of the way.** The first re-run named the region it was answering
+  from before opening it, and it located by frame title instead of searching item text. But it
+  opened its write destination without naming it first, as if a frame it planned to write to didn't
+  count as a read. The second re-run named both frames before opening either, which closed that
+  gap, but it ran board-wide text searches before naming them. That's one session per rewording, and
+  neither saw the board the first runs saw, so this shows the direction of the change, not its size.
+- **The board tool's own guidance contradicts (a).** The board server tells the agent to "use canvas
+  search beforehand to narrow down scope of a read", meaning search before you read. Step 1 now says
+  the opposite. The second rewording got every opened region named first, and neither rewording
+  stopped the search-first habit. After the second rewording, the agent leaned on search snippets as
+  sources more than it had before. Either the vendor's instruction outranks ours for this tool, or
+  (a) treats as a content read something that, in practice, is how this board is located. A third
+  rewording won't settle which.
+- **Headless sessions.** Here an approval was typed in as a resumed one-shot turn. A designer in an
+  interactive session might phrase approvals differently, or approve a whole batch at once. Neither
+  was tested.
 
 ## Verdict
-One of **criterion met** / **criterion not met** / **inconclusive, and why**.
-
-FILL_ME
+**Criterion not met as written.** Parts (b) and (c) held in the treatment, and the baseline failed
+(c) outright. The second re-run did not hold (b): a snippet from a search names a region, but it is
+not a region the agent opened. Part (a) failed the treatment's first turn the same way it failed
+the baseline, so the discipline was not shown to change the opening move. It did change the write:
+the baseline wrote unasked, while the treatment proposed, re-checked, halted when the destination
+moved, and wrote only what was approved. The second rewording of step 1 got every region named
+before it was opened, the write destination included. Neither stopped a board-wide text search
+from coming first, a habit the board tool's own instructions teach. (a) is still not met. What's
+left is a decision about the spec, not more wording: either count a text search as locating, or
+keep (a) and accept that this tool undermines it. The spec now takes the first option: a search
+that returns a region counts as locating, and an empty or failed one locates nothing. One run under
+the revised (a) named four of the five regions it opened, and opened the fifth, which a search had
+surfaced, without naming it. The revised (a) is not met yet either.
