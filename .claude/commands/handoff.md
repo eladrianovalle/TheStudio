@@ -1,18 +1,18 @@
 ---
 description: "Use when a session is running out of room or has just been cleared, to save the state of the work in flight to a durable note so the thread survives the conversation, and to resume a saved thread later by name. Triggers include 'we are running out of context', 'save where we are before I clear', and naming a thread to pick back up. It records where things stand, not the story of how they got there."
-argument-hint: "[a note to add] | <slug to resume>"
+argument-hint: "[a note to add] | resume <slug>"
 ---
 
 A session is about to run out of room, or has already been cleared. `/handoff` writes the *state* of the work in flight to a small note in this repo, so the thread survives the conversation and can be picked back up from something precise instead of a long auto-summary.
 
 The command lives in Studio; the note it writes belongs to whatever repo you are working in.
 
-Pick the mode from `$ARGUMENTS`:
+Pick the mode from the first word of `$ARGUMENTS`. There is nothing to look up:
 
-- **Save** — `/handoff [optional note]` writes (or overwrites) the handoff note for the thread in flight, then says in plain words that it is safe to `/clear`, and gives the exact command to resume.
-- **Resume** — `/handoff <slug>` reads that thread's note and picks the work back up. If no slug is given and no thread is obviously in flight, list the open threads with their goal line and updated date, and ask which one.
+- **Resume:** `/handoff resume <slug>` reads that thread's note and picks the work back up. With no slug, list the open threads with their goal line and updated date, and ask which one.
+- **Save:** anything else. `/handoff`, or `/handoff <a note to fold in>`, writes (or overwrites) the handoff note for the thread in flight. It then says in plain words that it is safe to `/clear`, and gives the exact command to resume.
 
-If the argument matches an existing thread note, it is a resume. Otherwise it is a save, and the argument is a note to fold in.
+Because the first word decides, a note can't start with the word `resume`: `/handoff resume CI once the runner is back` is read as a resume of a thread called `CI`. Reword the note.
 
 ## Where the note goes
 
@@ -70,7 +70,7 @@ Rules for what goes in it:
 - **Absolute dates only** (`2026-07-29`) — never "today" or "yesterday".
 - **Be honest about what is unfinished.** If something is 80% done, name the missing 20% and why it stalled. That last stretch is what usually dies with the session.
 
-Then say, in one short paragraph: what was saved, that it is safe to `/clear` now, and the literal command to resume — `/handoff <slug>`.
+Then say, in one short paragraph: what was saved, that it is safe to `/clear` now, and the literal command to resume, `/handoff resume <slug>`, on a line of its own so it can be copied as is.
 
 ## Resuming
 
