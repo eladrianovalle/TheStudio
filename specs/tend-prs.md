@@ -117,17 +117,19 @@ tick never escalates on a contributor's unreviewed PR and never pushes to a cont
 **Order.** PRs are visited in ascending number. One escalation ends the tick, so a later PR waits
 for the next loop.
 
-**Decision table.** The grace period is 30 minutes from the review.
+**Decision table.** The grace period is 30 minutes from the review. In row 1 it runs from when the
+head was pushed, read from the PR timeline, never from the commit's own date: a commit made an hour
+before it was pushed is not an hour overdue for review.
 
 | # | Situation | Action | Push? |
 |---|---|---|---|
-| 1 | The latest review's `commit.oid` differs from the PR head | Wait: a review is still owed. If the head commit is older than the grace period, escalate for this PR: nothing reviewed the new head. | No |
+| 1 | The latest review's `commit.oid` differs from the PR head | Wait: a review is still owed. If the head was pushed longer ago than the grace period, escalate for this PR: nothing reviewed the new head. | No |
 | 2 | The review is younger than the grace period, and no responder note answers it | Wait | No |
 | 3 | The PR has no review, and it is older than the grace period | Escalate for this PR: nothing is reviewing here. | — |
 | 4 | REJECTED, with no responder answer after the grace period | Fix the Must fix items only. Run the tests and push. Post a note quoting each Must fix addressed. | Yes |
 | 5 | REJECTED after a tender push, and a Must fix that the tender's note quoted is back | Escalate | — |
 | 6 | REJECTED, the responder answered, and items are still open | Handle each open item under rows 4, 8 or 9 | Must fix only |
-| 7 | APPROVED with Considers that no note answers, after the grace period | Post a disposition for each Consider: accept, or decline with a reason. If no `tend-prs: consider-push` note exists on the PR, push the accepted ones as one commit and post that note. If one exists, post the dispositions only, as "deferred to a follow-up" or "declined". | Once per PR |
+| 7 | APPROVED with Considers that no note answers, after the grace period | Decide a disposition for each Consider: accept, or decline with a reason. If no `tend-prs: consider-push` note exists on the PR, push the accepted ones as one commit, and only after the push succeeds post the dispositions with that note. If one exists, post the dispositions only, as "deferred to a follow-up" or "declined". | Once per PR |
 | 8 | A "needs your call" item the tender would decide 90/10, a stale PR body, or a follow-up nobody filed | Post the decision as a note, then carry it out without pushing: edit the body, or file the issue and link it. On REJECTED, fold it into the row 4 push only if a Must fix depends on it. | No |
 | 9 | A "needs your call" item with no 90/10 answer | Escalate | — |
 | 10 | A responder note points at a proposed patch | Fetch it the way the repo's `CLAUDE.md` says. Read the diff against the review item it answers. Apply it only if it does what that item asks, applies cleanly, and the tests pass. On REJECTED it is the row 4 push; on APPROVED it is the row 7 push and uses up the single `consider-push` allowance. If the repo names no way to fetch it, escalate. | Rows 4 or 7 |
@@ -143,7 +145,8 @@ for the next loop.
 
 If the PR's head moves between checkout and push, that is not an escalation. Usually it is
 the responder pushing just after the grace period. The tick discards its change, pushes nothing,
-and moves on; the next tick sees the new head under row 1.
+posts nothing (no row 7 dispositions, no note), and moves on; the next tick sees the new head under
+row 1.
 
 No open PRs is not an escalation: reschedule.
 
@@ -205,7 +208,9 @@ No open PRs is not an escalation: reschedule.
 - **Does `/loop` read a trailing argument as its own interval?** Assumed no: only a leading
   interval counts. If it does, the cron guard stops the loop loudly on its first tick. Either way,
   the build checks it by running the documented form and confirming `CronList` is empty.
-- **The 30-minute grace period is a guess** at how long the responder takes.
+- **The 30-minute grace period is a guess** at how long the responder takes. Since row 1 escalates,
+  it also caps how long the reviewer may take on a new head: a slow or throttled reviewer now stops
+  the loop where before it only made the loop wait.
 - **Must-fix pushes are uncapped.** Row 5 only fires when a Must fix the tender's note quoted comes
   back. If the reviewer rewords the item, or keeps finding new Must fixes in the tender's own
   pushes, the loop keeps pushing.
@@ -225,9 +230,12 @@ No open PRs is not an escalation: reschedule.
   No second tick runs, and nothing is merged.
 - **Baseline.** The same fixture, re-seeded, and the same `/loop … 1m`, but with the human's own
   paragraph asking for this behavior as the prompt in place of the command file. Does an unaided
-  session reach the same three outcomes in one tick? The seeding script resets the branches and
-  posts the reviews and notes from the user's account. That works because the command recognizes
-  actors by comment format.
+  session reach the same three outcomes in one tick? The seeding script works in this order: it
+  resets the branches first, then posts each review through the reviews API with `commit_id` set to
+  that PR's post-reset head, then posts the notes. Posting reviews before the reset would leave every
+  PR under row 1. The fixture PRs are opened from the account that runs the tick, since the tick
+  lists only `--author @me`, and the reviews and notes come from that same account. That works
+  because the command recognizes actors by comment format.
 - **Where the evidence goes.** `specs/tend-prs-eval-results.md`, created when this spec is
   approved. The fixture repo is named by its role only.
 - **Stop condition.** While that file still says `FILL_ME`, nobody may call this feature working,
