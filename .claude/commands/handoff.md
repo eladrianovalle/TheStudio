@@ -12,6 +12,8 @@ Pick the mode from the first word of `$ARGUMENTS`. There is nothing to look up:
 - **Resume:** `/handoff resume <slug>` reads that thread's note and picks the work back up. With no slug, list the open threads with their goal line and updated date, and ask which one.
 - **Save:** anything else. `/handoff`, or `/handoff <a note to fold in>`, writes (or overwrites) the handoff note for the thread in flight. It then says in plain words that it is safe to `/clear`, and gives the exact command to resume.
 
+Because the first word decides, a note can't start with the word `resume`: `/handoff resume CI once the runner is back` is read as a resume of a thread called `CI`. Reword the note.
+
 ## Where the note goes
 
 Resolve the threads directory in this order, and say which one you used:
