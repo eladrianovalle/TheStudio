@@ -51,7 +51,7 @@ flowchart TD
     Loop["/loop /tend-prs 20m<br/>(self-paced)"] --> Tick[One tick]
     Tick --> Guard{Cron job for /tend-prs?}
     Guard -- yes --> Stop
-    Guard -- no --> List[gh: open, non-draft PRs<br/>ascending number]
+    Guard -- no --> List[gh: open, non-draft PRs<br/>authored by the current gh user<br/>ascending number]
     List --> Read[Read the thread:<br/>latest review, responder notes, tend-prs notes]
     Read --> Table{Decision table}
     Table -- wait --> Next[Next PR]
@@ -99,12 +99,20 @@ clamped to 60–3600 s):
 
 **Recognizing the actors.** By comment format, never by account name, because every actor may post
 as the same account:
-- **A review** starts with `APPROVED` or `REJECTED`, has Must fix and Consider sections, and names
-  the head SHA it read.
+- **A review** is a PR review from the reviews API. It starts with `APPROVED` or `REJECTED` and has
+  Must fix and Consider sections. The head it read is the review's `commit.oid`, not a SHA parsed
+  out of its body.
 - **A responder note** answers a review with a disposition per item (`addressed`, or `declined`
   with a reason). `NO-ACTION` and `NEEDS-HUMAN` first lines are responder notes too.
 - **A tender note** starts with `tend-prs:`, carries no verdict line and no @-mention (either could
   re-trigger the pipeline), and names the head SHA it acted on.
+
+Reviews and notes come from two sources: reviews from the reviews API, responder and tender notes
+from the PR's issue comments.
+
+**Tick start.** After the cron guard, the tick lists open, non-draft PRs authored by the current
+`gh` user (`gh pr list --author @me`). A PR from anyone else's account is never visited, so the
+tick never escalates on a contributor's unreviewed PR and never pushes to a contributor's branch.
 
 **Order.** PRs are visited in ascending number. One escalation ends the tick, so a later PR waits
 for the next loop.
@@ -113,7 +121,7 @@ for the next loop.
 
 | # | Situation | Action | Push? |
 |---|---|---|---|
-| 1 | The latest review's head differs from the PR head | Wait: a review is still owed. | No |
+| 1 | The latest review's `commit.oid` differs from the PR head | Wait: a review is still owed. If the head commit is older than the grace period, escalate for this PR: nothing reviewed the new head. | No |
 | 2 | The review is younger than the grace period, and no responder note answers it | Wait | No |
 | 3 | The PR has no review, and it is older than the grace period | Escalate for this PR: nothing is reviewing here. | — |
 | 4 | REJECTED, with no responder answer after the grace period | Fix the Must fix items only. Run the tests and push. Post a note quoting each Must fix addressed. | Yes |
@@ -122,16 +130,20 @@ for the next loop.
 | 7 | APPROVED with Considers that no note answers, after the grace period | Post a disposition for each Consider: accept, or decline with a reason. If no `tend-prs: consider-push` note exists on the PR, push the accepted ones as one commit and post that note. If one exists, post the dispositions only, as "deferred to a follow-up" or "declined". | Once per PR |
 | 8 | A "needs your call" item the tender would decide 90/10, a stale PR body, or a follow-up nobody filed | Post the decision as a note, then carry it out without pushing: edit the body, or file the issue and link it. On REJECTED, fold it into the row 4 push only if a Must fix depends on it. | No |
 | 9 | A "needs your call" item with no 90/10 answer | Escalate | — |
-| 10 | A responder note points at a proposed patch | Fetch it the way the repo's `CLAUDE.md` says. Read the diff against the review item it answers. Apply it only if it does what that item asks, applies cleanly, and the tests pass. On REJECTED it is the row 4 push; on APPROVED it is the row 7 push. If the repo names no way to fetch it, escalate. | Rows 4 or 7 |
+| 10 | A responder note points at a proposed patch | Fetch it the way the repo's `CLAUDE.md` says. Read the diff against the review item it answers. Apply it only if it does what that item asks, applies cleanly, and the tests pass. On REJECTED it is the row 4 push; on APPROVED it is the row 7 push and uses up the single `consider-push` allowance. If the repo names no way to fetch it, escalate. | Rows 4 or 7 |
 | 11 | APPROVED, and every item has an answer | Nothing to do | No |
 
 **Escalate and stop** on any of these:
 - the tests go red after the tender's change (leave the worktree as it is, don't push);
-- row 3, 5 or 9;
-- the PR closes, or its head moves, between checkout and push;
+- row 1 after the grace period, or row 3, 5 or 9;
+- the PR closes between checkout and push;
 - `gh` or `git push` fails, or a patch can't be fetched;
 - no test command is found;
 - the cron guard fires.
+
+If the PR's head moves between checkout and push, that is not an escalation. Usually it is
+the responder pushing just after the grace period. The tick discards its change, pushes nothing,
+and moves on; the next tick sees the new head under row 1.
 
 No open PRs is not an escalation: reschedule.
 
@@ -139,9 +151,11 @@ No open PRs is not an escalation: reschedule.
 1. Use one worktree per PR branch, at `.scratch/tend-prs/<pr>`, reused across ticks. Never use the
    session's own checkout.
 2. `git fetch`, reset the worktree to the PR head, and record that head.
-3. Find the test command the way `/forge` does, by running the repo's `impl_loop.py` (the
-   `test_command` key). Don't hard-code a config path: the Studio source repo keeps its config under
-   `studio/.studio/`, unlike a consuming repo. If no test command is found, escalate.
+3. Find the test command the way `/forge` does: infer it from the repo's marker files first
+   (`pyproject.toml`, `package.json`, `Cargo.toml`), and only if none matches, fall back to the
+   `test_command` key from the repo's `impl_loop.py`. Don't hard-code a config path for that
+   fallback: the Studio source repo keeps its config under `studio/.studio/`, unlike a consuming
+   repo. If no test command is found, escalate.
 4. Right before pushing, run `gh pr view`. Check that the PR is open, its head ref is the worktree's
    branch, and the remote head still equals the recorded head.
 5. Push to that branch only. No force-push, no merge, no new PR, no push to another PR's branch.
@@ -153,10 +167,12 @@ No open PRs is not an escalation: reschedule.
 
 - **One prompt file, with the thread as memory.** Every fact a tick needs is already in the PR
   thread, so a state file would only be a second copy that drifts.
-- **On an APPROVED PR, act without pushing.** Each push to a PR starts another review round. A
-  verdict never blocks a merge, so on an APPROVED PR a push buys nothing but another round. Body
-  edits, notes and filed issues don't trigger a review. In the ten-round example, the extra rounds
-  came from pushes made after the PR was already APPROVED.
+- **On an APPROVED PR, land row 8 decisions without pushing.** Each push to a PR starts another
+  review round. A verdict never blocks a merge, so on an APPROVED PR a push buys nothing but another
+  round. Body edits, notes and filed issues don't trigger a review. In the ten-round example, the
+  extra rounds came from pushes made after the PR was already APPROVED. The only push allowed on
+  APPROVED is the single Consider push (row 7); a row-10 patch on APPROVED is that push, not one on
+  top of it.
 - **One Consider push per PR. After that, answer without pushing; don't escalate.** An earlier draft
   escalated on the second round of Considers. The reviewer posts Considers on nearly every round, so
   that draft would have stopped the loop on almost every approved PR, which is the stall this
@@ -190,6 +206,9 @@ No open PRs is not an escalation: reschedule.
   interval counts. If it does, the cron guard stops the loop loudly on its first tick. Either way,
   the build checks it by running the documented form and confirming `CronList` is empty.
 - **The 30-minute grace period is a guess** at how long the responder takes.
+- **Must-fix pushes are uncapped.** Row 5 only fires when a Must fix the tender's note quoted comes
+  back. If the reviewer rewords the item, or keeps finding new Must fixes in the tender's own
+  pushes, the loop keeps pushing.
 
 ## Verification
 
@@ -224,7 +243,8 @@ The command file, its registration, the docs rows and a content test.
 - [ ] `.claude/commands/tend-prs.md` exists with the eight sections named in "How It Works", in that order.
 - [ ] `install.SLASH_COMMANDS` contains `tend-prs.md`, and the existing command-registration tests in `studio/tests/test_install.py` pass.
 - [ ] A new test asserts the command file contains `ScheduleWakeup`, `stop: true`, `CronList`, `CronDelete`, and a sentence saying it never merges.
-- [ ] A new test reads a gitignored `.private/` list of forbidden names, when present, and asserts none appears in the command file; it skips when the list is absent.
+- [ ] The Tick start section lists only open, non-draft PRs authored by the current `gh` user, and the content test asserts the command file contains `--author @me`.
+- [ ] A new test reads a gitignored `.private/` list of forbidden names, when present, and asserts none appears in the command file; it skips when the list is absent, so it is a local-only guard and never runs in CI.
 - [ ] The `/tend-prs` rows in `README.md` and `studio/docs/CLAUDE_CODE_USAGE.md` show only the `/loop /tend-prs [interval]` form.
 
 **Out of scope:** running the Verification eval. That happens after the build, against the fixture.
