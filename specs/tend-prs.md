@@ -121,8 +121,9 @@ for the next loop.
 head was pushed. The PR timeline doesn't record that for an ordinary push (a `committed` event
 carries only the commit's own dates), so read it from the `created_at` of the earliest check suite
 on the head commit, or failing that from the `PushEvent` for that head in the repo events API. If
-neither exists, use the later of the commit date and the latest review. Never use the commit date
-alone: a commit made an hour before it was pushed is not an hour overdue for review.
+neither exists, use the PR's `updated_at`. A push bumps it, so it never comes before the push; it
+can only err late, because comments bump it too. Never use a commit date: a commit made an hour
+before it was pushed is not an hour overdue for review.
 
 | # | Situation | Action | Push? |
 |---|---|---|---|
