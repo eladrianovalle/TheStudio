@@ -6,6 +6,9 @@ All notable changes to TheGameStudio are documented here.
 
 ## [Unreleased]
 
+### Changed
+- `/handoff` resumes with `/handoff resume <slug>`, and a save ends with that exact line, so pasting it back resumes straight away. Before, `/handoff <slug>` was both forms, and the agent had to check whether the argument matched a saved note before it knew which one you meant. Saving is unchanged: a bare `/handoff`, or `/handoff <note>`.
+
 ### Added
 - `/forge` can look at the running product. Set `[gate] observe_command` in your repo's `.studio/implementation_loop.toml` to a command that captures it (a screenshot of a named scene, a timing readout), and the writer is told to run it while it builds and the editor while it grades. The editor may pass a player-visible criterion from a picture, naming the image's absolute path in its evidence; a capture the unit broke is `fail`, and a command that could not run is `unverifiable`. Neither agent may commit what the command wrote, and a "before this unit" capture never moves the unit's checkout. `/spec` accepts a player-visible criterion only when the key is set. The key is optional and empty means off: both prompts then render exactly as before. Studio never runs the command, writes capture code or compares images (built to the approved spec at `specs/forge-observe-command.md`).
 - The evidence skeleton `/spec` prints now warns about void arms before you trust either row of the table. Proving `find-before-you-grep` took six runs to get one valid comparison, and both failures were instrument errors rather than anything about the feature: a baseline is only a baseline if the behaviour under test cannot reach the agent by another route (a skill, a hook, an MCP server, CLAUDE.md), and a treatment is only a treatment if the file carrying it actually loads. Every future prompt-shaped feature inherits the warning instead of rediscovering it.
