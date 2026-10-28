@@ -14,7 +14,8 @@ keeps a copy, a cache, a mirror or an index, because a copy starts lying the mom
 item. And **the agent never claims anything about the game that it did not just read.**
 
 The repository names the actual tool, the board itself, and the destinations for writes in that same
-`CLAUDE.md`. Nothing parses that declaration; it is prose the agent reads.
+`CLAUDE.md`. Nothing parses that declaration; it is prose the agent reads. What a build keeps as its
+record of having read the board is the design ledger; `DESIGN_LEDGER.md` says what that is.
 
 ## The order of operations
 

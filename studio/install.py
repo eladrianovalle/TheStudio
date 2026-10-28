@@ -69,6 +69,7 @@ SOURCE_FILES = [
     "docs/STUDIO_BRIDGE_TEMPLATE.md",
     "docs/CODING_PRINCIPLES.md",
     "docs/DESIGN_BOARD.md",
+    "docs/DESIGN_LEDGER.md",
     "docs/SCOPES_GUIDE.md",
 ]
 
