@@ -12,6 +12,7 @@ from pathlib import Path
 
 _DOCS = Path(__file__).resolve().parent.parent / "docs"
 _DESIGN_BOARD = _DOCS / "DESIGN_BOARD.md"
+_DESIGN_LEDGER = _DOCS / "DESIGN_LEDGER.md"
 _CODING_PRINCIPLES = _DOCS / "CODING_PRINCIPLES.md"
 _DOCS_INDEX = _DOCS / "INDEX.md"
 
@@ -48,11 +49,21 @@ _LEADING_MARKUP = re.compile(r"^[#>\-*\s0-9.)]+")
 # happens to begin with a digit and so would break that paragraph in two.
 _HEADING = re.compile(r"^#{1,6}\s")
 _BLOCK_START = re.compile(r"^([-*>]\s|\d+[.)]\s)")
-_SENTENCE_SPLIT = re.compile(r"(?<=[.:!?])\s+")
+# A sentence also ends where a bold run closes after its full stop, and a table cell
+# opens like a sentence does, so a pipe splits too. Without either, the first word of
+# the next sentence or cell reads as mid-sentence and every table row trips the guard.
+_SENTENCE_SPLIT = re.compile(r"(?<=[.:!?|])\**\s+")
+# The row under a table's header: pipes, dashes and alignment colons only.
+_TABLE_DELIMITER = re.compile(r"^\|?(\s*:?-+:?\s*\|)+\s*(:?-+:?)?\s*$")
 
 # Capitalized words the shipped text is allowed to use mid-sentence: they name this
-# project and its own documents, not a third-party product.
-_ALLOWED_CAPITALIZED = {"Studio"}
+# project and its own documents, or a file format, not a third-party product.
+_ALLOWED_CAPITALIZED = {"Studio", "JSON"}
+
+# `frames` is the field name #229 gave the ledger for the region titles, and it is
+# also one of the UI nouns above. Whether the key should be `regions` is an open call
+# on the schema, so the field name alone is let through; the word in prose still fails.
+_LEDGER_FIELD_NAME = re.compile(r'[`"]frames[`"]')
 
 
 _CODE_SPAN = re.compile(r"`[^`]*`")
@@ -82,6 +93,44 @@ def _code_span_names(text: str) -> list[str]:
         bare = span.strip("`").strip()
         if _PROPER_NOUN.match(bare) and bare not in _ALLOWED_CAPITALIZED:
             found.append(bare)
+    return found
+
+
+def _table_cell_names(text: str) -> list[str]:
+    """Proper nouns standing alone as a table body cell.
+
+    Splitting at a pipe lets a cell open like a sentence, so its first word is
+    exempt — and when the cell is one word, that word is the whole cell, which is
+    where a "tool" column would put a product name. A one-word cell is not a
+    sentence, so it is matched here. The header row is left out: its cells are the
+    column labels, which are capitalized one-word cells by convention. Only a
+    table's first delimiter row marks its header: a body row of bare hyphens
+    (`| - | - |`) matches the delimiter pattern too, and treating it as one would
+    exempt the body row above it.
+    """
+    found = []
+    lines = [line.strip() for line in text.splitlines()]
+    past_header = False
+    for i, line in enumerate(lines):
+        if not line.startswith("|"):
+            past_header = False
+            continue
+        if not past_header:
+            if _TABLE_DELIMITER.match(line):
+                past_header = True
+                continue
+            if i + 1 < len(lines) and _TABLE_DELIMITER.match(lines[i + 1]):
+                continue
+        for cell in line.strip("|").split("|"):
+            words = cell.split()
+            if len(words) != 1:
+                continue
+            # Table values are meant to be lowercase (`yes`, `no`): a capitalized
+            # one-word value such as `Required` fails here like a product name would.
+            bare = words[0].strip("*_`\"'“”‘’(),.:;!?—–-")
+            for part in _NAME_PARTS.split(bare):
+                if _PROPER_NOUN.match(part) and part not in _ALLOWED_CAPITALIZED:
+                    found.append(part)
     return found
 
 
@@ -135,6 +184,7 @@ def _mid_sentence_capitalized_words(text: str) -> list[str]:
                 for part in _NAME_PARTS.split(bare):
                     if _PROPER_NOUN.match(part) and part not in _ALLOWED_CAPITALIZED:
                         found.append(part)
+    found.extend(_table_cell_names(_without_code_spans(text)))
     return found
 
 
@@ -316,6 +366,42 @@ class TestDesignBoardDiscipline:
             "Fourthname",
         ]
 
+    def test_the_guard_sees_a_vendor_name_after_a_bold_sentence_or_in_a_table_cell(self):
+        """Splitting after a bold run and at a pipe exempts only the word that opens
+        the next sentence or cell; a name later in either is still seen."""
+        text = (
+            "1. **The board says it.** The listing that Vendorname returns is free.\n"
+            "\n"
+            "| Field | Meaning |\n"
+            "|---|---|\n"
+            "| `kind` | How Othername reads the call. |\n"
+        )
+        assert _mid_sentence_capitalized_words(text) == ["Vendorname", "Othername"]
+
+    def test_the_guard_sees_a_vendor_name_that_is_a_whole_table_cell(self):
+        """A cell's first word is exempt as a sentence opener, so a cell that is one
+        word was exempt entirely — a "tool" column could ship a product name. The
+        header row's one-word labels stay exempt; a body cell does not."""
+        text = (
+            "| Field | Tool |\n"
+            "|:---|---:|\n"
+            "| `kind` | Vendorname |\n"
+            "| `built` | yes |\n"
+        )
+        assert _mid_sentence_capitalized_words(text) == ["Vendorname"]
+
+    def test_a_hyphen_body_row_does_not_turn_the_row_above_into_a_header(self):
+        """A body row of bare hyphens matches the delimiter pattern. Only a table's
+        first delimiter row closes its header, so the body row above it is still
+        checked."""
+        text = (
+            "| Field | Tool |\n"
+            "|---|---|\n"
+            "| `b` | Vendorname |\n"
+            "| - | - |\n"
+        )
+        assert _mid_sentence_capitalized_words(text) == ["Vendorname"]
+
     def test_the_guard_sees_a_vendor_name_in_a_wrapped_heading(self):
         """A heading wraps like anything else does. Emitting its first line as a block
         on its own left the continuation to open a fresh paragraph, so its first word
@@ -365,6 +451,30 @@ class TestDesignBoardDiscipline:
     def test_asks_which_area_when_there_are_too_many_regions(self):
         text = _flat(_DESIGN_BOARD.read_text(encoding="utf-8"))
         assert "ask the designer which area" in text
+
+
+class TestDesignLedgerDoc:
+    """docs/DESIGN_LEDGER.md — shipped beside the discipline, under the same guards."""
+
+    def test_names_no_board_vendor(self):
+        """The ledger contract is shipped text too, so it gets the same guard: no UI
+        noun from one product's model and no proper noun mid-sentence."""
+        text = _DESIGN_LEDGER.read_text(encoding="utf-8")
+        lowered = _LEDGER_FIELD_NAME.sub(" ", text).lower()
+        for noun in _VENDOR_UI_NOUNS:
+            assert not re.search(rf"\b{noun}\b", lowered), (
+                f"DESIGN_LEDGER.md uses {noun!r}, a noun from one board product's model"
+            )
+        assert not _mid_sentence_capitalized_words(text), (
+            "DESIGN_LEDGER.md carries a proper noun mid-sentence, which is how a "
+            f"product name gets in: {_mid_sentence_capitalized_words(text)}"
+        )
+
+    def test_is_listed_in_the_docs_index(self):
+        assert "DESIGN_LEDGER.md" in _DOCS_INDEX.read_text(encoding="utf-8")
+
+    def test_the_board_doc_points_at_it(self):
+        assert "`DESIGN_LEDGER.md`" in _DESIGN_BOARD.read_text(encoding="utf-8")
 
 
 class TestCodingPrinciplesPointer:

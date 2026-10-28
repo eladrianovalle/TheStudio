@@ -172,6 +172,14 @@ class TestInstallStudio:
         manifest = json.loads((target_dir / ".studio" / "MANIFEST.json").read_text())
         assert "docs/DESIGN_BOARD.md" in manifest
 
+    def test_ships_design_ledger_contract(self, target_dir, studio_dir):
+        """DESIGN_LEDGER.md ships so the pointer in DESIGN_BOARD.md resolves in a
+        consuming repo, and the manifest lists it so the clobber guard covers it."""
+        install_studio(target_dir, studio_dir)
+        assert (target_dir / ".studio" / "source" / "docs" / "DESIGN_LEDGER.md").is_file()
+        manifest = json.loads((target_dir / ".studio" / "MANIFEST.json").read_text())
+        assert "docs/DESIGN_LEDGER.md" in manifest
+
     def test_ships_implementation_loop(self, target_dir, studio_dir):
         """Install ships the writer/editor loop: source, config, command, workflow."""
         install_studio(target_dir, studio_dir)
