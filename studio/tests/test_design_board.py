@@ -103,19 +103,30 @@ def _table_cell_names(text: str) -> list[str]:
     exempt — and when the cell is one word, that word is the whole cell, which is
     where a "tool" column would put a product name. A one-word cell is not a
     sentence, so it is matched here. The header row is left out: its cells are the
-    column labels, which are capitalized one-word cells by convention.
+    column labels, which are capitalized one-word cells by convention. Only a
+    table's first delimiter row marks its header: a body row of bare hyphens
+    (`| - | - |`) matches the delimiter pattern too, and treating it as one would
+    exempt the body row above it.
     """
     found = []
     lines = [line.strip() for line in text.splitlines()]
+    past_header = False
     for i, line in enumerate(lines):
-        if not line.startswith("|") or _TABLE_DELIMITER.match(line):
+        if not line.startswith("|"):
+            past_header = False
             continue
-        if i + 1 < len(lines) and _TABLE_DELIMITER.match(lines[i + 1]):
-            continue
+        if not past_header:
+            if _TABLE_DELIMITER.match(line):
+                past_header = True
+                continue
+            if i + 1 < len(lines) and _TABLE_DELIMITER.match(lines[i + 1]):
+                continue
         for cell in line.strip("|").split("|"):
             words = cell.split()
             if len(words) != 1:
                 continue
+            # Table values are meant to be lowercase (`yes`, `no`): a capitalized
+            # one-word value such as `Required` fails here like a product name would.
             bare = words[0].strip("*_`\"'“”‘’(),.:;!?—–-")
             for part in _NAME_PARTS.split(bare):
                 if _PROPER_NOUN.match(part) and part not in _ALLOWED_CAPITALIZED:
@@ -376,6 +387,18 @@ class TestDesignBoardDiscipline:
             "|:---|---:|\n"
             "| `kind` | Vendorname |\n"
             "| `built` | yes |\n"
+        )
+        assert _mid_sentence_capitalized_words(text) == ["Vendorname"]
+
+    def test_a_hyphen_body_row_does_not_turn_the_row_above_into_a_header(self):
+        """A body row of bare hyphens matches the delimiter pattern. Only a table's
+        first delimiter row closes its header, so the body row above it is still
+        checked."""
+        text = (
+            "| Field | Tool |\n"
+            "|---|---|\n"
+            "| `b` | Vendorname |\n"
+            "| - | - |\n"
         )
         assert _mid_sentence_capitalized_words(text) == ["Vendorname"]
 
