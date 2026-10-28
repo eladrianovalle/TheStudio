@@ -53,6 +53,8 @@ _BLOCK_START = re.compile(r"^([-*>]\s|\d+[.)]\s)")
 # opens like a sentence does, so a pipe splits too. Without either, the first word of
 # the next sentence or cell reads as mid-sentence and every table row trips the guard.
 _SENTENCE_SPLIT = re.compile(r"(?<=[.:!?|])\**\s+")
+# The row under a table's header: pipes, dashes and alignment colons only.
+_TABLE_DELIMITER = re.compile(r"^\|?(\s*:?-+:?\s*\|)+\s*(:?-+:?)?\s*$")
 
 # Capitalized words the shipped text is allowed to use mid-sentence: they name this
 # project and its own documents, or a file format, not a third-party product.
@@ -91,6 +93,33 @@ def _code_span_names(text: str) -> list[str]:
         bare = span.strip("`").strip()
         if _PROPER_NOUN.match(bare) and bare not in _ALLOWED_CAPITALIZED:
             found.append(bare)
+    return found
+
+
+def _table_cell_names(text: str) -> list[str]:
+    """Proper nouns standing alone as a table body cell.
+
+    Splitting at a pipe lets a cell open like a sentence, so its first word is
+    exempt — and when the cell is one word, that word is the whole cell, which is
+    where a "tool" column would put a product name. A one-word cell is not a
+    sentence, so it is matched here. The header row is left out: its cells are the
+    column labels, which are capitalized one-word cells by convention.
+    """
+    found = []
+    lines = [line.strip() for line in text.splitlines()]
+    for i, line in enumerate(lines):
+        if not line.startswith("|") or _TABLE_DELIMITER.match(line):
+            continue
+        if i + 1 < len(lines) and _TABLE_DELIMITER.match(lines[i + 1]):
+            continue
+        for cell in line.strip("|").split("|"):
+            words = cell.split()
+            if len(words) != 1:
+                continue
+            bare = words[0].strip("*_`\"'“”‘’(),.:;!?—–-")
+            for part in _NAME_PARTS.split(bare):
+                if _PROPER_NOUN.match(part) and part not in _ALLOWED_CAPITALIZED:
+                    found.append(part)
     return found
 
 
@@ -144,6 +173,7 @@ def _mid_sentence_capitalized_words(text: str) -> list[str]:
                 for part in _NAME_PARTS.split(bare):
                     if _PROPER_NOUN.match(part) and part not in _ALLOWED_CAPITALIZED:
                         found.append(part)
+    found.extend(_table_cell_names(_without_code_spans(text)))
     return found
 
 
@@ -336,6 +366,18 @@ class TestDesignBoardDiscipline:
             "| `kind` | How Othername reads the call. |\n"
         )
         assert _mid_sentence_capitalized_words(text) == ["Vendorname", "Othername"]
+
+    def test_the_guard_sees_a_vendor_name_that_is_a_whole_table_cell(self):
+        """A cell's first word is exempt as a sentence opener, so a cell that is one
+        word was exempt entirely — a "tool" column could ship a product name. The
+        header row's one-word labels stay exempt; a body cell does not."""
+        text = (
+            "| Field | Tool |\n"
+            "|:---|---:|\n"
+            "| `kind` | Vendorname |\n"
+            "| `built` | yes |\n"
+        )
+        assert _mid_sentence_capitalized_words(text) == ["Vendorname"]
 
     def test_the_guard_sees_a_vendor_name_in_a_wrapped_heading(self):
         """A heading wraps like anything else does. Emitting its first line as a block
