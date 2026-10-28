@@ -12,6 +12,7 @@ from pathlib import Path
 
 _DOCS = Path(__file__).resolve().parent.parent / "docs"
 _DESIGN_BOARD = _DOCS / "DESIGN_BOARD.md"
+_DESIGN_LEDGER = _DOCS / "DESIGN_LEDGER.md"
 _CODING_PRINCIPLES = _DOCS / "CODING_PRINCIPLES.md"
 _DOCS_INDEX = _DOCS / "INDEX.md"
 
@@ -48,11 +49,19 @@ _LEADING_MARKUP = re.compile(r"^[#>\-*\s0-9.)]+")
 # happens to begin with a digit and so would break that paragraph in two.
 _HEADING = re.compile(r"^#{1,6}\s")
 _BLOCK_START = re.compile(r"^([-*>]\s|\d+[.)]\s)")
-_SENTENCE_SPLIT = re.compile(r"(?<=[.:!?])\s+")
+# A sentence also ends where a bold run closes after its full stop, and a table cell
+# opens like a sentence does, so a pipe splits too. Without either, the first word of
+# the next sentence or cell reads as mid-sentence and every table row trips the guard.
+_SENTENCE_SPLIT = re.compile(r"(?<=[.:!?|])\**\s+")
 
 # Capitalized words the shipped text is allowed to use mid-sentence: they name this
-# project and its own documents, not a third-party product.
-_ALLOWED_CAPITALIZED = {"Studio"}
+# project and its own documents, or a file format, not a third-party product.
+_ALLOWED_CAPITALIZED = {"Studio", "JSON"}
+
+# `frames` is the field name #229 gave the ledger for the region titles, and it is
+# also one of the UI nouns above. Whether the key should be `regions` is an open call
+# on the schema, so the field name alone is let through; the word in prose still fails.
+_LEDGER_FIELD_NAME = re.compile(r'[`"]frames[`"]')
 
 
 _CODE_SPAN = re.compile(r"`[^`]*`")
@@ -316,6 +325,18 @@ class TestDesignBoardDiscipline:
             "Fourthname",
         ]
 
+    def test_the_guard_sees_a_vendor_name_after_a_bold_sentence_or_in_a_table_cell(self):
+        """Splitting after a bold run and at a pipe exempts only the word that opens
+        the next sentence or cell; a name later in either is still seen."""
+        text = (
+            "1. **The board says it.** The listing that Vendorname returns is free.\n"
+            "\n"
+            "| Field | Meaning |\n"
+            "|---|---|\n"
+            "| `kind` | How Othername reads the call. |\n"
+        )
+        assert _mid_sentence_capitalized_words(text) == ["Vendorname", "Othername"]
+
     def test_the_guard_sees_a_vendor_name_in_a_wrapped_heading(self):
         """A heading wraps like anything else does. Emitting its first line as a block
         on its own left the continuation to open a fresh paragraph, so its first word
@@ -365,6 +386,30 @@ class TestDesignBoardDiscipline:
     def test_asks_which_area_when_there_are_too_many_regions(self):
         text = _flat(_DESIGN_BOARD.read_text(encoding="utf-8"))
         assert "ask the designer which area" in text
+
+
+class TestDesignLedgerDoc:
+    """docs/DESIGN_LEDGER.md — shipped beside the discipline, under the same guards."""
+
+    def test_names_no_board_vendor(self):
+        """The ledger contract is shipped text too, so it gets the same guard: no UI
+        noun from one product's model and no proper noun mid-sentence."""
+        text = _DESIGN_LEDGER.read_text(encoding="utf-8")
+        lowered = _LEDGER_FIELD_NAME.sub(" ", text).lower()
+        for noun in _VENDOR_UI_NOUNS:
+            assert not re.search(rf"\b{noun}\b", lowered), (
+                f"DESIGN_LEDGER.md uses {noun!r}, a noun from one board product's model"
+            )
+        assert not _mid_sentence_capitalized_words(text), (
+            "DESIGN_LEDGER.md carries a proper noun mid-sentence, which is how a "
+            f"product name gets in: {_mid_sentence_capitalized_words(text)}"
+        )
+
+    def test_is_listed_in_the_docs_index(self):
+        assert "DESIGN_LEDGER.md" in _DOCS_INDEX.read_text(encoding="utf-8")
+
+    def test_the_board_doc_points_at_it(self):
+        assert "`DESIGN_LEDGER.md`" in _DESIGN_BOARD.read_text(encoding="utf-8")
 
 
 class TestCodingPrinciplesPointer:

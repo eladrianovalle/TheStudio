@@ -17,11 +17,11 @@ Three rules hold it up.
    statement the board does not; when it quotes, it quotes verbatim, and when the board is silent it
    says so rather than filling the gap.
 2. **The ledger records what the build did and where it got it.** Every rule and every tunable number
-   in the game is reachable from one entry. A number with no entry is a number nobody can trace, and
+   in the game is reachable from an entry. A number with no entry is a number nobody can trace, and
    the game's own tests should refuse it.
 3. **A quote is the board's words, verbatim.** Not a paraphrase, not a tidy-up, not a translation into
    the game's terms. A check that compares the ledger to the live board can only work when the words
-   match exactly, so the quote is kept as it was read, with its date.
+   match exactly, so the quote is kept as it was read.
 
 ## Where it lives
 
