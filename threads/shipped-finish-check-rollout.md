@@ -28,18 +28,16 @@ Every Studio install gets the finish-check hook, and `specs/shipped-finish-check
   Suite green on the branch: 1396 passed, ruff clean.
 - `main` is `59a60d0` and red on rule 6 until that branch merges.
 
-**Blocked downstream of the red suite: Studio PR #232** (`fix/installer-names-missing-listed-files`).
-The reviewer REJECTED at `909888d`; the responder prepared the fix (comment and docstring reworded
-to "listed but absent", `studio-update.md` exception, warning no longer prints a temp path) but
-pushed nothing because the suite was red. Its three edits are spelled out in its comment on #232.
-`origin/fix/installer-names-missing-listed-files` is still at `909888d`.
+**Studio PR #232** (`fix/installer-names-missing-listed-files`): the responder's three edits are
+pushed as `f91d044`, the PR body is rewritten to say it guards the "listed but absent" case only,
+and the reverse case (file present in source, unlisted by an older installer) is issue #234. Its
+one failing check is the date-expired spec on `main`, which #233 fixes.
 
-**Next action.** Once `chore/ship-finish-check-spec` merges: re-apply the responder's three edits
-on #232 by hand from its comment, push, edit the PR body as the comment suggests, and open the
-follow-up issue for the real Tycho case ("present in source, unlisted by an older installer": read
-`SOURCE_FILES` from the source tree's own `install.py`, or run the update with the source's
-installer). Then the OrcPunk-dotcom correction: its `CLAUDE.md` still carries the superseded
-multi-line comment principle; re-splice the marker block from Studio `main` the way Multica #159 did.
+**OrcPunk-dotcom's correction is open as its PR #95**: the Studio marker block in its `CLAUDE.md`
+regenerated with the installer's own splice function; one principle line changes, nothing else.
+
+**Next action.** None for an agent until the merges below land. Then pull each consumer and
+close this thread (delete the note).
 
 ## Decisions made
 
@@ -56,9 +54,11 @@ multi-line comment principle; re-splice the marker block from Studio `main` the 
 
 ## Blocked on
 
-- **Adriano: merge the spec-ship PR** from `chore/ship-finish-check-spec`. That unreds `main`.
-- **Adriano: merge Cerebro #228 and OrcPunk-biz #22**, then pull each into its live checkout.
-- **OrcPunk-dotcom's correction**, not yet opened (see Next action).
+- **Adriano: merge Studio #233** (ships the spec, unreds `main`), then **#232** (its check goes
+  green once #233 is in).
+- **Adriano: merge OrcPunk-dotcom #95, Cerebro #228 and OrcPunk-biz #22**, then pull each into
+  its live checkout. The dotcom checkout is on a dirty feature branch; pull `main` there, don't
+  switch it.
 
 ## Landmines
 
@@ -93,9 +93,9 @@ multi-line comment principle; re-splice the marker block from Studio `main` the 
   `specs/shipped-finish-check-eval-results.md` (filled from `studio/finish_check_tally.py`).
 - Code: `studio/finish_check.py`; `_install_stop_hook` in `studio/install.py`; `--no-finish-check`
   in `studio/run_phase.py`. Tests: `studio/tests/test_finish_check.py`, `test_hook_install.py`.
-- Open Studio PRs: the spec-ship PR (branch `chore/ship-finish-check-spec`), #232 (installer warning,
-  rejected, patch unpushed), #227 (`/tend-prs` spec, worktree `_TheGameStudio-tend-prs`).
-- Consumer PRs still open: Cerebro #228, OrcPunk-biz #22. Tycho #69 merged.
+- Open Studio PRs: #233 (ships the spec), #232 (installer warning, fix pushed), #227 (`/tend-prs`
+  spec, worktree `_TheGameStudio-tend-prs`). Issue #234 is the reverse installer gap.
+- Consumer PRs still open: Cerebro #228, OrcPunk-biz #22, OrcPunk-dotcom #95. Tycho #69 merged.
 - Obligation queue also names `specs/game-design-board.md`: every unit built, still `approved`,
   owes a flip to `shipped` with `shipped_impact` and `shipped_changed`. Separate thread
   (`threads/game-design-boards.md`).
