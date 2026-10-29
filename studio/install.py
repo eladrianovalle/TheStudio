@@ -956,11 +956,14 @@ def _collect_source_files(studio_dir: Path) -> List[Path]:
     """Collect all source files to install (relative to studio/)."""
     files: List[Path] = []
 
-    # Explicit files
+    # Explicit files. A listed file the tree lacks is skipped, but never quietly: the
+    # snapshot would then claim the source commit while missing one of its files.
     for f in SOURCE_FILES:
         path = studio_dir / f
         if path.exists():
             files.append(Path(f))
+        else:
+            print(f"  WARNING: {f} is listed in SOURCE_FILES but is not in {studio_dir}; skipped it.")
 
     # Glob patterns
     for pattern in [ROLE_PACK_GLOB, PROMPT_DOC_GLOB]:

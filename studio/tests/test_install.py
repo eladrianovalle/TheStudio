@@ -1382,3 +1382,41 @@ class TestLocalEditsDisplayPath:
 
         for rel in ("config/scopes.toml", ".claude/commands/run-phase.md"):
             assert _manifest_installed_path(tmp_path, rel) == tmp_path / _installed_display_path(rel)
+
+
+class TestMissingListedSourceFile:
+    """A file SOURCE_FILES names but the source tree lacks must not vanish silently.
+
+    This happened to a consuming repo: its installed installer's list was older than the
+    source it copied from, so one doc was never installed, and VERSION still recorded the
+    snapshot as being at the source commit. Nothing said a file had been skipped.
+    """
+
+    def _studio_dir_missing_one_listed_file(self, tmp_path: Path) -> Path:
+        studio = tmp_path / "studio"
+        studio.mkdir()
+        for rel in install.SOURCE_FILES:
+            if rel == "docs/DESIGN_LEDGER.md":
+                continue
+            path = studio / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("# stand-in\n", encoding="utf-8")
+        return studio
+
+    def test_collect_warns_naming_each_listed_file_that_is_absent(self, tmp_path, capsys):
+        studio = self._studio_dir_missing_one_listed_file(tmp_path)
+
+        collected = install._collect_source_files(studio)
+
+        out = capsys.readouterr().out
+        assert "WARNING" in out
+        assert "docs/DESIGN_LEDGER.md" in out
+        assert Path("docs/DESIGN_LEDGER.md") not in collected
+
+    def test_collect_is_silent_when_every_listed_file_exists(self, tmp_path, capsys):
+        studio = self._studio_dir_missing_one_listed_file(tmp_path)
+        (studio / "docs" / "DESIGN_LEDGER.md").write_text("# stand-in\n", encoding="utf-8")
+
+        install._collect_source_files(studio)
+
+        assert "WARNING" not in capsys.readouterr().out
