@@ -3,7 +3,7 @@ feature: Shipped Finish-Check Stop Hook
 slug: shipped-finish-check
 ticket: https://github.com/eladrianovalle/TheStudio/issues/209
 # status: draft → approved (a human approved it) → shipped (built AND verified)
-status: approved
+status: shipped
 studio_run: studio/output/tech/run_tech_20260928_163630
 # verification_due: the date the evidence is due (YYYY-MM-DD). Required once this spec is
 # `approved`, and only if it carries a `## Verification` section — no section, no deadline.
@@ -14,8 +14,8 @@ verification_due: 2026-10-28
 # satisfy the gate having edited nothing.
 # shipped_impact: one of none | minor | major — how much it changed downstream
 # shipped_changed: one line, in plain words, on what this actually changed
-shipped_impact:
-shipped_changed:
+shipped_impact: major
+shipped_changed: Every install's sessions are refused their first stop each turn; measured over a month, 4 in 10 blocked stops were followed by a concrete change and the rest by a second stop that bought nothing.
 ---
 
 # Shipped Finish-Check Stop Hook — Architecture Spec
