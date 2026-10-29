@@ -957,13 +957,16 @@ def _collect_source_files(studio_dir: Path) -> List[Path]:
     files: List[Path] = []
 
     # Explicit files. A listed file the tree lacks is skipped, but never quietly: the
-    # snapshot would then claim the source commit while missing one of its files.
+    # snapshot would then claim the source commit while missing one of its files. This
+    # only sees files the list names. The reverse gap, a file the source has that an
+    # older installer's list leaves out, is still dropped silently, because the loop
+    # never looks at it.
     for f in SOURCE_FILES:
         path = studio_dir / f
         if path.exists():
             files.append(Path(f))
         else:
-            print(f"  WARNING: {f} is listed in SOURCE_FILES but is not in {studio_dir}; skipped it.")
+            print(f"  WARNING: {f} is listed in SOURCE_FILES but missing from the Studio source tree; skipped it.")
 
     # Glob patterns
     for pattern in [ROLE_PACK_GLOB, PROMPT_DOC_GLOB]:

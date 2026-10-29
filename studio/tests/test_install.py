@@ -1387,9 +1387,10 @@ class TestLocalEditsDisplayPath:
 class TestMissingListedSourceFile:
     """A file SOURCE_FILES names but the source tree lacks must not vanish silently.
 
-    This happened to a consuming repo: its installed installer's list was older than the
-    source it copied from, so one doc was never installed, and VERSION still recorded the
-    snapshot as being at the source commit. Nothing said a file had been skipped.
+    This covers the "listed but absent" case only: the list names a file, the tree has no
+    such file, and the installer says so instead of skipping it quietly. It does not cover
+    the reverse, a file the tree has that an older installer's list leaves out, which the
+    collecting loop never looks at and still drops without a word.
     """
 
     def _studio_dir_missing_one_listed_file(self, tmp_path: Path) -> Path:
