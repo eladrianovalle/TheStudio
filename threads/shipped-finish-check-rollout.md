@@ -36,8 +36,11 @@ one failing check is the date-expired spec on `main`, which #233 fixes.
 **OrcPunk-dotcom's correction is open as its PR #95**: the Studio marker block in its `CLAUDE.md`
 regenerated with the installer's own splice function; one principle line changes, nothing else.
 
-**Next action.** None for an agent until the merges below land. Then pull each consumer and
-close this thread (delete the note).
+**Next action.** #233 is still REJECTED: the tally counted `2>&1`, `>/dev/null` and a `>` inside
+a quoted argument as a write, so every "concrete change" number above is too high. The regex is
+fixed; the tally has to be re-run on Adriano's machine (the transcripts live only there) and the
+numbers here, in the results file and in the spec's `shipped_changed` replaced with what it prints.
+Then the merges below, then pull each consumer and close this thread (delete the note).
 
 ## Decisions made
 
@@ -54,7 +57,8 @@ close this thread (delete the note).
 
 ## Blocked on
 
-- **Adriano: merge Studio #233** (ships the spec, unreds `main`), then **#232** (its check goes
+- **Adriano: re-run `python studio/finish_check_tally.py --since 2026-09-29` on #233** and update
+  its numbers; only then merge it (ships the spec, unreds `main`), then **#232** (its check goes
   green once #233 is in).
 - **Adriano: merge OrcPunk-dotcom #95, Cerebro #228 and OrcPunk-biz #22**, then pull each into
   its live checkout. The dotcom checkout is on a dirty feature branch; pull `main` there, don't

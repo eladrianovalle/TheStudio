@@ -36,12 +36,25 @@ BLOCK_TEXT = "Stop hook feedback:\nFINISH-CHECK"
 # "ran a tool" but not as a concrete change.
 WRITING_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit", "Agent", "Task", "Workflow", "Skill"}
 
-# A Bash command that writes: git state, GitHub objects, redirects, file moves.
+# A Bash command that writes: git state, GitHub objects, file moves.
 WRITING_COMMAND = re.compile(
     r"git (commit|push|add|checkout|switch|rebase|merge|worktree|stash)"
     r"|gh (pr|issue) (create|comment|edit|close|merge|ready)"
-    r"|sed -i|>>?\s*\S|\btee\b|\brm\b|\bmv\b|\bcp\b|\bmkdir\b|\btouch\b"
+    r"|sed -i|\btee\b|\brm\b|\bmv\b|\bcp\b|\bmkdir\b|\btouch\b"
 )
+
+# A redirect into a file. `2>&1` and `>/dev/null` write nothing, so they don't count.
+# It is matched only after heredoc bodies and quoted strings are taken out, so a `>`
+# inside a jq filter, a grep pattern or an inline script is not mistaken for one.
+REDIRECT_TO_FILE = re.compile(r"(?<![-=<>])\d*>>?\s*(?!&|/dev/null\b)[\w./~$]")
+HEREDOC_BODY = re.compile(r"(<<-?\s*(['\"]?)(\w+)\2[^\n]*\n).*?^\s*\3\s*$", re.S | re.M)
+QUOTED = re.compile(r"'[^']*'|\"(?:\\.|[^\"\\])*\"")
+
+
+def redirects_to_a_file(command):
+    unquoted = QUOTED.sub("_", HEREDOC_BODY.sub(r"\1", command))
+    return bool(REDIRECT_TO_FILE.search(unquoted))
+
 
 # The criterion as written in the spec: of 30 consecutive blocks, at least 8
 # must be followed by a concrete change.
@@ -108,7 +121,7 @@ def is_writing(tool_use):
         return True
     if name == "Bash":
         command = (tool_use.get("input") or {}).get("command", "")
-        return bool(WRITING_COMMAND.search(command))
+        return bool(WRITING_COMMAND.search(command)) or redirects_to_a_file(command)
     return False
 
 
@@ -155,7 +168,9 @@ def scan(projects_dir, excluded_prefix, since):
     blocks = []
     for transcript in glob.glob(os.path.join(projects_dir, "*", "*.jsonl")):
         project = os.path.basename(os.path.dirname(transcript))
-        if project.startswith(excluded_prefix):
+        # The repo itself, and worktrees nested inside it; not a sibling repo whose
+        # name merely starts the same way.
+        if project == excluded_prefix or project.startswith(excluded_prefix + "-"):
             continue
         for block in blocks_in(read_records(transcript)):
             if block["timestamp"][:10] >= since:

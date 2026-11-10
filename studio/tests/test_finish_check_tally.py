@@ -98,10 +98,14 @@ def test_scan_leaves_out_the_excluded_repo_and_older_blocks(tmp_path: Path):
     write("-Users-x-Repos-consumer", [old_block, PROMPT, BLOCK, assistant(("Edit", {})), PROMPT])
     write("-Users-x-Repos--Studio", [BLOCK, assistant(("Edit", {})), PROMPT])
     write("-Users-x-Repos--Studio-worktree", [BLOCK, PROMPT])
+    write("-Users-x-Repos--StudioTools", [BLOCK, assistant(("Edit", {})), PROMPT])
 
     blocks = tally.scan(str(tmp_path), "-Users-x-Repos--Studio", since="2026-09-29")
-    assert [block["project"] for block in blocks] == ["-Users-x-Repos-consumer"]
-    assert blocks[0]["changed_something"] is True
+    assert sorted(block["project"] for block in blocks) == [
+        "-Users-x-Repos--StudioTools",
+        "-Users-x-Repos-consumer",
+    ]
+    assert all(block["changed_something"] for block in blocks)
 
 
 def test_report_says_when_there_are_too_few_blocks():
@@ -115,8 +119,16 @@ def test_report_says_when_there_are_too_few_blocks():
         ("git commit -m x", True),
         ("gh pr create --title t", True),
         ("echo hi > out.txt", True),
+        ("echo hi >> notes.md 2>&1", True),
+        ('cat > "plan.md" <<\'EOF\'\nsome > text\nEOF', True),
         ("git status && git diff", False),
         ("python -m pytest tests/ -q", False),
+        ("git status 2>&1 | head", False),
+        ("ls foo 2>/dev/null", False),
+        ("python -m pytest -q > /dev/null", False),
+        ("jq '.[]|select(.n > 3)' data.json", False),
+        ('grep -rn "->" src', False),
+        ("python3 - <<'EOF'\nprint(1 > 0)\nEOF", False),
     ],
 )
 def test_which_shell_commands_count_as_writing(command, writes):
