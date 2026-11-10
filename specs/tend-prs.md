@@ -215,6 +215,10 @@ No open PRs is not an escalation: reschedule.
 - **The 30-minute grace period is a guess** at how long the responder takes. Since row 1 escalates,
   it also caps how long the reviewer may take on a new head: a slow or throttled reviewer now stops
   the loop where before it only made the loop wait.
+- **The `updated_at` fallback can wait without limit.** Any activity on a PR sitting in row 1 (a
+  comment, a label change, the reviewer's own heads-up) bumps `updated_at` and restarts the clock,
+  so on a PR with steady comment traffic row 1 may never escalate. That is accepted: a PR with
+  that much activity has someone looking at it.
 - **Must-fix pushes are uncapped.** Row 5 only fires when a Must fix the tender's note quoted comes
   back. If the reviewer rewords the item, or keeps finding new Must fixes in the tender's own
   pushes, the loop keeps pushing.
