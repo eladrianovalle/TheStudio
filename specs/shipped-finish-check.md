@@ -15,7 +15,7 @@ verification_due: 2026-10-28
 # shipped_impact: one of none | minor | major — how much it changed downstream
 # shipped_changed: one line, in plain words, on what this actually changed
 shipped_impact: major
-shipped_changed: Every install's sessions are refused their first stop each turn; measured over a month, 4 in 10 blocked stops were followed by a concrete change and the rest by a second stop that bought nothing.
+shipped_changed: Every install's sessions are refused their first stop each turn; measured over five weeks, 3 in 10 blocked stops were followed by a concrete change and the rest by a second stop that bought nothing.
 ---
 
 # Shipped Finish-Check Stop Hook — Architecture Spec

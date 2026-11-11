@@ -70,6 +70,13 @@ def test_each_block_is_graded_on_its_own_turn():
     assert [block["changed_something"] for block in graded] == [False, True]
 
 
+def test_delegating_to_an_agent_is_reported_but_is_not_a_change():
+    graded = tally.blocks_in([BLOCK, assistant(("Agent", {"prompt": "look around"})), PROMPT])
+    assert graded[0]["ran_a_tool"] is True
+    assert graded[0]["delegated"] is True
+    assert graded[0]["changed_something"] is False
+
+
 def test_hook_feedback_is_not_a_prompt():
     assert tally.is_user_prompt(BLOCK) is False
     assert tally.is_user_prompt(TOOL_RESULT) is False
@@ -109,7 +116,7 @@ def test_scan_leaves_out_the_excluded_repo_and_older_blocks(tmp_path: Path):
 
 
 def test_report_says_when_there_are_too_few_blocks():
-    text = tally.report([dict(BLOCK, project="p", ran_a_tool=False, changed_something=False, output_tokens=5)], "2026-09-29")
+    text = tally.report([dict(BLOCK, project="p", ran_a_tool=False, changed_something=False, delegated=False, output_tokens=5)], "2026-09-29")
     assert "Fewer than 30 blocks" in text
 
 

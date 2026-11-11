@@ -31,10 +31,15 @@ import sys
 
 BLOCK_TEXT = "Stop hook feedback:\nFINISH-CHECK"
 
-# Tools whose use means the assistant changed something, or delegated work that
-# will. Everything else (Read, a read-only Bash, a browser screenshot) counts as
-# "ran a tool" but not as a concrete change.
-WRITING_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit", "Agent", "Task", "Workflow", "Skill"}
+# Tools whose use means the assistant changed something. Everything else (Read,
+# a read-only Bash, a browser screenshot) counts as "ran a tool" but not as a
+# concrete change.
+WRITING_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit"}
+
+# Tools that hand work to another agent. What that agent did is in its own
+# transcript, which this script does not read, so delegation is reported on its
+# own line and never counted as a change.
+DELEGATING_TOOLS = {"Agent", "Task", "Workflow", "Skill"}
 
 # A Bash command that writes: git state, GitHub objects, file moves.
 WRITING_COMMAND = re.compile(
@@ -136,6 +141,7 @@ def grade_turn(records):
     return {
         "ran_a_tool": bool(uses),
         "changed_something": any(is_writing(use) for use in uses),
+        "delegated": any(use.get("name") in DELEGATING_TOOLS for use in uses),
         "output_tokens": output_tokens,
     }
 
@@ -165,6 +171,13 @@ def project_dir_name(path):
 
 
 def scan(projects_dir, excluded_prefix, since):
+    """Every graded block outside the excluded repo, oldest first.
+
+    The exclusion drops the repo's own directory and `<repo>-...`, which is how its
+    worktrees are named. A sibling repo whose name continues with a dash or a dot
+    (`Studio-old`, `Studio.bak`) is dropped too, because the directory encoding turns
+    `/`, `.` and `-` all into `-` and nothing else tells them apart.
+    """
     blocks = []
     for transcript in glob.glob(os.path.join(projects_dir, "*", "*.jsonl")):
         project = os.path.basename(os.path.dirname(transcript))
@@ -198,12 +211,18 @@ def report(blocks, since):
     lines.append(f"Blocked stops outside this repo since {since}: {total}, in {projects} project directories.")
     if total == 0:
         return "\n".join(lines)
+    lines.append(
+        f"  earliest {blocks[0]['timestamp'][:10]}, latest {blocks[-1]['timestamp'][:10]}"
+        " (Claude Code deletes old transcripts, so the earliest is where the surviving record starts)"
+    )
     ran = sum(block["ran_a_tool"] for block in blocks)
     changed = sum(block["changed_something"] for block in blocks)
     silent = total - ran
     tokens_after_silent = sum(block["output_tokens"] for block in blocks if not block["ran_a_tool"])
     lines.append(f"  followed by any tool call:         {ran}")
     lines.append(f"  followed by a concrete change:     {changed}")
+    delegated_only = sum(block["delegated"] and not block["changed_something"] for block in blocks)
+    lines.append(f"  delegated to an agent, no change of its own: {delegated_only}  (not counted as a change)")
     lines.append(f"  followed by no tool call at all:   {silent}  ({tokens_after_silent} output tokens spent on those turns)")
     met, windows, worst = windows_met(blocks)
     if windows:

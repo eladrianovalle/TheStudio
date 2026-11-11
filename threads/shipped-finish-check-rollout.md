@@ -23,9 +23,10 @@ Every Studio install gets the finish-check hook, and `specs/shipped-finish-check
   `chore/ship-finish-check-spec`. The instrument was never actually cut: Claude Code's transcripts
   under `~/.claude/projects/` record every blocked stop as a hook-feedback record. New module
   `studio/finish_check_tally.py` (+ `tests/test_finish_check_tally.py`) grades the turn after each
-  block. Measured 1,048 blocks outside Studio since 2026-09-29; 401 followed by a concrete change,
-  563 by nothing; 866 of 1,019 windows of 30 meet the 8-of-30 bar (first 13, latest 10, worst 3).
-  Suite green on the branch: 1396 passed, ruff clean.
+  block. Re-tallied 2026-11-11 with the fixed grading: 912 surviving blocks outside Studio
+  (2026-10-05 to 2026-11-11; Claude Code deletes transcripts after 30 days), 288 followed by a
+  concrete change, 503 by nothing; 601 of 883 windows of 30 meet the 8-of-30 bar (earliest 12,
+  latest 15, worst 3). Verdict holds. Delegating to a subagent is reported but not counted.
 - `main` is `59a60d0` and red on rule 6 until that branch merges.
 
 **Studio PR #232** (`fix/installer-names-missing-listed-files`): the responder's three edits are
@@ -36,11 +37,8 @@ one failing check is the date-expired spec on `main`, which #233 fixes.
 **OrcPunk-dotcom's correction is open as its PR #95**: the Studio marker block in its `CLAUDE.md`
 regenerated with the installer's own splice function; one principle line changes, nothing else.
 
-**Next action.** #233 is still REJECTED: the tally counted `2>&1`, `>/dev/null` and a `>` inside
-a quoted argument as a write, so every "concrete change" number above is too high. The regex is
-fixed; the tally has to be re-run on Adriano's machine (the transcripts live only there) and the
-numbers here, in the results file and in the spec's `shipped_changed` replaced with what it prints.
-Then the merges below, then pull each consumer and close this thread (delete the note).
+**Next action.** None for an agent. #233 carries the re-tally and waits on its reviewer and the
+merges below. After the merges, pull each consumer and close this thread (delete the note).
 
 ## Decisions made
 
@@ -57,9 +55,8 @@ Then the merges below, then pull each consumer and close this thread (delete the
 
 ## Blocked on
 
-- **Adriano: re-run `python studio/finish_check_tally.py --since 2026-09-29` on #233** and update
-  its numbers; only then merge it (ships the spec, unreds `main`), then **#232** (its check goes
-  green once #233 is in).
+- **Adriano: merge Studio #233** once its reviewer approves (ships the spec, unreds `main`), then
+  **#232** (its check goes green once #233 is in).
 - **Adriano: merge OrcPunk-dotcom #95, Cerebro #228 and OrcPunk-biz #22**, then pull each into
   its live checkout. The dotcom checkout is on a dirty feature branch; pull `main` there, don't
   switch it.
@@ -83,6 +80,9 @@ Then the merges below, then pull each consumer and close this thread (delete the
   hand-copy the script back; the merge would refuse to overwrite an untracked file.
 - **`/forge --work-dir` loses the handoff records** (gitignored `.studio/output/impl_loop/`).
   Copy them out before `git worktree remove`.
+- **Claude Code deletes transcripts after 30 days** (`cleanupPeriodDays`, default 30), so the tally's
+  population moves every day and two runs weeks apart measure different blocks. Re-grade promptly or
+  not at all; see [[feedback_a_rotating_log_is_not_a_population]].
 - **A stale `.git/index.lock` blocks everything silently.** One from 2026-10-26 sat in the main
   checkout with no git process alive; `rm` it after checking `pgrep -fl git`.
 - **`_Alfred` cannot take a plain worktree** (git-crypt smudge fails). Use `--no-checkout` plus a
