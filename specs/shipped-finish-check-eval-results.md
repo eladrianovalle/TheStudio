@@ -20,8 +20,9 @@ suite once this spec says `status: shipped` — every heading here needs an answ
 Measured 2026-11-11 with `studio/finish_check_tally.py --since 2026-09-29`, with this repo's own
 transcripts excluded. The instrument is Claude Code's own transcripts: every blocked stop is in there
 as a hook-feedback record, followed by whatever the assistant did before the person's next prompt.
-The rollout reached every install on 2026-09-29. Claude Code deletes transcripts after 30 days, so
-the surviving record on the author's machine runs from 2026-10-05 to 2026-11-11; an earlier run of
+The rollout reached every install on 2026-09-29. Claude Code deletes a transcript file 30 days
+after its last write, so a long-running session keeps records older than that. The surviving record
+on the author's machine runs from 2026-10-05 to 2026-11-11; an earlier run of
 the same tally on 2026-10-29 saw blocks back to the rollout day and was discarded because its
 grading over-counted (see below). The spec's own instrument (a payload log inside the hook) was cut
 in the build and turned out not to be needed.
@@ -35,7 +36,7 @@ as a change, because what the subagent did is in a transcript this tally does no
 | Condition | What was run | Times | Criterion met | Notes |
 |---|---|---|---|---|
 | Baseline (feature off) | Not run | 0 | no, by construction | With the hook off the turn ends at the first stop and nothing follows it, so there is no following turn to grade. The global registration of the same hook that would have voided the comparison is gone: on 2026-10-29 the user-level settings file carries one Stop hook, the worktree-pruning one. |
-| With the feature | The tally over every surviving transcript outside this repo | 912 blocked stops in 10 project directories | yes | 288 of 912 blocks were followed by a concrete change, 409 by any tool call, 503 by no tool call at all; 10 more delegated to a subagent and did nothing else. Of the 883 windows of 30 consecutive blocks, 601 meet the criterion. The earliest surviving window has 12, the latest 15, the worst 3. |
+| With the feature | The tally over every surviving transcript outside this repo | 912 blocked stops in 10 project directories | yes | 288 of 912 blocks were followed by a concrete change, 409 by any tool call, 503 by no tool call at all; 10 more delegated to a subagent and changed nothing themselves. Of the 883 windows of 30 consecutive blocks, 601 meet the criterion. The earliest surviving window has 12, the latest 15, the worst 3. |
 
 The 10 directories are installs' main checkouts; the throwaway worktrees and review sandboxes that
 the 2026-10-29 run also saw have been deleted since, transcripts included. "Consecutive" is by

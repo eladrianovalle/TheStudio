@@ -24,7 +24,8 @@ Every Studio install gets the finish-check hook, and `specs/shipped-finish-check
   under `~/.claude/projects/` record every blocked stop as a hook-feedback record. New module
   `studio/finish_check_tally.py` (+ `tests/test_finish_check_tally.py`) grades the turn after each
   block. Re-tallied 2026-11-11 with the fixed grading: 912 surviving blocks outside Studio
-  (2026-10-05 to 2026-11-11; Claude Code deletes transcripts after 30 days), 288 followed by a
+  (2026-10-05 to 2026-11-11; Claude Code deletes a transcript file 30 days after its last write,
+  so a long session keeps older records), 288 followed by a
   concrete change, 503 by nothing; 601 of 883 windows of 30 meet the 8-of-30 bar (earliest 12,
   latest 15, worst 3). Verdict holds. Delegating to a subagent is reported but not counted.
 - `main` is `59a60d0` and red on rule 6 until that branch merges.

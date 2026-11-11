@@ -120,6 +120,29 @@ def test_report_says_when_there_are_too_few_blocks():
     assert "Fewer than 30 blocks" in text
 
 
+def test_report_prints_the_record_span_delegation_and_windows():
+    # 31 blocks, one a day: the first 8 changed something, so the first window has 8,
+    # the last (blocks 2..31) has 7, and one of the two windows meets the criterion.
+    blocks = [
+        dict(
+            BLOCK,
+            timestamp=f"2026-10-{day:02d}T10:00:00.000Z",
+            project="p",
+            ran_a_tool=True,
+            changed_something=day <= 8,
+            delegated=day in (1, 20),
+            output_tokens=5,
+        )
+        for day in range(1, 32)
+    ]
+    text = tally.report(blocks, "2026-09-29")
+    assert "earliest 2026-10-01, latest 2026-10-31" in text
+    # Day 1 delegated but also changed something, so only day 20 is delegation alone.
+    assert "delegated to an agent, no change of its own: 1 " in text
+    assert "with at least 8 changes: 1 of 2." in text
+    assert "first window: 8   last window: 7   worst window: 7" in text
+
+
 @pytest.mark.parametrize(
     "command, writes",
     [
