@@ -39,7 +39,7 @@ WRITING_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit"}
 # Tools that hand work to another agent. What that agent did is in its own
 # transcript, which this script does not read, so delegation is reported on its
 # own line and never counted as a change.
-DELEGATING_TOOLS = {"Agent", "Task", "Workflow", "Skill"}
+DELEGATING_TOOLS = {"Agent", "Task", "Workflow"}
 
 # A Bash command that writes: git state, GitHub objects, file moves.
 WRITING_COMMAND = re.compile(

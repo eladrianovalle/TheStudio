@@ -23,11 +23,12 @@ Every Studio install gets the finish-check hook, and `specs/shipped-finish-check
   `chore/ship-finish-check-spec`. The instrument was never actually cut: Claude Code's transcripts
   under `~/.claude/projects/` record every blocked stop as a hook-feedback record. New module
   `studio/finish_check_tally.py` (+ `tests/test_finish_check_tally.py`) grades the turn after each
-  block. Re-tallied 2026-11-11 with the fixed grading: 912 surviving blocks outside Studio
-  (2026-10-05 to 2026-11-11; Claude Code deletes a transcript file 30 days after its last write,
-  so a long session keeps older records), 288 followed by a
-  concrete change, 503 by nothing; 601 of 883 windows of 30 meet the 8-of-30 bar (earliest 12,
-  latest 15, worst 3). Verdict holds. Delegating to a subagent is reported but not counted.
+  block. Re-tallied 2026-11-12 with the fixed grading: 918 surviving blocks outside Studio
+  (2026-10-05 to 2026-11-12; Claude Code deletes a transcript file 30 days after its last write,
+  so a long session keeps older records), 291 followed by a
+  concrete change, 504 by nothing; 607 of 889 windows of 30 meet the 8-of-30 bar (earliest 12,
+  latest 17, worst 3). Verdict holds. Delegating to a subagent (not a skill load) is reported but
+  not counted.
 - `main` is `59a60d0` and red on rule 6 until that branch merges.
 
 **Studio PR #232** (`fix/installer-names-missing-listed-files`): the responder's three edits are

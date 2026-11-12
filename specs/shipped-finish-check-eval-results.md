@@ -17,12 +17,12 @@ suite once this spec says `status: shipped` — every heading here needs an answ
 
 ## What happened
 
-Measured 2026-11-11 with `studio/finish_check_tally.py --since 2026-09-29`, with this repo's own
+Measured 2026-11-12 with `studio/finish_check_tally.py --since 2026-09-29`, with this repo's own
 transcripts excluded. The instrument is Claude Code's own transcripts: every blocked stop is in there
 as a hook-feedback record, followed by whatever the assistant did before the person's next prompt.
 The rollout reached every install on 2026-09-29. Claude Code deletes a transcript file 30 days
 after its last write, so a long-running session keeps records older than that. The surviving record
-on the author's machine runs from 2026-10-05 to 2026-11-11; an earlier run of
+on the author's machine runs from 2026-10-05 to 2026-11-12; an earlier run of
 the same tally on 2026-10-29 saw blocks back to the rollout day and was discarded because its
 grading over-counted (see below). The spec's own instrument (a payload log inside the hook) was cut
 in the build and turned out not to be needed.
@@ -36,7 +36,7 @@ as a change, because what the subagent did is in a transcript this tally does no
 | Condition | What was run | Times | Criterion met | Notes |
 |---|---|---|---|---|
 | Baseline (feature off) | Not run | 0 | no, by construction | With the hook off the turn ends at the first stop and nothing follows it, so there is no following turn to grade. The global registration of the same hook that would have voided the comparison is gone: on 2026-10-29 the user-level settings file carries one Stop hook, the worktree-pruning one. |
-| With the feature | The tally over every surviving transcript outside this repo | 912 blocked stops in 10 project directories | yes | 288 of 912 blocks were followed by a concrete change, 409 by any tool call, 503 by no tool call at all; 10 more delegated to a subagent and changed nothing themselves. Of the 883 windows of 30 consecutive blocks, 601 meet the criterion. The earliest surviving window has 12, the latest 15, the worst 3. |
+| With the feature | The tally over every surviving transcript outside this repo | 918 blocked stops in 10 project directories | yes | 291 of 918 blocks were followed by a concrete change, 414 by any tool call, 504 by no tool call at all; 10 more delegated to a subagent and changed nothing themselves. Of the 889 windows of 30 consecutive blocks, 607 meet the criterion. The earliest surviving window has 12, the latest 17, the worst 3. |
 
 The 10 directories are installs' main checkouts; the throwaway worktrees and review sandboxes that
 the 2026-10-29 run also saw have been deleted since, transcripts included. "Consecutive" is by
@@ -59,7 +59,7 @@ Required — this section is the point of the file.
   if you can't name a limit, you haven't looked yet.
 
 **The criterion passed as written, but it never said which 30.** It is met by the earliest
-surviving 30 blocks, by the latest 30, and by 601 of the 883 windows. It is not met by 282 of them,
+surviving 30 blocks, by the latest 30, and by 607 of the 889 windows. It is not met by 282 of them,
 roughly a third, and the worst run of 30 produced 3 changes. A reader who picked that run would call
 the feature a tax, and the spec gives them no grounds to be overruled.
 
@@ -72,9 +72,9 @@ them by then. So the two runs are not the same population measured twice, and th
 4 in 10 to roughly 3 in 10 is the correction and the rotation together, in a split nobody can
 recover. The numbers above are the ones the shipped tool reproduces.
 
-**The numbers that moved the wrong way, cost first.** 503 of the 912 blocks, more than half, were
+**The numbers that moved the wrong way, cost first.** 504 of the 918 blocks, more than half, were
 followed by no tool call: the assistant re-read its message and stopped again. Those turns cost
-105,154 output tokens between them, and that is the smaller half of the bill. Each one is also a full
+105,188 output tokens between them, and that is the smaller half of the bill. Each one is also a full
 model round trip re-reading the whole context, which the transcripts do not price and this file does
 not count. The hook's cost is one such round trip on every turn in every install, paid whether or not
 anything follows.
