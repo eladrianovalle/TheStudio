@@ -77,6 +77,13 @@ def test_delegating_to_an_agent_is_reported_but_is_not_a_change():
     assert graded[0]["changed_something"] is False
 
 
+def test_loading_a_skill_is_a_tool_but_not_delegation_or_a_change():
+    graded = tally.blocks_in([BLOCK, assistant(("Skill", {"skill": "review"})), PROMPT])
+    assert graded[0]["ran_a_tool"] is True
+    assert graded[0]["delegated"] is False
+    assert graded[0]["changed_something"] is False
+
+
 def test_hook_feedback_is_not_a_prompt():
     assert tally.is_user_prompt(BLOCK) is False
     assert tally.is_user_prompt(TOOL_RESULT) is False
