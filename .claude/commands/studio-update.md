@@ -31,10 +31,13 @@ update from the upstream Studio source repo instead:
 `python studio/run_phase.py update --target <this-repo>`. Do not trust the result until then.
 
 The one exception is a `WARNING:` saying a file "is listed in SOURCE_FILES but missing from the
-Studio source tree", when it is the only `WARNING:` in the output. That file is missing from the
-source itself, so running the update from upstream would skip it again. Tell the user which file
-the install is missing, and leave it at that. If the snapshot warning above is also printed, the
-"source tree" is the snapshot, which may simply be a file short, so follow the rerun advice above.
+Studio source tree", when it is the only `WARNING:` in the output. Either that file is missing from
+the source itself, so running the update from upstream would skip it again, or the installed
+installer's list is older than the source and still names a file upstream has since removed or
+renamed. Rerun from upstream before reporting it: if the warning is gone, it was the stale list;
+if it persists, tell the user which file the install is missing, and leave it at that. If the
+snapshot warning above is also printed, the "source tree" is the snapshot, which may simply be a
+file short, so follow the rerun advice above.
 
 **If the output says the Studio source is behind its remote** (a "source is N commits behind
 `origin/main`" block; `check-install` exits non-zero), the source repo Studio is comparing against

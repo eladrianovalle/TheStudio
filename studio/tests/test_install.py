@@ -1393,11 +1393,14 @@ class TestMissingListedSourceFile:
     collecting loop never looks at and still drops without a word.
     """
 
+    # Taken from the list itself, so the tests stay tied to it if entries change.
+    MISSING = install.SOURCE_FILES[0]
+
     def _studio_dir_missing_one_listed_file(self, tmp_path: Path) -> Path:
         studio = tmp_path / "studio"
         studio.mkdir()
         for rel in install.SOURCE_FILES:
-            if rel == "docs/DESIGN_LEDGER.md":
+            if rel == self.MISSING:
                 continue
             path = studio / rel
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -1411,12 +1414,14 @@ class TestMissingListedSourceFile:
 
         out = capsys.readouterr().out
         assert "WARNING" in out
-        assert "docs/DESIGN_LEDGER.md" in out
-        assert Path("docs/DESIGN_LEDGER.md") not in collected
+        assert self.MISSING in out
+        assert Path(self.MISSING) not in collected
 
     def test_collect_is_silent_when_every_listed_file_exists(self, tmp_path, capsys):
         studio = self._studio_dir_missing_one_listed_file(tmp_path)
-        (studio / "docs" / "DESIGN_LEDGER.md").write_text("# stand-in\n", encoding="utf-8")
+        path = studio / self.MISSING
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# stand-in\n", encoding="utf-8")
 
         install._collect_source_files(studio)
 
