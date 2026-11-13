@@ -1382,3 +1382,47 @@ class TestLocalEditsDisplayPath:
 
         for rel in ("config/scopes.toml", ".claude/commands/run-phase.md"):
             assert _manifest_installed_path(tmp_path, rel) == tmp_path / _installed_display_path(rel)
+
+
+class TestMissingListedSourceFile:
+    """A file SOURCE_FILES names but the source tree lacks must not vanish silently.
+
+    This covers the "listed but absent" case only: the list names a file, the tree has no
+    such file, and the installer says so instead of skipping it quietly. It does not cover
+    the reverse, a file the tree has that an older installer's list leaves out, which the
+    collecting loop never looks at and still drops without a word.
+    """
+
+    # Taken from the list itself, so the tests stay tied to it if entries change.
+    MISSING = install.SOURCE_FILES[0]
+
+    def _studio_dir_missing_one_listed_file(self, tmp_path: Path) -> Path:
+        studio = tmp_path / "studio"
+        studio.mkdir()
+        for rel in install.SOURCE_FILES:
+            if rel == self.MISSING:
+                continue
+            path = studio / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("# stand-in\n", encoding="utf-8")
+        return studio
+
+    def test_collect_warns_naming_each_listed_file_that_is_absent(self, tmp_path, capsys):
+        studio = self._studio_dir_missing_one_listed_file(tmp_path)
+
+        collected = install._collect_source_files(studio)
+
+        out = capsys.readouterr().out
+        assert "WARNING" in out
+        assert self.MISSING in out
+        assert Path(self.MISSING) not in collected
+
+    def test_collect_is_silent_when_every_listed_file_exists(self, tmp_path, capsys):
+        studio = self._studio_dir_missing_one_listed_file(tmp_path)
+        path = studio / self.MISSING
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# stand-in\n", encoding="utf-8")
+
+        install._collect_source_files(studio)
+
+        assert "WARNING" not in capsys.readouterr().out
