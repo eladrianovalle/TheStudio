@@ -966,7 +966,7 @@ def _collect_source_files(studio_dir: Path) -> List[Path]:
         if path.exists():
             files.append(Path(f))
         else:
-            print(f"  WARNING: {f} is listed in SOURCE_FILES but missing from the Studio source tree; skipped it.")
+            print(f"  WARNING: {f} is listed in SOURCE_FILES but missing from the Studio source tree; left it out.")
 
     # Glob patterns
     for pattern in [ROLE_PACK_GLOB, PROMPT_DOC_GLOB]:
