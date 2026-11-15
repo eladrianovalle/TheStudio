@@ -355,7 +355,10 @@ function editorPrompt(u, writer) {
     `what the tool says about its excerpt being enough. A quote taken from a summary rather than the file is`,
     `\`(unverified)\` — the mandate's lower-confidence rule then demotes it and drops it unless fatal.`,
     ``,
-    `Scope of review: \`${gitIn(u)} diff ${writer.writer_sha}..\` — these are the writer's changes. Read the touched`,
+    // The writer's changes live IN writer_sha, so the range runs from its parent to it. A bare
+    // `diff ${writer_sha}..` compares that commit to the tree it just committed and prints nothing;
+    // an editor that took it literally reviewed an empty diff and called the unit clean.
+    `Scope of review: \`${gitIn(u)} diff ${writer.writer_sha}^..${writer.writer_sha}\` — these are the writer's changes. Read the touched`,
     `files (${(writer.files_touched || []).join(', ') || 'see the diff'})${u.read_scope === 'touched' ? '' : ' and their direct importers'}.`,
     `Do not wander beyond that read scope.`,
     ``,

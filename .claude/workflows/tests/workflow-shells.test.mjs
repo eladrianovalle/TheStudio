@@ -463,7 +463,9 @@ test('the writer prompt pins every git command, including the escalation commit'
 
 test('the editor prompt pins its diff, its revert, and its commit', () => {
   const prompt = editorPrompt({ ...UNIT, work_dir: WORK_DIR }, WRITER)
-  assert.ok(prompt.includes(`${PINNED} diff ${WRITER.writer_sha}..`))
+  assert.ok(prompt.includes(`${PINNED} diff ${WRITER.writer_sha}^..${WRITER.writer_sha}`))
+  // `diff <writer_sha>..` is the writer's commit against the tree it just committed: an empty diff.
+  assert.ok(!prompt.includes(`diff ${WRITER.writer_sha}..`))
   assert.ok(prompt.includes(`${PINNED} reset --hard ${WRITER.writer_sha}`))
   assert.ok(prompt.includes(`${PINNED} commit -am "editor: unit_demo"`))
   assert.equal(occurrences(prompt, PINNED), 3)

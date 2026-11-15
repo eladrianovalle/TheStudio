@@ -51,7 +51,7 @@ These were settled deliberately; each rejects a plausible alternative.
   diff base, the unit boundary, and the revert restore-point all deterministic.
 
 - **Editor diffs against `writer_sha`, then reads from disk.** The handoff carries metadata only.
-  The editor computes `git diff <writer_sha>..` for an unambiguous picture of what the writer
+  The editor computes `git diff <writer_sha>^..<writer_sha>` for an unambiguous picture of what the writer
   changed (no conflation with pre-existing uncommitted work, no bleed between sequential units in
   one tree), then reads the touched files directly.
 
