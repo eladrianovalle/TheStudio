@@ -47,13 +47,15 @@ These were settled deliberately; each rejects a plausible alternative.
 
 - **In-memory handoff, anchored to a commit.** The writer→editor baton is an in-memory metadata
   object the orchestrator passes between stages (the natural shape in every agent runtime). It
-  carries a `writer_sha` (the commit of the writer's passing state), which is what makes the
-  diff base, the unit boundary, and the revert restore-point all deterministic.
+  carries a `base_sha` (HEAD before the writer changed anything) and a `writer_sha` (the commit of
+  the writer's passing state), which make the diff range, the unit boundary, and the revert
+  restore-point all deterministic.
 
-- **Editor diffs against `writer_sha`, then reads from disk.** The handoff carries metadata only.
-  The editor computes `git diff <writer_sha>..` for an unambiguous picture of what the writer
+- **Editor diffs `base_sha..writer_sha`, then reads from disk.** The handoff carries metadata only.
+  The editor computes `git diff <base_sha>..<writer_sha>` for an unambiguous picture of what the writer
   changed (no conflation with pre-existing uncommitted work, no bleed between sequential units in
-  one tree), then reads the touched files directly.
+  one tree, and every commit the writer made rather than only its last), then reads the touched
+  files directly.
 
 ## The portable core (provider-neutral data)
 
@@ -69,7 +71,8 @@ persisted to the run directory.
 {
   "unit_id": "unit_01",
   "title": "Users can create and view a profile (hardcoded storage)",
-  "writer_sha": "a1b2c3d",          // commit of the writer's passing state — diff base + revert point
+  "base_sha": "9f8e7d6",            // HEAD before the writer changed anything — where the editor's diff starts
+  "writer_sha": "a1b2c3d",          // commit of the writer's passing state — diff end + revert point
   "files_touched": ["src/profile.py", "tests/test_profile.py"],
   "tests": {
     "command": "pytest tests/test_profile.py -q",   // unit-scoped, fast — run at the gate

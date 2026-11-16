@@ -169,10 +169,12 @@ class TestWriterEscalationChannel:
         # and a normal run never sets the field at all.
         top_level_required = re.search(r"required: \[([^\]]*)\]", handoff).group(1)
         declared = re.findall(r"'([^']+)'", top_level_required)
-        # `mutation_check` joined the required list when skip reasons landed; `stuck`
-        # must never join it, and nothing else may drift in unnoticed.
+        # `mutation_check` joined the required list when skip reasons landed, and
+        # `base_sha` when the editor's diff began at the unit's start; `stuck` must
+        # never join it, and nothing else may drift in unnoticed.
         assert declared == [
             "unit_id",
+            "base_sha",
             "writer_sha",
             "files_touched",
             "tests",
