@@ -85,7 +85,7 @@ test('concernsDisplayPath stays a bare relative path without a work dir', () => 
 // ---------------------------------------------------------------------------
 const unitCriteria = loadFunction('../implementation-loop.js', 'unitCriteria')
 const writerPrompt = loadFunction('../implementation-loop.js', 'writerPrompt', ['unitCriteria', 'staticCheckCommands', 'runDir', 'gitIn', 'workDirPreamble', 'observeCommand', 'writerObserveLines'])
-const editorPrompt = loadFunction('../implementation-loop.js', 'editorPrompt', ['unitCriteria', 'runDir', 'concernsDir', 'concernsPath', 'gitIn', 'workDirPreamble', 'observeCommand', 'editorObserveLines'])
+const editorPrompt = loadFunction('../implementation-loop.js', 'editorPrompt', ['unitCriteria', 'runDir', 'concernsDir', 'concernsPath', 'gitIn', 'workDirPreamble', 'observeCommand', 'editorObserveLines', 'unitBase'])
 
 // A unit with no acceptance_criteria key at all — the shape every run had before this feature.
 const UNIT = {
@@ -456,9 +456,10 @@ test('the writer prompt pins every git command, including the escalation commit'
   assert.ok(prompt.includes(`${PINNED} add -A && ${PINNED} commit -m "writer: unit_demo"`))
   // The --allow-empty stuck commit is the easiest of the three commit shapes to miss.
   assert.ok(prompt.includes(`${PINNED} add -A && ${PINNED} commit --allow-empty -m "writer(stuck): unit_demo"`))
-  // Two commands, two git tokens each: a count, so a fourth command added later can't slip past
-  // unpinned without failing here.
-  assert.equal(occurrences(prompt, PINNED), 4)
+  assert.ok(prompt.includes(`${PINNED} rev-parse --short HEAD`))
+  // The base lookup plus two commits of two git tokens each: a count, so a command added later can't
+  // slip past unpinned without failing here.
+  assert.equal(occurrences(prompt, PINNED), 5)
 })
 
 test('the editor prompt pins its diff, its revert, and its commit', () => {
@@ -492,6 +493,29 @@ test('both prompts open by telling the agent to cd into the work dir', () => {
     assert.equal(prompt.split('\n')[0], `ALL WORK HAPPENS IN ${WORK_DIR} — cd there before you do anything else, and stay there.`)
     assert.match(prompt, /Every command below \(tests, static checks, git\) must run in that directory/)
   }
+})
+
+// The editor reviews from where the unit started, not from the writer's last commit: writers do split a
+// unit across commits, and a range of one commit then hides the rest from the editor.
+test('the editor reviews every commit since the base the writer recorded', () => {
+  const prompt = editorPrompt(UNIT, { ...WRITER, base_sha: '9f8e7d6' })
+  assert.ok(prompt.includes('Scope of review: `git diff 9f8e7d6..a1b2c3d`'))
+  assert.ok(!prompt.includes('a1b2c3d^'))
+})
+
+test('a missing or self-referencing base falls back to the writer commit\'s parent', () => {
+  for (const base_sha of [undefined, '', '   ', WRITER.writer_sha]) {
+    const prompt = editorPrompt(UNIT, { ...WRITER, base_sha })
+    assert.ok(prompt.includes('Scope of review: `git diff a1b2c3d^..a1b2c3d`'), `base_sha=${JSON.stringify(base_sha)}`)
+  }
+})
+
+test('the writer records its base before changing anything', () => {
+  const prompt = writerPrompt(UNIT)
+  const discipline = prompt.indexOf('Discipline:')
+  const baseLine = prompt.indexOf('run `git rev-parse --short HEAD` and report it as base_sha')
+  assert.ok(discipline >= 0 && baseLine > discipline, 'base_sha is the first discipline step')
+  assert.ok(baseLine < prompt.indexOf('- Build a usable interaction'))
 })
 
 test('both prompts say to stop rather than fall back to bare git', () => {

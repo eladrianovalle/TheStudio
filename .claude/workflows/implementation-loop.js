@@ -133,6 +133,16 @@ function writerObserveLines(u) {
 }
 
 // The editor's lines when the repo declares an observe command; none when it does not.
+// Where the unit's changes start. The writer records base_sha before it changes anything, so the editor
+// sees every commit the writer made, not only the last one: writers do split a unit across commits.
+// A base that is missing, or equal to writer_sha, is a misreport (even a stuck writer's empty commit is
+// a new commit), so it falls back to the parent of the writer's commit.
+function unitBase(writer) {
+  const base = typeof writer.base_sha === 'string' ? writer.base_sha.trim() : ''
+  if (base && base !== writer.writer_sha) return base
+  return `${writer.writer_sha}^`
+}
+
 function editorObserveLines(u, writer) {
   const command = observeCommand(u)
   if (!command) return []
@@ -156,11 +166,11 @@ function editorObserveLines(u, writer) {
     `  say to keep, and stage it with \`${git} add\`: \`commit -am\` does not stage a new file. Leave ignored files`,
     `  alone: an engine cache such as Unity's \`Library/\` is ignored, and deleting it makes the next capture pay`,
     `  the cold import. \`${git} status\` must then show nothing the command wrote except the files you kept.`,
-    `- A criterion that compares against "before this unit" needs a capture at \`${writer.writer_sha}^\` as well.`,
+    `- A criterion that compares against "before this unit" needs a capture at \`${unitBase(writer)}\` as well.`,
     `  Never take it by moving this checkout: no \`checkout\`, \`switch\`, \`stash\` or \`reset\` to the parent`,
     `  here, because the commits and resets that follow would then run against the wrong place. The unit`,
     `  checkout's HEAD and working tree never change for a before capture. Use the repository's documented`,
-    `  method, or add a separate worktree at \`${writer.writer_sha}^\` outside this checkout, capture there, and`,
+    `  method, or add a separate worktree at \`${unitBase(writer)}\` outside this checkout, capture there, and`,
     `  remove it. If neither is possible, grade the criterion unverifiable.`,
     `- If the command fails, decide why. A failure the unit caused (a compile error, an exception from a`,
     `  touched file, a scene that no longer loads) is fail. A command that could not run for reasons outside`,
@@ -174,12 +184,13 @@ function editorObserveLines(u, writer) {
 // ---------------------------------------------------------------------------
 const WRITER_HANDOFF = {
   type: 'object',
-  required: ['unit_id', 'writer_sha', 'files_touched', 'tests', 'mvi_claimed', 'mutation_check', 'stage'],
+  required: ['unit_id', 'base_sha', 'writer_sha', 'files_touched', 'tests', 'mvi_claimed', 'mutation_check', 'stage'],
   additionalProperties: false,
   properties: {
     unit_id: { type: 'string' },
     title: { type: 'string' },
-    writer_sha: { type: 'string', description: 'commit of the writer\'s passing state — diff base + revert point' },
+    base_sha: { type: 'string', description: 'HEAD before the writer changed anything — where the editor\'s diff starts' },
+    writer_sha: { type: 'string', description: 'commit of the writer\'s passing state — diff end + revert point' },
     files_touched: { type: 'array', items: { type: 'string' } },
     tests: {
       type: 'object',
@@ -309,6 +320,8 @@ function writerPrompt(u) {
     `like that.`,
     ``,
     `Discipline:`,
+    `- Before you change anything, run \`${gitIn(u)} rev-parse --short HEAD\` and report it as base_sha. The editor`,
+    `  reviews everything from there to writer_sha, so it has to be the commit this unit started from.`,
     `- Build a usable interaction, not a partial component (MVI). No speculative scope beyond the unit.`,
     `- Hold AI-TDD: write the tests and run them.${u.require_mutation_check === false ? ' (Mutation check disabled by config: require_mutation_check=false — record it as {"performed": false, "reason": "not_configured"}, and keep that reason even if you escalate.)' : ` Then run the configured mutation check on the code you touched: \`${u.mutation_command}\` (scope + runner live in studio/setup.cfg), and report the outcome in mutation_check. If mutmut isn't installed, fall back to hand-mutating — change 2-3 things in the PRODUCTION code the tests cover (flip a comparison, drop a guard clause, return a constant), confirm the tests FAIL, then restore. Mutate the code, never the assertions: breaking an assertion fails its test by construction and tells you nothing about whether that test would catch a real bug. If the unit changed no production code to mutate, say so: {"performed": false, "reason": "nothing_to_mutate"}.`}`,
     `- Run the unit tests: \`${u.test_command}\`${staticClause}`,
@@ -355,10 +368,10 @@ function editorPrompt(u, writer) {
     `what the tool says about its excerpt being enough. A quote taken from a summary rather than the file is`,
     `\`(unverified)\` — the mandate's lower-confidence rule then demotes it and drops it unless fatal.`,
     ``,
-    // The writer's changes live IN writer_sha, so the range runs from its parent to it. A bare
-    // `diff ${writer_sha}..` compares that commit to the tree it just committed and prints nothing;
-    // an editor that took it literally reviewed an empty diff and called the unit clean.
-    `Scope of review: \`${gitIn(u)} diff ${writer.writer_sha}^..${writer.writer_sha}\` — these are the writer's changes. Read the touched`,
+    // The range ends AT writer_sha. A bare `diff ${writer_sha}..` compares that commit to the tree it
+    // just committed and prints nothing; an editor that took it literally reviewed an empty diff and
+    // called the unit clean.
+    `Scope of review: \`${gitIn(u)} diff ${unitBase(writer)}..${writer.writer_sha}\` — these are the writer's changes. Read the touched`,
     `files (${(writer.files_touched || []).join(', ') || 'see the diff'})${u.read_scope === 'touched' ? '' : ' and their direct importers'}.`,
     `Do not wander beyond that read scope.`,
     ``,
