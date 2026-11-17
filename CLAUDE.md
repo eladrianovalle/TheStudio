@@ -220,7 +220,7 @@ See **`studio/docs/ARCHITECTURE.md`** for the full per-module reference.
 - **Diagnostics:** `stats.py` (pure cross-run aggregation, plus the shipped-features summary read off spec frontmatter — a feature counts as shipped when its spec says `status: shipped`), `obligations.py` (pure; the obligation queue `stats` prints and the session brief names one of — a unit nobody built, a finished spec still at `approved`, evidence past its date), `session.py` (pure; builds the automatic `session.json` health record finalize writes for each run), `finish_check_tally.py` (grades the finish-check hook from Claude Code's own transcripts: what the assistant did in the turn after each blocked stop)
 - **Workflows / loops:** `impl_loop.py` (config for `.claude/workflows/implementation-loop.js`, the `/forge` writer/editor loop — see `studio/docs/IMPLEMENTATION_LOOP_SPEC.md`) and `.claude/workflows/finding-verifier.js` (the independent finding verifier; core in `verifier.py`), plus `finish_check.py` — the Stop hook `init`/`update` install in every repo, which refuses the first stop of each turn to ask what was left undone (one extra model round-trip per turn; `--no-finish-check` or `.studio/finish-check.off` turns it off)
 - **Cross-repo + hygiene:** `install.py`, `setup.py`, `offload.py`, `cleanup.py`
-- **Shared:** `config_loading.py` (the single TOML loader), `validators/`, `integrations/slack_digest.py`
+- **Shared:** `config_loading.py` (the single TOML loader), `validators/`, `integrations/slack_digest.py`, `message_lint.py` (the `/message-draft` linter)
 
 ### Configuration files
 
