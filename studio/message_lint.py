@@ -66,6 +66,8 @@ PASTE_CHECKS = {
         _HEADING,
         _MARKDOWN_LINK,
         (r"`[^`\n]+`", "`code` (plain text shows the backticks)"),
+        (r"(?<![\w*])\*[^*\s][^*\n]*\*(?![\w*])", "*emphasis* (plain text shows the asterisks)"),
+        (r"(?<![\w`])_[^_\n]{2,}_(?![\w`])", "_emphasis_ (plain text shows the underscores)"),
     ],
 }
 
@@ -97,12 +99,16 @@ EM_DASH_LIMIT = 1
 
 
 def split_draft(text: str) -> Tuple[str, str]:
-    """Return the header and the message. With no separator, the whole text is the message."""
-    header, separator, rest = text.partition(SEPARATOR)
-    if not separator:
+    """Return the header and the message.
+
+    The separator only counts on a line of its own, since that is the line the copy command
+    looks for. With no such line, the whole text is the message.
+    """
+    lines = text.split("\n")
+    if SEPARATOR not in lines:
         return "", text
-    message = rest.split("\n", 1)[1] if "\n" in rest else ""
-    return header, message
+    at = lines.index(SEPARATOR)
+    return "\n".join(lines[:at]), "\n".join(lines[at + 1:])
 
 
 def without_code_blocks(message: str) -> str:
@@ -110,9 +116,8 @@ def without_code_blocks(message: str) -> str:
 
 
 def is_label(line: str) -> bool:
-    """A label is a short line that is only bold text, like *Why* or **Why**."""
-    stripped = line.strip()
-    return len(stripped) > 2 and stripped.startswith("*") and stripped.endswith("*")
+    """A label is a short line that is only bold text, like *Why* or **Why**, not a bullet."""
+    return re.fullmatch(r"(\*\*?)[^*\s](?:[^*]*[^*\s])?\1", line.strip()) is not None
 
 
 def is_bullet(line: str) -> bool:
@@ -120,8 +125,8 @@ def is_bullet(line: str) -> bool:
 
 
 def check_header(header: str) -> List[str]:
-    has_point = re.search(r"^Point:\s*\S", header, re.M) is not None
-    has_ask = re.search(r"^Ask:\s*\S", header, re.M) is not None
+    has_point = re.search(r"^Point:[ \t]*\S", header, re.M) is not None
+    has_ask = re.search(r"^Ask:[ \t]*\S", header, re.M) is not None
     if has_point and has_ask:
         return []
     return [f"header needs Point: and Ask: lines above a {SEPARATOR} line"]
@@ -129,6 +134,9 @@ def check_header(header: str) -> List[str]:
 
 def check_message(message: str, platform: str) -> List[str]:
     issues: List[str] = []
+
+    if not message.strip():
+        return [f"no message after the {SEPARATOR} line"]
 
     if len(message.strip()) > CHARACTER_CEILING:
         issues.append(
@@ -141,14 +149,14 @@ def check_message(message: str, platform: str) -> List[str]:
         if re.search(pattern, prose, re.M):
             issues.append(warning)
 
-    lines = [line for line in prose.splitlines() if line.strip()]
-    for line in lines:
+    for line in message.splitlines():
         if len(line) > LINE_LENGTH_LIMIT:
             issues.append(
                 f"paragraph over {LINE_LENGTH_LIMIT} characters (shorten it, don't wrap it): "
                 f"{line[:50]}..."
             )
 
+    lines = [line for line in prose.splitlines() if line.strip()]
     labels = [line for line in lines if is_label(line)]
     if len(labels) > LABEL_LIMIT:
         issues.append(f"{len(labels)} labels (at most {LABEL_LIMIT})")
@@ -159,7 +167,7 @@ def check_message(message: str, platform: str) -> List[str]:
     if len(bullets) > BULLET_LIMIT:
         issues.append(f"{len(bullets)} bullets (at most {BULLET_LIMIT} pieces of evidence)")
 
-    word_count = len(prose.split())
+    word_count = len(message.split())
     if word_count > WORD_TARGET:
         issues.append(f"{word_count} words (aim for {WORD_TARGET} or fewer)")
 

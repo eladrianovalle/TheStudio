@@ -68,7 +68,8 @@ Two files, both shipped by `init` and `update` like every other command:
   Code blocks are skipped for the formatting checks. It exits 1 when there is something to fix.
   It imports nothing from Studio, so it runs from `.studio/source/` or `studio/` unchanged.
 
-Drafts go to `~/.studio/drafts/YYYY-MM-DD-<platform>-<who>.txt`, outside every repository. A
+Drafts go to `~/.studio/drafts/YYYY-MM-DD-<platform>-<who>.txt`, outside every repository, with
+`-2`, `-3` and so on added when that name already holds a different message. A
 repo's ignore rules can't be relied on: at least one consuming repo doesn't ignore
 `.studio/output/`, and a draft can quote private conversation.
 

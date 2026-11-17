@@ -136,3 +136,42 @@ def test_a_long_paragraph_is_flagged_as_one_to_shorten_not_wrap():
     assert len(paragraph) > 250
     issues = check_draft(draft(paragraph + "\n"), "plain")
     assert any("paragraph over 250 characters" in issue and "don't wrap" in issue for issue in issues)
+
+
+def test_a_header_with_no_message_after_the_separator_is_flagged():
+    issues = check_draft("Point: one thing.\nAsk: none\n---8<---\n", "plain")
+    assert "no message after the ---8<--- line" in issues
+
+
+def test_an_empty_point_is_flagged_even_with_a_line_after_it():
+    issues = check_draft("Point:\nAsk: none\n---8<---\nReady.\n", "plain")
+    assert any("Point:" in issue for issue in issues)
+
+
+def test_a_separator_inside_a_header_line_does_not_count():
+    # The copy command looks for the separator on a line of its own, so this copies nothing.
+    issues = check_draft("Point: Ready.\nAsk: none---8<---\nReady.\n", "plain")
+    assert any("Point:" in issue for issue in issues)
+
+
+def test_bold_bullets_are_bullets_not_labels():
+    issues = check_draft(draft("Lead.\n\n* **One**\n* **Two**\n* **Three**\n"), "github")
+    assert issues == []
+
+
+def test_a_code_block_still_counts_toward_the_word_and_line_limits():
+    message = "Lead.\n\n```\n" + "word " * 151 + "\n```\n"
+    issues = check_draft(draft(message), "github")
+    assert any("words" in issue for issue in issues)
+    assert any("paragraph over 250 characters" in issue for issue in issues)
+
+
+def test_plain_text_rejects_single_asterisk_and_underscore_emphasis():
+    issues = check_draft(draft("This is *really* done and _also_ shipped.\n"), "plain")
+    assert "*emphasis* (plain text shows the asterisks)" in issues
+    assert "_emphasis_ (plain text shows the underscores)" in issues
+
+
+def test_plain_text_accepts_asterisks_and_underscores_that_are_not_emphasis():
+    message = "Set max_retry_count to 3 * 2 for https://example.com/a_b_c.\n"
+    assert check_draft(draft(message), "plain") == []
