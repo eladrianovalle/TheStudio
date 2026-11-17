@@ -175,3 +175,19 @@ def test_plain_text_rejects_single_asterisk_and_underscore_emphasis():
 def test_plain_text_accepts_asterisks_and_underscores_that_are_not_emphasis():
     message = "Set max_retry_count to 3 * 2 for https://example.com/a_b_c.\n"
     assert check_draft(draft(message), "plain") == []
+
+
+def test_plain_text_rejects_single_character_underscore_emphasis():
+    issues = check_draft(draft("Choose _x_ next.\n"), "plain")
+    assert "_emphasis_ (plain text shows the underscores)" in issues
+
+
+@pytest.mark.parametrize("platform", ["slack", "plain"])
+def test_bare_urls_are_not_read_as_emphasis(platform):
+    message = "See https://example.com/_draft_/ and https://example.com/*x*/ for both.\n"
+    assert check_draft(draft(message), platform) == []
+
+
+def test_a_markdown_link_is_still_flagged_with_a_url_inside():
+    issues = check_draft(draft("See [the draft](https://example.com/_draft_/).\n"), "plain")
+    assert "[text](url) link (paste the bare URL)" in issues

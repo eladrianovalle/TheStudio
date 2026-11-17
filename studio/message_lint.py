@@ -67,7 +67,7 @@ PASTE_CHECKS = {
         _MARKDOWN_LINK,
         (r"`[^`\n]+`", "`code` (plain text shows the backticks)"),
         (r"(?<![\w*])\*[^*\s][^*\n]*\*(?![\w*])", "*emphasis* (plain text shows the asterisks)"),
-        (r"(?<![\w`])_[^_\n]{2,}_(?![\w`])", "_emphasis_ (plain text shows the underscores)"),
+        (r"(?<![\w`])_[^_\n]+_(?![\w`])", "_emphasis_ (plain text shows the underscores)"),
     ],
 }
 
@@ -115,6 +115,11 @@ def without_code_blocks(message: str) -> str:
     return re.sub(r"```.*?```", "", message, flags=re.S)
 
 
+def without_urls(text: str) -> str:
+    """Stand a placeholder in for each URL, so its underscores and asterisks aren't markup."""
+    return re.sub(r"https?://[^\s)>]+", "URL", text)
+
+
 def is_label(line: str) -> bool:
     """A label is a short line that is only bold text, like *Why* or **Why**, not a bullet."""
     return re.fullmatch(r"(\*\*?)[^*\s](?:[^*]*[^*\s])?\1", line.strip()) is not None
@@ -146,7 +151,7 @@ def check_message(message: str, platform: str) -> List[str]:
 
     prose = without_code_blocks(message)
     for pattern, warning in PASTE_CHECKS[platform]:
-        if re.search(pattern, prose, re.M):
+        if re.search(pattern, without_urls(prose), re.M):
             issues.append(warning)
 
     for line in message.splitlines():
