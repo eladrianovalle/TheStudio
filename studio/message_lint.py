@@ -116,8 +116,12 @@ def without_code_blocks(message: str) -> str:
 
 
 def without_urls(text: str) -> str:
-    """Stand a placeholder in for each URL, so its underscores and asterisks aren't markup."""
-    return re.sub(r"https?://[^\s)>]+", "URL", text)
+    """Stand a placeholder in for each URL, so its underscores and asterisks aren't markup.
+
+    A URL never contains a backtick or a pipe, and never ends in emphasis markers or
+    sentence punctuation, so markup wrapped around it is left in place to be checked.
+    """
+    return re.sub(r"https?://[^\s)>`|]*[^\s)>`|*_.,;:!?]", "URL", text)
 
 
 def is_label(line: str) -> bool:

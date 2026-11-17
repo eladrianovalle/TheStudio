@@ -191,3 +191,16 @@ def test_bare_urls_are_not_read_as_emphasis(platform):
 def test_a_markdown_link_is_still_flagged_with_a_url_inside():
     issues = check_draft(draft("See [the draft](https://example.com/_draft_/).\n"), "plain")
     assert "[text](url) link (paste the bare URL)" in issues
+
+
+@pytest.mark.parametrize(
+    "platform, message, warning",
+    [
+        ("slack", "See **https://example.com**.\n", "**bold** (Slack uses *bold*)"),
+        ("plain", "Run `https://example.com`.\n", "`code` (plain text shows the backticks)"),
+        ("plain", "Read _https://example.com_ first.\n", "_emphasis_ (plain text shows the underscores)"),
+        ("plain", "| site |https://example.com|\n", "table (pastes as pipes)"),
+    ],
+)
+def test_markup_around_a_url_is_still_flagged(platform, message, warning):
+    assert warning in check_draft(draft(message), platform)
