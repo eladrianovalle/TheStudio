@@ -263,6 +263,53 @@ def test_a_second_session_is_blocked_even_while_another_marker_is_fresh(hook_tmp
 
 
 # ---------------------------------------------------------------------------
+# A short final message is let through without a block
+# ---------------------------------------------------------------------------
+
+# Restated independently of the module: the cutoff below which a stop is allowed unasked.
+SHORT_MESSAGE_CHARS = 600
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["", "Done.", "x" * (SHORT_MESSAGE_CHARS - 1)],
+    ids=["empty", "one-word", "one-under-the-cutoff"],
+)
+def test_a_short_final_message_is_allowed_without_a_block(message, hook_tmp):
+    payload = {"session_id": "short-session", "last_assistant_message": message}
+    result = _run_hook(payload, tmpdir=hook_tmp)
+    assert result.returncode == 0
+    assert result.stdout == b""
+    assert result.stderr == b""
+    assert not _expected_marker(hook_tmp, "short-session").exists()
+
+
+def test_a_final_message_at_the_cutoff_is_blocked(hook_tmp):
+    payload = {"session_id": "long-session", "last_assistant_message": "x" * SHORT_MESSAGE_CHARS}
+    result = _run_hook(payload, tmpdir=hook_tmp)
+    assert json.loads(result.stdout.decode("utf-8"))["decision"] == "block"
+    assert _expected_marker(hook_tmp, "long-session").exists()
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"session_id": "odd-session"},
+        {"session_id": "odd-session", "last_assistant_message": None},
+        {"session_id": "odd-session", "last_assistant_message": ["Done."]},
+        {"session_id": "odd-session", "last_assistant_message": 5},
+    ],
+    ids=["missing", "null", "list", "number"],
+)
+def test_a_final_message_that_is_not_a_string_still_blocks(payload, hook_tmp):
+    """Only a string can be measured; anything else keeps the behaviour from before the cutoff."""
+    result = _run_hook(payload, tmpdir=hook_tmp)
+    assert result.returncode == 0
+    assert result.stderr == b""
+    assert json.loads(result.stdout.decode("utf-8"))["decision"] == "block"
+
+
+# ---------------------------------------------------------------------------
 # Criterion 3 — nothing on stdin can make it fail
 # ---------------------------------------------------------------------------
 
