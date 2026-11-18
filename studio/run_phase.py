@@ -572,6 +572,10 @@ def _objective_changed(
     return False
 
 
+# The finalize status for a run its pre-flight ended before any debate.
+STOPPED_STATUS = "STOPPED"
+
+
 def _ensure_summary_path(meta: Dict, run_dir: Path) -> Path:
     summary_path = meta.get("summary_path")
     if summary_path:
@@ -587,8 +591,14 @@ def _validate_artifacts(
     errors: List[str] = []
     completed_roles: List[str] = []
     missing_roles: List[str] = []
+    # A run the pre-flight ended never reached the debate, so it has no agent
+    # files to check. Its summary, saying why it stopped, is all it owes.
+    stopped_before_debate = (meta or {}).get("status") == STOPPED_STATUS
 
-    if phase == "studio":
+    if stopped_before_debate:
+        advocate_files: List[Path] = []
+        iterations_value = 0
+    elif phase == "studio":
         studio_meta = (meta or {}).get("studio_roles") or {}
         invited_roles = studio_meta.get("invited") or []
         if not invited_roles:
@@ -935,6 +945,7 @@ def build_instruction_doc(
             "```",
             "",
             "4. If nothing is genuinely open, say so in one line and proceed. Then begin the Iteration Loop.",
+            "5. If the pre-flight shows the run should not go ahead at all (and the user agrees), write `summary.md` saying why and finalize with `--status stopped`: that is the one status `finalize` accepts without advocate or contrarian files.",
             "",
             "In scoped studio runs, fold this into the start of the **Alignment** scope (S1). This pre-flight front-loads the obvious questions; it does **not** replace ongoing flagging — every later pass must keep raising new questions as they surface.",
         ])

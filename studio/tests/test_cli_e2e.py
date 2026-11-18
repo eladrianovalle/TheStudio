@@ -122,6 +122,54 @@ class TestCLIFinalize:
         assert meta["status"] == "COMPLETED"
         assert meta["verdict"] == "APPROVED"
 
+    def _prepare_tech_run(self, studio_root: Path) -> Path:
+        prep = _run_cli(
+            "prepare", "--phase", "tech", "--text", "Build API", "--json",
+            studio_root=studio_root,
+        )
+        assert prep.returncode == 0, prep.stderr
+        return Path(json.loads(prep.stdout.splitlines()[-1])["run_dir"])
+
+    def test_a_run_stopped_at_its_pre_flight_finalizes_on_its_summary_alone(self, cli_studio_root):
+        # The pre-flight is allowed to end a run: no debate happened, so there
+        # are no advocate or contrarian files, only a summary saying why.
+        run_dir = self._prepare_tech_run(cli_studio_root)
+        (run_dir / "summary.md").write_text("# Summary\nStopped: the baseline never failed.")
+
+        fin = _run_cli(
+            "finalize", "--run-id", run_dir.name, "--status", "stopped", "--verdict", "N/A",
+            studio_root=cli_studio_root,
+        )
+        assert fin.returncode == 0, fin.stderr
+
+        meta = json.loads((run_dir / "run.json").read_text())
+        assert meta["status"] == "STOPPED"
+        assert meta["iterations_run"] == 0
+        index = (cli_studio_root / "output" / "index.md").read_text()
+        assert f"| {run_dir.name} | tech |" in index and "STOPPED" in index
+
+    def test_a_stopped_run_still_needs_the_summary_that_says_why(self, cli_studio_root):
+        run_dir = self._prepare_tech_run(cli_studio_root)
+
+        fin = _run_cli(
+            "finalize", "--run-id", run_dir.name, "--status", "stopped",
+            studio_root=cli_studio_root,
+        )
+        assert fin.returncode != 0
+        assert "summary" in fin.stderr.lower()
+
+    def test_a_completed_run_with_only_a_summary_is_still_refused(self, cli_studio_root):
+        # Only the stopped status skips the debate files; every other status keeps the checklist.
+        run_dir = self._prepare_tech_run(cli_studio_root)
+        (run_dir / "summary.md").write_text("# Summary\nDone")
+
+        fin = _run_cli(
+            "finalize", "--run-id", run_dir.name, "--status", "completed",
+            studio_root=cli_studio_root,
+        )
+        assert fin.returncode != 0
+        assert "advocate" in fin.stderr.lower()
+
     def test_finalize_fails_on_missing_artifacts(self, cli_studio_root):
         # Prepare
         prep = _run_cli(
