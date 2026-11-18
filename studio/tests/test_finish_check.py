@@ -555,8 +555,9 @@ def _reason_printed_by(script, hook_tmp, session_id, cwd) -> str:
     assert result.returncode == 0, result.stderr
     assert result.stderr == b""
     printed = json.loads(result.stdout.decode("utf-8"))
-    assert printed == _held_open_with(printed["hookSpecificOutput"]["additionalContext"])
-    return printed["hookSpecificOutput"]["additionalContext"]
+    paragraph = printed["hookSpecificOutput"]["additionalContext"]
+    assert printed == _held_open_with(paragraph)
+    return paragraph
 
 
 @pytest.fixture
