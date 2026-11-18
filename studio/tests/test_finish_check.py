@@ -2,7 +2,7 @@
 
 Almost every promise this hook makes is about the *process*, not the function: exit
 status 0 on every path, nothing on stderr, exactly one JSON object on stdout when it
-blocks. So the tests here drive `finish_check.py` as a real subprocess with stdin piped,
+holds the turn open. So the tests here drive `finish_check.py` as a real subprocess with stdin piped,
 which is the only way those three are actually observed. The hook reads stdin to EOF, so
 it must never be started without input attached or it simply waits.
 
@@ -52,6 +52,14 @@ HOSTILE_SESSION_IDS = [
 HOSTILE_IDS = ["dotdot-slash", "absolute", "subdir", "dotdot", "backslash", "nul", "4kb"]
 
 SENTINEL_BYTES = b"planted by test_finish_check; the hook must never touch this\n"
+
+
+def _held_open_with(paragraph: str) -> dict:
+    """The one object the hook prints on a first stop: the paragraph as Stop additionalContext."""
+    return {"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": paragraph}}
+
+
+HELD_OPEN = _held_open_with(finish_check.DEFAULT_REASON)
 
 
 # ---------------------------------------------------------------------------
@@ -226,8 +234,7 @@ def test_the_first_stop_is_blocked_and_the_second_is_allowed(hook_tmp):
     assert blocked.stderr == b""
     lines = blocked.stdout.decode("utf-8").strip().splitlines()
     assert len(lines) == 1
-    decision = json.loads(lines[0])
-    assert decision == {"decision": "block", "reason": finish_check.DEFAULT_REASON}
+    assert json.loads(lines[0]) == HELD_OPEN
     assert marker.exists()
 
     allowed = _run_hook(payload, tmpdir=hook_tmp)
@@ -241,7 +248,7 @@ def test_stop_hook_active_allows_the_stop_and_clears_the_marker(hook_tmp):
     """The primary loop guard: the harness sets this on the retry our block caused."""
     marker = _expected_marker(hook_tmp, "retry-session")
     blocked = _run_hook({"session_id": "retry-session"}, tmpdir=hook_tmp)
-    assert json.loads(blocked.stdout.decode("utf-8"))["decision"] == "block"
+    assert json.loads(blocked.stdout.decode("utf-8")) == HELD_OPEN
     assert marker.exists()
 
     allowed = _run_hook(
@@ -252,12 +259,24 @@ def test_stop_hook_active_allows_the_stop_and_clears_the_marker(hook_tmp):
     assert not marker.exists()
 
 
+def test_stop_hook_active_alone_prints_nothing_without_a_marker(hook_tmp):
+    """Each loop guard has to hold on its own: no marker exists, so only the field can allow this."""
+    marker = _expected_marker(hook_tmp, "field-only-session")
+    allowed = _run_hook(
+        {"session_id": "field-only-session", "stop_hook_active": True}, tmpdir=hook_tmp
+    )
+    assert allowed.returncode == 0
+    assert allowed.stdout == b""
+    assert allowed.stderr == b""
+    assert not marker.exists()
+
+
 def test_a_second_session_is_blocked_even_while_another_marker_is_fresh(hook_tmp):
     """Markers are per session, so one session's block cannot silence another's check."""
     first = _run_hook({"session_id": "session-one"}, tmpdir=hook_tmp)
     second = _run_hook({"session_id": "session-two"}, tmpdir=hook_tmp)
-    assert json.loads(first.stdout.decode("utf-8"))["decision"] == "block"
-    assert json.loads(second.stdout.decode("utf-8"))["decision"] == "block"
+    assert json.loads(first.stdout.decode("utf-8")) == HELD_OPEN
+    assert json.loads(second.stdout.decode("utf-8")) == HELD_OPEN
     assert _expected_marker(hook_tmp, "session-one").exists()
     assert _expected_marker(hook_tmp, "session-two").exists()
 
@@ -287,7 +306,7 @@ def test_a_short_final_message_is_allowed_without_a_block(message, hook_tmp):
 def test_a_final_message_at_the_cutoff_is_blocked(hook_tmp):
     payload = {"session_id": "long-session", "last_assistant_message": "x" * SHORT_MESSAGE_CHARS}
     result = _run_hook(payload, tmpdir=hook_tmp)
-    assert json.loads(result.stdout.decode("utf-8"))["decision"] == "block"
+    assert json.loads(result.stdout.decode("utf-8")) == HELD_OPEN
     assert _expected_marker(hook_tmp, "long-session").exists()
 
 
@@ -306,7 +325,7 @@ def test_a_final_message_that_is_not_a_string_still_blocks(payload, hook_tmp):
     result = _run_hook(payload, tmpdir=hook_tmp)
     assert result.returncode == 0
     assert result.stderr == b""
-    assert json.loads(result.stdout.decode("utf-8"))["decision"] == "block"
+    assert json.loads(result.stdout.decode("utf-8")) == HELD_OPEN
 
 
 # ---------------------------------------------------------------------------
@@ -327,7 +346,7 @@ def test_unusable_stdin_still_blocks_cleanly(raw, hook_tmp):
     result = _run_hook(raw, tmpdir=hook_tmp)
     assert result.returncode == 0
     assert result.stderr == b""
-    assert json.loads(result.stdout.decode("utf-8"))["decision"] == "block"
+    assert json.loads(result.stdout.decode("utf-8")) == HELD_OPEN
 
 
 def test_eight_kilobytes_of_binary_noise_exits_zero(hook_tmp):
@@ -490,7 +509,7 @@ def test_a_hostile_session_id_touches_only_its_own_hashed_marker(
 
     blocked = _run_hook({"session_id": session_id}, tmpdir=hook_tmp)
     assert blocked.returncode == 0
-    assert json.loads(blocked.stdout.decode("utf-8"))["decision"] == "block"
+    assert json.loads(blocked.stdout.decode("utf-8")) == HELD_OPEN
     assert _files_under(tmp_path) - before == {_expected_marker(hook_tmp, session_id)}
 
     allowed = _run_hook({"session_id": session_id}, tmpdir=hook_tmp)
@@ -535,7 +554,9 @@ def _reason_printed_by(script, hook_tmp, session_id, cwd) -> str:
     result = _run_hook({"session_id": session_id}, tmpdir=hook_tmp, script=script, cwd=cwd)
     assert result.returncode == 0, result.stderr
     assert result.stderr == b""
-    return json.loads(result.stdout.decode("utf-8"))["reason"]
+    printed = json.loads(result.stdout.decode("utf-8"))
+    assert printed == _held_open_with(printed["hookSpecificOutput"]["additionalContext"])
+    return printed["hookSpecificOutput"]["additionalContext"]
 
 
 @pytest.fixture

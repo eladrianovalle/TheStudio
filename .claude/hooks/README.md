@@ -4,9 +4,9 @@ There are no hooks left in this directory, and that is the point of the change t
 
 ## Where `finish-check.py` went
 
-`finish-check.py` was a Stop hook: it refuses the first stop of every turn with one paragraph asking
-the assistant to re-read its own message for work it deferred that nothing is blocking, then lets the
-second stop through. It now lives with the rest of Studio's source, as **`studio/finish_check.py`**.
+`finish-check.py` was a Stop hook: it holds the first stop of every turn open once, handing the
+assistant one paragraph asking it to re-read its own message for work it deferred that nothing is
+blocking, then lets the second stop through. It now lives with the rest of Studio's source, as **`studio/finish_check.py`**.
 Teaching the installer to copy it into each consuming repo at `.studio/source/finish_check.py` and
 register it there is the next step in `specs/shipped-finish-check.md`, which also covers the override
 paragraph a repo can supply in `.studio/finish-check.txt`. Until that step lands, the only copy that

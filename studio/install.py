@@ -477,7 +477,7 @@ UPDATE_CHECK_CACHE = "update-check.json"
 UPDATE_CHECK_SENTINEL = "update-check.off"
 # The finish-check Stop hook's own opt-out, read exactly like the one above and
 # deliberately separate from it: wanting the session-start update nudge but not a
-# hook that refuses your first stop is a perfectly ordinary position to hold.
+# hook that holds your first stop open is a perfectly ordinary position to hold.
 FINISH_CHECK_SENTINEL = "finish-check.off"
 UPDATE_CHECK_TTL_SECONDS = 24 * 3600
 UPDATE_ADDITIONAL_CONTEXT = (
