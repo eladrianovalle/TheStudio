@@ -5,9 +5,14 @@ The hook (`finish_check.py`) refuses the first stop of every turn. Whether that
 refusal buys anything is the question `specs/shipped-finish-check.md` asks: does
 the assistant go on to *do* something in the turn that follows, or just stop
 again? Nothing in Studio records the answer, but Claude Code does. Every
-transcript under `~/.claude/projects/<project>/<session>.jsonl` holds the
-block as a user record flagged `isMeta` whose text starts with the hook's own
-paragraph, followed by whatever the assistant did before the next real prompt.
+transcript under `~/.claude/projects/<project>/<session>.jsonl` holds each
+check in one of two forms, followed by whatever the assistant did before the
+next real prompt:
+
+- a refused stop ("block"): a user record flagged `isMeta` whose text starts
+  with the hook's own paragraph;
+- a context note ("context"): a `hook_additional_context` attachment from the
+  Stop hook whose content list holds the FINISH-CHECK paragraph.
 
 This script reads those transcripts and prints, for every block outside the
 Studio source repo, whether the following turn ran any tool and whether it ran
@@ -15,9 +20,15 @@ one that changes something: an edit, a write, a commit, a push, a pull request.
 It then checks the spec's pass criterion over every window of 30 consecutive
 blocks. It writes nothing anywhere.
 
+Two filters sit next to `--since`: `--channel block|context` keeps one form
+only (default: both), and `--min-final-chars N` keeps only checks whose final
+assistant message had at least N characters of text. The report names any
+active filter on the line after its first.
+
 Run it from the Studio source checkout, which it excludes from the count:
 
     python studio/finish_check_tally.py --since 2026-09-29
+    python studio/finish_check_tally.py --since <date> --channel block --min-final-chars 600
 """
 
 import argparse
@@ -30,6 +41,7 @@ import subprocess
 import sys
 
 BLOCK_TEXT = "Stop hook feedback:\nFINISH-CHECK"
+CONTEXT_TEXT = "FINISH-CHECK"
 
 # Tools whose use means the assistant changed something. Everything else (Read,
 # a read-only Bash, a browser screenshot) counts as "ran a tool" but not as a
@@ -83,14 +95,60 @@ def content_of(record):
     return (record.get("message") or {}).get("content")
 
 
-def is_block(record):
+def channel_of(record):
+    """Which way a finish-check reached the assistant in this record, or None if it didn't.
+
+    "block" is the older refused stop: a `user` record flagged `isMeta` carrying the
+    hook's paragraph. "context" is the newer form: a `hook_additional_context`
+    attachment from a Stop hook with a FINISH-CHECK entry in its content list. Each
+    check also writes sibling records (a `hook_blocking_error` or `hook_success`
+    attachment, a `stop_hook_summary`, an `api-request-blob`); those return None so
+    no check is counted twice. SessionStart and UserPromptSubmit hooks write the same
+    attachment type, which is why the event is checked.
+    """
     content = content_of(record)
-    return (
+    if (
         record.get("type") == "user"
         and bool(record.get("isMeta"))
         and isinstance(content, str)
         and content.startswith(BLOCK_TEXT)
-    )
+    ):
+        return "block"
+    attachment = record.get("attachment") or {}
+    if (
+        record.get("type") == "attachment"
+        and attachment.get("type") == "hook_additional_context"
+        and attachment.get("hookEvent") == "Stop"
+        and isinstance(attachment.get("content"), list)
+        and any(
+            isinstance(entry, str) and entry.startswith(CONTEXT_TEXT)
+            for entry in attachment["content"]
+        )
+    ):
+        return "context"
+    return None
+
+
+def final_message_chars(records, index):
+    """How much text the assistant wrote in the message the check at `index` followed.
+
+    Claude Code writes each content block as its own record, so only the nearest
+    earlier `assistant` record is the final one. If it holds no text (thinking or a
+    tool call only), the turn ended without text and this returns 0 rather than
+    measuring an earlier message. No assistant record before the check also returns 0.
+    """
+    for record in reversed(records[:index]):
+        if record.get("type") != "assistant":
+            continue
+        content = content_of(record)
+        if not isinstance(content, list):
+            return 0
+        return sum(
+            len(block.get("text") or "")
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+    return 0
 
 
 def is_user_prompt(record):
@@ -147,11 +205,12 @@ def grade_turn(records):
 
 
 def blocks_in(records):
-    """Each finish-check block in a transcript, graded on the turn that followed it."""
+    """Each finish-check in a transcript, in either form, graded on the turn that followed it."""
     graded = []
     index = 0
     while index < len(records):
-        if not is_block(records[index]):
+        channel = channel_of(records[index])
+        if channel is None:
             index += 1
             continue
         end = index + 1
@@ -160,6 +219,8 @@ def blocks_in(records):
         grade = grade_turn(records[index + 1:end])
         grade["timestamp"] = records[index].get("timestamp") or ""
         grade["cwd"] = records[index].get("cwd") or ""
+        grade["channel"] = channel
+        grade["final_chars"] = final_message_chars(records, index)
         graded.append(grade)
         index = end
     return graded
@@ -170,8 +231,11 @@ def project_dir_name(path):
     return re.sub(r"[^A-Za-z0-9]", "-", os.path.abspath(path))
 
 
-def scan(projects_dir, excluded_prefix, since):
+def scan(projects_dir, excluded_prefix, since, min_final_chars=0, channel=None):
     """Every graded block outside the excluded repo, oldest first.
+
+    `min_final_chars` keeps only checks whose final message had at least that many
+    characters of text; `channel` ("block" or "context") keeps only that form.
 
     The exclusion drops the repo's own directory and `<repo>-...`, which is how its
     worktrees are named. A sibling repo whose name continues with a dash or a dot
@@ -186,9 +250,14 @@ def scan(projects_dir, excluded_prefix, since):
         if project == excluded_prefix or project.startswith(excluded_prefix + "-"):
             continue
         for block in blocks_in(read_records(transcript)):
-            if block["timestamp"][:10] >= since:
-                block["project"] = project
-                blocks.append(block)
+            if block["timestamp"][:10] < since:
+                continue
+            if block["final_chars"] < min_final_chars:
+                continue
+            if channel is not None and block["channel"] != channel:
+                continue
+            block["project"] = project
+            blocks.append(block)
     blocks.sort(key=lambda block: block["timestamp"])
     return blocks
 
@@ -204,11 +273,26 @@ def windows_met(blocks):
     return sum(count >= NEEDED for count in counts), len(counts), min(counts)
 
 
-def report(blocks, since):
+def describe_filters(min_final_chars, channel):
+    """The one report line naming the active filters, or None when there are none."""
+    filters = []
+    if channel is not None:
+        filters.append(f"channel {channel} only")
+    if min_final_chars > 0:
+        filters.append(f"final message at least {min_final_chars} characters")
+    if not filters:
+        return None
+    return "  filtered: " + ", ".join(filters)
+
+
+def report(blocks, since, min_final_chars=0, channel=None):
     lines = []
     total = len(blocks)
     projects = len({block["project"] for block in blocks})
     lines.append(f"Blocked stops outside this repo since {since}: {total}, in {projects} project directories.")
+    filter_line = describe_filters(min_final_chars, channel)
+    if filter_line is not None:
+        lines.append(filter_line)
     if total == 0:
         return "\n".join(lines)
     lines.append(
@@ -262,10 +346,22 @@ def main(argv=None):
         default=None,
         help="a repo whose transcripts are left out; default: the repo this is run from",
     )
+    parser.add_argument(
+        "--min-final-chars",
+        type=int,
+        default=0,
+        help="only checks whose final message had at least this many characters of text",
+    )
+    parser.add_argument(
+        "--channel",
+        choices=["block", "context"],
+        default=None,
+        help="only checks in this form; default: both",
+    )
     args = parser.parse_args(argv)
     excluded = project_dir_name(args.exclude or this_repo_root())
-    blocks = scan(args.projects_dir, excluded, args.since)
-    print(report(blocks, args.since))
+    blocks = scan(args.projects_dir, excluded, args.since, args.min_final_chars, args.channel)
+    print(report(blocks, args.since, args.min_final_chars, args.channel))
     return 0
 
 
