@@ -453,7 +453,7 @@ Options:
 - `--mode`: Output mode: `deliverables` (default) or `questions` (see Question Mode above)
 - `--no-scopes`: Flat mode — every role runs at full depth, sequentially, with no tiers
 
-By default the debate runs in three scoped tiers: **alignment** (all roles, short, parallel) → **depth** (per-role, full, sequential) → **polish** (all roles, short, 1 pass). An Integrator duel then synthesizes the cross-functional plan. Tier budgets come from `scopes.toml` (override at `.studio/scopes.toml`); see `ARCHITECTURE.md` section 4 for the scoped flow and its file naming. See the [command file](../../.claude/commands/run-studio-phase.md) for full details.
+By default the debate runs in three scoped tiers: **alignment** (all roles, short, parallel) → **depth** (per-role, full, sequential) → **polish** (one consolidated cross-discipline reviewer, short, 1 pass). An Integrator duel then synthesizes the cross-functional plan. Tier budgets come from `scopes.toml` (override at `.studio/scopes.toml`); see `ARCHITECTURE.md` section 4 for the scoped flow and its file naming. See the [command file](../../.claude/commands/run-studio-phase.md) for full details.
 
 ### Project-Local Role Overrides
 

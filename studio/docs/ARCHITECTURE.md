@@ -142,10 +142,10 @@ Studio runs use a scoped flow configured in `config/scopes.toml`:
 
 1. **Alignment** (all roles, parallel, ~500 words each): Directional check on approach, fatal flaws, and high-level tradeoffs. Catches bad directions cheaply before deep dives.
 2. **Depth** (per-role, sequential, no word cap): Full deliverables per discipline. Starts focused because alignment context is available.
-3. **Polish** (all roles, parallel, ~300 words, 1 pass): Cross-discipline gut-check. Flag remaining conflicts, no new proposals.
+3. **Polish** (one consolidated reviewer, not per-role pairs, under 800 words, 1 pass): Cross-discipline gut-check. Flag remaining conflicts, no new proposals.
 4. **Integrator duel**: Synthesize all scope artifacts into `integrator.md` with `### Integrator Advocate`, `### Integrator Contrarian`, `### Integrated Plan`.
 
-File naming encodes scope: `advocate--marketing--S1-01.md` (alignment), `advocate--engineering--S2-02.md` (depth iteration 2), `advocate--qa--S3-01.md` (polish).
+File naming encodes scope: `advocate--marketing--S1-01.md` (alignment), `advocate--engineering--S2-02.md` (depth iteration 2), `polish--consolidated--S3-01.md` (polish).
 
 Use `--no-scopes` for flat mode (all roles at full depth, original behavior).
 
