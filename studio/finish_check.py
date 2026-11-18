@@ -7,11 +7,13 @@ list gets glossed over. Instructions in CLAUDE.md are read *before* the work,
 when the loose ends are still hypothetical. This fires *after* the message is
 written, when they are concrete and countable.
 
-It blocks exactly once per turn, every turn. Blocking is the whole mechanism --
-refusing the stop is what forces the re-read -- so there is no silent mode, and
-skipping turns that merely look clean would just be a keyword matcher deciding
-instead of Claude. The only thing that can be kept small is the wording, so the
-reason is one paragraph rather than a page.
+It blocks at most once per turn. Blocking is the whole mechanism -- refusing
+the stop is what forces the re-read -- so there is no silent mode. The one turn
+it lets through unasked is a short one: a final message under
+SHORT_MESSAGE_CHARS rarely hides deferred work. The message is measured, never
+read for meaning -- a keyword matcher would be a worse judge than Claude
+re-reading its own session. The wording is kept small too, so the reason is one
+paragraph rather than a page.
 
 The first stop is refused with that reason; Claude either does the remaining
 work or confirms there is none, and the second stop goes through. Two
@@ -66,6 +68,14 @@ MARKER_DIR = os.path.join(tempfile.gettempdir(), "studio-finish-check-%d" % UID)
 # If a marker is older than this, treat it as debris from an abandoned turn
 # rather than as "we already fired this turn".
 MARKER_MAX_AGE_SECONDS = 600
+
+# A final message shorter than this is let through without a block. Measured on
+# 731 blocked stops across every install (2026-11-01 to 2026-11-18): this cutoff
+# skips about a quarter of blocks and keeps 88 of the 94 that led to a real fix.
+# Most of the six it loses were "waiting on a background job" messages. The
+# cutoff was chosen on the same data, so re-run `finish_check_tally.py` once it
+# has been live a while and compare the catch rate.
+SHORT_MESSAGE_CHARS = 600
 
 # The repo's optional replacement for DEFAULT_REASON. Resolved from this file's
 # own location -- once installed at `.studio/source/finish_check.py`, up two
@@ -230,6 +240,11 @@ def main():
     if payload.get("stop_hook_active") is True:
         allow_stop(path)
     if already_fired_this_turn(path):
+        allow_stop(path)
+    # Only a string can be measured. Anything else -- missing, null, a list --
+    # blocks as it did before this check existed.
+    last_message = payload.get("last_assistant_message")
+    if isinstance(last_message, str) and len(last_message) < SHORT_MESSAGE_CHARS:
         allow_stop(path)
 
     block_stop(path)
