@@ -281,6 +281,10 @@ check and the entry gate doesn't require it). So passing all knobs makes
 The workflow runs in the background and notifies on completion. Do not re-run it or poll;
 wait for the completion notification.
 
+If this session has no Workflow tool, stop and say so. Do not build the unit yourself and play
+both parts: the editor's value is that it is a separate agent that did not write the code, so a
+one-agent run reports a review that never happened.
+
 #### Gotchas (learned the hard way, do not regress these)
 
 - **Invoke by `scriptPath`, never `name`.** `Workflow({name})` resolves a FROZEN registry snapshot
