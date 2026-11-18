@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Offloaded References
+
+| Read when | Doc |
+|---|---|
+| Running or changing a phase debate | `studio/docs/CLAUDE_CODE_USAGE.md` |
+| Running or changing `/forge` | `studio/docs/IMPLEMENTATION_LOOP_SPEC.md` |
+| Using a CLI subcommand other than the tests | `studio/docs/API.md` |
+| Adding or changing a module or config file | `studio/docs/ARCHITECTURE.md` |
+
 ## Coding Principles
 
 Behavioral guidelines to reduce common LLM coding mistakes. These apply to ALL work in this repository, not just Studio runs.
@@ -147,106 +156,35 @@ TheGameStudio is an **instruction generator** for structured advocate/contrarian
 
 ## Running a Studio Phase (Claude Code)
 
-Use the slash command to run a full advocate/contrarian debate:
-
-```
-/run-phase --phase market --text "A cozy farming sim with social deduction mechanics"
-/run-phase --phase tech --text "Build multiplayer lobby system" --max-iterations 5
-/run-phase --phase design --text "A cozy farming sim" --mode questions
-/run-studio-phase --text "Add AI critique engine" --roles +marketing +engineering
-/run-studio-phase --text "Social deduction farming sim" --roles +product +design --mode questions
-```
-
-Single-phase runs (`/run-phase`) spawn separate Advocate and Contrarian agents per iteration. Multi-role runs (`/run-studio-phase`) use a three-tier scoped debate by default: **alignment** (all roles, short, parallel) → **depth** (per-role, full, sequential) → **polish** (all roles, short, 1 pass) → integrator duel. Use `--no-scopes` for flat mode. See `studio/docs/CLAUDE_CODE_USAGE.md` for details.
-
-All runs (except `--mode questions`) include inline **decision point surfacing**: agents flag P0 (blocking), P1 (important), and P2 (context) decisions using a standard blockquote format. Every deliverable run also opens with a built-in **Open-Questions Pre-Flight** (Step 0): a fast pass that surfaces what is genuinely unsettled, pauses on P0 blockers, and records the answers before the iteration loop begins, so no run silently assumes. The standalone `--mode questions` remains a heavier, questions-only run for when you want a full prioritized decision set with no deliverables.
-
-The **Contrarian is an editor by default**: beyond hunting flaws and edge cases, it carries an always-on mandate to remove, merge, and simplify. The advocate piles it on; the contrarian carves out the essence (bias toward deletion, clarity, conciseness). This mandate is on in every deliverable run and stance, but deliberately **off in `--mode questions`**, where the contrarian instead judges question *relevance* and must not drop genuinely-open questions to keep the list lean.
+**Before running or changing a phase debate** (`/run-phase`, `/run-studio-phase`), read
+`studio/docs/CLAUDE_CODE_USAGE.md` for the scope tiers, decision points, the Open-Questions
+Pre-Flight and the contrarian's editor mandate. A run driven from memory skips steps it depends on.
 
 ## Implementation Loop (Claude Code)
 
-The same advocate/contrarian cadence also runs during **implementation**, via `/forge`:
-
-```
-/forge Users can create and view a profile (hardcoded storage)
-```
-
-A **writer** agent builds one complete MVI unit and commits its passing state; a fresh **editor** agent (the `CONTRARIAN_MANDATE` applied to code) cuts/refines it against the writer's diff and reverts if an edit breaks green — surfacing any real-but-unactionable critique as a **Reviewer Concern** (`reviewer-concerns/<unit_id>.md`, kept outside the gitignored run dir so it survives a worktree removal) instead of losing it on the revert: a one-way pipeline gated on **"MVI unit complete AND tests green."** Hand the unit a list of **acceptance criteria** — in practice via `/forge --spec <slug> --unit <unit_id>`, which copies them verbatim out of an approved spec's Build Plan — and the editor grades them one at a time — `pass`, `fail`, or `unverifiable`, each with the evidence it checked — and only calls the unit done if it is usable as a complete interaction *and* every criterion passes. A failing criterion ships the unit flagged; it never reverts or retries. With no criteria the editor judges against the unit's title, as before. It runs the `.claude/workflows/implementation-loop.js` Claude Code Workflow, config-driven via `implementation_loop.toml` (editor on/off, read scope, output budget, mutation/static gates, and an optional `observe_command` both agents run to look at the running product), with knobs read by running `impl_loop.py` as a script. It is the executor described in `studio/docs/IMPLEMENTATION_LOOP_SPEC.md`. Status: executor + config shipped; cadence tuning (gate granularity vs. editor yield) is ongoing.
+`/forge` builds one MVI unit through a writer/editor loop. **Before running or changing it**, read
+`studio/docs/IMPLEMENTATION_LOOP_SPEC.md` for how the loop works and its config, and the `/forge`
+section of `studio/docs/CLAUDE_CODE_USAGE.md` for acceptance criteria via `--spec`. The loop
+commits real code, so a wrong assumption lands in git.
 
 ## CLI Commands
 
-`run_phase.py` is the single entrypoint. The commands below are the ones you
-reach for most; run `python studio/run_phase.py --help` for the full subcommand
-list and **`studio/docs/API.md`** for the argument-by-argument contract.
+`studio/run_phase.py` is the single entrypoint. Tests run from `studio/`:
 
 ```bash
-# Tests (from studio/)
 cd studio && python -m pytest tests/ -v
 cd studio && python -m pytest tests/test_run_phase.py::TestClassName::test_name -v
-
-# Prepare / finalize / validate a run
-python studio/run_phase.py prepare --phase <market|design|tech|studio> --text "description"
-python studio/run_phase.py prepare --phase design --text "description" --mode questions
-python studio/run_phase.py finalize --phase <phase> --run-id <run_id> --status completed --verdict APPROVED
-python studio/run_phase.py validate --phase <phase> --run-id <run_id>
-
-# Cross-run dashboard: shipped features (from specs/), verdicts, decisions, session health,
-# and planned units no commit says were built
-python studio/run_phase.py stats
-
-# Cross-repo install / update (also: check-install, setup, offload, notify, cleanup)
-python studio/run_phase.py init --target /path/to/project
-python studio/run_phase.py update --target /path/to/project
 ```
 
-Other subcommands are documented in `studio/docs/API.md`: decision management
-(`check-decisions`, `record-decisions`, `extract-decisions`, `inject-context`),
-clarity (`show-clarity`, `set-clarity`, `recompute-clarity`),
-`check-updates` (the session brief: an available update, and one unbuilt unit
-an approved spec still owes),
-`cleanup`, `notify`, `setup`, `offload`.
+**Before running any other subcommand**, check `python studio/run_phase.py --help` and
+`studio/docs/API.md` for its arguments. Guessed flags give misleading results.
 
 ## Architecture
 
-All source lives under `studio/`. `run_phase.py` is the sole entrypoint using only stdlib (plus `tomli` on Python 3.10).
-
-### Modules (all in `studio/`)
-
-`run_phase.py` is the CLI entrypoint; the rest are focused modules it imports.
-See **`studio/docs/ARCHITECTURE.md`** for the full per-module reference.
-
-- **Debate / flow:** `scopes.py` (+ `CONTRARIAN_MANDATE`), `question_mode.py`, `decision_points.py` (owns the canonical decision-point emit/parse format), `findings.py` (the parseable `FINDING` block → `findings.json`), `verifier.py` (independent finding verifier, behind `finding-verifier.js`), `clarity.py`, `verdict.py`, `rerun.py`
-- **Roles / personas:** `run_phase_roles.py`, `role_overrides.py`, `persona_overrides.py`, `design_mandate.py` (design-phase-only AI-slop blacklist + Goodwill Reservoir critique guide) (+ `studio.manifest.json`, `role_packs/`)
-- **Diagnostics:** `stats.py` (pure cross-run aggregation, plus the shipped-features summary read off spec frontmatter — a feature counts as shipped when its spec says `status: shipped`), `obligations.py` (pure; the obligation queue `stats` prints and the session brief names one of — a unit nobody built, a finished spec still at `approved`, evidence past its date), `session.py` (pure; builds the automatic `session.json` health record finalize writes for each run), `finish_check_tally.py` (grades the finish-check hook from Claude Code's own transcripts: what the assistant did in the turn after each blocked stop)
-- **Workflows / loops:** `impl_loop.py` (config for `.claude/workflows/implementation-loop.js`, the `/forge` writer/editor loop — see `studio/docs/IMPLEMENTATION_LOOP_SPEC.md`) and `.claude/workflows/finding-verifier.js` (the independent finding verifier; core in `verifier.py`), plus `finish_check.py` — the Stop hook `init`/`update` install in every repo, which refuses the first stop of each turn to ask what was left undone (one extra model round-trip per turn; `--no-finish-check` or `.studio/finish-check.off` turns it off)
-- **Cross-repo + hygiene:** `install.py`, `setup.py`, `offload.py`, `cleanup.py`
-- **Shared:** `config_loading.py` (the single TOML loader), `validators/`, `integrations/slack_digest.py`, `message_lint.py` (the `/message-draft` linter)
-
-### Configuration files
-
-Shipped defaults live in `config/` and `studio.manifest.json`; per-repo overrides
-live in `.studio/`. How an override combines with the default depends on the file:
-roles and personas shallow-merge over the shipped values, while `scopes.toml` and
-`implementation_loop.toml` are read *instead of* the shipped file — a key you leave
-out of those falls back to the built-in default, not to the shipped file's value. The
-one exception is `implementation_loop.toml`'s `[gate]` table, which has no built-in
-defaults at all: a repo's own file is the only thing that says how `/forge` gates it,
-so a `[gate]` key left out is empty, and `/forge` refuses rather than guess.
-`setup.cfg` holds
-the mutmut (mutation-testing) config. See `studio/docs/ARCHITECTURE.md` for the full
-catalog and each file's schema.
-
-### Artifact structure
-
-Runs produce timestamped directories under `output/<phase>/run_<phase>_<timestamp>/` containing:
-- `instructions.md`, `run.json`, `summary.md`
-- `advocate_N.md` / `contrarian_N.md` (simple phases)
-- `advocate--<role>--NN.md` / `contrarian--<role>--NN.md` + `integrator.md` (studio flat mode)
-- `advocate--<role>--S1-NN.md` / `S2-NN.md` / `S3-NN.md` (studio scoped mode: alignment/depth/polish)
-
-### Phases
-
-Four phases: `market`, `design`, `tech`, `studio`. Each has distinct advocate/contrarian personas. The `studio` phase supports multi-role pods via role packs.
+All source lives under `studio/`. **Before adding, moving or changing a module or config file**,
+read `studio/docs/ARCHITECTURE.md` for the per-module reference, how per-repo overrides combine
+with shipped defaults (it differs by file), and the run-directory layout. A wrong guess about
+override behavior breaks consuming repos.
 
 ## Important Conventions
 
