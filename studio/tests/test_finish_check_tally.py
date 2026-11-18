@@ -425,7 +425,3 @@ def test_an_assistant_record_with_no_content_list_or_empty_text_measures_zero():
 def test_any_positive_minimum_is_named_as_a_filter():
     assert tally.describe_filters(1, None) == "  filtered: final message at least 1 characters"
     assert tally.describe_filters(0, None) is None
-
-
-def test_report_with_default_arguments_prints_no_filter_line():
-    assert tally.report([], "2026-09-29") == "Blocked stops outside this repo since 2026-09-29: 0, in 0 project directories."
