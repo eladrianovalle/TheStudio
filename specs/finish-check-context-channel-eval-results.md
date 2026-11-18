@@ -11,6 +11,28 @@ suite once this spec says `status: shipped` — every heading here needs an answ
 ## Pass criterion (written before the build)
 > This feature works if and only if, over at least 150 context-channel finish-checks whose final message was at least 600 characters (from projects that also have a frozen block baseline), the share followed by a concrete change is at least 0.80 times the block-channel rate weighted by each project's share of those context checks.
 
+## Frozen baseline (written 2026-11-18, before the hook changed)
+Block channel, final message at least 600 characters. Run on 2026-11-18:
+`python studio/finish_check_tally.py --since 2026-11-01 --exclude <Studio source checkout> --channel block --min-final-chars 600`.
+530 checks from 2026-11-04 to 2026-11-18, 166 followed by a concrete change (0.313 pooled). Claude Code deletes
+transcripts 30 days after their last write, so these numbers are never re-read from disk. Installs are labelled rather than named because this repository is public; the
+mapping to transcript directories is kept outside it. Weight each row by that install's
+context-check count when comparing.
+
+| Install | Checks | Followed by a concrete change |
+|---|---|---|
+| Install A | 180 | 50 |
+| Install B | 84 | 30 |
+| Install C | 69 | 29 |
+| Install D | 60 | 8 |
+| Install E | 50 | 18 |
+| Install F | 50 | 20 |
+| Install G | 18 | 4 |
+| Install H | 9 | 6 |
+| Install I | 6 | 1 |
+| Install J | 3 | 0 |
+| a temporary test project | 1 | 0 |
+
 ## What happened
 | Condition | What was run | Times | Criterion met | Notes |
 |---|---|---|---|---|
