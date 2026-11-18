@@ -27,7 +27,7 @@ work nothing is blocking, that it could simply have done. The instructions telli
 live in `CLAUDE.md`, which it reads *before* the work, when the loose ends are still hypothetical.
 
 The finish-check is a small program that runs at the moment a turn ends. It refuses the first stop,
-every time, with one paragraph asking the assistant to re-read its own message for work it deferred
+every time (since 2026-11-18, unless its final message is under 600 characters), with one paragraph asking the assistant to re-read its own message for work it deferred
 that nothing is blocking. Then it lets the second stop through. Refusing is the whole mechanism: it
 is what forces the re-read, at the one moment when the loose ends are concrete and countable.
 
@@ -206,8 +206,15 @@ Every row but the last ends in *allow the stop*. The tests assert one row each.
 **It blocks every turn rather than on evidence of deferral.** A keyword matcher deciding when a turn
 is finished is a worse judge than the model re-reading its own message, and the deferrals worth
 catching are the ones phrased in ways no list holds. `last_assistant_message` is present on every real
-payload and is **deliberately unread**: making the paragraph specific about an offer means first
-finding the offer, which is that same rejected matcher wearing a smaller blast radius.
+payload and its words are **deliberately unread**: making the paragraph specific about an offer means
+first finding the offer, which is that same rejected matcher wearing a smaller blast radius.
+
+*Amended 2026-11-18:* the hook now reads the message's **length**, and lets a stop through unrefused
+when it is under 600 characters. Of 731 blocks across every install (2026-11-01 to 2026-11-18), 94 were
+followed by a real fix; the cutoff skips 26% of blocks and keeps 88 of those 94. Two judges were tried
+on the same blocks and rejected: a small model reading the final message kept only 13 of the 94,
+because most fixes come from re-reading the session and leave no trace in the message, and no wording
+(offers, "I recommend", "still running") caught more often than the 13% base rate.
 
 **On by default, not an opt-in wizard step.** Measured: 3 of 11 installs have no `SETUP.json` at all,
 and wizard step v5 reached 5 — three of them within the same minute, under a scripted sweep, and one
@@ -235,8 +242,8 @@ a pointer line so the reversal is discoverable from the document that recorded i
 
 ## Non-Goals / Cut Scope
 
-- **No use of `last_assistant_message`, `transcript_path`, `cwd`, or `scratchpad_dir`.** The hook reads
-  two fields.
+- **No use of `transcript_path`, `cwd`, or `scratchpad_dir`, and none of `last_assistant_message`
+  beyond its length** (amended 2026-11-18, above).
 - **No payload log**, for the two reasons above.
 - **No wizard step.** It ships on by default or it does not ship.
 - **No TOML config.** A loader and a schema for one string; it is a text file.

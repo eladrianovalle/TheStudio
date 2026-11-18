@@ -371,7 +371,8 @@ never does a merge, a force, or a rebase. The `update.toml` lives in the source 
 ### The finish-check (automatic, at the end of a turn)
 
 `init` and `update` install a second hook, separate from the session brief above and with its own
-switches. This one runs at the *end* of a turn, and it **refuses the first stop, every time**. What
+switches. This one runs at the *end* of a turn, and it **refuses the first stop** unless the final message is
+under 600 characters. What
 comes back is one paragraph asking the assistant to re-read the message it just wrote for work it
 said it would do and then didn't — work nothing was blocking. Then the second stop goes through, so
 a turn is never held up more than once.
@@ -380,10 +381,11 @@ Refusing is the whole mechanism. The instructions telling an assistant to finish
 in `CLAUDE.md`, which it reads *before* the work, when the loose ends are still hypothetical. The
 finish-check asks at the one moment they are concrete and countable.
 
-- **What it costs.** One extra model round-trip per turn, in every repo, forever. That is not small,
-  and it is worth deciding on deliberately rather than discovering later. There is no cleverness
-  making it cheaper: it does not try to work out whether *this* turn left anything undone, because a
-  keyword matcher is a worse judge of that than the model re-reading its own message.
+- **What it costs.** One extra model round-trip on most turns, in every repo, forever. That is not
+  small, and it is worth deciding on deliberately rather than discovering later. The one saving is
+  length: a final message under 600 characters goes through unrefused, because across 731 refusals
+  those turns almost never turned up deferred work. It never reads the message for meaning, because a
+  keyword matcher is a worse judge of what was left undone than the model re-reading its own session.
 - **Turn it off** two ways, and neither touches the session brief: `studio init --no-finish-check` /
   `studio update --no-finish-check` skips (or removes) the hook, and an empty
   `.studio/finish-check.off` file disables it durably, even when a later `update` would otherwise
