@@ -109,7 +109,7 @@ with a size cap, falling back to the default when absent, empty, unreadable or o
 | | Contract |
 |---|---|
 | **stdin** | Read to EOF once, parsed with `json.loads`. Anything that is not a JSON **object** becomes `{}` — including `[]` and `"x"`, which parse successfully and would otherwise make `payload.get` raise. |
-| **Fields read** | `session_id` (string, defaulted) and `stop_hook_active` (truthiness). **Nothing else.** |
+| **Fields read** | `session_id` (string, defaulted), `stop_hook_active` (truthiness), and `last_assistant_message` (length only, when it is a string — amended 2026-11-18). **Nothing else.** |
 | **stdout, allow** | Nothing. |
 | **stdout, block** | Exactly one line: `{"decision": "block", "reason": <text>}`. |
 | **stderr** | Nothing, ever. A Stop hook's stderr is surfaced to the user as an error. |
