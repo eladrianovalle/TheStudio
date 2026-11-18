@@ -75,7 +75,7 @@ Inside each run directory:
 | --- | --- | --- | --- |
 | `--phase {market,design,tech,studio}` | ❌ | derived from `--run-id` | Phase associated with the run. Redundant with `--run-id`, which already encodes it, so it's optional. |
 | `--run-id run_<phase>_<timestamp>` | ✅ | - | Identifier printed by `prepare`. |
-| `--status STATUS` | ❌ | `COMPLETED` | Free-form label (“completed”, “abandoned”, etc.). |
+| `--status STATUS` | ❌ | `COMPLETED` | Free-form label (“completed”, “abandoned”, etc.). `stopped` is special: it marks a run its pre-flight ended before any debate, and `finalize` then requires only `summary.md`. |
 | `--verdict VERDICT` | ❌ | - | `APPROVED`, `REJECTED`, `N/A`, or any label you prefer. |
 | `--iterations-run N` | ❌ | auto-count | Override if the assistant ran extra loops or skipped iterations. |
 | `--summary PATH` | ❌ | auto-detected | Provide a custom summary path if you store it elsewhere. |
@@ -146,7 +146,7 @@ No API keys or third-party credentials are required.
 | `tech` | `advocate_<n>.md`, `contrarian_<n>.md`, `summary.md`, `implementation.md` (with tests) |
 | `studio` | `integrator.md` (with duel sections), `summary.md`, plus per-role agent files. In the default scoped mode those are `advocate--<role>--S1-<nn>.md` / `S2-` / `S3-` (alignment / depth / polish) and the matching `contrarian--` files; with `--no-scopes` they are `advocate--<role>--<n>.md` and `contrarian--<role>--<n>.md`. |
 
-`finalize` ensures these files exist inside the run directory. You can add extra context (screenshots, spreadsheets, etc.) so long as they live in the same folder.
+`finalize` ensures these files exist inside the run directory. The one exception is a run finalized with `--status stopped`, which owes only its `summary.md`. You can add extra context (screenshots, spreadsheets, etc.) so long as they live in the same folder.
 
 ---
 

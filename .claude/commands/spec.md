@@ -369,6 +369,10 @@ python ".studio/source/run_phase.py" finalize --phase tech --run-id {run_id} \
   --status completed --verdict {APPROVED|REJECTED}
 ```
 
+If the pre-flight stopped the run before any debate (the baseline never failed, say, and the user
+agreed to drop it), write `summary.md` saying why and finalize with `--status stopped --verdict N/A`.
+`finalize` accepts that run without advocate or contrarian files.
+
 ## Key Rules
 
 - **Discovery first.** The pre-flight is where a spec earns its keep — surface the architectural
