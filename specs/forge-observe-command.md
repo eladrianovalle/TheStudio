@@ -7,7 +7,7 @@ status: approved
 studio_run: studio/output/tech/run_tech_20261015_194438
 # verification_due: the date the evidence is due (YYYY-MM-DD). Required once this spec is
 # `approved`, and only if it carries a `## Verification` section — no section, no deadline.
-verification_due: 2026-12-16
+verification_due: 2027-01-16
 # Leave the two below EMPTY until this spec flips to `shipped`, and keep their notes on
 # comment lines like these. An inline `# ...` after the colon is read as the VALUE, and
 # `shipped_changed` has no vocabulary check to catch it — so a spec could otherwise
@@ -236,6 +236,10 @@ build.
 - **Precondition.** The adopter's command must exist and be able to capture at `<writer_sha>^`. A
   second worktree at the parent satisfies the working-directory contract. If that has not landed by
   the middle of the window, move `verification_due` visibly rather than let it lapse.
+  **Moved on 2026-11-18, from 2026-12-16 to 2027-01-16.** The first adopter is leaving Unity for
+  three.js, so its capture command will be a browser screenshot tool rather than a Unity one, and
+  Unity cannot start here without a renewed licence. The replay waits for the first three.js unit
+  with a rendering criterion.
 - **Where the evidence goes.** `specs/forge-observe-command-eval-results.md`, created from the
   skeleton when this spec is approved. This repository is public. The adopter's name, unit id,
   commits and criterion text stay in the adopter's repository. The results file paraphrases them.
