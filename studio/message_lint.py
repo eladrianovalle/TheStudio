@@ -11,8 +11,9 @@ A draft file is a header, a ``---8<---`` line, then the message:
 The checks hold the message to what /message-draft promises: the point and the ask come
 first, the message is short enough to read in one pass, it pastes cleanly into the
 platform it is going to, and it never exceeds 2,000 characters, which is Discord's limit
-for a standard account. That ceiling applies on every platform, so any draft can be
-pasted anywhere.
+for a standard account
+(https://support.discord.com/hc/en-us/articles/360034632292-Sending-Messages). That
+ceiling applies on every platform, so any draft can be pasted anywhere.
 
 The linter cannot judge the argument. A clean result means the shape is right; the lead
 still has to be reread by a person.
@@ -34,7 +35,9 @@ from typing import List, Tuple
 SEPARATOR = "---8<---"
 PLATFORMS = ("slack", "discord", "github", "plain")
 
-CHARACTER_CEILING = 2000  # Discord's per-message limit for a standard account
+# Discord's per-message limit for a standard account:
+# https://support.discord.com/hc/en-us/articles/360034632292-Sending-Messages
+CHARACTER_CEILING = 2000
 WORD_TARGET = 150
 LINE_LENGTH_LIMIT = 250
 LABEL_LIMIT = 2
