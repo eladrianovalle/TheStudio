@@ -20,6 +20,11 @@ shipped_changed: Every install's sessions are refused their first stop each turn
 
 # Shipped Finish-Check Stop Hook — Architecture Spec
 
+> **2026-11-18:** the hook no longer refuses the stop. It returns its paragraph as the Stop hook's
+> `additionalContext`, which keeps the turn going without Claude Code's "stop hook reported a
+> problem" notice; see [finish-check-context-channel.md](./finish-check-context-channel.md). The
+> evidence and criteria below were measured on the old refusal channel.
+
 ## In Plain Language
 
 When an assistant finishes a turn, it often stops while work it just described is still undone —

@@ -371,19 +371,21 @@ never does a merge, a force, or a rebase. The `update.toml` lives in the source 
 ### The finish-check (automatic, at the end of a turn)
 
 `init` and `update` install a second hook, separate from the session brief above and with its own
-switches. This one runs at the *end* of a turn, and it **refuses the first stop** unless the final message is
-under 600 characters. What
-comes back is one paragraph asking the assistant to re-read the message it just wrote for work it
-said it would do and then didn't — work nothing was blocking. Then the second stop goes through, so
-a turn is never held up more than once.
+switches. This one runs at the *end* of a turn, and it **holds the first stop open once** unless the final
+message is under 600 characters. It hands the assistant one paragraph asking it to re-read the
+message it just wrote for work it said it would do and then didn't — work nothing was blocking — and
+the turn continues. Then the second stop goes through, so a turn is never held up more than once.
+The paragraph arrives as the Stop hook's `additionalContext` rather than as a refusal, so Claude Code
+shows no "stop hook reported a problem" notice. That needs a Claude Code that reads a Stop hook's
+`additionalContext` (2.1.327 does); an older one ends the turn unchecked.
 
-Refusing is the whole mechanism. The instructions telling an assistant to finish what it starts live
+Holding the turn open is the whole mechanism. The instructions telling an assistant to finish what it starts live
 in `CLAUDE.md`, which it reads *before* the work, when the loose ends are still hypothetical. The
 finish-check asks at the one moment they are concrete and countable.
 
 - **What it costs.** One extra model round-trip on most turns, in every repo, forever. That is not
   small, and it is worth deciding on deliberately rather than discovering later. The one saving is
-  length: a final message under 600 characters goes through unrefused, because across 731 refusals
+  length: a final message under 600 characters goes through unchecked, because across 731 checks
   those turns almost never turned up deferred work. It never reads the message for meaning, because a
   keyword matcher is a worse judge of what was left undone than the model re-reading its own session.
 - **Turn it off** two ways, and neither touches the session brief: `studio init --no-finish-check` /

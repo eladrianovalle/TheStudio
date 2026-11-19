@@ -2040,8 +2040,8 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument(
         "--no-finish-check",
         action="store_true",
-        help="Do not install the Stop finish-check hook, which refuses the first "
-             "stop of each turn to ask whether anything was left undone. This "
+        help="Do not install the Stop finish-check hook, which holds the first "
+             "stop of each turn open once to ask whether anything was left undone. This "
              "covers this run only; to keep it off, create "
              ".studio/finish-check.off.",
     )
@@ -2106,7 +2106,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-finish-check",
         action="store_true",
         help="Remove (or skip installing) the Stop finish-check hook, which "
-             "refuses the first stop of each turn to ask whether anything was "
+             "holds the first stop of each turn open once to ask whether anything was "
              "left undone. This covers this run only; the next plain update puts "
              "it back, so to keep it off create .studio/finish-check.off.",
     )

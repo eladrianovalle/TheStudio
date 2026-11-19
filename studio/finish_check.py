@@ -7,30 +7,36 @@ list gets glossed over. Instructions in CLAUDE.md are read *before* the work,
 when the loose ends are still hypothetical. This fires *after* the message is
 written, when they are concrete and countable.
 
-It blocks at most once per turn. Blocking is the whole mechanism -- refusing
-the stop is what forces the re-read -- so there is no silent mode. The one turn
-it lets through unasked is a short one: a final message under
+It holds a turn open at most once. The first stop is answered by handing
+Claude one paragraph as the Stop hook's `additionalContext`, which keeps the
+turn going for one re-read; there is no silent mode. It does not refuse the stop
+with a `decision: block` reply, because Claude Code shows every refusal to the
+user as "stop hook reported a problem". A Claude Code too old to read the field
+just ends the turn unchecked, which fails open like everything else in this file.
+
+The one turn it lets through unasked is a short one: a final message under
 SHORT_MESSAGE_CHARS rarely hides deferred work. The message is measured, never
 read for meaning -- a keyword matcher would be a worse judge than Claude
 re-reading its own session. The wording is kept small too, so the reason is one
 paragraph rather than a page.
 
-The first stop is refused with that reason; Claude either does the remaining
-work or confirms there is none, and the second stop goes through. Two
-independent guards keep that from looping:
+After that paragraph Claude either does the remaining work or confirms there is
+none, and the second stop goes through. Two independent guards keep that from
+looping:
 
   1. `stop_hook_active` is true on stdin when this stop was itself caused by a
      stop hook, which is the harness telling us we already fired.
-  2. A per-session marker file, written when we block and deleted when we let a
+  2. A per-session marker file, written when we fire and deleted when we let a
      stop through. This covers us if the field is ever absent or renamed.
 
 Two rules hold on every path through this file, because a hook whose job is to
 never break a session has to fail open:
 
   * The exit status is always 0, and nothing is ever written to stderr. A Stop
-    hook's stderr is surfaced to the user as an error, and blocking is expressed
-    in stdout alone -- so a crash can never be mistaken for a deliberate block.
-  * Anything that goes wrong lets the stop through rather than blocking it.
+    hook's stderr is surfaced to the user as an error, and holding the turn open
+    is expressed in stdout alone -- so a crash can never be mistaken for a
+    deliberate check.
+  * Anything that goes wrong lets the stop through rather than holding it open.
 
 Zero Studio imports, deliberately: every Studio module can raise while being
 imported, which would happen before any of our own error handling exists.
@@ -69,7 +75,7 @@ MARKER_DIR = os.path.join(tempfile.gettempdir(), "studio-finish-check-%d" % UID)
 # rather than as "we already fired this turn".
 MARKER_MAX_AGE_SECONDS = 600
 
-# A final message shorter than this is let through without a block. Measured on
+# A final message shorter than this is let through without a check. Measured on
 # 731 blocked stops across every install (2026-11-01 to 2026-11-18): this cutoff
 # skips about a quarter of blocks and keeps 88 of the 94 that led to a real fix.
 # Most of the six it loses were "waiting on a background job" messages. The
@@ -100,7 +106,7 @@ def marker_path(session_id):
     The session id arrives on stdin, so it is untrusted input being turned into a
     filesystem path. Hashing it is a security boundary, not tidiness: a raw value
     of `../../x` or `/etc/passwd` would let the delete on `stop_hook_active`, or
-    the write on a block, reach outside the marker directory. A hex digest cannot
+    the write on a first stop, reach outside the marker directory. A hex digest cannot
     contain a separator, so every marker is a direct child of that one directory
     whatever the payload says.
     """
@@ -134,10 +140,10 @@ def marker_dir_is_private():
 
 
 def sweep_stale_markers():
-    """Delete markers left behind by sessions that were abandoned mid-block.
+    """Delete markers left behind by sessions that were abandoned mid-check.
 
     A marker is normally removed on the very next stop. One only survives if the
-    session ended between the block and the retry, and past MARKER_MAX_AGE_SECONDS
+    session ended between the first stop and the retry, and past MARKER_MAX_AGE_SECONDS
     it is ignored anyway -- so without this the directory grows forever.
     """
     try:
@@ -157,10 +163,10 @@ def sweep_stale_markers():
 
 
 def already_fired_this_turn(path):
-    """Did we already block this turn?
+    """Did we already fire this turn?
 
     Age is the only evidence, which leaves one gap: if a session is interrupted
-    between the block and the retry, the marker outlives the turn that wrote it,
+    between the first stop and the retry, the marker outlives the turn that wrote it,
     and the next turn's first stop spends it instead of firing. That turn goes
     unchecked. It fails open, which is the right direction, and closing it would
     mean pinning the marker to a turn identity the payload does not carry.
@@ -208,7 +214,16 @@ def block_stop(path):
         # If we cannot record that we fired, we cannot guarantee we won't loop.
         # Letting the stop through is the safe failure.
         sys.exit(0)
-    print(json.dumps({"decision": "block", "reason": reason_text()}))
+    print(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "Stop",
+                    "additionalContext": reason_text(),
+                }
+            }
+        )
+    )
     sys.exit(0)
 
 
@@ -242,7 +257,7 @@ def main():
     if already_fired_this_turn(path):
         allow_stop(path)
     # Only a string can be measured. Anything else -- missing, null, a list --
-    # blocks as it did before this check existed.
+    # is checked as it was before this cutoff existed.
     last_message = payload.get("last_assistant_message")
     if isinstance(last_message, str) and len(last_message) < SHORT_MESSAGE_CHARS:
         allow_stop(path)
