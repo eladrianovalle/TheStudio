@@ -88,6 +88,14 @@ def test_formatting_inside_a_code_block_is_not_flagged():
     assert check_draft(draft(message), "slack") == []
 
 
+def test_plain_text_flags_a_code_block_and_the_markup_inside_it():
+    message = "Please review.\n\n```\n**Deployment** [status](https://example.com)\n```\n"
+    issues = check_draft(draft(message), "plain")
+    assert "``` code block (plain text shows the backticks)" in issues
+    assert "**bold** (plain text shows the asterisks)" in issues
+    assert "[text](url) link (paste the bare URL)" in issues
+
+
 def test_more_than_three_bullets_is_flagged():
     message = "Lead.\n\n• one\n• two\n• three\n• four\n"
     issues = check_draft(draft(message), "slack")

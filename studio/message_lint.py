@@ -61,6 +61,7 @@ PASTE_CHECKS = {
     ],
     "github": [],
     "plain": [
+        (r"```", "``` code block (plain text shows the backticks)"),
         _TABLE,
         (r"\*\*[^*\n]+\*\*", "**bold** (plain text shows the asterisks)"),
         _HEADING,
@@ -154,8 +155,11 @@ def check_message(message: str, platform: str) -> List[str]:
         )
 
     prose = without_code_blocks(message)
+    # Plain text has no code blocks: the fence and everything inside it reach the
+    # reader as typed, so a plain draft is checked whole.
+    pasted = message if platform == "plain" else prose
     for pattern, warning in PASTE_CHECKS[platform]:
-        if re.search(pattern, without_urls(prose), re.M):
+        if re.search(pattern, without_urls(pasted), re.M):
             issues.append(warning)
 
     for line in message.splitlines():
