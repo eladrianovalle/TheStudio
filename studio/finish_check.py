@@ -78,8 +78,11 @@ MARKER_MAX_AGE_SECONDS = 600
 # A final message shorter than this is let through without a check. 600 is a
 # chosen heuristic: short finals tend to be status lines ("waiting on the
 # build"), where a check has less to catch. UNVERIFIED: how many useful checks
-# the cutoff skips has no committed measurement. To measure it on your own
-# transcripts, run `finish_check_tally.py --min-final-chars 600`.
+# the cutoff skips has no committed measurement. `finish_check_tally.py
+# --min-final-chars 600` counts only the checks the cutoff keeps; to measure what
+# it skips, compare that with an unfiltered tally over transcripts recorded
+# before the cutoff was enabled. Later transcripts cannot show it, since the
+# short finals in them were never checked.
 SHORT_MESSAGE_CHARS = 600
 
 # The repo's optional replacement for DEFAULT_REASON. Resolved from this file's
