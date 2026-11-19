@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Grade the finish-check hook from Claude Code's own transcripts.
 
-The hook (`finish_check.py`) refuses the first stop of every turn. Whether that
-refusal buys anything is the question `specs/shipped-finish-check.md` asks: does
-the assistant go on to *do* something in the turn that follows, or just stop
-again? Nothing in Studio records the answer, but Claude Code does. Every
+The hook (`finish_check.py`) checks the first stop of every turn: it used to
+refuse that stop, and now hands its paragraph back as additional context.
+Whether that check buys anything is the question `specs/shipped-finish-check.md`
+asks: does the assistant go on to *do* something in the turn that follows, or
+just stop again? Nothing in Studio records the answer, but Claude Code does. Every
 transcript under `~/.claude/projects/<project>/<session>.jsonl` holds each
 check in one of two forms, followed by whatever the assistant did before the
 next real prompt:
@@ -14,11 +15,11 @@ next real prompt:
 - a context note ("context"): a `hook_additional_context` attachment from the
   Stop hook whose content list holds the FINISH-CHECK paragraph.
 
-This script reads those transcripts and prints, for every block outside the
+This script reads those transcripts and prints, for every check outside the
 Studio source repo, whether the following turn ran any tool and whether it ran
 one that changes something: an edit, a write, a commit, a push, a pull request.
 It then checks the spec's pass criterion over every window of 30 consecutive
-blocks. It writes nothing anywhere.
+checks. It writes nothing anywhere.
 
 Two filters sit next to `--since`: `--channel block|context` keeps one form
 only (default: both), and `--min-final-chars N` keeps only checks whose final

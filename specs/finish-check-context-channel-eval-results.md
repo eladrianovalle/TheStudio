@@ -19,6 +19,11 @@ transcripts 30 days after their last write, so these numbers are never re-read f
 mapping to transcript directories is kept outside it. Weight each row by that install's
 context-check count when comparing.
 
+This baseline is the comparison rate the criterion is relative to, so it cannot pass or fail that
+criterion by itself. The template's "baseline row should read no" check under "What happened" does
+not fit here: record this baseline in the baseline row with "n/a (comparison rate)" as its
+"Criterion met", and grade only the row with the feature.
+
 | Install | Checks | Followed by a concrete change |
 |---|---|---|
 | Install A | 180 | 50 |
