@@ -631,6 +631,31 @@ def test_the_override_is_resolved_from_the_module_not_the_working_directory(
 
 
 # ---------------------------------------------------------------------------
+# The off switch works at once, not only after the next update
+# ---------------------------------------------------------------------------
+
+def test_creating_the_off_switch_lets_the_next_stop_through_unchecked(
+    installed_module, hook_tmp, unrelated_cwd
+):
+    (installed_module.parents[1] / "finish-check.off").write_text("", encoding="utf-8")
+    result = _run_hook(
+        {"session_id": "switched-off"}, tmpdir=hook_tmp, script=installed_module, cwd=unrelated_cwd
+    )
+    assert result.returncode == 0
+    assert result.stdout == b""
+    assert result.stderr == b""
+    assert not _expected_marker(hook_tmp, "switched-off").exists()
+
+
+def test_an_off_switch_beside_the_working_directory_does_not_count(
+    installed_module, hook_tmp, unrelated_cwd
+):
+    (unrelated_cwd / "finish-check.off").write_text("", encoding="utf-8")
+    reason = _reason_printed_by(installed_module, hook_tmp, "off-switch-decoy", unrelated_cwd)
+    assert reason == finish_check.DEFAULT_REASON
+
+
+# ---------------------------------------------------------------------------
 # Criterion 7 — one copy of the mechanism in the repository
 # ---------------------------------------------------------------------------
 

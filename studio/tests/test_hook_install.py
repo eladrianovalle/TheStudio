@@ -117,6 +117,36 @@ class TestHookMerge:
         # Our entry was added.
         assert len(_our_entries(data)) == 1
 
+    @pytest.mark.parametrize("enabled", [True, False], ids=["update", "switched-off"])
+    def test_a_user_hook_sharing_our_group_survives(self, target_dir, enabled):
+        settings = _settings_path(target_dir)
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        their_hook = {"type": "command", "command": "my-own-check.sh"}
+        seed = {
+            "hooks": {
+                "Stop": [
+                    {"matcher": "*",
+                     "hooks": [
+                         {"type": "command", "command": "python /old/finish_check.py"},
+                         their_hook,
+                     ]}
+                ]
+            }
+        }
+        settings.write_text(json.dumps(seed, indent=2), encoding="utf-8")
+        # The installer only registers a script that is actually installed.
+        script = target_dir / ".studio" / "source" / "finish_check.py"
+        script.parent.mkdir(parents=True)
+        script.write_text("", encoding="utf-8")
+
+        _install_stop_hook(target_dir, enabled=enabled)
+
+        groups = json.loads(settings.read_text(encoding="utf-8"))["hooks"]["Stop"]
+        assert {"matcher": "*", "hooks": [their_hook]} in groups
+        commands = [inner["command"] for group in groups for inner in group["hooks"]]
+        ours = [command for command in commands if _FINISH_CHECK_MARKER in command]
+        assert ours == ([_finish_check_command()] if enabled else [])
+
     def test_idempotent_no_duplicate(self, target_dir):
         _install_sessionstart_hook(target_dir, enabled=True)
         _install_sessionstart_hook(target_dir, enabled=True)

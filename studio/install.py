@@ -691,7 +691,8 @@ def _merge_hook_entry(
     a re-install finds its own entry and stays idempotent. That entry is removed
     and re-added rather than edited in place, which refreshes the command in one
     path — the interpreter or the source path can change between installs. Every
-    other key and hook in the file is left untouched. ``label`` names this hook in
+    other key and hook in the file is left untouched, including a user's hook that
+    shares a group with ours. ``label`` names this hook in
     the warnings, e.g. ``"update-check hook"``.
 
     Best-effort and NEVER raises. A settings file that isn't a JSON object, a
@@ -734,19 +735,28 @@ def _merge_hook_entry(
         return
     entries = hooks.setdefault(event, [])
 
-    # Find our own entry (the group whose command contains the marker).
-    our_entry = None
+    # Find the group holding our own command (the one containing the marker).
+    our_group = None
     for existing in entries:
         commands = (inner.get("command", "") for inner in existing.get("hooks", []))
         if any(marker in command for command in commands):
-            our_entry = existing
+            our_group = existing
             break
 
-    if our_entry is None and not enabled:
+    if our_group is None and not enabled:
         return  # Nothing of ours, and none wanted: leave the file as-is.
 
-    if our_entry is not None:
-        entries.remove(our_entry)
+    # Take out only our command. A user may have put their own hook in the same
+    # group, and that hook, plus the group's matcher, has to survive; the group
+    # itself goes only once nothing is left in it.
+    if our_group is not None:
+        our_group["hooks"] = [
+            inner
+            for inner in our_group["hooks"]
+            if marker not in inner.get("command", "")
+        ]
+        if not our_group["hooks"]:
+            entries.remove(our_group)
     if enabled:
         entries.append({"hooks": [entry]})
 

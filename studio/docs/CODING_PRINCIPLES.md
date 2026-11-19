@@ -132,7 +132,7 @@ The test: if someone asked "what are we building and why is it shaped this way?"
 ## Design board
 
 If this repository keeps a design board, the discipline lives in `.studio/source/docs/DESIGN_BOARD.md`
-— inside the gitignored snapshot, so a fresh clone gets it from `/studio-update`. Locate before you
+— part of the installed Studio snapshot; if it is missing, `/studio-update` installs it. Locate before you
 read, source every claim to a region you read this turn, and name the item and destination before you write.
 
 ---

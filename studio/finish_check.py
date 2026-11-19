@@ -75,12 +75,12 @@ MARKER_DIR = os.path.join(tempfile.gettempdir(), "studio-finish-check-%d" % UID)
 # rather than as "we already fired this turn".
 MARKER_MAX_AGE_SECONDS = 600
 
-# A final message shorter than this is let through without a check. Measured on
-# 731 blocked stops across every install (2026-11-01 to 2026-11-18): this cutoff
-# skips about a quarter of blocks and keeps 88 of the 94 that led to a real fix.
-# Most of the six it loses were "waiting on a background job" messages. The
-# cutoff was chosen on the same data, so re-run `finish_check_tally.py` once it
-# has been live a while and compare the catch rate.
+# A final message shorter than this is let through without a check. Short
+# finals are mostly status lines ("waiting on the build"), and checking them
+# rarely led to a fix, so the cutoff skips them while keeping nearly every check
+# that did. It was chosen on the same stops it was measured on, so re-run
+# `finish_check_tally.py --min-final-chars` once it has been live a while and
+# see whether the catch rate holds.
 SHORT_MESSAGE_CHARS = 600
 
 # The repo's optional replacement for DEFAULT_REASON. Resolved from this file's
@@ -93,6 +93,14 @@ OVERRIDE_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "finish-check.txt"
 )
 
+# The repo's off switch, `.studio/finish-check.off`, resolved the same way. The
+# installer also reads it and stops registering the hook, but only on the next
+# `update`; reading it here means creating the file takes effect on the very
+# next stop.
+OFF_SWITCH_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "finish-check.off"
+)
+
 # The override is a paragraph, not a document. Anything larger is treated as a
 # mistake and ignored in favour of the shipped wording.
 OVERRIDE_MAX_BYTES = 4096
@@ -101,7 +109,7 @@ DEFAULT_REASON = """FINISH-CHECK (automatic, not the user speaking). Re-read you
 
 
 def marker_path(session_id):
-    """The marker file for one session: `<tempdir>/studio-finish-check/<sha256>.fired`.
+    """The marker file for one session: `<tempdir>/studio-finish-check-<uid>/<sha256>.fired`.
 
     The session id arrives on stdin, so it is untrusted input being turned into a
     filesystem path. Hashing it is a security boundary, not tidiness: a raw value
@@ -229,6 +237,8 @@ def block_stop(path):
 
 def main():
     raw_text = sys.stdin.read()
+    if os.path.exists(OFF_SWITCH_PATH):
+        sys.exit(0)
 
     try:
         payload = json.loads(raw_text)
