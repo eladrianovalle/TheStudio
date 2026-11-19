@@ -24,7 +24,7 @@ The user sends; this command ends at a draft file. It never posts, emails or com
    - `discord`: Markdown renders, tables don't.
    - `github`: Markdown renders, tables included.
    - `plain`: no markup at all, since email and most other boxes show it raw. Bare URLs, plain `-` bullets.
-   - Everywhere: one paragraph per line, never wrapped by hand, since a hand-made break survives the paste. No paragraph over 250 characters, and the whole message under 2,000 characters, the most one Discord message holds on a standard account. If it can't fit, it is two messages: say so and draft both.
+   - Everywhere: one paragraph per line, never wrapped by hand, since a hand-made break survives the paste. No paragraph over 250 characters, and the whole message under 2,000 characters, the most one Discord message holds on a standard account ([Discord: Sending Messages](https://support.discord.com/hc/en-us/articles/360034632292-Sending-Messages)). If it can't fit, it is two messages: say so and draft both.
 7. **Save and lint.** Save to `~/.studio/drafts/YYYY-MM-DD-<platform>-<who>.txt`, with `<who>` as a lowercase, hyphenated slug (`alex-smith`), outside every repository so a draft is never committed: the header, a `---8<---` line, then the message. Each message gets its own file: if that name already holds a different message, the second of a split included, add `-2`, `-3` and so on before `.txt` rather than overwrite it. Run the linter on it and fix what it flags:
    - In a repo that installed Studio: `python3 .studio/source/message_lint.py "<file>" --to <platform>`
    - In the Studio source repo: `python3 studio/message_lint.py "<file>" --to <platform>`

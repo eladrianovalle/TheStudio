@@ -75,12 +75,14 @@ MARKER_DIR = os.path.join(tempfile.gettempdir(), "studio-finish-check-%d" % UID)
 # rather than as "we already fired this turn".
 MARKER_MAX_AGE_SECONDS = 600
 
-# A final message shorter than this is let through without a check. Short
-# finals are mostly status lines ("waiting on the build"), and checking them
-# rarely led to a fix, so the cutoff skips them while keeping nearly every check
-# that did. It was chosen on the same stops it was measured on, so re-run
-# `finish_check_tally.py --min-final-chars` once it has been live a while and
-# see whether the catch rate holds.
+# A final message shorter than this is let through without a check. 600 is a
+# chosen heuristic: short finals tend to be status lines ("waiting on the
+# build"), where a check has less to catch. UNVERIFIED: how many useful checks
+# the cutoff skips has no committed measurement. `finish_check_tally.py
+# --min-final-chars 600` counts only the checks the cutoff keeps; to measure what
+# it skips, compare that with an unfiltered tally over transcripts recorded
+# before the cutoff was enabled. Later transcripts cannot show it, since the
+# short finals in them were never checked.
 SHORT_MESSAGE_CHARS = 600
 
 # The repo's optional replacement for DEFAULT_REASON. Resolved from this file's
