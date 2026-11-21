@@ -3,6 +3,7 @@
 import dataclasses
 import json
 import os
+import re
 import string
 import subprocess
 import sys
@@ -1018,17 +1019,26 @@ def test_forge_runs_the_branch_check_and_no_longer_asks_for_one_by_hand():
     assert "status --porcelain" not in forge
 
 
-def test_forge_step_3_stops_on_exactly_the_branches_the_check_protects():
-    """Step 3's early stop is a prose copy of _PROTECTED_BRANCHES.
+@pytest.mark.parametrize(
+    ("anchor", "end"),
+    [
+        ("- If `--branch` was given and it is ", ", STOP"),
+        ("- Else if the work directory is on ", ", create"),
+    ],
+)
+def test_forge_step_3_names_exactly_the_branches_the_check_protects(anchor, end):
+    """Step 3 has two prose copies of _PROTECTED_BRANCHES.
 
-    It exists so a `--branch main` is refused before the user's checkout is switched.
-    If the code list grows and the prose doesn't, Step 5 still refuses the run, but only
-    after the checkout this stop was written to avoid.
+    The early stop exists so a `--branch main` is refused before the user's checkout is
+    switched; the fallback moves a run off the main branch onto `impl/<unit_id>`. If the
+    code list grows and either bullet doesn't, Step 5 still refuses the run, but only
+    after a checkout that was wasted or a branch that was never switched.
     """
     forge = (STUDIO_ROOT.parent / ".claude" / "commands" / "forge.md").read_text()
-    bullet = forge.split("- If `--branch` was given and it is ", 1)[1].split(", STOP", 1)[0]
 
-    assert set(bullet.replace("`", "").split(" or ")) == set(_PROTECTED_BRANCHES)
+    assert anchor in forge, f"forge.md Step 3 no longer has a bullet starting {anchor!r}"
+    names = forge.split(anchor, 1)[1].split(end, 1)[0]
+    assert set(re.findall(r"`([^`]+)`", names)) == set(_PROTECTED_BRANCHES)
 
 
 # --- detection, and the config file that is read instead of it -------------
