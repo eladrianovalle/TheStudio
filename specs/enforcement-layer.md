@@ -208,14 +208,16 @@ pr_base = "main"
 
 There is no shipped default. A missing file or key means the rule is off. A file that exists and
 cannot be parsed denies the two matched commands and names the file. TOML is parsed with `tomllib`,
-falling back to `tomli`, imported only when the file exists.
+falling back to `tomli`, imported only when the file exists. When neither can be imported, the file
+counts as one that cannot be parsed: the same two commands are denied, naming the file and the
+missing parser.
 
 **Messages.** Each begins `Studio guard (<rule>):` so decisions can be counted per rule from
 transcripts.
 
 | Rule | What the agent reads |
 |---|---|
-| `forge-branch-lock` | A `/forge` loop for `<unit>` has been running in `<tree>` on `<branch>` since `<time>`. Switching branches here would land its commits on the wrong branch. If you are that loop's own agent: restore files with `git restore <path>`, and never switch. Otherwise work in another worktree. The lock lifts at `<time>`; the user can lift it sooner. |
+| `forge-branch-lock` | A `/forge` loop for `<unit>` has been running in `<tree>` on `<branch>` since `<time>`. Switching branches here would land its commits on the wrong branch. If you are that loop's own agent: restore files with `git restore <path>`, and never switch. Otherwise work in another worktree. The lock lifts at `<time>`, or sooner when the user runs this unit's check. |
 | `forge-commit-branch` | `<tree>` is running `/forge` for `<unit>` on `<branch>` but is now on `<current>`. Do not commit here and do not switch it back yourself. Stop and tell the user: something moved this checkout mid-run. |
 | `forge-check-before-push` (deny) | `/forge` built `<unit>` in `<tree>` and nothing has checked it. Run `<check command>` first; it runs this repository's test command itself. |
 | `forge-check-before-push` (ask) | The check on `<unit>` found: `<problems>`. Push anyway? |
@@ -234,6 +236,9 @@ boundary.
 - A guarded command on a line that cannot be tokenized, past that line's first quote character.
 - A push of the loop's branch from a different tree, or after the worktree and its record are gone.
 - `rm -rf` on a worktree.
+- A run artifact whose path also exists in the main checkout with different content. The rule
+  compares paths, not contents, so that file is still deleted. Same-named files are likelier under
+  `reviewer-concerns/` than under the timestamped run directories.
 - Launching and checking a trivial unit to replace a stamped record. That is a forged step, not a
   skipped one, and forged steps are out of scope throughout.
 - A machine where the installer never ran: the entry lives in `settings.local.json`, which is per
@@ -267,23 +272,29 @@ every other launch check has passed and immediately before it prints the JSON. T
 file plus `os.replace`. A check that finds no problems deletes it. A check that finds problems keeps
 it, with `checked_at` and `problems` filled in. A stamped record can be checked again, and passing
 deletes it. The branch lock and `forge-commit-branch` apply only while `checked_at` is `null` and
-`started_at` is less than four hours old (`BRANCH_LOCK_HOURS`). Expiry never frees the push.
+`started_at` is less than four hours old (`BRANCH_LOCK_HOURS`). Expiry never frees the push. Running
+`--check` early is how the user lifts the lock sooner: it either deletes the record or stamps it, and
+both end the lock. The lock messages name the check but do not print its command, so the loop's own
+agents are not handed a way to close their record mid-run.
 
 **What each reader does.**
 
-| Reader | Missing | Expired, never checked | Stamped with problems | Unreadable |
-|---|---|---|---|---|
-| Guard: branch switch, wrong-branch commit | nothing | nothing | nothing | nothing |
-| Guard: push, `gh pr create` of the record's branch | nothing | deny | ask | ask, naming the file |
-| `--check` | exit 2, "nothing to check" | checks | checks again | exit 2, names the file |
-| Launch | writes one | refuses `unchecked-loop` | replaces it | refuses `unreadable-record` |
+| Reader | Missing | Live | Expired, never checked | Stamped with problems | Unreadable |
+|---|---|---|---|---|---|
+| Guard: branch switch, wrong-branch commit | nothing | deny | nothing | nothing | nothing |
+| Guard: push, `gh pr create` of the record's branch | nothing | deny | deny | ask | ask, naming the file |
+| `--check` | exit 2, "nothing to check" | checks | checks | checks again | exit 2, names the file |
+| Launch | writes one | refuses `unchecked-loop` | refuses `unchecked-loop` | replaces it | refuses `unreadable-record` |
 
 ### The launch and the post-loop check
 
 **Launch.** `impl_loop.py --branch <b> --unit <id> [--spec <slug-or-path>] [--work-dir <tree>]`.
 `--branch` now needs a unit id: `--unit`, or a `--spec` whose plan has exactly one unit. Without one
 it exits with a usage error that adds "if `/forge` sent this, the session is running an older copy
-of the command: restart it". On success the JSON gains `launched_at`. `/forge` passes it through
+of the command: restart it". Over a record that was never checked it exits 1 with `unchecked-loop`,
+naming the record's unit, branch and start time and printing the exact `<check command>` for the
+tree, so a crashed loop's user knows what to run before relaunching. Over a record it cannot read it
+exits 1 with `unreadable-record`, naming the file. On success the JSON gains `launched_at`. `/forge` passes it through
 with the other knobs, and `implementation-loop.js` returns `{ delivered: false, reason:
 'not_launched' }` before spawning any agent when its args carry none. The command file and the loop
 script both ship through the manifest, so they cannot fall out of step with `impl_loop.py`.
@@ -433,7 +444,7 @@ It cannot stop someone raising the number. It makes doing so a deliberate, visib
 17. `setup` refuses an unknown role pack or role-override field.
 18. `setup` refuses a persona key in the wrong place.
 19. `setup` never overwrites an existing `implementation_loop.toml`.
-20. Studio's code imports only the standard library.
+20. Studio's code imports only the standard library, plus `tomli` on Python 3.10.
 21. A spec's `status` is one of draft, approved, shipped.
 22. An approved spec with a Verification section has an evidence file.
 23. An approved spec with a Verification section has a `verification_due` date that has not passed.
@@ -498,7 +509,7 @@ They say why; the guard is the step.
 | Guard | Its own bug, a hang, or input it cannot read | The same: every agent `git`/`gh` command in that repository refused, `git status` and `git diff` included, until it is fixed from the user's shell or by re-running update |
 | Guard | The pinned interpreter is uninstalled | Agent git refused in every repository whose entry points at it, until update is re-run in each |
 | Guard | A rule refuses something legitimate | The message naming the rule; the user runs the command themselves. Counted later from transcripts by rule name |
-| Guard | `guard.toml` unparseable | `gh pr merge` and `gh pr create` denied, naming the file |
+| Guard | `guard.toml` unparseable, or no TOML parser importable | `gh pr merge` and `gh pr create` denied, naming the file |
 | Guard | Installer never ran on this machine, or the session started before the entry was written | No guard, silently |
 | Record | Loop crashed | Branch switching refused for up to four hours; pushes of that branch refused until the check runs |
 | Record | Launch succeeded, the loop never ran | The check reports `no-writer-commit` without running the tests; pushes of that branch ask |
@@ -517,7 +528,8 @@ guard in a worktree, never in the main checkout.
 
 ### Dependencies
 
-Python 3.10+ and the standard library only. Claude Code's hook contract: the `PreToolUse` event,
+Python 3.10+ and the standard library only, plus `tomli` on Python 3.10, the same allowance the
+rest of Studio has. Claude Code's hook contract: the `PreToolUse` event,
 the `if` field, `permissionDecision`, `permission_mode` on stdin, and `onFailure` (Claude Code
 2.1.295 and later). `git` on the path. Pull request #249 (`impl_loop.py --branch`) is assumed merged.
 
@@ -661,7 +673,9 @@ the table to installed repositories.
 ### 2. `check_specs_ships` — any repository that installed Studio can check its specs and hears about problems at session start
 
 What gets built: `spec_rules.py` with the moved rule code, its line in `SOURCE_FILES`, the
-`check-specs` subcommand, the brief's third block, and the docs that list subcommands and modules.
+`check-specs` subcommand, the brief's third block, the docs that list subcommands and modules, and
+`ENFORCED` rows 21 to 27 re-pointed at the moved functions' new names in `spec_rules.py`, so the
+ratchet stays green when the code leaves the test file.
 
 **Acceptance criteria:**
 - [ ] `spec_rules.py` is in `SOURCE_FILES` and imports neither pytest nor anything under `tests/`, and `test_spec_verification.py` runs its existing cases against the moved functions with no rule logic left in the test file.
@@ -726,7 +740,7 @@ loop-spec and usage docs.
 
 **Acceptance criteria:**
 - [ ] `impl_loop.py --branch <b> --unit <id>` writes the record, with the eight fields listed under "The loop record", into the tree's git directory and prints `launched_at` with the knobs; `--branch` without a unit id exits non-zero; no other invocation writes a record.
-- [ ] Launching in a tree whose record was never checked exits 1 with `unchecked-loop`; over a record that was checked and kept its problems, the launch replaces it.
+- [ ] Launching in a tree whose record was never checked exits 1 with `unchecked-loop` and prints the exact `--check` command for that tree; over a record that cannot be read it exits 1 with `unreadable-record`, naming the file; over a record that was checked and kept its problems, the launch replaces it.
 - [ ] `--check` exits 0 and removes the record only when the tree is on the recorded branch, a commit whose subject starts with `writer: <unit_id>` lies between the recorded base and `HEAD`, and the recorded test command passes when `--check` runs it.
 - [ ] Each failure exits 1 under its own name (`wrong-branch`, `no-writer-commit`, `tests-failed`) and leaves the record stamped; the test command is not run when either git check fails; `--check` on a stamped record checks again.
 - [ ] `--check` exits 2 without running the tests when there is no record or it cannot be read.
@@ -774,7 +788,7 @@ What gets built: `guard.toml` reading, the two opt-in rules, Studio's own
 - [ ] With no `guard.toml`, `gh pr merge` and `gh pr create --base other` print nothing.
 - [ ] With `ask_before_merge = true`, `gh pr merge` returns `ask` in `default`, `plan`, `acceptEdits` and `auto` and `deny` in every other mode.
 - [ ] With `pr_base = "main"`, `gh pr create` and `gh pr edit` with `--base X`, `--base=X` or `-B X` naming another branch are denied, and the same commands with no base or with `main` print nothing.
-- [ ] The file is read from beside the guard's own script and applies only to a command whose tree belongs to that repository: a worktree with no `.studio/` gets the main checkout's policy, `gh pr create --base develop` run in another repository prints nothing, and a file that exists but cannot be parsed denies both commands and names it.
+- [ ] The file is read from beside the guard's own script and applies only to a command whose tree belongs to that repository: a worktree with no `.studio/` gets the main checkout's policy, `gh pr create --base develop` run in another repository prints nothing, and a file that exists but cannot be parsed, or cannot be read because no TOML parser imports, denies both commands and names it.
 - [ ] Studio's own repository commits `studio/.studio/guard.toml` with both rules on.
 
 **Out of scope:** the merged-pull-request rule; merges made any way other than `gh pr merge`; a
