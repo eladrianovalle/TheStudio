@@ -136,8 +136,7 @@ python .studio/source/impl_loop.py --work-dir "<path>"
 ```
 
 On success this prints the same knobs JSON Step 5 needs, plus a `work_dir` key holding the
-**resolved absolute path**. That resolved path is `<work_dir>` for the rest of this command. Keep
-the JSON — Step 5 reuses it instead of running the command again.
+**resolved absolute path**. That resolved path is `<work_dir>` for the rest of this command.
 
 **If it exits non-zero, STOP. Do not run the loop.** It writes to stderr naming which of four
 reasons it hit, and the path it tried:
@@ -165,15 +164,15 @@ with `git -C "<work_dir>"`. With no `--work-dir`, run them bare (`git rev-parse 
 
 ```bash
 git -C "<work_dir>" rev-parse --abbrev-ref HEAD
-git -C "<work_dir>" status --porcelain
 ```
 
 - If `--branch` was given, check it out in the work directory (create if missing).
 - Else if the work directory is on `main`/`master`, create and switch to `impl/<unit_id>` there.
 - Else use the branch the work directory is already on (it's already a feature branch).
 
-If that working tree is dirty — the `status --porcelain` above printed anything — stop and tell the
-user to commit or stash **in the work directory**; the loop's revert relies on a clean base.
+That branch is `<branch>` for the rest of this command. Don't check by hand that the tree is clean
+or still on it: Step 5's command does, at the last moment before the loop starts, and refuses the
+run if not.
 
 ### Step 4: Echo the plan
 
@@ -220,18 +219,29 @@ path argument is needed. That file is the only thing that says how this repo is 
 key it leaves out is empty, and nothing is detected here:
 
 ```bash
-python .studio/source/impl_loop.py
-# prints knobs JSON, e.g. {"editor_enabled": true, "read_scope": "touched+importers", "output_budget": 400, ...}
+python .studio/source/impl_loop.py --branch "<branch>"
+# prints knobs JSON, e.g. {"editor_enabled": true, "read_scope": "touched+importers", "output_budget": 400, ..., "branch": "<branch>"}
 ```
 
-If `--work-dir` was given you already ran this in Step 3 (with the flag) and it produced the same
-JSON. Reuse that output; don't run it a second time.
+If `--work-dir` was given, pass it here too (`--work-dir "<work_dir>" --branch "<branch>"`), so the
+branch is checked in the work directory. Run this even though Step 3 already printed the knobs: it
+is the check of the tree as it stands now, so it must be the last command before the Workflow call.
 
-**If this command exits non-zero, STOP — do not run the loop.** It means this repository's config
-has no test command: either the file is not there, or its `test_command` is blank. Its message
-already says which, names the file, and gives the exact lines to write; print it as-is and let the
-user fix it (running `/studio-setup` writes the file when there is none). Do not invent a test
-command and carry on: the writer would run it, and the gate would believe whatever came back.
+**If this command exits non-zero, STOP — do not run the loop.** Its message already says what is
+wrong and what to do; print it as-is and let the user fix it. It is one of:
+
+- **No test command.** This repository's config file is not there, or its `test_command` is blank.
+  The message names the file and gives the exact lines to write (running `/studio-setup` writes the
+  file when there is none). Do not invent a test command and carry on: the writer would run it, and
+  the gate would believe whatever came back.
+- **`protected-branch`** — `<branch>` is `main` or `master`. The loop commits as it goes, and a
+  unit's commits never go straight onto the main branch.
+- **`wrong-branch`** — the tree is no longer on `<branch>`. Another session moved the checkout after
+  Step 3, and the writer commits to whatever branch it finds. Do not switch it back yourself and
+  carry on; whoever moved it may still be working there.
+- **`dirty-tree`** — something is uncommitted, and the message lists it. The writer's `git add -A`
+  would sweep it into the unit's commit, and the loop's `git reset --hard` would delete it. A
+  concerns file an earlier unit left behind counts.
 
 **If you resolved criteria in Step 1 and `editor_enabled` is `false`, STOP here — do not run the
 loop.** The editor is the only thing that grades criteria, so this pair asks for a graded run and
