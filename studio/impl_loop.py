@@ -918,7 +918,17 @@ def validate_branch(directory: str | Path, expected_branch: str) -> str:
             "again."
         )
 
-    uncommitted = (_git_output(path, "status", "--porcelain") or "").splitlines()
+    status = _git_output(path, "status", "--porcelain")
+    if status is None:
+        # Git found the branch but can't say what is uncommitted (a corrupt index, a
+        # permissions problem). A tree nobody can vouch for is refused, not assumed clean.
+        raise BranchError(
+            f"branch {BRANCH_DIRTY_TREE}: `git status` failed in {path}, so there is no "
+            "telling whether anything is uncommitted. Run `git status` there, fix what it "
+            "reports, then run /forge again."
+        )
+
+    uncommitted = status.splitlines()
     if uncommitted:
         lines = [
             f"branch {BRANCH_DIRTY_TREE}: {path} has {len(uncommitted)} uncommitted "

@@ -166,7 +166,10 @@ with `git -C "<work_dir>"`. With no `--work-dir`, run them bare (`git rev-parse 
 git -C "<work_dir>" rev-parse --abbrev-ref HEAD
 ```
 
-- If `--branch` was given, check it out in the work directory (create if missing).
+- If `--branch` was given and it is `main` or `master`, STOP before checking anything out: the
+  loop never commits straight to the main branch, and Step 5 would refuse it as
+  `protected-branch` anyway. Tell the user to pick a feature branch.
+- Else if `--branch` was given, check it out in the work directory (create if missing).
 - Else if the work directory is on `main`/`master`, create and switch to `impl/<unit_id>` there.
 - Else use the branch the work directory is already on (it's already a feature branch).
 

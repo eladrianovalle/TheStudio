@@ -923,6 +923,22 @@ def test_validate_branch_accepts_a_tree_whose_only_extra_file_is_ignored(tmp_pat
     assert validate_branch(repo, "impl/some_unit") == "impl/some_unit"
 
 
+def test_validate_branch_refuses_a_tree_whose_status_git_cannot_read(tmp_path):
+    """A failing `git status` is no evidence of a clean tree, so it is refused.
+
+    A corrupt index is a real way to get there: git still names the branch, because
+    that comes from HEAD, but cannot say what is uncommitted.
+    """
+    repo = _repo_on_branch(tmp_path / "repo", "impl/some_unit")
+    (repo / ".git" / "index").write_text("not an index\n")
+
+    with pytest.raises(BranchError) as refused:
+        validate_branch(repo, "impl/some_unit")
+
+    assert BRANCH_DIRTY_TREE in str(refused.value)
+    assert "git status" in str(refused.value)
+
+
 def test_validate_branch_lists_only_the_first_few_of_many_uncommitted_files(tmp_path):
     repo = _repo_on_branch(tmp_path / "repo", "impl/some_unit")
     for number in range(25):
