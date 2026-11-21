@@ -268,6 +268,34 @@ class TestHookCommand:
         assert result.returncode == 0, result.stderr
         assert result.stderr == ""
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="needs a POSIX sh")
+    def test_command_still_runs_the_script_where_studio_is_installed(self, target_dir):
+        """The guard must only skip a missing script, never an installed one.
+
+        A guard that always short-circuits would leave the missing-script test green
+        while the update check silently stopped running everywhere.
+        """
+        import os
+        import subprocess
+
+        source = target_dir / ".studio" / "source"
+        source.mkdir(parents=True)
+        marker = target_dir / "ran.txt"
+        (source / "run_phase.py").write_text(
+            "import pathlib, sys\n"
+            f"pathlib.Path({str(marker)!r}).write_text(' '.join(sys.argv[1:]))\n",
+            encoding="utf-8",
+        )
+
+        result = subprocess.run(
+            ["sh", "-c", _hook_command()],
+            env={**os.environ, "CLAUDE_PROJECT_DIR": str(target_dir)},
+            capture_output=True, text=True,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert marker.read_text(encoding="utf-8") == f"check-updates --target {target_dir}"
+
 
 class TestHookMalformedFields:
     """Non-object hooks / non-list SessionStart are left untouched, no exception."""
