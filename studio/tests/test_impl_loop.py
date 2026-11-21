@@ -32,6 +32,7 @@ from impl_loop import (
     _ALLOWED,
     _ALLOWED_SUMMARY,
     _KNOWN_BAD,
+    _PROTECTED_BRANCHES,
     _cli,
     _detected_line,
     _git_common_dir,
@@ -1015,6 +1016,19 @@ def test_forge_runs_the_branch_check_and_no_longer_asks_for_one_by_hand():
 
     assert 'impl_loop.py --branch "<branch>"' in forge
     assert "status --porcelain" not in forge
+
+
+def test_forge_step_3_stops_on_exactly_the_branches_the_check_protects():
+    """Step 3's early stop is a prose copy of _PROTECTED_BRANCHES.
+
+    It exists so a `--branch main` is refused before the user's checkout is switched.
+    If the code list grows and the prose doesn't, Step 5 still refuses the run, but only
+    after the checkout this stop was written to avoid.
+    """
+    forge = (STUDIO_ROOT.parent / ".claude" / "commands" / "forge.md").read_text()
+    bullet = forge.split("- If `--branch` was given and it is ", 1)[1].split(", STOP", 1)[0]
+
+    assert set(bullet.replace("`", "").split(" or ")) == set(_PROTECTED_BRANCHES)
 
 
 # --- detection, and the config file that is read instead of it -------------
