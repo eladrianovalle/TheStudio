@@ -181,7 +181,7 @@ else `cwd`.
 |---|---|---|---|---|
 | `forge-branch-lock` | everywhere | `git switch`; `git checkout` when git itself would switch | the tree has a live record | deny |
 | `forge-commit-branch` | everywhere | `git commit` | the tree has a live record and is on a different branch | deny |
-| `forge-check-before-push` | everywhere | `git push`, `gh pr create` | the tree has a record, and is on the record's branch or the command names it | never checked: deny. Checked with problems, or unreadable: ask |
+| `forge-check-before-push` | everywhere | `git push`, `gh pr create` | the tree has a record, and is on the record's branch or the command names it | live: deny, without the check command. Expired and never checked: deny. Checked with problems, or unreadable: ask |
 | `worktree-artifacts` | everywhere | `git worktree remove <path>`, forced or not | a file git does not track under `<path>/.studio/output/`, `<path>/studio/output/` or `<path>/reviewer-concerns/` has no file at the same relative path in the main checkout | deny |
 | `ask-before-merge` | opt-in | `gh pr merge` | `ask_before_merge = true`, and the command's tree belongs to the guard's repository | ask |
 | `pr-base` | opt-in | `gh pr create` or `gh pr edit` with `--base X`, `--base=X` or `-B X` | `pr_base` is set, `X` differs, and the command's tree belongs to the guard's repository | deny |
@@ -219,7 +219,8 @@ transcripts.
 |---|---|
 | `forge-branch-lock` | A `/forge` loop for `<unit>` has been running in `<tree>` on `<branch>` since `<time>`. Switching branches here would land its commits on the wrong branch. If you are that loop's own agent: restore files with `git restore <path>`, and never switch. Otherwise work in another worktree. The lock lifts at `<time>`, or sooner when the user runs this unit's check. |
 | `forge-commit-branch` | `<tree>` is running `/forge` for `<unit>` on `<branch>` but is now on `<current>`. Do not commit here and do not switch it back yourself. Stop and tell the user: something moved this checkout mid-run. |
-| `forge-check-before-push` (deny) | `/forge` built `<unit>` in `<tree>` and nothing has checked it. Run `<check command>` first; it runs this repository's test command itself. |
+| `forge-check-before-push` (live) | A `/forge` loop for `<unit>` has been running in `<tree>` on `<branch>` since `<time>` and has not finished. Push after it finishes. |
+| `forge-check-before-push` (expired) | `/forge` built `<unit>` in `<tree>` and nothing has checked it. Run `<check command>` first; it runs this repository's test command itself. |
 | `forge-check-before-push` (ask) | The check on `<unit>` found: `<problems>`. Push anyway? |
 | `worktree-artifacts` | `<path>` holds run artifacts that exist nowhere else and that `git worktree remove` would delete: `<up to five paths>`. Copy them first with `<cp -R line>`, then remove the worktree. |
 | `ask-before-merge` | This repository asks a person to approve every merge. Merge `<arguments>`? |
@@ -274,15 +275,16 @@ it, with `checked_at` and `problems` filled in. A stamped record can be checked 
 deletes it. The branch lock and `forge-commit-branch` apply only while `checked_at` is `null` and
 `started_at` is less than four hours old (`BRANCH_LOCK_HOURS`). Expiry never frees the push. Running
 `--check` early is how the user lifts the lock sooner: it either deletes the record or stamps it, and
-both end the lock. The lock messages name the check but do not print its command, so the loop's own
-agents are not handed a way to close their record mid-run.
+both end the lock. The lock messages name the check but do not print its command, and the push
+denial while the record is live prints neither, so the loop's own agents are not handed a way to
+close their record mid-run. The guard prints the check command only once the record has expired.
 
 **What each reader does.**
 
 | Reader | Missing | Live | Expired, never checked | Stamped with problems | Unreadable |
 |---|---|---|---|---|---|
 | Guard: branch switch, wrong-branch commit | nothing | deny | nothing | nothing | nothing |
-| Guard: push, `gh pr create` of the record's branch | nothing | deny | deny | ask | ask, naming the file |
+| Guard: push, `gh pr create` of the record's branch | nothing | deny, without the check command | deny, printing the check command | ask | ask, naming the file |
 | `--check` | exit 2, "nothing to check" | checks | checks | checks again | exit 2, names the file |
 | Launch | writes one | refuses `unchecked-loop` | refuses `unchecked-loop` | replaces it | refuses `unreadable-record` |
 
@@ -606,7 +608,7 @@ check, at the highest level that works, and write prose last.
 - **Cut by the review:** the `forge-launch-record` rule, the `criteria` and `spec_file` record
   fields, the `history-moved` and `commits-elsewhere` problems, a second `closing_verdict` reader,
   per-subprocess timeouts, the forced-removal condition on `worktree-artifacts`, and the check
-  command in the two lock messages.
+  command in the two lock messages and in the push denial while the record is live.
 
 ## Risks & Open Questions
 
@@ -772,9 +774,9 @@ What gets built: the three record rules in `command_guard.py`, their messages, a
 **Acceptance criteria:**
 - [ ] With a live record, `git switch <x>`, `git checkout <branch>`, `git checkout -b <new>`, `git checkout --detach` and `git checkout -` are denied, while `git checkout <file>`, `git checkout <ref> <file>`, `git checkout -- <path>`, `git checkout .` and `git restore` are not; with an expired or stamped record none is denied.
 - [ ] With a live record and the tree on another branch `git commit` is denied; on the recorded branch it is not.
-- [ ] With a record and the tree on its branch, or the command naming that branch: a never-checked record of any age denies `git push` and `gh pr create` and prints the exact `--check` command; a stamped record returns `ask` in `default`, `plan`, `acceptEdits` and `auto` and `deny` in every other mode; with the tree on another branch and the branch not named, and with no record, nothing is printed.
+- [ ] With a record and the tree on its branch, or the command naming that branch: a never-checked record of any age denies `git push` and `gh pr create`, printing the exact `--check` command only once the record has expired; a stamped record returns `ask` in `default`, `plan`, `acceptEdits` and `auto` and `deny` in every other mode; with the tree on another branch and the branch not named, and with no record, nothing is printed.
 - [ ] With a record that cannot be read, a push asks and names the file, and the two lock rules print nothing.
-- [ ] The two lock messages tell the loop's own agents to restore files with `git restore` and never switch, and do not print the check command.
+- [ ] The two lock messages tell the loop's own agents to restore files with `git restore` and never switch; neither they nor the push denial for a live record print the check command.
 - [ ] The guard tests read a record written by `impl_loop`'s own writer function.
 
 **Out of scope:** telling sessions apart; pushes from another tree; any network call.
