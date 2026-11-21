@@ -219,7 +219,7 @@ transcripts.
 |---|---|
 | `forge-branch-lock` | A `/forge` loop for `<unit>` has been running in `<tree>` on `<branch>` since `<time>`. Switching branches here would land its commits on the wrong branch. If you are that loop's own agent: restore files with `git restore <path>`, and never switch. Otherwise work in another worktree. The lock lifts at `<time>`, or sooner when the user runs this unit's check. |
 | `forge-commit-branch` | `<tree>` is running `/forge` for `<unit>` on `<branch>` but is now on `<current>`. Do not commit here and do not switch it back yourself. Stop and tell the user: something moved this checkout mid-run. |
-| `forge-check-before-push` (live) | A `/forge` loop for `<unit>` has been running in `<tree>` on `<branch>` since `<time>` and has not finished. Push after it finishes. |
+| `forge-check-before-push` (live) | A `/forge` loop for `<unit>` has been running in `<tree>` on `<branch>` since `<time>` and has not finished. The push waits for this unit's check, which the user runs after the loop finishes, or sooner if it has stopped. |
 | `forge-check-before-push` (expired) | `/forge` built `<unit>` in `<tree>` and nothing has checked it. Run `<check command>` first; it runs this repository's test command itself. |
 | `forge-check-before-push` (ask) | The check on `<unit>` found: `<problems>`. Push anyway? |
 | `worktree-artifacts` | `<path>` holds run artifacts that exist nowhere else and that `git worktree remove` would delete: `<up to five paths>`. Copy them first with `<cp -R line>`, then remove the worktree. |
@@ -275,9 +275,11 @@ it, with `checked_at` and `problems` filled in. A stamped record can be checked 
 deletes it. The branch lock and `forge-commit-branch` apply only while `checked_at` is `null` and
 `started_at` is less than four hours old (`BRANCH_LOCK_HOURS`). Expiry never frees the push. Running
 `--check` early is how the user lifts the lock sooner: it either deletes the record or stamps it, and
-both end the lock. The lock messages name the check but do not print its command, and the push
-denial while the record is live prints neither, so the loop's own agents are not handed a way to
-close their record mid-run. The guard prints the check command only once the record has expired.
+both end the lock. The lock messages and the push denial while the record is live name the check
+but do not print its command, so the guard does not hand the loop's own agents a way to close their
+record mid-run. The guard prints the check command only once the record has expired. The launch's
+`unchecked-loop` refusal is the one place that prints it over a live record: a crashed loop's user
+needs it before relaunching, and a loop's own agents have no reason to run the launch.
 
 **What each reader does.**
 
@@ -776,7 +778,7 @@ What gets built: the three record rules in `command_guard.py`, their messages, a
 - [ ] With a live record and the tree on another branch `git commit` is denied; on the recorded branch it is not.
 - [ ] With a record and the tree on its branch, or the command naming that branch: a never-checked record of any age denies `git push` and `gh pr create`, printing the exact `--check` command only once the record has expired; a stamped record returns `ask` in `default`, `plan`, `acceptEdits` and `auto` and `deny` in every other mode; with the tree on another branch and the branch not named, and with no record, nothing is printed.
 - [ ] With a record that cannot be read, a push asks and names the file, and the two lock rules print nothing.
-- [ ] The two lock messages tell the loop's own agents to restore files with `git restore` and never switch; neither they nor the push denial for a live record print the check command.
+- [ ] The two lock messages tell the loop's own agents to restore files with `git restore` and never switch; the push denial for a live record names the unit's check; none of the three prints the check command.
 - [ ] The guard tests read a record written by `impl_loop`'s own writer function.
 
 **Out of scope:** telling sessions apart; pushes from another tree; any network call.
