@@ -8,6 +8,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 
 // A rebuilt function gets no scope from the file it came from, so a helper that calls other
 // top-level helpers (writerPrompt uses unitCriteria and runDir) needs those named as `deps`. Their
@@ -85,7 +86,7 @@ test('concernsDisplayPath stays a bare relative path without a work dir', () => 
 // ---------------------------------------------------------------------------
 const unitCriteria = loadFunction('../implementation-loop.js', 'unitCriteria')
 const writerPrompt = loadFunction('../implementation-loop.js', 'writerPrompt', ['unitCriteria', 'staticCheckCommands', 'runDir', 'gitIn', 'workDirPreamble', 'observeCommand', 'writerObserveLines'])
-const editorPrompt = loadFunction('../implementation-loop.js', 'editorPrompt', ['unitCriteria', 'runDir', 'concernsDir', 'concernsPath', 'gitIn', 'workDirPreamble', 'observeCommand', 'editorObserveLines', 'unitBase'])
+const editorPrompt = loadFunction('../implementation-loop.js', 'editorPrompt', ['editorMandate', 'unitCriteria', 'runDir', 'concernsDir', 'concernsPath', 'gitIn', 'workDirPreamble', 'observeCommand', 'editorObserveLines', 'unitBase'])
 
 // A unit with no acceptance_criteria key at all — the shape every run had before this feature.
 const UNIT = {
@@ -642,4 +643,82 @@ test('the observe lines pin every git command they name to the work dir', () => 
     const bare = [...body.matchAll(/`git (?!-C)/g)].map((m) => body.slice(m.index, m.index + 44))
     assert.deepEqual(bare, [], `unpinned git command found in a prompt: ${JSON.stringify(bare)}`)
   }
+})
+
+// ---------------------------------------------------------------------------
+// implementation-loop.js — the editor's mandate is printed into its prompt, not fetched from a file,
+// and the editor always runs on Opus. The printed copy must match the debate contrarian's mandate
+// in studio/scopes.py, up to the lines about FINDING blocks, character for character.
+// ---------------------------------------------------------------------------
+const editorMandate = loadFunction('../implementation-loop.js', 'editorMandate')
+
+// The Python value itself, read by importing scopes.py rather than parsing it. PYTHON lets the pytest
+// suite pass its own interpreter, so this compares against the same scopes.py the suite imports.
+function contrarianMandateBeforeFindingBlocks() {
+  const script = [
+    'import json, sys',
+    "sys.path.insert(0, 'studio')",
+    'from scopes import CONTRARIAN_MANDATE',
+    'lines = []',
+    'for line in CONTRARIAN_MANDATE:',
+    "    if 'FINDING' in line:",
+    '        break',
+    '    lines.append(line)',
+    'print(json.dumps(lines))',
+  ].join('\n')
+  const repoRoot = new URL('../../../', import.meta.url)
+  const output = execFileSync(process.env.PYTHON || 'python3', ['-c', script], { cwd: repoRoot, encoding: 'utf8' })
+  return JSON.parse(output)
+}
+const SCOPES_MANDATE_LINES = contrarianMandateBeforeFindingBlocks()
+
+test('editorMandate is the contrarian mandate up to its FINDING lines, character for character', () => {
+  // Guards the cut itself: an empty or whole-mandate slice would make the comparison meaningless.
+  assert.equal(SCOPES_MANDATE_LINES.length, 18)
+  assert.deepEqual(editorMandate().split('\n'), SCOPES_MANDATE_LINES)
+})
+
+test('the editor prompt prints every mandate line, in order, right under the line saying to adopt it', () => {
+  for (const unit of [UNIT, { ...UNIT, acceptance_criteria: CRITERIA }, { ...UNIT, work_dir: WORK_DIR }, { ...UNIT, observe_command: OBSERVE }]) {
+    const lines = editorPrompt(unit, WRITER).split('\n')
+    const adoptAt = lines.findIndex((line) => line.startsWith('Adopt the contrarian mandate below, applied to code:'))
+    assert.ok(adoptAt >= 0, 'the editor prompt must say to adopt the mandate')
+    const mandateStart = adoptAt + 3  // the sentence wraps onto a second line, then a blank line
+    assert.equal(lines[mandateStart - 1], '')
+    assert.deepEqual(lines.slice(mandateStart, mandateStart + SCOPES_MANDATE_LINES.length), SCOPES_MANDATE_LINES)
+  }
+})
+
+// The loop script's source, for the checks that cannot go through a rebuilt function: the inline
+// prompts and the agent() call lines. The orchestration itself cannot be run here.
+const LOOP_SOURCE = readFileSync(new URL('../implementation-loop.js', import.meta.url), 'utf8')
+
+test('no prompt in the loop script names scopes.py or sends the editor to a file for its mandate', () => {
+  for (const unit of [UNIT, { ...UNIT, acceptance_criteria: CRITERIA }, { ...UNIT, work_dir: WORK_DIR }, { ...UNIT, observe_command: OBSERVE }]) {
+    for (const prompt of [writerPrompt(unit), editorPrompt(unit, WRITER)]) {
+      assert.ok(!prompt.includes('scopes.py'), 'a rendered prompt names scopes.py')
+      assert.ok(!prompt.includes('CONTRARIAN_MANDATE'), 'a rendered prompt points at CONTRARIAN_MANDATE')
+    }
+  }
+  // The inline prompts (the revert and commit fallbacks) are not functions, so read the source: the
+  // only lines allowed to name scopes.py are comments and the fallback unit's own task text.
+  const defaultUnitStart = LOOP_SOURCE.indexOf('const DEFAULT_UNIT = {')
+  const defaultUnitEnd = LOOP_SOURCE.indexOf('\n}\n', defaultUnitStart)
+  const outsideDefaultUnit = LOOP_SOURCE.slice(0, defaultUnitStart) + LOOP_SOURCE.slice(defaultUnitEnd)
+  const naming = outsideDefaultUnit.split('\n').filter((line) => line.includes('scopes.py') && !line.trim().startsWith('//'))
+  assert.deepEqual(naming, [])
+})
+
+const agentCallLine = (promptFunction) => {
+  const matches = LOOP_SOURCE.split('\n').filter((line) => line.includes(`await agent(${promptFunction}(`))
+  assert.equal(matches.length, 1, `expected exactly one agent() call for ${promptFunction}`)
+  return matches[0]
+}
+
+test('the editor runs on EDITOR_MODEL, a one-line opus constant, and the writer keeps the unit model', () => {
+  assert.match(LOOP_SOURCE, /^const EDITOR_MODEL = 'opus'$/m)
+  const editorCall = agentCallLine('editorPrompt')
+  assert.match(editorCall, /[{,] model: EDITOR_MODEL \}\)$/)
+  const writerCall = agentCallLine('writerPrompt')
+  assert.match(writerCall, /[{,] model: unit\.model \}\)$/)
 })

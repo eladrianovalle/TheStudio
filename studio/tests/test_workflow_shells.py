@@ -13,9 +13,11 @@ These guards catch the schema-shape class *statically* (no live API needed), pin
 the reviewerConcerns wiring, and run the JS unit tests (``node:test``) that
 exercise the shells' pure helpers against their real source.
 """
+import os
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -556,10 +558,13 @@ def test_js_shell_unit_tests():
     # directory as a module rather than scan it.
     test_files = sorted((_WORKFLOW_DIR / "tests").glob("*.test.mjs"))
     assert test_files, "expected at least one workflow node:test file"
+    # The editor-mandate test imports scopes.py; hand it this interpreter so
+    # it reads the same CONTRARIAN_MANDATE this suite does.
     result = subprocess.run(
         ["node", "--test", *(str(p) for p in test_files)],
         cwd=_REPO_ROOT,
         capture_output=True,
         text=True,
+        env={**os.environ, "PYTHON": sys.executable},
     )
     assert result.returncode == 0, result.stdout + result.stderr
