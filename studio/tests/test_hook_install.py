@@ -236,7 +236,7 @@ class TestHookCommand:
     def test_command_paths_are_absolute_and_quoted(self):
         cmd = _hook_command()
         # Interpreter is absolute AND quoted (a space in the path must not split it).
-        assert cmd.startswith(f'"{sys.executable}"')
+        assert f' "{sys.executable}" ' in cmd
         # Script path is anchored to the project dir, not cwd-relative: Claude Code
         # runs hooks from the session's working dir, which may be a subdirectory.
         assert '"$CLAUDE_PROJECT_DIR/.studio/source/run_phase.py"' in cmd
@@ -244,6 +244,57 @@ class TestHookCommand:
         assert '".studio/source/run_phase.py"' not in cmd
         assert "check-updates" in cmd
         assert '--target "$CLAUDE_PROJECT_DIR"' in cmd
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="needs a POSIX sh")
+    def test_command_exits_0_where_studio_is_not_installed(self, target_dir):
+        """A session can start somewhere that has the hook and no `.studio/` beside it.
+
+        A git worktree is the usual case: `.studio/` is often gitignored, so a new
+        worktree has none, while the hook still loads from the main checkout's
+        settings. Without the guard Python exits 2 ("can't open file") and every
+        session there opens with a hook error.
+        """
+        import os
+        import subprocess
+
+        assert not (target_dir / ".studio").exists()
+
+        result = subprocess.run(
+            ["sh", "-c", _hook_command()],
+            env={**os.environ, "CLAUDE_PROJECT_DIR": str(target_dir)},
+            capture_output=True, text=True,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert result.stderr == ""
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="needs a POSIX sh")
+    def test_command_still_runs_the_script_where_studio_is_installed(self, target_dir):
+        """The guard must only skip a missing script, never an installed one.
+
+        A guard that always short-circuits would leave the missing-script test green
+        while the update check silently stopped running everywhere.
+        """
+        import os
+        import subprocess
+
+        source = target_dir / ".studio" / "source"
+        source.mkdir(parents=True)
+        marker = target_dir / "ran.txt"
+        (source / "run_phase.py").write_text(
+            "import pathlib, sys\n"
+            f"pathlib.Path({str(marker)!r}).write_text(' '.join(sys.argv[1:]))\n",
+            encoding="utf-8",
+        )
+
+        result = subprocess.run(
+            ["sh", "-c", _hook_command()],
+            env={**os.environ, "CLAUDE_PROJECT_DIR": str(target_dir)},
+            capture_output=True, text=True,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert marker.read_text(encoding="utf-8") == f"check-updates --target {target_dir}"
 
 
 class TestHookMalformedFields:

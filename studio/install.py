@@ -653,9 +653,15 @@ def _hook_command() -> str:
     root. A cwd-relative script path would make Python exit 2 ("can't open file")
     and surface a hook error at session start, breaking the always-exit-0 contract.
     Both paths are quoted so a space in either doesn't split the command.
+
+    The leading ``[ ! -f ... ] ||`` makes a missing script a clean exit 0. A session
+    can start where the hook loads and ``.studio/`` is absent: a new git worktree of a
+    repo that gitignores ``.studio/`` is the usual case. Without the guard Python
+    exits 2 ("can't open file") and every session there opens with a hook error.
     """
+    script = '"$CLAUDE_PROJECT_DIR/.studio/source/run_phase.py"'
     return (
-        f'"{sys.executable}" "$CLAUDE_PROJECT_DIR/.studio/source/run_phase.py" '
+        f'[ ! -f {script} ] || "{sys.executable}" {script} '
         f'check-updates --target "$CLAUDE_PROJECT_DIR"'
     )
 
