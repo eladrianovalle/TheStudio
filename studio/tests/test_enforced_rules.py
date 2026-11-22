@@ -734,29 +734,34 @@ def test_a_results_file_that_exists_reports_nothing(tmp_path):
     assert missing_results_problems([row], tmp_path) == []
 
 
-def test_more_unmeasured_judges_than_the_count_is_reported(tmp_path):
-    row = _sound_judged_row(tmp_path)
+# Counting reads only a row's results field, so these rows need no files on disk.
+_UNMEASURED_ROW = JudgedRule(
+    rule="The work is judged.",
+    stated_in="docs/rules.md",
+    judge="prompts/judge.py::judge_prompt",
+)
 
-    problem = unmeasured_count_problem([row, row._replace(rule="Another rule.")], expected_count=1)
+
+def test_more_unmeasured_judges_than_the_count_is_reported():
+    rows = [_UNMEASURED_ROW, _UNMEASURED_ROW._replace(rule="Another rule.")]
+
+    problem = unmeasured_count_problem(rows, expected_count=1)
 
     assert problem is not None
     assert "JUDGED has 2 rows with no results but JUDGED_WITHOUT_MEASUREMENT_COUNT is 1" in problem
 
 
-def test_fewer_unmeasured_judges_than_the_count_is_reported(tmp_path):
-    row = _sound_judged_row(tmp_path)
-
-    problem = unmeasured_count_problem([row], expected_count=2)
+def test_fewer_unmeasured_judges_than_the_count_is_reported():
+    problem = unmeasured_count_problem([_UNMEASURED_ROW], expected_count=2)
 
     assert problem is not None
     assert "lower the count to 1" in problem
 
 
-def test_a_measured_judge_is_not_counted_as_unmeasured(tmp_path):
-    unmeasured_row = _sound_judged_row(tmp_path)
-    measured_row = unmeasured_row._replace(rule="A measured rule.", results="results/judge.md")
+def test_a_measured_judge_is_not_counted_as_unmeasured():
+    measured_row = _UNMEASURED_ROW._replace(rule="A measured rule.", results="results/judge.md")
 
-    assert unmeasured_count_problem([unmeasured_row, measured_row], expected_count=1) is None
+    assert unmeasured_count_problem([_UNMEASURED_ROW, measured_row], expected_count=1) is None
 
 
 def test_one_sentence_in_two_lists_is_reported():
