@@ -171,17 +171,23 @@ def parse_evidence(text: str) -> Evidence:
         plain = line.replace("**", "").replace("__", "").rstrip()
         if not _VERDICT_LABEL.match(plain):
             continue
-        # An explanation can intervene between two declarations. Start fresh at each
-        # sentence, but skip examples such as "For example, inconclusive." as a whole.
+        # Only authored declarations count. A sentence introducing an example can
+        # mention any verdict. Inside a declaration, ordinary qualifications such
+        # as "on the pilot" do not end the search for a later verdict.
         for sentence in re.split(r"(?<=[.!?])\s+(?:(?:or|and|but)\s+)?", plain, flags=re.I):
+            if not _VERDICT_LABEL.match(sentence):
+                continue
+            # An inline example can quote a verdict. A semicolon starts an
+            # independent statement, so a declaration after it still counts.
+            sentence = re.sub(r"\b(?:for (?:example|instance)\b|examples?\s*:|e\.g\.)[^;]*",
+                              "", sentence, flags=re.I)
             for clause in re.split(
                 r"(?:[,:;]\s+|\s*[-–—]\s+)(?:(?:or|and|but)\s+)?|\s+or\s+",
                 sentence, flags=re.I,
             ):
                 declaration = _VERDICT_LABEL.match(clause)
-                if not declaration:
-                    break
-                declarations.add(Evidence(declaration.group(1).lower()))
+                if declaration:
+                    declarations.add(Evidence(declaration.group(1).lower()))
     return declarations.pop() if len(declarations) == 1 else Evidence.UNCLEAR
 
 
