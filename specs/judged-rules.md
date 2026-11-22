@@ -228,11 +228,11 @@ same pull request. The defect case is the tree at the writer commit. Its clean t
 
 Both cases of a pair carry identical criteria, the same test command and the same probe, so the
 probe is shown to fail on the defect and pass once it is fixed, as a plant's is. If a later commit
-narrowed a criterion, that change goes into both trees as part of their `patch`. On `origin/main`
-there are about 65 candidate fix commits behind 28 units. A person sorts them before the case set is
-built and the sort is recorded as a table in the pull request that adds the cases. Expect mostly
-plants: by the review's count about 10 of those units have checkbox criteria in a spec, and 7 of
-their fixes apply cleanly to the writer's tree.
+narrowed a criterion, that change goes into both trees as part of their `patch`. A person sorts the
+candidate fix commits before the case set is built, and the sort is recorded as a table in the pull
+request that adds the cases. Expect mostly plants: most candidates turn out not to be a defect in
+the unit that precedes them, and a unit yields a pair only when it also has checkbox criteria and a
+fix that touches a test.
 
 **Plants.** A plant is valid when the build confirms all of these:
 

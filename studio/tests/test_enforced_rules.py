@@ -15,14 +15,24 @@ the prose:
   must equal ``NOT_YET_ENFORCED_COUNT``, a number that only goes down: adding a rule here fails
   until someone raises the number, a one-line edit a reviewer sees going the wrong way, and
   moving a rule into ``ENFORCED`` fails until the number comes down.
+- ``JUDGED`` lists judgment rules, the ones where two careful people could disagree about
+  whether a piece of work followed them, that a separate agent checks at a step the worker
+  cannot skip. Each row names the rule, where it is stated, the prompt that carries it to that
+  agent (the judge) and the tracked file holding the judge's measured results, or None while
+  nobody has measured it. The suite fails when a cited judge file is gone or no longer holds the
+  name the row cites, and when a named results file does not exist. The number of rows with no
+  results must equal ``JUDGED_WITHOUT_MEASUREMENT_COUNT``, which only goes down: adding a judge
+  nobody has measured fails until someone raises the number where a reviewer sees it.
 
-Judgment rules, the ones where two careful people could disagree about whether a piece of work
-followed them, are in neither list. ``specs/judged-rules.md`` is the follow-up that covers them.
+A rule sentence sits in one list at most. Only a rule with a real judge is in ``JUDGED``. The
+judgment rules that only a person looking at the evidence can decide are in no list here; they
+stay in Appendix A of ``specs/judged-rules.md``.
 
-What this does not check: that a proving test asserts the right thing. It checks that the test
-is there under the name the row cites.
+What this does not check: that a proving test asserts the right thing, or that a judge judges
+well. It checks that the test or the prompt is there under the name the row cites.
 
-Built to ``specs/enforcement-layer.md``, "The enforced-rules table".
+Built to ``specs/enforcement-layer.md``, "The enforced-rules table", and
+``specs/judged-rules.md``, "The sorting pass".
 """
 from __future__ import annotations
 
@@ -264,9 +274,106 @@ NOT_YET_ENFORCED: list[str] = [
     "No worktree removal deletes run artifacts that exist nowhere else.",
     "An agent asks before merging.",
     "Pull requests target the main branch.",
+    # The 32 entries from the sort in specs/judged-rules.md, Appendix A, in its order.
+    "`/forge` does not build against a spec that is not approved without the user's go-ahead on record.",
+    "The static-check commands `/forge` passes have their paths filled in by code, and a command with no paths is dropped.",
+    "`/forge` and `/spec` print their plan from code, and `--plan` starts nothing.",
+    "The loop script `/forge` launches is the work tree's own copy or a byte-identical one.",
+    "The grades in a `/forge` report are printed by code from the loop's return.",
+    "A spec's path is resolved by code, and an existing spec is revised in place.",
+    "A spec is not written from a debate that ended REJECTED without the user's go-ahead on record.",
+    "A spec has every required section, including the plain-language one and a diagram.",
+    "A spec that is not shipped has empty `shipped_*` fields.",
+    "A spec becomes approved only in a commit that changes nothing else, after its pull request merged.",
+    "The pass criterion in an evidence file is the spec's own sentence.",
+    "An evidence file is tracked by git, not ignored.",
+    "A `/spec` run's debate is finalized before its spec is committed.",
+    "A debate's agents run in the order and with the inputs code sets: one agent per stance, the contrarian reading only the advocate's file, a briefing before each.",
+    "A debate does not start its first agent before its pre-flight questions have answers on record.",
+    "An approved run that produces a deliverable has an `implementation.md` before it is finalized.",
+    "A stance file over its scope's word cap is refused.",
+    "A studio run has a current `S2-brief.md` before each third role is briefed.",
+    "A `/message-draft` draft is saved outside the repository under a new name and handed over by code.",
+    "`/studio-update` and `/studio-setup` stop and say what is next themselves: up to date, restart needed, not installed, or status only.",
+    "`/handoff` picks its mode and its directory in code and prints the resume command.",
+    "A handoff note's branch, commit and pull-request state match git and GitHub when it is written.",
+    "`/smoke` takes its profile from config in code, names it, reports an ambiguous stack, and stops when the build fails.",
+    "`/smoke` hands over only after its health check answers.",
+    "`/detest` and `/unstale` run the suite before and after their fixes themselves.",
+    "The audit agents in `/detest`, `/unstale` and `/offload` run without edit tools.",
+    "A `/detest` run changes only test files, adds no dependency, and leaves no mutation behind.",
+    "`/unstale` takes its profile from config in code and names it.",
+    "An agent asks before closing an issue or deleting a tracking file.",
+    "An `/unstale` run creates no new document and only adds to the changelog.",
+    "The counts the docs state match the code.",
+    "An approved spec is a tracked file under the specs directory.",
 ]
 
-NOT_YET_ENFORCED_COUNT = 20  # this number only goes down
+# Rose once, on purpose, from 20 to 52 when specs/judged-rules.md sorted the rules an audit found
+# unchecked. This number only goes down from here.
+NOT_YET_ENFORCED_COUNT = 52
+
+
+class JudgedRule(NamedTuple):
+    rule: str
+    stated_in: str
+    judge: str
+    results: str | None = None
+
+
+JUDGED: list[JudgedRule] = [
+    # The /forge editor's prompt asks it to grade each criterion and to set mvi_verdict only when
+    # the unit is usable and every criterion passes. It also prints the contrarian mandate, whose
+    # "Default to deletion" and "Cut concepts, not clarity" lines carry the next two rules.
+    JudgedRule(
+        rule="A unit passes only when every acceptance criterion of its spec holds in the code.",
+        stated_in=".claude/commands/forge.md",
+        judge=".claude/workflows/implementation-loop.js::editorPrompt",
+    ),
+    JudgedRule(
+        rule="Every unit ends in something usable.",
+        stated_in="CLAUDE.md",
+        judge=".claude/workflows/implementation-loop.js::editorPrompt",
+    ),
+    JudgedRule(
+        rule="No unrequested features, abstractions or config.",
+        stated_in="CLAUDE.md",
+        judge=".claude/workflows/implementation-loop.js::editorPrompt",
+    ),
+    JudgedRule(
+        rule="Code is written for humans.",
+        stated_in="CLAUDE.md",
+        judge=".claude/workflows/implementation-loop.js::editorPrompt",
+    ),
+    # The debate contrarian. A scoped run, which is what /spec runs, builds its prompt in
+    # generate_scope_prompt: it tells the contrarian to flag what the advocate assumed but is
+    # unsettled, asks every depth deliverable to end in a testable condition, and treats
+    # decisions.md as hard constraints. The quote-first rule is in CONTRARIAN_MANDATE, which that
+    # prompt includes; the finding verifier checks the same rule afterwards, and this field holds
+    # one judge, so it names the contrarian's.
+    JudgedRule(
+        rule="Pre-flight surfaces what is unsettled; an unknown is never papered over.",
+        stated_in=".claude/commands/spec.md",
+        judge="studio/scopes.py::generate_scope_prompt",
+    ),
+    JudgedRule(
+        rule="Criteria are checkable from code.",
+        stated_in=".claude/commands/spec.md",
+        judge="studio/scopes.py::generate_scope_prompt",
+    ),
+    JudgedRule(
+        rule="An index summary is not evidence; quote the file.",
+        stated_in=".claude/commands/spec.md",
+        judge="studio/scopes.py::CONTRARIAN_MANDATE",
+    ),
+    JudgedRule(
+        rule="Settled decisions are hard constraints.",
+        stated_in=".claude/commands/run-phase.md",
+        judge="studio/scopes.py::generate_scope_prompt",
+    ),
+]
+
+JUDGED_WITHOUT_MEASUREMENT_COUNT = 8  # this number only goes down
 
 
 # ---------------------------------------------------------------------------
@@ -341,6 +448,63 @@ def count_problem(entries: list[str], expected_count: int) -> str | None:
     return None
 
 
+def judge_citation_problems(rows: list[JudgedRule], root: Path) -> list[str]:
+    """Every judged row whose stated_in file is gone, or whose judge is not where it says."""
+    problems: list[str] = []
+    for row in rows:
+        if not (root / row.stated_in).is_file():
+            problems.append(f"{row.rule!r}: stated_in file {row.stated_in!r} does not exist.")
+        problem = _citation_problem(row.rule, "judge", row.judge, root)
+        if problem:
+            problems.append(problem)
+    return problems
+
+
+def missing_results_problems(rows: list[JudgedRule], root: Path) -> list[str]:
+    """Every judged row that names a results file nobody can find."""
+    problems: list[str] = []
+    for row in rows:
+        if row.results is None:
+            continue
+        if not (root / row.results).is_file():
+            problems.append(f"{row.rule!r}: results file {row.results!r} does not exist.")
+    return problems
+
+
+def unmeasured_count_problem(rows: list[JudgedRule], expected_count: int) -> str | None:
+    """Why the number of judged rows with no results differs from the number beside it, or None."""
+    unmeasured_count = sum(1 for row in rows if row.results is None)
+    if unmeasured_count > expected_count:
+        return (
+            f"JUDGED has {unmeasured_count} rows with no results but "
+            f"JUDGED_WITHOUT_MEASUREMENT_COUNT is {expected_count}. A judge nobody has measured "
+            f"was added: measure it and name its results file, or raise the count on purpose "
+            f"where a reviewer sees it."
+        )
+    if unmeasured_count < expected_count:
+        return (
+            f"JUDGED has {unmeasured_count} rows with no results but "
+            f"JUDGED_WITHOUT_MEASUREMENT_COUNT is {expected_count}. A judge was measured or "
+            f"left the list: lower the count to {unmeasured_count}."
+        )
+    return None
+
+
+def rules_in_more_than_one_list(lists: dict[str, list[str]]) -> list[str]:
+    """Every rule sentence that appears in more than one of the named lists."""
+    list_names_by_rule: dict[str, list[str]] = {}
+    for list_name, rules in lists.items():
+        for rule in rules:
+            names = list_names_by_rule.setdefault(rule, [])
+            if list_name not in names:
+                names.append(list_name)
+    return [
+        f"{rule!r} is in {' and '.join(list_names)}. A rule belongs to one list."
+        for rule, list_names in list_names_by_rule.items()
+        if len(list_names) > 1
+    ]
+
+
 # ---------------------------------------------------------------------------
 # The real table.
 # ---------------------------------------------------------------------------
@@ -359,6 +523,32 @@ def test_no_retired_prose_is_left_in_the_file_that_states_its_rule():
 def test_the_not_yet_enforced_list_is_exactly_as_long_as_its_count():
     problem = count_problem(NOT_YET_ENFORCED, NOT_YET_ENFORCED_COUNT)
     assert problem is None, problem
+
+
+def test_every_judged_row_cites_a_judge_that_is_still_there():
+    problems = judge_citation_problems(JUDGED, REPO_ROOT)
+    assert not problems, "\n".join(problems)
+
+
+def test_every_results_file_a_judged_row_names_exists():
+    problems = missing_results_problems(JUDGED, REPO_ROOT)
+    assert not problems, "\n".join(problems)
+
+
+def test_the_unmeasured_judges_are_exactly_as_many_as_their_count():
+    problem = unmeasured_count_problem(JUDGED, JUDGED_WITHOUT_MEASUREMENT_COUNT)
+    assert problem is None, problem
+
+
+def test_no_rule_sentence_is_in_more_than_one_list():
+    problems = rules_in_more_than_one_list(
+        {
+            "ENFORCED": [row.rule for row in ENFORCED],
+            "NOT_YET_ENFORCED": NOT_YET_ENFORCED,
+            "JUDGED": [row.rule for row in JUDGED],
+        }
+    )
+    assert not problems, "\n".join(problems)
 
 
 # ---------------------------------------------------------------------------
@@ -481,3 +671,118 @@ def test_a_list_shorter_than_its_count_is_reported():
 
 def test_a_list_exactly_as_long_as_its_count_reports_nothing():
     assert count_problem(["one rule", "another rule"], expected_count=2) is None
+
+
+def _sound_judged_row(root: Path) -> JudgedRule:
+    """A judged row whose stated_in and judge files exist and hold what the row cites."""
+    _write(root, "docs/rules.md", "The judgment rule, stated in prose.\n")
+    _write(root, "prompts/judge.py", "def judge_prompt():\n    return 'Judge the work.'\n")
+    return JudgedRule(
+        rule="The work is judged.",
+        stated_in="docs/rules.md",
+        judge="prompts/judge.py::judge_prompt",
+    )
+
+
+def test_a_sound_judged_row_reports_nothing(tmp_path):
+    row = _sound_judged_row(tmp_path)
+
+    assert judge_citation_problems([row], tmp_path) == []
+    assert missing_results_problems([row], tmp_path) == []
+
+
+def test_a_judge_file_that_is_gone_is_reported(tmp_path):
+    row = _sound_judged_row(tmp_path)
+    (tmp_path / "prompts/judge.py").unlink()
+
+    problems = judge_citation_problems([row], tmp_path)
+
+    assert problems == ["'The work is judged.': judge file prompts/judge.py does not exist."]
+
+
+def test_a_judge_name_the_file_no_longer_contains_is_reported(tmp_path):
+    row = _sound_judged_row(tmp_path)
+    _write(tmp_path, "prompts/judge.py", "def renamed_prompt():\n    return 'Judge the work.'\n")
+
+    problems = judge_citation_problems([row], tmp_path)
+
+    assert problems == [
+        "'The work is judged.': judge file prompts/judge.py no longer contains judge_prompt."
+    ]
+
+
+def test_a_judged_stated_in_file_that_is_gone_is_reported(tmp_path):
+    row = _sound_judged_row(tmp_path)._replace(stated_in="docs/deleted.md")
+
+    problems = judge_citation_problems([row], tmp_path)
+
+    assert problems == ["'The work is judged.': stated_in file 'docs/deleted.md' does not exist."]
+
+
+def test_a_results_file_that_does_not_exist_is_reported(tmp_path):
+    row = _sound_judged_row(tmp_path)._replace(results="results/judge.md")
+
+    problems = missing_results_problems([row], tmp_path)
+
+    assert problems == ["'The work is judged.': results file 'results/judge.md' does not exist."]
+
+
+def test_a_results_file_that_exists_reports_nothing(tmp_path):
+    row = _sound_judged_row(tmp_path)._replace(results="results/judge.md")
+    _write(tmp_path, "results/judge.md", "Measured.\n")
+
+    assert missing_results_problems([row], tmp_path) == []
+
+
+# Counting reads only a row's results field, so these rows need no files on disk.
+_UNMEASURED_ROW = JudgedRule(
+    rule="The work is judged.",
+    stated_in="docs/rules.md",
+    judge="prompts/judge.py::judge_prompt",
+)
+
+
+def test_more_unmeasured_judges_than_the_count_is_reported():
+    rows = [_UNMEASURED_ROW, _UNMEASURED_ROW._replace(rule="Another rule.")]
+
+    problem = unmeasured_count_problem(rows, expected_count=1)
+
+    assert problem is not None
+    assert "JUDGED has 2 rows with no results but JUDGED_WITHOUT_MEASUREMENT_COUNT is 1" in problem
+
+
+def test_fewer_unmeasured_judges_than_the_count_is_reported():
+    problem = unmeasured_count_problem([_UNMEASURED_ROW], expected_count=2)
+
+    assert problem is not None
+    assert "lower the count to 1" in problem
+
+
+def test_a_measured_judge_is_not_counted_as_unmeasured():
+    measured_row = _UNMEASURED_ROW._replace(rule="A measured rule.", results="results/judge.md")
+
+    assert unmeasured_count_problem([_UNMEASURED_ROW, measured_row], expected_count=1) is None
+
+
+def test_one_sentence_in_two_lists_is_reported():
+    problems = rules_in_more_than_one_list(
+        {
+            "ENFORCED": ["Bad input is refused."],
+            "NOT_YET_ENFORCED": ["Something nothing refuses yet."],
+            "JUDGED": ["Bad input is refused."],
+        }
+    )
+
+    assert problems == ["'Bad input is refused.' is in ENFORCED and JUDGED. A rule belongs to one list."]
+
+
+def test_lists_that_share_no_sentence_report_nothing():
+    problems = rules_in_more_than_one_list(
+        {
+            "ENFORCED": ["Bad input is refused."],
+            "NOT_YET_ENFORCED": ["Something nothing refuses yet."],
+            "JUDGED": ["The work is judged."],
+        }
+    )
+
+    assert problems == []
