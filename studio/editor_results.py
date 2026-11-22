@@ -66,7 +66,10 @@ def cases_fingerprint(cases, patches):
 
 def fingerprints(cases, patches, knobs, script=None):
     fixture = read(WORKFLOWS / "tests/fixtures/prompts-no-work-dir.json")
-    unit = {**fixture["unit"], **knobs, "acceptance_criteria": ["The profile is visible."]}
+    # Every benchmark editor receives checkout instructions. A fixed path renders
+    # those instructions and keeps the fingerprint reproducible across machines.
+    unit = {**fixture["unit"], **knobs, "work_dir": "/studio/checkouts/reference",
+            "acceptance_criteria": ["The profile is visible."]}
     rendered = node("render", [{"unit": unit, "writer": fixture["writer"]}], script)
     encoded = json.dumps(rendered, sort_keys=True, ensure_ascii=False).encode()
     return {"prompt_fingerprint": hashlib.sha256(encoded).hexdigest(),

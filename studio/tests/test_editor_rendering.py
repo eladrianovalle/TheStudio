@@ -33,6 +33,7 @@ def test_fingerprint_tracks_behavior_and_gate_source(tmp_path):
     assert fingerprint("// A comment outside the gate.\n" + source) == expected
     for old, new in [
         ("You are the EDITOR", "You are the REVIEWER"), ("Default to deletion", "Prefer deletion"),
+        ("cd there before you do anything else, and stay there.", "run commands from wherever your shell started."),
         ("const EDITOR_HANDOFF = {", "const EDITOR_HANDOFF = { description: 'Edited schema',"),
         ("const EDITOR_MODEL = 'opus'", "const EDITOR_MODEL = 'different'"),
         ("function unconfirmedCriteria(criteria, verdicts) {", "function unconfirmedCriteria(criteria, verdicts) { // revised"),
