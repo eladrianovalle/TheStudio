@@ -70,10 +70,6 @@ def _prepare_studio_run(studio_root):
     return run_id, run_dir
 
 
-def _finalize_studio_run(run_id):
-    run_phase.finalize_run(make_finalize_args(phase="studio", run_id=run_id))
-
-
 def test_finalize_refuses_a_studio_run_with_no_integrator_file(studio_root):
     run_id, run_dir = _prepare_studio_run(studio_root)
     # One role completed both stances, so the missing integrator.md is the only gap.
@@ -82,7 +78,7 @@ def test_finalize_refuses_a_studio_run_with_no_integrator_file(studio_root):
     status_before = json.loads((run_dir / "run.json").read_text())["status"]
 
     with pytest.raises(FileNotFoundError) as refusal:
-        _finalize_studio_run(run_id)
+        run_phase.finalize_run(make_finalize_args(phase="studio", run_id=run_id))
 
     assert "Missing integrator roadmap (integrator.md)." in str(refusal.value)
     assert "No Studio role produced" not in str(refusal.value)
@@ -98,7 +94,7 @@ def test_finalize_refuses_a_studio_run_where_no_role_completed_both_stances(stud
     status_before = json.loads((run_dir / "run.json").read_text())["status"]
 
     with pytest.raises(FileNotFoundError) as refusal:
-        _finalize_studio_run(run_id)
+        run_phase.finalize_run(make_finalize_args(phase="studio", run_id=run_id))
 
     assert "No Studio role produced both advocate and contrarian artifacts." in str(refusal.value)
     assert "integrator.md" not in str(refusal.value)
