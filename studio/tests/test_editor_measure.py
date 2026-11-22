@@ -137,7 +137,7 @@ def history(tmp_path_factory):
 
 @pytest.fixture
 def checkout_root():
-    """A root outside pytest's own temp directory, whose path holds the word 'test'."""
+    """A root outside pytest's own temp directory, whose path holds the word 'test' (which the build refuses)."""
     parent = Path(tempfile.mkdtemp(prefix="checkouts-")).resolve()
     yield parent / "trees"
     shutil.rmtree(parent, ignore_errors=True)

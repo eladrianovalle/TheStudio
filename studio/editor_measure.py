@@ -151,23 +151,18 @@ def load_case(case_path: Path) -> dict:
     return case
 
 
-def commits_named_by(case: dict) -> list[str]:
-    """Every commit the case needs from this clone: writer, tree_sha and the probe's source."""
-    commits = [case["writer_sha"]]
-    if case.get("tree_sha"):
-        commits.append(case["tree_sha"])
-    if case.get("probe"):
-        commits.append(case["probe"]["from_sha"])
-    return commits
-
-
 def require_history(source_repo: Path, name: str, case: dict) -> None:
     """Raise HistoryMissing when a commit the case names is not in ``source_repo``.
 
     A shallow clone, or one that never fetched the branch a unit was built on, cannot
     build the case at all, which is different from the case being wrong.
     """
-    for commit in commits_named_by(case):
+    commits = [case["writer_sha"]]
+    if case.get("tree_sha"):
+        commits.append(case["tree_sha"])
+    if case.get("probe"):
+        commits.append(case["probe"]["from_sha"])
+    for commit in commits:
         if not _git_succeeds(source_repo, "cat-file", "-e", f"{commit}^{{commit}}"):
             raise HistoryMissing(
                 f"case {name}: commit {commit} is not in {source_repo}. The history is missing "
