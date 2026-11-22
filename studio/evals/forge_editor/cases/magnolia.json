@@ -1,0 +1,22 @@
+{
+  "unit_id": "approval_writes_the_date",
+  "kind": "defect",
+  "source": "plant",
+  "writer_sha": "ed64f200c4339f8f4257d81d2eda2cdd7dd09406",
+  "spec_file": "specs/verification-due-date.md",
+  "acceptance_criteria": [
+    "The frontmatter template in `.claude/commands/spec.md` includes `verification_due`, marked as required only when the spec carries a `## Verification` section.",
+    "Step 4's approval step instructs setting `verification_due` to 30 days from approval, in the same place it already instructs creating the evidence file.",
+    "No document still describes the convention as four rules, or states that the only trigger is a human typing `shipped`.",
+    "The full suite passes and `ruff check .` is clean."
+  ],
+  "test_command": "python -m pytest -q studio/tests/test_spec_verification.py -k 'not test_every_spec_satisfies_the_convention'",
+  "breaks_criterion": 2,
+  "defect": "The /spec approval step sets the verification deadline to 60 days instead of 30.",
+  "patch": "magnolia.patch",
+  "probe": {
+    "from_sha": "ed64f200c4339f8f4257d81d2eda2cdd7dd09406",
+    "paths": [],
+    "command": "PYTHONPATH=studio:studio/tests python - <<'PY'\nfrom test_spec_verification import SPEC_COMMAND, _approval_step\n\nstep = _approval_step(SPEC_COMMAND.read_text(encoding=\"utf-8\"))\nassert \"set `verification_due` to 30 days\" in step, step\nPY"
+  }
+}

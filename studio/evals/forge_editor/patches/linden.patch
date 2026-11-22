@@ -1,0 +1,32 @@
+diff --git a/.claude/commands/spec.md b/.claude/commands/spec.md
+index 8c9a1a2..85d8dfd 100644
+--- a/.claude/commands/spec.md
++++ b/.claude/commands/spec.md
+@@ -56,7 +56,8 @@ an inlined source excerpt is not evidence, however sufficient the tool says it i
+ scoped the feature against, and never copy board content the spec could cite instead — the board is
+ the only place that says what the game is, so a copy becomes a second source that goes stale the
+ moment the board moves, while a citation stays true. `/spec` never writes to the board: scoping is
+-read-only. The discipline the reads follow is `studio/docs/DESIGN_BOARD.md`.
++read-only. The discipline the reads follow is `.studio/source/docs/DESIGN_BOARD.md` (or
++`studio/docs/DESIGN_BOARD.md` if you are in the Studio source repo).
+ 
+ ### Step 1: Resolve the spec's identity
+ 
+diff --git a/studio/tests/test_design_board.py b/studio/tests/test_design_board.py
+index b8ff61c..2e19be8 100644
+--- a/studio/tests/test_design_board.py
++++ b/studio/tests/test_design_board.py
+@@ -378,7 +378,12 @@ class TestSpecBoardCitationClause:
+         """The six rules live in one place. A clause that grew its own copy of them
+         would be the second source this whole design exists to prevent."""
+         clause = _spec_command_paragraph(_BOARD_CLAUSE_LABEL)
+-        assert "studio/docs/DESIGN_BOARD.md" in clause
++        # The installed path first: this command is copied verbatim into consuming
++        # repos, where Studio's docs live under `.studio/source/docs/` and the source
++        # tree's own `studio/docs/` does not exist. Asserting only the source-repo
++        # path would go green here while an installed `/spec` had nothing to read.
++        assert ".studio/source/docs/DESIGN_BOARD.md" in clause
++        assert "`studio/docs/DESIGN_BOARD.md`" in clause
+         assert len(clause.splitlines()) <= 6, (
+             "the /spec board clause has grown past six lines; the discipline belongs "
+             "in DESIGN_BOARD.md, not in the command"

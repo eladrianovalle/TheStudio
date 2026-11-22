@@ -1,0 +1,27 @@
+{
+  "unit_id": "finish_check_install_entry",
+  "source": "review_fix",
+  "fix_sha": "a99b6f7fc0d41f6744cccaa6cc0c124fc018ae6a",
+  "writer_sha": "96cd258f8cdea0b1a0973e11dd00ecce5a9e7e05",
+  "spec_file": "specs/shipped-finish-check.md",
+  "acceptance_criteria": [
+    "After `init`, `.claude/settings.local.json` holds exactly one `hooks.Stop` entry containing the marker substring, with absolute interpreter and script paths; a second and third `init` leave exactly one, and none of them alters the SessionStart entry.",
+    "`init --no-finish-check` writes no entry, and `update --no-finish-check` removes one a previous install wrote **including when the install is already up to date**; the `.studio/finish-check.off` sentinel produces the same result as the flag on both subcommands.",
+    "A `settings.local.json` that is a JSON array, one whose `hooks` is a string, and one whose `hooks.Stop` is a dict each make the finish-check installer print one warning, leave `hooks.Stop` exactly as it was, add no entry of its own, and raise nothing — from both `init` and `update`. **This criterion was narrowed after measuring; the original wording and the reasoning are below the Build Plan.**",
+    "`init` writes `.studio/source/finish_check.py`, and `MANIFEST.json` records no entry for it; a subsequent `update` overwrites a locally-edited copy of it and reports no BLOCKED state over that file.",
+    "`.studio/finish-check.txt` and `.studio/finish-check.off` are written by neither `init` nor `update`, and appear in no manifest.",
+    "README, `studio/docs/CLAUDE_CODE_USAGE.md`, `studio/docs/API.md` and `studio/docs/ARCHITECTURE.md` document the flag, the sentinel, the override file, the one-extra-round-trip-per-turn cost, and the instruction to remove any global `Stop` registration before rollout; `specs/obligation-queue.md`'s \"No Stop hook\" Non-Goal carries a line pointing at this spec so the reversal is discoverable from the document that recorded the cut; `studio/tests/test_doc_parity.py` passes."
+  ],
+  "test_command": "python -m pytest -q studio/tests/test_hook_install.py studio/tests/test_doc_parity.py",
+  "probe": {
+    "from_sha": "a99b6f7fc0d41f6744cccaa6cc0c124fc018ae6a",
+    "paths": [
+      "studio/tests/test_hook_install.py"
+    ],
+    "command": "python -m pytest -q studio/tests/test_hook_install.py -k 'no_source_update_registers_nothing or up_to_date_update_registers_once_the_script_lands'"
+  },
+  "kind": "defect",
+  "breaks_criterion": null,
+  "defect": "Updating an older install can register the Stop hook even when its script is unavailable.",
+  "patch": "poplar.patch"
+}

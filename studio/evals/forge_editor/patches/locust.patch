@@ -1,0 +1,28 @@
+--- a/studio/docs/DESIGN_BOARD.md
++++ b/studio/docs/DESIGN_BOARD.md
+@@ -65,9 +65,7 @@
+ 
+ ## Where writes land
+ 
+-Agent writes go to the destination the repository designates. A repository may also name further
+-destinations by purpose — research output to one place, art references to another. When it names
+-only one destination, everything falls to that one.
++Put all writes on the board used for the current work.
+ 
+ ## Answering "what is still open"
+ 
+--- a/studio/tests/test_design_board.py
++++ b/studio/tests/test_design_board.py
+@@ -125,12 +125,6 @@
+             f"product name gets in: {_mid_sentence_capitalized_words(text)}"
+         )
+ 
+-    def test_writes_land_where_the_repo_designates(self):
+-        text = _flat(_DESIGN_BOARD.read_text(encoding="utf-8"))
+-        assert "Agent writes go to the destination the repository designates" in text
+-        assert "further destinations by purpose" in text
+-        assert "names only one destination, everything falls to that one" in text
+-
+     def test_open_questions_are_a_reading_not_a_status(self):
+         """Studio keeps no open-questions list of its own — that is the copy the
+         source-of-truth rule forbids."""

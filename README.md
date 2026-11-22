@@ -385,6 +385,7 @@ studio/
   rerun.py                  # Rejection context injection for iterate-on-failure
   verdict.py                # APPROVED/REJECTED extraction
   impl_loop.py              # Implementation writer/editor loop config (LoopConfig; run as a script for knobs)
+  editor_measure.py         # Builds the proved case trees the /forge editor is measured on (not shipped to installs)
   integrations/             # Outbound run-digest webhooks (slack_digest.py → Slack/n8n)
   validators/               # DocumentValidator + CodeValidator
   studio.manifest.json      # Role definitions (14 disciplines)
@@ -427,3 +428,7 @@ Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.
 ## License
 
 MIT. Reuse freely across your projects.
+
+## Measuring the forge editor
+
+Run `/measure-editor` in a fresh Studio worktree to compare the editor against the historical benchmark and record the outcome.

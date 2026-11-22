@@ -497,3 +497,7 @@ One Product + Engineering role iteration applied to the first draft:
 - `studio/persona_overrides.py`, `studio/role_overrides.py`: the shallow-merge override pattern
   for prompts-as-data.
 - `MVI_METHODOLOGY.md`, `AI_TDD_METHODOLOGY.md`, `TEST_DRIVEN_GUIDE.md`: the gate criteria.
+
+## Changing the editor prompt
+
+Edit the prompt by hand on a feature branch and run `/measure-editor` there. Commit the matching measurement with the prompt change. Once measurements exist, the suite requires a matching run before the branch can pass the entry gate.
