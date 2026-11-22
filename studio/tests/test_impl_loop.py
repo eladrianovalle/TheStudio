@@ -1025,6 +1025,7 @@ def test_forge_runs_the_branch_check_and_no_longer_asks_for_one_by_hand():
         ("- If `--branch` was given and it is ", ", STOP"),
         ("- Else if the work directory is on ", ", create"),
     ],
+    ids=["early-stop", "fallback"],
 )
 def test_forge_step_3_names_exactly_the_branches_the_check_protects(anchor, end):
     """Step 3 has two prose copies of _PROTECTED_BRANCHES.
@@ -1037,7 +1038,9 @@ def test_forge_step_3_names_exactly_the_branches_the_check_protects(anchor, end)
     forge = (STUDIO_ROOT.parent / ".claude" / "commands" / "forge.md").read_text()
 
     assert anchor in forge, f"forge.md Step 3 no longer has a bullet starting {anchor!r}"
-    names = forge.split(anchor, 1)[1].split(end, 1)[0]
+    after_anchor = forge.split(anchor, 1)[1]
+    assert end in after_anchor, f"the Step 3 bullet starting {anchor!r} no longer continues with {end!r}"
+    names = after_anchor.split(end, 1)[0]
     assert set(re.findall(r"`([^`]+)`", names)) == set(_PROTECTED_BRANCHES)
 
 
