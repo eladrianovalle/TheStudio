@@ -1,10 +1,11 @@
 """What this repository owes, worked out from its specs and its commit log.
 
-An **obligation** is one unfinished thing. There are three kinds:
+An **obligation** is one unfinished thing. There are four kinds:
 
 * a unit an approved spec planned that no commit says was built,
 * a spec whose work is finished while its frontmatter still says ``status: approved``,
   so the shipped-features block leaves out a feature that actually landed,
+* a finished spec whose verification failed or needs clarification,
 * a spec that promised evidence by a date that has passed, with the evidence file blank.
 
 Nothing here is stored. Every obligation is derived at the moment it is asked for, so one
@@ -19,6 +20,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from enum import Enum
 from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple
 
 if TYPE_CHECKING:  # Annotations only — nothing here calls into stats at runtime.
@@ -26,13 +28,11 @@ if TYPE_CHECKING:  # Annotations only — nothing here calls into stats at runti
 
 UNBUILT_UNIT = "unbuilt_unit"
 STALE_STATUS = "stale_status"
+EVIDENCE_FOLLOW_UP = "evidence_follow_up"
 EVIDENCE_OVERDUE = "evidence_overdue"
 
-# The order obligations are reported in, and so the order the session brief picks its one
-# from. `stale_status` leads because a finished spec left at `approved` is missing from the
-# shipped-features block — the only record of what landed and what it changed — and it is
-# the cheapest of the three to discharge. Both arguments point the same way.
-RANK = (STALE_STATUS, EVIDENCE_OVERDUE, UNBUILT_UNIT)
+# Both the dashboard and the brief use this order.
+RANK = (STALE_STATUS, EVIDENCE_FOLLOW_UP, EVIDENCE_OVERDUE, UNBUILT_UNIT)
 
 # What a spec's evidence file is called, and the placeholder its skeleton is full of until
 # somebody fills it in. Shared with the spec-verification suite by convention rather than
@@ -44,6 +44,7 @@ EVIDENCE_PLACEHOLDER = "FILL_ME"
 # so a group is however many obligations of one kind sit together in it.
 _KIND_HEADINGS = {
     STALE_STATUS: "Finished but still `approved` — the frontmatter owes a flip",
+    EVIDENCE_FOLLOW_UP: "Evidence needs follow-up",
     EVIDENCE_OVERDUE: "Evidence overdue — the results file is still blank",
     UNBUILT_UNIT: "Planned and never built",
 }
@@ -60,12 +61,27 @@ class Obligation:
     honest way out: a spec whose work is finished is either flipped or it is not.
     """
 
-    kind: str  # one of the three constants above
+    kind: str
     subject: str  # a unit_id, or a spec slug for the spec-level kinds
     spec_file: str  # repo-relative path to the spec that defines it
     detail: str  # one plain sentence: what is owed, and why it is owed now
     command: str
     silence: str
+
+
+class Evidence(Enum):
+    BLANK = "blank"
+    PASSED = "criterion met"
+    FAILED = "criterion not met"
+    INCONCLUSIVE = "inconclusive"
+    UNCLEAR = "unclear"
+
+
+_EVIDENCE_ACTIONS = {
+    Evidence.FAILED: "shows the measurement failed — revise the spec or rerun the evaluation",
+    Evidence.INCONCLUSIVE: "is inconclusive — resolve the uncertainty",
+    Evidence.UNCLEAR: "has no clear verdict — clarify the declaration under `## Verdict`",
+}
 
 
 @dataclass(frozen=True)
@@ -81,7 +97,7 @@ class SpecView:
     status: str
     promises_evidence: bool  # True when the spec carries a `## Verification` section
     verification_due: str  # the raw frontmatter value; "" when there is none
-    evidence_is_blank: bool  # True when the results file is missing, unreadable, or FILL_ME
+    evidence: Evidence
     units: Tuple["PlannedUnit", ...]
 
 
@@ -123,9 +139,9 @@ def derive(
     for spec in specs:
         if spec.status != "approved":
             continue
-        stale = _stale_status(spec, still_owed, dropped)
-        if stale is not None:
-            obligations.append(stale)
+        follow_up = _completed_spec(spec, still_owed, dropped)
+        if follow_up is not None:
+            obligations.append(follow_up)
         overdue = _evidence_overdue(spec, today)
         if overdue is not None:
             obligations.append(overdue)
@@ -182,20 +198,15 @@ def _unbuilt_unit(unit: "PlannedUnit") -> Obligation:
     )
 
 
-def _stale_status(
+def _completed_spec(
     spec: SpecView,
     still_owed: set,
     dropped: set,
 ) -> Optional[Obligation]:
-    """A spec whose work is done but whose frontmatter has not caught up, if it is one.
+    """A completed spec owes the action its promised verification supports.
 
-    Two shapes are silent on purpose. A spec that planned no units at all, or whose every
-    unit was dropped, has not been shown to be finished — "every unit is built" is vacuously
-    true of the first and false of the second, and ``shipped`` would be a claim about work
-    that never landed. And a spec still waiting on evidence owes nothing yet: the
-    spec-verification suite turns red on a ``shipped`` spec whose evidence file still says
-    ``FILL_ME``, so naming it here would be telling a reader to make an edit the suite
-    rejects. Once its deadline passes, ``evidence_overdue`` names it instead.
+    Empty or entirely dropped plans have no built work. Outstanding units (including
+    escalations) still belong to the ledger. A blank record has its own deadline reminder.
     """
     if not spec.units:
         return None
@@ -203,8 +214,19 @@ def _stale_status(
         return None
     if all(_key(unit) in dropped for unit in spec.units):
         return None
-    if spec.promises_evidence and spec.evidence_is_blank:
-        return None
+    if spec.promises_evidence:
+        if spec.evidence is Evidence.BLANK:
+            return None
+        if spec.evidence is not Evidence.PASSED:
+            return Obligation(
+                kind=EVIDENCE_FOLLOW_UP,
+                subject=spec.slug,
+                spec_file=spec.spec_file,
+                detail=(f"Evidence for `{spec.slug}` ({evidence_file_for(spec.spec_file)}) "
+                        f"{_EVIDENCE_ACTIONS[spec.evidence]}"),
+                command="",
+                silence="",
+            )
     return Obligation(
         kind=STALE_STATUS,
         subject=spec.slug,
@@ -223,7 +245,7 @@ def _stale_status(
 def _evidence_overdue(spec: SpecView, today: date) -> Optional[Obligation]:
     """A spec past the date it promised evidence by, with the evidence file still blank."""
     due = parse_due(spec.verification_due)
-    if due is None or due > today or not spec.evidence_is_blank:
+    if due is None or due > today or spec.evidence is not Evidence.BLANK:
         return None
     return Obligation(
         kind=EVIDENCE_OVERDUE,
