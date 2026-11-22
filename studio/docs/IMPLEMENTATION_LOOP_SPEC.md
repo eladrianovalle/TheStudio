@@ -391,6 +391,17 @@ Checking first is what
 makes the flag worth reaching for — a typo'd path costs nothing, instead of failing an hour in with
 both agents already run.
 
+**The branch and the tree are checked as the loop starts.** `/forge`'s last command before it
+invokes the workflow is `impl_loop.py --branch <branch>` (with `--work-dir` when there is one),
+which stops the run naming one of three reasons: `protected-branch` (the plan names `main` or
+`master`), `wrong-branch` (the tree is on some other branch, or on none, because something moved
+the checkout after the plan was made), or `dirty-tree` (something is uncommitted, and the message
+lists it; a `git status` that fails counts as dirty, since it can't vouch for the tree). A dirty tree is refused for two reasons: the writer commits with `git add -A`, which
+would sweep those paths into the unit, and the loop undoes a bad edit with `git reset --hard`, which
+would delete them. This runs with or without `--work-dir`. It checks once, at launch: a checkout
+that is moved while the agents are working is still not caught, which is the case `--work-dir`
+exists for.
+
 **What it does not do.** It reduces the blast radius of a run pointed at the wrong directory; it
 cannot make that impossible. Every one of these instructions is prompt text an agent may ignore, and
 the validation is one shot at the start while the agents work for an hour. A test can prove the
