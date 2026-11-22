@@ -2,7 +2,7 @@
 feature: Let the measured verdict guide the obligation queue
 slug: obligation-evidence-verdict
 ticket: https://github.com/eladrianovalle/TheStudio/issues/225
-status: draft
+status: approved
 studio_run: studio/output/tech/run_tech_20261122_220644
 shipped_impact:
 shipped_changed:
