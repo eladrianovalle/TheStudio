@@ -402,6 +402,8 @@ def test_the_derived_values_cannot_be_edited_after_the_fact():
     ("## Verdict\nCriterion met. Criterion not met.", Evidence.UNCLEAR),
     ("## Verdict\nCriterion met, but criterion not met.", Evidence.UNCLEAR),
     ("## Verdict\nCriterion met: criterion not met.", Evidence.UNCLEAR),
+    ("## Verdict\nCriterion met — criterion not met.", Evidence.UNCLEAR),
+    ("## Verdict\nCriterion met, criterion not met or inconclusive.", Evidence.UNCLEAR),
     ("## Verdict\nCriterion met. For example, inconclusive.", Evidence.PASSED),
     ("## Verdict\n**Criterion met.** **Inconclusive.**", Evidence.UNCLEAR),
     ("## Verdict\n### Example\nCriterion met.", Evidence.UNCLEAR),

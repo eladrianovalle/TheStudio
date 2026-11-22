@@ -981,6 +981,7 @@ def _verification_spec(target, slug, unit_id, due="2000-01-01", *, promised=True
      "clarify", "2000-01-01"),
     ("## Verdict\nMaybe the intervention helped.", "clarify", "2000-01-01"),
     ("## Verdict\nCriterion met.\n\n**Criterion not met.**", "clarify", "2000-01-01"),
+    ("## Verdict\nCriterion met. The rerun changed the conclusion. Criterion not met.", "clarify", "2000-01-01"),
     ("## Verdict\nSee below.\n## Notes\n**Criterion met**", "clarify", "2000-01-01"),
     ("## Verdict\n```md\nCriterion met.\n```\n> Criterion met.", "clarify", "2000-01-01"),
 ])

@@ -169,11 +169,19 @@ def parse_evidence(text: str) -> Evidence:
         # Ignore ordinary prose, quoted examples and the template's list of options.
         # Only a declaration can introduce further declarations on the same line.
         plain = line.replace("**", "").replace("__", "").rstrip()
-        for clause in re.split(r"(?<=[.,!:;])\s+(?:(?:or|and|but)\s+)?", plain, flags=re.I):
-            declaration = _VERDICT_LABEL.match(clause)
-            if not declaration:
-                break
-            declarations.add(Evidence(declaration.group(1).lower()))
+        if not _VERDICT_LABEL.match(plain):
+            continue
+        # An explanation can intervene between two declarations. Start fresh at each
+        # sentence, but skip examples such as "For example, inconclusive." as a whole.
+        for sentence in re.split(r"(?<=[.!?])\s+(?:(?:or|and|but)\s+)?", plain, flags=re.I):
+            for clause in re.split(
+                r"(?:[,:;]\s+|\s*[-–—]\s+)(?:(?:or|and|but)\s+)?|\s+or\s+",
+                sentence, flags=re.I,
+            ):
+                declaration = _VERDICT_LABEL.match(clause)
+                if not declaration:
+                    break
+                declarations.add(Evidence(declaration.group(1).lower()))
     return declarations.pop() if len(declarations) == 1 else Evidence.UNCLEAR
 
 
