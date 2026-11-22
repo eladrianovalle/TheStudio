@@ -198,9 +198,14 @@ calling it "non-negotiable" would still overstate it.
 Authored the same way personas and roles already are: shipped defaults that a project-local file
 shallow-merges over (mirrors `persona_overrides.py` and `role_overrides.py`).
 
-- **Editor mandate** = the existing `CONTRARIAN_MANDATE` (`studio/scopes.py:32`), pointed at code:
-  default to deletion, name the specific cut (not "this is complex"), collapse rather than
-  accumulate, guard the essence. With one code-specific bound, **behavior preservation**: the
+- **Editor mandate** = the debate contrarian's mandate, pointed at code: default to deletion, name
+  the specific cut (not "this is complex"), collapse rather than accumulate, guard the essence. The
+  loop script prints it into the editor's prompt in full (`editorMandate()` in
+  `implementation-loop.js`), so the editor reads no file to find it. Those are the lines of
+  `CONTRARIAN_MANDATE` that come before its FINDING-block format, which the editor has nowhere to
+  put, and a test fails if the two copies differ by one character. The editor always runs on Opus
+  (`EDITOR_MODEL`), whatever model the session uses; a unit's `model` override reaches the writer
+  only. With one code-specific bound, **behavior preservation**: the
   editor may restructure and delete freely *as long as tests stay green*, and may not touch a
   `load_bearing` item without escalating. The editor also renders the authoritative `mvi_verdict`
   at the exit gate, which can overturn the writer's claim. When the unit carries acceptance
@@ -483,7 +488,8 @@ One Product + Engineering role iteration applied to the first draft:
 
 ## References
 
-- `studio/scopes.py:32`: `CONTRARIAN_MANDATE` (the editor mandate, reused verbatim).
+- `studio/scopes.py:32`: `CONTRARIAN_MANDATE` (the debate contrarian's mandate; the editor's prompt
+  prints the lines before its FINDING-block format, and a test holds the copies equal).
 - `studio/validators/code_validator.py`: `CodeValidator.validate_implementation()` returns
   `List[CheckResult]`; `run_pytest` is `pytest -v` + path, `run_ruff` is `ruff check .`,
   `run_mypy` is `mypy . --strict`. Gate reuses the runner + ruff/pytest; aggregation is net-new.

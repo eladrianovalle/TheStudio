@@ -16,9 +16,9 @@ export const meta = {
 // ---------------------------------------------------------------------------
 const DEFAULT_UNIT = {
   unit_id: 'unit_impl_loop_config',
-  // Optional model override for the writer + editor agents (e.g. 'fable', 'sonnet',
-  // 'opus'). Passed straight to agent()'s `model` opt; undefined inherits the
-  // session model (the prior behavior), so this is a no-op unless callers set it.
+  // Optional model override for the writer agent only (e.g. 'fable', 'sonnet', 'opus'). Passed
+  // straight to agent()'s `model` opt; undefined inherits the session model. The editor ignores
+  // it: it is pinned to EDITOR_MODEL whatever this says.
   model: undefined,
   // Absolute path to the directory the agents should work in — a git worktree of this repo,
   // validated by /forge before the loop starts. Undefined means "wherever the agent's shell is",
@@ -48,6 +48,10 @@ const DEFAULT_UNIT = {
   // it always did.
   acceptance_criteria: [],
 }
+
+// The editor always runs on Opus, whatever model the session or the unit picked for the writer.
+// Keep it a ONE-LINER: the JS test loader extracts consts with a single-line regex.
+const EDITOR_MODEL = 'opus'
 
 const runDir = (u) => `.studio/output/impl_loop/${u.unit_id}`
 // Reviewer concerns deliberately do NOT live under runDir. That path is gitignored and, for a unit
@@ -352,15 +356,44 @@ function writerPrompt(u) {
   ].join('\n')
 }
 
+// The editor's mandate, printed into its prompt in full so the editor never has to find a file for
+// it. These are the lines of CONTRARIAN_MANDATE in studio/scopes.py that come before its first line
+// about FINDING blocks: the rest tells a debate contrarian how to format findings, and the editor
+// returns a structured result with nowhere to put one. A test holds the two copies equal, character
+// for character. A function, not a constant: the test loader reads a const only when it is one line.
+function editorMandate() {
+  return [
+    `**Contrarian Mandate — you are an editor, not only a critic.**`,
+    ``,
+    `Hunting flaws and edge cases is half your job. The other half is carving the proposal down to its essence. The advocate's instinct is to add; yours is to cut.`,
+    ``,
+    `- **Default to deletion.** Every feature, abstraction, step, and dependency the advocate proposed must justify its existence. If it does not clearly earn its keep, recommend removing it.`,
+    `- **Name the cut, specifically.** Do not just say "this is complex" — point at the exact feature, layer, option, or step and say what to delete or merge, and what (if anything) is actually lost.`,
+    `- **Simpler beats more complete.** A shorter, clearer proposal that still solves the real problem is a better outcome than a thorough one that does more than the problem requires.`,
+    `- **Collapse, don't accumulate.** Prefer merging two things into one over adding a third. Prefer removing an option over adding configuration to support it.`,
+    `- **Guard the essence.** Cutting serves clarity and the core problem — never amputate what the problem genuinely requires. If a cut would break the core, say so and stop.`,
+    `- **Cut concepts, not clarity.** Remove features, layers, and options — but never compress readable code into dense or clever code to save lines. Explicit names and obvious steps are part of the essence you protect, not fat to trim.`,
+    ``,
+    `**Findings must earn their place — quote first, then rate.**`,
+    ``,
+    `Hunting flaws only helps when the flaws are real. A confident-sounding critique that turns out to be wrong wastes the room's attention and makes every later finding easier to wave off. So gate each flaw on evidence before you raise it:`,
+    ``,
+    `- **Quote before you claim.** For every flaw or objection, quote the exact thing you are critiquing — the specific claim, feature, step, or line from the advocate's proposal. If you cannot point at the exact thing, you have not verified it: mark the finding \`(unverified)\` and treat it as low-confidence.`,
+    `- **Rate your confidence, and let the rating set how loudly you raise it.** *High* — you quoted the exact thing and showed concretely why it breaks: state it plainly as a finding. *Medium* — a real pattern you cannot fully prove here: raise it, tagged "verify this." *Low / unverified* — no quote, or a hunch: collect these under a short **Lower-confidence notes** list at the end, kept out of your main findings; drop one entirely unless, if it were true, it would be fatal (a P0).`,
+    `- **A vibe is not a finding.** "This looks off" or "this might not scale" earns nothing on its own. Either cite the evidence, or leave it out.`,
+  ].join('\n')
+}
+
 function editorPrompt(u, writer) {
   const criteria = unitCriteria(u)
   return [
     ...workDirPreamble(u),
     `You are the EDITOR in an implementation writer/editor loop — a fresh agent reviewing the writer's unit.`,
     ``,
-    `Your mandate IS the CONTRARIAN_MANDATE defined in scopes.py — read it at \`.studio/source/scopes.py\``,
-    `(installed repos) or \`studio/scopes.py\` (the Studio source repo), and adopt it: applied to code,`,
-    `default to deletion, name the specific cut, collapse don't accumulate, guard the essence.`,
+    `Adopt the contrarian mandate below, applied to code: default to deletion, name the specific cut,`,
+    `collapse don't accumulate, guard the essence.`,
+    ``,
+    editorMandate(),
     ``,
     `Finding code: if this repo has a code index or symbol search, use it to LOCATE code before grepping`,
     `or opening files blind. It tells you WHERE, not WHAT — open the file at the returned file:line and`,
@@ -526,7 +559,7 @@ if (unit.editor_enabled === false) {
 }
 
 phase('Edit')
-const editor = await agent(editorPrompt(unit, writer), { schema: EDITOR_HANDOFF, label: `editor:${unit.unit_id}`, phase: 'Edit', model: unit.model })
+const editor = await agent(editorPrompt(unit, writer), { schema: EDITOR_HANDOFF, label: `editor:${unit.unit_id}`, phase: 'Edit', model: EDITOR_MODEL })
 
 // Exit gate — tests green, authoritative MVI verdict, AND every acceptance criterion the unit
 // carried confirmed by a matching pass. A revert does not fail the gate: writer_sha still holds a
