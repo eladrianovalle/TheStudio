@@ -46,4 +46,4 @@ jobs:
       # on tests/ tries to run the fixtures/ subdir and fails.
       - name: Workflow shell tests
         working-directory: .
-        run: node --test .claude/workflows/tests/workflow-shells.test.mjs
+        run: node --test .claude/workflows/tests/*.test.mjs

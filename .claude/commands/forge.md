@@ -16,6 +16,14 @@ opt-in to run the `implementation-loop` workflow (which spawns multiple agents).
 asks in natural language to "implement X with the loop" / "run the writer-editor loop on X",
 treat that as an invocation of this command.
 
+## Portable runtime selection
+
+If the invocation supplies any of `--runtime`, `--writer-runtime`, `--editor-runtime`,
+`--writer-model` or `--editor-model`, run `python .studio/source/run_phase.py forge`
+with the supplied arguments (use `python studio/run_phase.py forge` in Studio's source checkout).
+Pass each argument literally, including `--plan`. Report the command's result and stop there.
+For calls without those selectors, continue with the native Claude Workflow below.
+
 ## Arguments
 
 - `$ARGUMENTS`: Required. Free-text description of the ONE unit to build. Should describe a

@@ -477,6 +477,13 @@ Override keys replace the base; unspecified keys inherit from the manifest. Vali
 
 ## Implementation Loop (`/forge`)
 
+From a terminal with Node.js and an authenticated Codex CLI, run
+`python .studio/source/run_phase.py forge --runtime codex --spec <slug> --unit <unit_id>`
+in an installed project. In the Studio source repo use `studio/run_phase.py`.
+Add `--plan` to inspect the target branch, roles and criteria before the writer starts.
+The portable host starts a fresh editor, runs the configured tests in the worktree,
+and reports the writer and editor results. The Claude Code slash command remains available.
+
 Brings the advocate/contrarian cadence into **implementation**, the writer/editor analogue of the planning-phase debate. One agent writes a complete unit; a fresh editor agent refines it; then it's delivered.
 
 ```

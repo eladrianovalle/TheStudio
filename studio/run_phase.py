@@ -21,6 +21,9 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
+if sys.argv[1:2] == ["forge"]:
+    sys.dont_write_bytecode = True  # --plan also works in a pristine installed snapshot.
+
 from cleanup import (
     cleanup_runs,
     format_bytes,
@@ -1769,6 +1772,8 @@ def _add_artifact_root_arg(subparser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Studio run helper.")
     subparsers = parser.add_subparsers(dest="command", required=True)
+    import forge
+    forge.add_parser(subparsers)
 
     prepare_parser = subparsers.add_parser("prepare", help="Create a new run_id and instructions.")
     prepare_parser.add_argument(
@@ -3528,7 +3533,10 @@ def do_offload(args: argparse.Namespace) -> None:
 
 
 def _dispatch(args: argparse.Namespace) -> None:
-    if args.command == "prepare":
+    if args.command == "forge":
+        import forge
+        forge.run(args)
+    elif args.command == "prepare":
         prepare_run(args)
     elif args.command == "finalize":
         finalize_run(args)

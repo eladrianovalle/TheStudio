@@ -202,6 +202,9 @@ python studio/run_phase.py stats                  # dashboard: shipped features,
 python studio/run_phase.py stats --phase studio   # filter to one phase
 python studio/run_phase.py stats --json           # machine-readable aggregate (includes a shipped_specs key)
 
+# Build a spec unit with a Codex writer and a separate Codex editor
+python studio/run_phase.py forge --runtime codex --spec <slug> --unit <unit_id>
+
 # Cross-repo install
 python studio/run_phase.py init --target /path/to/project
 python studio/run_phase.py check-install --target /path/to/project

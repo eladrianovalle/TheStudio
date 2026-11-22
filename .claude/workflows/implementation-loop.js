@@ -1,3 +1,4 @@
+// Generated from studio/forge_loop.mjs by studio/generate_forge.py.
 export const meta = {
   name: 'implementation-loop',
   description: 'Writer/editor implementation loop — one agent builds an MVI unit, a fresh editor cuts/refines it, gated on tests-green. See studio/docs/IMPLEMENTATION_LOOP_SPEC.md',
