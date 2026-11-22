@@ -2,7 +2,7 @@
 feature: Run Forge with independently selectable writer and editor runtimes
 slug: portable-forge
 ticket: https://github.com/eladrianovalle/TheStudio/issues/262
-status: draft
+status: approved
 studio_run: studio/output/tech/run_tech_20261122_224740
 shipped_impact:
 shipped_changed:
