@@ -24,6 +24,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from impl_loop import explain_unquotable_path
@@ -395,10 +396,23 @@ def prove_probe(tree: Path, source_repo: Path, name: str, case: dict) -> None:
             f"case {name}: the defect case's probe `{probe['command']}` passes, so the tree does not hold the defect"
         )
     if case["kind"] == "clean" and result.returncode != 0:
+        subject = "unplanted control" if case["source"] == "plant" else "clean case"
         raise CaseRefused(
-            f"case {name}: the clean case's probe `{probe['command']}` fails (exit {result.returncode}):\n"
+            f"case {name}: the {subject}'s probe `{probe['command']}` fails (exit {result.returncode}):\n"
             f"{_output_tail(result)}"
         )
+
+
+def prove_unplanted(tree: Path, name: str, case: dict, patches_dir: Path, source_repo: Path) -> None:
+    """Run the same probe on the same starting tree with the plant's patch omitted."""
+    control_case = dict(case, kind="clean")
+    del control_case["patch"]
+    with tempfile.TemporaryDirectory(prefix="studio-", dir=tree.parent) as directory:
+        control = Path(directory) / name
+        start_tree(control, control_case, source_repo)
+        shape_tree(control, name, control_case, patches_dir)
+        strip_history(control)
+        prove_probe(control, source_repo, name, control_case)
 
 
 # --- the writer handoff -----------------------------------------------------
@@ -448,6 +462,8 @@ def build_case(case_path: Path, root: Path, patches_dir: Path, source_repo: Path
         raise CaseRefused(f"case {name}: {problem}")
 
     case = load_case(case_path)
+    if case["source"] == "plant" and not case.get("patch"):
+        raise CaseRefused(f"case {name}: a plant needs a patch")
     require_history(source_repo, name, case)
 
     tree = root / name
@@ -458,6 +474,8 @@ def build_case(case_path: Path, root: Path, patches_dir: Path, source_repo: Path
         prove_criteria(tree, name, case)
         tests = prove_test_command(tree, name, case)
         prove_probe(tree, source_repo, name, case)
+        if case["source"] == "plant":
+            prove_unplanted(tree, name, case, patches_dir, source_repo)
     except subprocess.CalledProcessError as error:
         command = " ".join(shlex.quote(part) for part in error.cmd)
         raise CaseRefused(f"case {name}: `{command}` failed:\n{(error.stderr or '').strip()}") from error

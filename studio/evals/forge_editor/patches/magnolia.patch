@@ -1,0 +1,42 @@
+--- a/.claude/commands/spec.md
++++ b/.claude/commands/spec.md
+@@ -264,7 +264,7 @@
+   saying what actually changed for someone using this. Write it from what the feature does, not from
+   the fact that it landed: "it shipped" satisfies the test and tells a reader nothing.
+ 
+-  **If the spec carries a `## Verification` section**, set `verification_due` to 30 days from today
++  **If the spec carries a `## Verification` section**, set `verification_due` to 60 days from today
+   and create its evidence file now — empty, before any data exists. That ordering is the whole point:
+   headings written before the outcome is known can't be arranged to flatter it. The date bounds the
+   wait: once it passes with the evidence still blank, the suite goes red until you either record what
+--- a/studio/tests/test_spec_verification.py
++++ b/studio/tests/test_spec_verification.py
+@@ -610,28 +610,6 @@
+             "reading it cannot tell whether their spec needs a date at all."
+         )
+ 
+-    def test_the_approval_step_sets_the_due_date_where_it_creates_the_evidence_file(self):
+-        """The deadline gets written at the one moment rule 6 starts watching: approval.
+-
+-        Approval is already where the blank evidence file is created, and the date is what
+-        bounds how long that file may stay blank. Said anywhere else it is guidance sitting
+-        beside the step rather than part of it — and the step is what an agent follows.
+-        """
+-        step = _approval_step(SPEC_COMMAND.read_text(encoding="utf-8"))
+-        assert step, (
+-            f"{SPEC_COMMAND.name} no longer has the approval bullet that creates the evidence "
+-            f"file ({_APPROVAL_EVIDENCE_STEP!r}), so there is nowhere for the deadline to be set."
+-        )
+-        assert _DUE_FIELD in step, (
+-            f"the approval step in {SPEC_COMMAND.name} creates the evidence file but never sets "
+-            f"`{_DUE_FIELD}`, so a spec approved by following it fails rule 6a the moment it "
+-            "lands."
+-        )
+-        assert "30 days" in step, (
+-            f"the approval step in {SPEC_COMMAND.name} no longer says how far out the date goes, "
+-            "and rule 6a's own failure message tells an author 30 days is the convention."
+-        )
+-
+     def test_unfilled_sections_are_regenerable_from_the_skeleton(self):
+         """A section still holding a placeholder has not been reported in, so every other line
+         in it came from the template. One that didn't means this file was built from a skeleton

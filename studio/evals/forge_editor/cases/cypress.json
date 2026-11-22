@@ -1,0 +1,26 @@
+{
+  "unit_id": "build_plan_one_shape",
+  "source": "review_fix",
+  "fix_sha": "6b67e2f2c2497e496a7c1e485f977ee1c1715c41",
+  "writer_sha": "2e9635ee120b4ca8b2c3f5923ec43f02d98fdb17",
+  "spec_file": "specs/completion-ledger.md",
+  "acceptance_criteria": [
+    "Rule 7 fires with a sentence naming the spec when an `approved` spec's `## Build Plan` contains no unit heading, when a unit has neither a `- [ ]` criterion nor a valid `Dropped:` line, and when a unit id is not `snake_case` — and stays quiet for a spec with no Build Plan section, for a `status: draft` or `status: shipped` spec, and for both acceptance-criteria indentations in use today.",
+    "A synthetic approved spec carrying a **fenced** `## Build Plan` with a fenced `` ### 1. `unit_id` — x `` heading *before* its real Build Plan parses to the real units only and raises no violation; the same check passes against `specs/unit-acceptance-criteria.md` unchanged, whose two `## Build Plan` lines are at 77 (fenced) and 415.",
+    "Taking any one currently-approved spec, rewriting a single unit entry into the numbered-bold form, and re-running the suite turns it red with a sentence naming that spec; restoring the heading form turns it green.",
+    "A test walking the whole specs directory fails when two specs plan the same `unit_id`, and passes against the current tree.",
+    "`cd studio && python -m pytest tests/test_spec_verification.py -q` is green against the real `specs/` directory with no spec file modified, and `ruff check .` from the repo root is clean.",
+    "`spec.md`'s template shows the heading form and says `unit_id` is unique repo-wide; `forge.md` points at that shape instead of restating a format in its own words; no doc still says \"unique within this spec\"."
+  ],
+  "test_command": "python -m pytest -q studio/tests/test_spec_verification.py -k 'not test_every_spec_satisfies_the_convention'",
+  "probe": {
+    "from_sha": "6b67e2f2c2497e496a7c1e485f977ee1c1715c41",
+    "paths": [
+      "studio/tests/test_spec_verification.py"
+    ],
+    "command": "python -m pytest -q studio/tests/test_spec_verification.py -k test_a_suffixed_build_plan_heading_is_not_the_build_plan"
+  },
+  "kind": "defect",
+  "breaks_criterion": null,
+  "defect": "A suffixed Build Plan heading below the real section displaces the real units."
+}

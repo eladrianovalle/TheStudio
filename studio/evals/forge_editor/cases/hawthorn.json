@@ -1,0 +1,26 @@
+{
+  "unit_id": "due_date_rule",
+  "kind": "defect",
+  "source": "plant",
+  "writer_sha": "fefb4c54eb57ab095007910bb8d8747da155de50",
+  "spec_file": "specs/verification-due-date.md",
+  "acceptance_criteria": [
+    "A spec with a `## Verification` section at `status: approved` with no `verification_due` field produces exactly one violation naming the missing field.",
+    "A spec with a `## Verification` section at `status: approved` whose `verification_due` is in the past produces a violation naming both exits: fill in the evidence, or move the date.",
+    "That same past-due violation fires whether or not the evidence file still contains `FILL_ME`.",
+    "A spec with no `## Verification` section at `status: approved` and no `verification_due` produces no violation from rule 6.",
+    "`verification_due` is read only from the leading `---` block, so the same text inside the spec's prose or a code fence does not satisfy 6a.",
+    "A `verification_due` line carrying a trailing `#` comment parses as a valid date.",
+    "The three existing tests that assert exact violation counts still pass with their assertions unchanged.",
+    "`specs/find-before-you-grep.md` carries a `verification_due` date and the full suite is green — the rule ships with the repo passing, not with a known-red spec."
+  ],
+  "test_command": "python -m pytest -q studio/tests/test_spec_verification.py -k 'not test_every_spec_satisfies_the_convention'",
+  "breaks_criterion": 3,
+  "defect": "An approved spec can pass its verification deadline unnoticed when the evidence file has no placeholders.",
+  "patch": "hawthorn.patch",
+  "probe": {
+    "from_sha": "fefb4c54eb57ab095007910bb8d8747da155de50",
+    "paths": [],
+    "command": "PYTHONPATH=studio:studio/tests python - <<'PY'\nfrom datetime import date, timedelta\n\nfrom test_spec_verification import _FILLED, _synthetic_spec, _violations\n\ndue = (date.today() - timedelta(days=1)).isoformat()\nspec = _synthetic_spec(\"approved\", verification=True, due=due)\nviolations = _violations(\"synthetic.md\", spec, \"synthetic-eval-results.md\", _FILLED)\nassert len(violations) == 1 and \"date has passed\" in violations[0], violations\nPY"
+  }
+}

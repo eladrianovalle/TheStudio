@@ -1,0 +1,28 @@
+{
+  "unit_id": "obligation_queue_core",
+  "kind": "defect",
+  "source": "plant",
+  "writer_sha": "4bf6dcb6860c9b41d08b9f6c1b262f963dbc861b",
+  "spec_file": "specs/obligation-queue.md",
+  "acceptance_criteria": [
+    "`python studio/run_phase.py stats` prints obligations of all three kinds, each with the spec that defines it and either the command that discharges it or the edit that does, and the `unbuilt_unit` entries carry the same information the \"Planned work\" block carries today.",
+    "A spec whose every planned unit is built while its frontmatter still says `status: approved`, and which has no `## Verification` section or an evidence file that is no longer blank, produces exactly one `stale_status` obligation naming that spec, and producing it does not also report that spec's units as unbuilt.",
+    "A spec with a `## Verification` section whose units are all built but whose evidence file is missing or still holds `FILL_ME` produces no `stale_status` obligation, and no obligation at all while its `verification_due` is after `today`.",
+    "An approved spec whose Build Plan yields no units, or whose units are all `Dropped:`, produces no `stale_status` obligation; a spec whose `verification_due` does not parse as a date produces no `evidence_overdue` obligation.",
+    "A spec whose `verification_due` is on or before the supplied `today`, with its evidence file missing or still holding the skeleton's placeholders, produces exactly one `evidence_overdue` obligation; moving the date past `today` removes it.",
+    "The queue degrades to silence rather than to a guess: `derive` returns an empty list whenever `ledger.built_known` is `False` and the brief then prints nothing at all, while a spec that cannot be parsed removes only its own obligations and leaves both the other specs' obligations and the update nudge intact.",
+    "The session brief names exactly one obligation — the first by `RANK`, then spec path, then subject — states how many there are in total, and never prints a list; with no obligations and no available update it prints nothing.",
+    "`obligations.py` imports nothing outside the standard library and is listed in `install.SOURCE_FILES`, verified by the existing stdlib-only test and an install test."
+  ],
+  "test_command": "python -m pytest -q studio/tests/test_obligations.py studio/tests/test_stats.py studio/tests/test_update_check.py studio/tests/test_install.py",
+  "breaks_criterion": 5,
+  "defect": "The obligation queue omits blank evidence on its due date and first reports it the following day.",
+  "patch": "spruce.patch",
+  "probe": {
+    "from_sha": "4bf6dcb6860c9b41d08b9f6c1b262f963dbc861b",
+    "paths": [
+      "studio/tests/test_obligations.py"
+    ],
+    "command": "python -m pytest -q studio/tests/test_obligations.py -k test_evidence_due_today_is_already_owed"
+  }
+}

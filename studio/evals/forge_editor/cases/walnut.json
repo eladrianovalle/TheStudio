@@ -1,0 +1,25 @@
+{
+  "unit_id": "stop_generating_scopes_toml",
+  "kind": "defect",
+  "source": "plant",
+  "writer_sha": "359cfeb45fb55f3dfa2e70043fff629649f308c5",
+  "spec_file": "specs/retire-volunteer-metrics.md",
+  "acceptance_criteria": [
+    "`setup --target <fresh dir> --defaults` creates `.studio/` without a `scopes.toml`, and `setup --status` afterwards reports zero pending steps.",
+    "`from setup import apply_scopes` raises `ImportError`.",
+    "A pre-existing `.studio/scopes.toml` survives `setup --defaults` byte-for-byte, and a run in that repo still reads it (the scopes-config-from-artifact-root test stays green).",
+    "A `SETUP.json` carrying a stale `completed_steps[\"scopes\"]` entry loads without error and reports no pending step.",
+    "No `.claude/commands/*.md` or `studio/docs/*.md` still tells a reader the wizard configures scopes."
+  ],
+  "test_command": "python -m pytest -q studio/tests/test_setup.py studio/tests/test_run_phase.py",
+  "breaks_criterion": 3,
+  "defect": "Setup defaults deletes an existing hand-written scope override as if it were retired generated output.",
+  "patch": "walnut.patch",
+  "probe": {
+    "from_sha": "359cfeb45fb55f3dfa2e70043fff629649f308c5",
+    "paths": [
+      "studio/tests/test_setup.py"
+    ],
+    "command": "python -m pytest -q studio/tests/test_setup.py -k test_hand_written_scopes_toml_survives_defaults"
+  }
+}

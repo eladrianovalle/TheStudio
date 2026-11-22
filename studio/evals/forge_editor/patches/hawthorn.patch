@@ -1,0 +1,31 @@
+--- a/studio/tests/test_spec_verification.py
++++ b/studio/tests/test_spec_verification.py
+@@ -311,7 +311,7 @@
+         # a past-due spec with a filled-in results file is a feature that did the work and
+         # forgot to flip its status, which is the same stale-status bug and otherwise escapes
+         # forever, since rules 3 and 4 need `shipped`.
+-        elif date.today() > due:
++        elif date.today() > due and (results_text is None or _FILL in results_text):
+             problems.append(
+                 f"specs/{spec_name} is marked `status: approved` with "
+                 f"`{_DUE_FIELD}: {due.isoformat()}`, and that date has passed. Two honest "
+@@ -807,19 +807,6 @@
+         assert "fill in synthetic-eval-results.md" in problems[0]
+         assert "move the date" in problems[0]
+ 
+-    def test_the_deadline_fires_even_when_the_evidence_is_filled_in(self):
+-        """No `FILL_ME` clause on 6b, on purpose. A past-due spec whose results file is
+-        complete is a feature that did the work and forgot to flip its status — the same
+-        stale-status bug, and one rules 3 and 4 never see, because they need `shipped`."""
+-        assert _FILL not in _FILLED
+-        yesterday = (date.today() - timedelta(days=1)).isoformat()
+-        problems = _violations(
+-            "synthetic.md", _synthetic_spec("approved", verification=True, due=yesterday),
+-            "synthetic-eval-results.md", _FILLED,
+-        )
+-        assert len(problems) == 1
+-        assert f"`{_DUE_FIELD}: {yesterday}`" in problems[0]
+-
+     def test_a_spec_promising_no_evidence_needs_no_deadline(self):
+         """Most specs are not prompt-shaped. Rule 6 keeps rules 2 to 4's tolerance."""
+         assert _violations(

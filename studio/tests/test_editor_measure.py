@@ -185,8 +185,8 @@ def write_case(cases_dir: Path, name: str, case: dict) -> None:
     (cases_dir / f"{name}.json").write_text(json.dumps(case, indent=2), encoding="utf-8")
 
 
-def write_patch(history, patches_dir: Path, name: str, *paths: str, to: str = "plant") -> str:
-    diff = git(history["repo"], "diff", history["writer"], history[to], "--", *paths)
+def write_patch(history, patches_dir: Path, name: str, *paths: str, to: str = "plant", from_: str = "writer") -> str:
+    diff = git(history["repo"], "diff", history[from_], history[to], "--", *paths)
     (patches_dir / name).write_text(diff + "\n", encoding="utf-8")
     return name
 
@@ -361,13 +361,26 @@ def test_build_refuses_a_plant_that_touches_a_file_outside_the_unit_diff(history
 
 def test_a_plant_inside_the_unit_diff_builds(history, checkout_root, case_dirs, capsys):
     cases, patches = case_dirs
-    patch = write_patch(history, patches, "narrow.patch", "app.py", "run_checks.py")
-    write_case(cases, "greeter_eleven", defect_case(history, source="plant", patch=patch))
+    patch = write_patch(history, patches, "narrow.patch", "app.py", "run_checks.py", from_="fix")
+    write_case(cases, "greeter_eleven", defect_case(history, source="plant", patch=patch, tree_sha=history["fix"]))
 
     code, output = run_build(history, checkout_root, case_dirs, capsys)
 
     assert code == 0, output
     assert "# planted" in (checkout_root / "greeter_eleven" / "app.py").read_text()
+    assert sorted(path.name for path in checkout_root.iterdir()) == ["greeter_eleven"]
+
+
+def test_build_refuses_a_plant_whose_probe_already_fails_without_the_patch(history, checkout_root, case_dirs, capsys):
+    cases, patches = case_dirs
+    patch = write_patch(history, patches, "untargeted.patch", "app.py", "run_checks.py")
+    write_case(cases, "greeter_weak", defect_case(history, source="plant", patch=patch))
+
+    code, output = run_build(history, checkout_root, case_dirs, capsys)
+
+    assert code == 1
+    assert "case greeter_weak" in output
+    assert "unplanted control's probe" in output
 
 
 def test_build_refuses_a_tree_sha_with_another_units_writer_commit_in_between(history, checkout_root, case_dirs, capsys):
@@ -492,10 +505,13 @@ def test_the_proof_files_from_a_later_commit_never_reach_the_defect_tree(history
 # --- the command line -------------------------------------------------------
 
 
-def test_the_command_runs_as_a_script_and_reports_an_empty_case_set(checkout_root):
+def test_the_command_runs_as_a_script_and_reports_an_empty_case_set(checkout_root, tmp_path):
+    script = tmp_path / "editor_measure.py"
+    shutil.copy2(STUDIO_DIR / script.name, script)
     result = subprocess.run(
-        [sys.executable, str(STUDIO_DIR / "editor_measure.py"), "build", "--root", str(checkout_root)],
+        [sys.executable, str(script), "build", "--root", str(checkout_root)],
         capture_output=True, text=True,
+        env={**os.environ, "PYTHONPATH": str(STUDIO_DIR)},
     )
     assert result.returncode == 0, result.stderr
     assert "nothing to build" in result.stdout

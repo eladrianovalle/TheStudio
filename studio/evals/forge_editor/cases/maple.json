@@ -1,0 +1,23 @@
+{
+  "unit_id": "spec_shipped_frontmatter",
+  "kind": "defect",
+  "source": "plant",
+  "writer_sha": "d200136c2efdaf5674d320621db1691b204cae34",
+  "spec_file": "specs/retire-volunteer-metrics.md",
+  "acceptance_criteria": [
+    "A synthetic spec at `status: shipped` missing either field produces exactly one violation naming the missing field(s) and offering `status: approved` as the way out.",
+    "A synthetic spec with `shipped_impact: huge` produces exactly one violation naming the three allowed values.",
+    "The same specs at `status: approved` or `draft` produce no violation from rule 5.",
+    "Every spec at `status: shipped` in `specs/` (excluding `*-eval-results.md`) carries a non-empty `shipped_impact` in `none|minor|major` and a non-empty `shipped_changed`, and the real-spec test class is green.",
+    "`.claude/commands/spec.md` documents both fields in the frontmatter template and tells the reader to fill them in at the `shipped` flip."
+  ],
+  "test_command": "python -m pytest -q studio/tests/test_spec_verification.py",
+  "breaks_criterion": 2,
+  "defect": "A shipped spec with an invalid impact value passes verification without a warning.",
+  "patch": "maple.patch",
+  "probe": {
+    "from_sha": "d200136c2efdaf5674d320621db1691b204cae34",
+    "paths": [],
+    "command": "PYTHONPATH=studio:studio/tests python - <<'PY'\nfrom test_spec_verification import _synthetic_spec, _violations\n\nspec = _synthetic_spec(\"shipped\", verification=False, impact=\"huge\", changed=\"It starts sooner.\")\nviolations = _violations(\"synthetic.md\", spec, \"synthetic-eval-results.md\", None)\nassert len(violations) == 1 and \"none, minor, major\" in violations[0], violations\nPY"
+  }
+}

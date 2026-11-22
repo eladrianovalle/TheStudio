@@ -1,0 +1,29 @@
+--- a/studio/setup.py
++++ b/studio/setup.py
+@@ -683,6 +683,7 @@
+     apply_cleanup(target, state=state, _save=False)
+     apply_unstale_config(target, {}, state=state, _save=False)
+     apply_smoke_config(target, {}, state=state, _save=False)
++    (target / ".studio" / "scopes.toml").unlink(missing_ok=True)
+ 
+     save_setup_state(target, state)
+     return state
+--- a/studio/tests/test_setup.py
++++ b/studio/tests/test_setup.py
+@@ -297,16 +297,6 @@
+         """A leftover `scopes` key in an answers payload writes nothing."""
+         setup.apply_from_answers(project, {"scopes": "defaults"})
+         assert not (project / ".studio" / "scopes.toml").exists()
+-
+-    def test_hand_written_scopes_toml_survives_defaults(self, project: Path) -> None:
+-        """A scopes file someone wrote by hand is the only kind that should exist."""
+-        scopes_path = project / ".studio" / "scopes.toml"
+-        original = '[scopes.alignment]\nfocus = "Hand-tuned."\nmax_iterations = 9\n'
+-        scopes_path.write_text(original, encoding="utf-8")
+-
+-        setup.apply_defaults(project)
+-
+-        assert scopes_path.read_text(encoding="utf-8") == original
+ 
+     def test_stale_scopes_step_in_saved_state_is_inert(self, project: Path) -> None:
+         """A SETUP.json from before the step was retired reports nothing pending."""

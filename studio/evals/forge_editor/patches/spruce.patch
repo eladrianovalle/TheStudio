@@ -1,0 +1,31 @@
+--- a/studio/obligations.py
++++ b/studio/obligations.py
+@@ -223,7 +223,7 @@
+ def _evidence_overdue(spec: SpecView, today: date) -> Optional[Obligation]:
+     """A spec past the date it promised evidence by, with the evidence file still blank."""
+     due = parse_due(spec.verification_due)
+-    if due is None or due > today or not spec.evidence_is_blank:
++    if due is None or due >= today or not spec.evidence_is_blank:
+         return None
+     return Obligation(
+         kind=EVIDENCE_OVERDUE,
+--- a/studio/tests/test_obligations.py
++++ b/studio/tests/test_obligations.py
+@@ -266,17 +266,6 @@
+     assert _queue([moved], built=["built_one"]) == []
+ 
+ 
+-def test_evidence_due_today_is_already_owed():
+-    """On or before, not strictly before: the day it is due is the day it is late."""
+-    view = _view(
+-        _unit("built_one"),
+-        promises_evidence=True,
+-        verification_due=TODAY.isoformat(),
+-    )
+-
+-    assert [owed.kind for owed in _queue([view], built=["built_one"])] == [EVIDENCE_OVERDUE]
+-
+-
+ def test_evidence_that_is_in_owes_nothing_however_late_it_was():
+     """The deadline is not the obligation — the blank file is."""
+     view = _view(
