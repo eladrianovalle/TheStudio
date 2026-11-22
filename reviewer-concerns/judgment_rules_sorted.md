@@ -12,3 +12,5 @@
   is a prompt change, which is outside this unit.
 - **Follow-up:** Either add the index-summary line to the contrarian's prompt in `scopes.py`, or
   shorten the row's rule to the half the mandate carries ("A finding quotes the thing it critiques.").
+
+**Resolved.** The owner classified this rule as requiring a person. Appendix A records that ruling.
