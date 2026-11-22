@@ -194,7 +194,7 @@ name of the directory the editor will work in, and the only name the editor ever
 | `test_command` | yes | A command covering the unit's own test files |
 | `breaks_criterion` | `defect` | The number of the criterion the defect makes false, or `null` when no criterion states it |
 | `defect` | `defect` | One sentence saying what is wrong, for the person ruling. It never reaches the editor. |
-| `probe` | `defect`; optional for `clean` | `from_sha`, `paths`, `command`: files taken from another commit and a command that exits 0 only when the defect is absent |
+| `probe` | `defect`, and the clean twin of a `review_fix` pair; optional for other `clean` | `from_sha`, `paths`, `command`: files taken from another commit and a command that exits 0 only when the defect is absent |
 
 **Why the test command is narrowed.** A real editor is told to run the repository's whole suite.
 In a historic tree that suite fails today: one test checks evidence deadlines against the calendar,
@@ -213,7 +213,10 @@ in that line.
 3. Delete `.git/FETCH_HEAD` and `.git/logs`, then `git gc --prune=now`.
 4. Prove the case, then `git reset --hard` and `git clean -fdx` so the proof leaves nothing.
 5. Write `<tree>/.studio/output/impl_loop/<unit_id>/impl--<unit_id>--writer.json`, with
-   `writer_sha`, `base_sha` and `files_touched` read from the built tree.
+   `writer_sha`, `base_sha` and `files_touched` read from the built tree, and an empty
+   `load_bearing` list. The historic writer's items are not in public history. A real editor may not
+   edit a load-bearing item and must revert or escalate instead, so a case editor can repair a
+   defect a real one could only have flagged.
 
 **Real pairs.** A real pair comes from a unit the editor passed and review then fixed inside the
 same pull request. The defect case is the tree at the writer commit. Its clean twin is:
@@ -223,12 +226,13 @@ same pull request. The defect case is the tree at the writer commit. Its clean t
 - `tree_sha` set to the fix commit, where it does not apply. That tree also holds the historic
   editor's own edits, so false alarms on such a twin are measured on an already-reviewed tree.
 
-Both cases of a pair carry identical criteria and the same test command. If a later commit narrowed
-a criterion, that change goes into both trees as part of their `patch`. On `origin/main` there are
-about 65 candidate fix commits behind 28 units. A person sorts them before the case set is built
-and the sort is recorded as a table in the pull request that adds the cases. Expect mostly plants:
-by the review's count about 10 of those units have checkbox criteria in a spec, and 7 of their fixes
-apply cleanly to the writer's tree.
+Both cases of a pair carry identical criteria, the same test command and the same probe, so the
+probe is shown to fail on the defect and pass once it is fixed, as a plant's is. If a later commit
+narrowed a criterion, that change goes into both trees as part of their `patch`. On `origin/main`
+there are about 65 candidate fix commits behind 28 units. A person sorts them before the case set is
+built and the sort is recorded as a table in the pull request that adds the cases. Expect mostly
+plants: by the review's count about 10 of those units have checkbox criteria in a spec, and 7 of
+their fixes apply cleanly to the writer's tree.
 
 **Plants.** A plant is valid when the build confirms all of these:
 
@@ -283,24 +287,38 @@ Python from the case file and from `runtime_knobs(load_loop_config())`, the same
 **The workflow script.** `build` writes a copy of `measure-runner.js` to
 `studio/output/editor_measure/<timestamp>/` with one line replaced: the tracked file's
 `const BUILT = null` becomes the list of trees, each with its name and rendered prompt, plus the
-schema and the model. A manifest beside it holds each tree's path, built commit id, kind, criteria
-and probe, and both fingerprints. The tracked file, launched unbuilt, returns
-`{ measured: false, reason: 'not_built' }` and starts no agent. The script's whole body: for every
-tree, in parallel, one `agent()` call with that tree's prompt, the schema and the model. One agent
-per case and no others.
+schema and the model. A manifest beside it holds each tree's path, built commit id, kind, criteria,
+probe and rendered prompt, both fingerprints, and `built_at`, the time the build finished. `build`
+deletes every earlier build's directory, so only one runner exists to launch. The tracked file,
+launched unbuilt, returns `{ measured: false, reason: 'not_built' }` and starts no agent. The
+script's whole body: for every tree, in parallel, one `agent()` call with that tree's prompt, the
+schema and the model. One agent per case and no others.
 
 **How results reach a tracked file.** Claude Code writes a `journal.jsonl` for every workflow run.
 A `result` row carries the schema-checked object the agent returned and the tools it used. `record`
-finds the journal whose agent labels are exactly this build's tree names and whose workflow id is
-not already in the results file. It reads each case's model from the assistant turns of that case's
-own transcript. Then, for each case, it checks the tree still descends from the built commit, asks
-`editor-prompt.mjs gate` for the real `unconfirmedCriteria` and `passesExitGate` answers, runs a
-defect case's probe in the tree as the editor left it, and scores the row.
+reads the one manifest `build` left and finds the journal whose agent labels are exactly that
+build's tree names and whose workflow id is not already in the results file.
+
+That match does not on its own tie the journal to this build. Tree names and built commits are the
+same from one build to the next, so a run launched from an earlier build and never recorded would
+match a later build made after a prompt edit, and be recorded under the new prompt's fingerprint.
+So each case's own transcript must also belong to this build: its first user turn is, byte for
+byte, the prompt the manifest holds for that tree, and its first row is timestamped after the
+manifest's `built_at`. The second check matters even when the prompt did not change: a rebuild
+replaces every tree, so an editor that started before it worked on a tree that no longer exists,
+and probes run now would score a tree it never touched.
+
+`record` reads each case's model from the assistant turns of that case's own transcript. Then, for
+each case, it checks the tree still descends from the built commit, asks `editor-prompt.mjs gate`
+for the real `unconfirmedCriteria` and `passesExitGate` answers, runs a defect case's probe in the
+tree as the editor left it, and scores the row.
 
 **A void case** has no result; or a result row with no tool list, or one naming a tool beginning
-`mcp__`; or a turn that ran on a model outside the pinned family; or a tree that no longer descends
-from the built commit. Cases that did not all run on one model id void the run. A run with a void
-case is not recorded. It is thrown away and the measurement is launched again whole.
+`mcp__`; or a transcript whose first user turn differs from the manifest's prompt for that tree, or
+that began before `built_at`; or a turn that ran on a model outside the pinned family; or a tree
+that no longer descends from the built commit. Cases that did not all run on one model id void the
+run. A run with a void case is not recorded. It is thrown away and the measurement is launched again
+whole.
 
 ### Scoring
 
@@ -350,10 +368,13 @@ a ruled row, a note. Totals are not stored; the test and the report derive them 
 **What is fingerprinted.**
 
 - `prompt_fingerprint`: SHA-256 of the editor prompt rendered for one fixed reference unit, then
-  `EDITOR_HANDOFF` as JSON with sorted keys, then `EDITOR_MODEL`. It moves when a word of
-  `editorPrompt` or anything it calls changes, when the mandate changes, when the schema changes,
-  when the pinned model changes, or when one of `read_scope`, `output_budget` and `observe_command`
-  changes. It does not move for a comment or a reformat, because it hashes what was rendered.
+  `EDITOR_HANDOFF` as JSON with sorted keys, then `EDITOR_MODEL`, then the source of
+  `unconfirmedCriteria`, `passesExitGate` and everything they call, as the loader reads it. It
+  moves when a word of `editorPrompt` or anything it calls changes, when the mandate changes, when
+  the schema changes, when the pinned model changes, when one of `read_scope`, `output_budget` and
+  `observe_command` changes, or when the gate that decides what "flagged" means changes. Outside
+  the two gate functions it does not move for a comment or a reformat, because it hashes what was
+  rendered; inside them it does, because they are hashed as source.
 - `cases_fingerprint`: SHA-256 over the bytes of every case file and patch, in name order.
 
 Not covered: which Opus version answered, the reasoning effort the session passed down, the writer
@@ -409,6 +430,7 @@ baseline is two of those. Beside the tokens is the person's time: about 8 ruling
 | Runner | An agent dies, or a turn falls back to another model | The case is void; `record` writes nothing and names it; the run is launched again whole |
 | Runner | An editor works in the main checkout instead of its tree | Not caught mechanically. The pinned `git -C` keeps its git commands in the tree. Checked in Verification. |
 | Runner | Many test commands at once collide on something outside their trees | Unchecked. Would show as editors reporting red tests on clean cases |
+| Record | A run launched before the newest build is recorded after it | Its transcripts' prompts or start times do not match the manifest; every case is void, `record` writes nothing and says why |
 | Record | Claude Code changes where or how it writes the journal | `record` finds no journal matching the build and says what it looked for. Nothing can be recorded until it is fixed |
 | Scoring | Many rows need a ruling | The suite stays red until they are made; `rule` lets the user finish later |
 | Gate | The editor's prompt changes on a branch | The suite is red there until measured. `/forge` in this repository cannot pass its entry gate on that branch |
@@ -500,7 +522,8 @@ come from that.
 - **`record` depends on files Claude Code writes for its own purposes.** Their layout is not a
   published contract. A change stops recording, loudly, and nothing else.
 - **A case tree is not exactly what a real editor sees:** a narrowed test command, a standalone
-  repository, a clock months ahead of its newest commit, and a session that lists other commands.
+  repository, a clock months ahead of its newest commit, a session that lists other commands, and a
+  writer handoff with no load-bearing items, which can turn a flag into a repair.
 - **Two Appendix A labels are inconsistent with their neighbours** and are the approver's call:
   `/smoke` "launch in the background" is `person` while its sibling steps are `by design`, and
   `/handoff` "re-verify on resume" is `person` while "verify before writing" is `proxy`.
@@ -584,7 +607,7 @@ and the writer handoff file, tested against a throwaway repository.
 - [ ] `build` stops and names the case when the case's test command fails in the built tree, when a defect case's probe passes, when a clean case's probe fails, and when a criterion is not in the spec file as it stands in the built tree.
 - [ ] `build` stops and names the case when a patch does not apply, when a `plant` case's patch touches a file outside the unit's diff, and when a merge commit or another unit's `writer:` commit lies between the writer commit and `tree_sha`.
 - [ ] `build` refuses a root or tree name that holds a telltale word or a character `explain_unquotable_path` refuses, and exits 2 saying the history is missing in a clone that lacks a case's commits.
-- [ ] After a successful build the proof has left no file in the tree, and the tree's run directory holds a writer handoff whose `writer_sha`, `base_sha` and `files_touched` are read from the built tree.
+- [ ] After a successful build the proof has left no file in the tree, and the tree's run directory holds a writer handoff whose `writer_sha`, `base_sha` and `files_touched` are read from the built tree and whose `load_bearing` list is empty.
 
 **Out of scope:** rendering a prompt; the runner; any case file for a real unit.
 
@@ -596,7 +619,7 @@ their shape. The user sorts the candidate fix commits first.
 **Acceptance criteria:**
 - [ ] The suite fails on a case file with an unknown `kind` or `source`, no criteria, a tree name that repeats or holds a telltale word, or a defect case with no probe, no `defect` sentence or no `breaks_criterion` key.
 - [ ] The set holds at least 12 defect cases and at least 6 clean ones, and the suite fails below either number.
-- [ ] Every `review_fix` case names a `fix_sha`, and a defect case and a clean case that name the same one carry the same criteria and test command.
+- [ ] Every `review_fix` case names a `fix_sha`, and a defect case and a clean case that name the same one carry the same criteria, test command and probe.
 - [ ] Every plant names a patch file that exists and whose added lines hold no telltale word.
 - [ ] `python studio/editor_measure.py build` exits 0 for the whole set in a checkout with this repository's full history; no suite test runs it.
 
@@ -612,7 +635,7 @@ removal from the test file, and `editor_measure.py fingerprint`. Depends on unit
 - [ ] Given the pinned fixture's unit and writer, `editor-prompt.mjs render` prints exactly the fixture's editor prompt, prints `EDITOR_HANDOFF` as JSON whose top-level type is `object`, and prints the loop script's `EDITOR_MODEL`.
 - [ ] `editor-prompt.mjs gate` returns, for a set of editor results, the unconfirmed criteria and exit-gate answer that `unconfirmedCriteria` and `passesExitGate` give for the same inputs.
 - [ ] `workflow-shells.test.mjs` imports its loader from `load-from-source.mjs` and holds no second copy of it.
-- [ ] Against a copy of the loop script, `fingerprint` changes when a word of the rendered editor prompt, the mandate text, the schema, `EDITOR_MODEL`, or one of `read_scope`, `output_budget` and `observe_command` changes, and stays the same when only a comment in the script changes.
+- [ ] Against a copy of the loop script, `fingerprint` changes when a word of the rendered editor prompt, the mandate text, the schema, `EDITOR_MODEL`, one of `read_scope`, `output_budget` and `observe_command`, or the code of `unconfirmedCriteria` or `passesExitGate` changes, and stays the same when only a comment outside those two functions changes.
 
 **Out of scope:** the writer prompt; running any agent; the results file.
 
@@ -623,9 +646,10 @@ with the scoring, `measure-editor.md`, the one name in `test_install.py`, and th
 docs. Depends on units 3, 4 and 5.
 
 **Acceptance criteria:**
-- [ ] `build` writes a copy of `measure-runner.js` with every tree's name and rendered prompt, the schema and the editor's model filled in, and a manifest beside it, under `studio/output/editor_measure/`; the copy's bytes are the same for the same cases and root; the tracked file returns `measured: false` with reason `not_built` and spawns no agent.
-- [ ] `record` uses the journal whose agent labels are exactly the build's tree names and whose workflow id is not already in the results file, and appends one run with one row per case, the two fingerprints, and the model read from the assistant turns of each case's own transcript.
+- [ ] `build` writes a copy of `measure-runner.js` with every tree's name and rendered prompt, the schema and the editor's model filled in, and a manifest beside it holding each tree's prompt and `built_at`, under `studio/output/editor_measure/`, and deletes every earlier build's directory; the copy's bytes are the same for the same cases and root; the tracked file returns `measured: false` with reason `not_built` and spawns no agent.
+- [ ] `record` uses the journal whose agent labels are exactly the build's tree names and whose workflow id is not already in the results file, and in which every case's transcript opens with the manifest's prompt for that tree, byte for byte, and begins after `built_at`, and appends one run with one row per case, the two fingerprints, and the model read from the assistant turns of each case's own transcript.
 - [ ] `record` writes nothing and names each void case when a case has no result, when its result row carries no list of tools or the list names one beginning `mcp__`, when any of its turns ran on a model outside the pinned family or the cases did not all run on one model id, and when a tree's head no longer descends from the built commit.
+- [ ] Given a finished journal from one build that was never recorded, `record` after a rebuild writes nothing and names every case as void, both when the editor's prompt changed between the builds and when only a case file did.
 - [ ] Each row's outcome follows the scoring tables, with `caught` only on a `fail` verdict under the target criterion's exact text and a flagged clean case scored `false_alarm`: tests with made-up journals and trees cover `caught`, `repaired`, `needs_ruling` and `missed` for a defect case, and `passed` and `false_alarm` for a clean one.
 - [ ] `rule` lists a run's unruled rows with each case's `defect` sentence, writes `caught` or `missed` with a note to one of them, and refuses any other word, an empty note, and a row that does not need a ruling.
 - [ ] `measure-editor.md` is not in `SLASH_COMMANDS`, the registration test names it as the one command that is never installed and still fails for any other unregistered command file, its frontmatter carries `disable-model-invocation: true`, it tells the session to start from a fresh worktree, build, launch the built runner by `scriptPath`, record, and put each `needs_ruling` row to the user through `rule`, and the README and `CLAUDE_CODE_USAGE.md` name the command.
@@ -875,7 +899,7 @@ Totals: 25 listed, 57 checkable, 6 with a judge, 30 for a person; 118 in all.
 26. The audit agents in `/detest`, `/unstale` and `/offload` run without edit tools.
 27. A `/detest` run changes only test files, adds no dependency, and leaves no mutation behind.
 28. `/unstale` takes its profile from config in code and names it.
-29. An agent asks before closing an issue.
+29. An agent asks before closing an issue or deleting a tracking file.
 30. An `/unstale` run creates no new document and only adds to the changelog.
 31. The counts the docs state match the code.
 32. An approved spec is a tracked file under the specs directory.
