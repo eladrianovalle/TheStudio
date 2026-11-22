@@ -34,9 +34,11 @@ def resolve_unit(args, cwd):
                 "title": title, "acceptance_criteria": [], "instructions": title}
 
     path = cwd / args.spec
-    if not path.is_file() and "/" not in args.spec and not args.spec.endswith(".md"):
-        specs = ".studio/specs" if (cwd / ".studio/source").is_dir() else "specs"
-        path = cwd / specs / (args.spec + ".md")
+    if not path.is_file() and not args.spec.endswith(".md"):
+        path = cwd / (args.spec + ".md")
+        if not path.is_file() and "/" not in args.spec:
+            specs = ".studio/specs" if (cwd / ".studio/source").is_dir() else "specs"
+            path = cwd / specs / path.name
     units = []
 
     def refusal(reason):
@@ -58,7 +60,23 @@ def resolve_unit(args, cwd):
     entry = next(m for m in UNIT_OPENER.finditer(section) if m[1] == unit.unit_id)
     following = section[entry.end():]
     following = re.split(r"(?m)^ {0,3}#{1,3}\s|" + UNIT_OPENER.pattern, following, maxsplit=1)[0]
-    criteria = re.findall(r"(?m)^\s*[-*]\s+\[[ xX]\]\s+(.+)$", following)
+    # Preserve wrapped Markdown sentences, including their punctuation and inline markup.
+    criteria = []
+    current = []
+    for line in following.splitlines():
+        bullet = re.match(r"^( *)[-*][ \t]+\[[ xX]\][ \t]+(\S.*)", line.expandtabs())
+        if bullet:
+            if current:
+                criteria.append(" ".join(current))
+            current = [bullet[2].strip()]
+            continuation_indent = bullet[1] + " "
+        elif current and line.strip() and line.expandtabs().startswith(continuation_indent):
+            current.append(line.strip())
+        elif current:
+            criteria.append(" ".join(current))
+            current = []
+    if current:
+        criteria.append(" ".join(current))
     if not criteria:
         raise refusal("empty criteria list")
     status = parse_frontmatter(spec).get("status", "unknown")

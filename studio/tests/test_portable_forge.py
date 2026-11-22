@@ -129,3 +129,12 @@ def test_draft_acknowledgement_and_legacy_plan_entry(project):
     assert '--allow-draft' in cli(project, *args).stderr
     r = cli(project, *args, '--allow-draft')
     assert json.loads(r.stdout)['acceptance_criteria'] == ['Retains the original text.']
+
+
+def test_extensionless_path_preserves_wrapped_criterion(project):
+    spec = project / '.studio/specs/demo.md'
+    spec.write_text(spec.read_text().replace('Prints **demo**.',
+                                             'Prints **demo**\n  followed by a newline.'))
+    r = cli(project, '--spec', '.studio/specs/demo', '--plan')
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout)['acceptance_criteria'] == ['Prints **demo** followed by a newline.']

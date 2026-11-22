@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {execFileSync} from 'node:child_process'
 import {mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync} from 'node:fs'
 import {tmpdir} from 'node:os'
-import {join} from 'node:path'
+import {delimiter, join} from 'node:path'
 import {forge} from '../../../studio/forge_host.mjs'
 import {runLoop} from '../../../studio/forge_loop.mjs'
 
@@ -61,15 +61,23 @@ function fixture() {
   return {cwd, git: runGit, unit}
 }
 
-for (const scenario of ['pass', 'missing grade', 'red writer', 'red editor', 'bad pin', 'malformed',
+for (const scenario of ['pass', 'separate pins', 'missing grade', 'red writer', 'red editor', 'bad pin', 'malformed',
   'wrong unit', 'wrong hash', 'extra file', 'unexpected commit', 'branch movement', 'concurrent']) {
   test('linked worktree: ' + scenario, async () => {
     const {cwd, git, unit} = fixture()
     let count = 0
     if (scenario === 'bad pin') unit.roles.writer.model = 'requested'
-    const adapter = async ({execution}) => {
+    if (scenario === 'separate pins') {
+      unit.roles.writer.model = 'writer-pin'
+      unit.roles.editor.model = 'editor-pin'
+    }
+    const adapter = async ({execution, model}) => {
       count++
       Object.assign(execution, {actual_runtime: 'codex', completed: true, session_id: 'session-' + count})
+      if (scenario === 'separate pins') {
+        assert.equal(model, count === 1 ? 'writer-pin' : 'editor-pin')
+        execution.observed_models.push(model)
+      }
       if (count === 1) {
         if (scenario === 'concurrent') await assert.rejects(forge(unit, {codex: adapter}), /owns this worktree/)
         writeFileSync(join(cwd, 'hello'), scenario === 'red writer' ? 'fail' : 'pass')
@@ -99,8 +107,13 @@ for (const scenario of ['pass', 'missing grade', 'red writer', 'red editor', 'ba
       return
     }
     assert.equal(count, 2)
-    if (['pass', 'concurrent', 'missing grade', 'red editor'].includes(scenario)) {
+    if (['pass', 'separate pins', 'concurrent', 'missing grade', 'red editor'].includes(scenario)) {
       assert.equal(state.error, undefined)
+      for (const [role, record] of Object.entries(state.roles)) {
+        const pin = scenario === 'separate pins' ? role + '-pin' : null
+        assert.equal(record.requested_model, pin)
+        assert.deepEqual(record.observed_models, pin ? [pin] : [])
+      }
       assert.equal(state.result.flagged, ['red editor', 'missing grade'].includes(scenario))
       assert.equal(git('status', '--porcelain'), '')
       assert.equal(readFileSync(join(cwd, 'hello'), 'utf8'), 'pass')
@@ -115,3 +128,52 @@ for (const scenario of ['pass', 'missing grade', 'red writer', 'red editor', 'ba
     }
   })
 }
+
+
+test('branch switch rejects an intervening commit before dispatch', async () => {
+  const {cwd, git, unit} = fixture()
+  const hooks = join(cwd, '.git-hooks')
+  mkdirSync(hooks)
+  writeFileSync(join(hooks, 'post-checkout'), '#!/bin/sh\ngit commit -q --allow-empty -m intervening\n', {mode: 0o755})
+  git('add', '.git-hooks')
+  git('commit', '-qm', 'prepare checkout hook')
+  git('config', 'core.hooksPath', hooks)
+  unit.base_sha = git('rev-parse', 'HEAD')
+  unit.branch = 'target'
+  const state = await forge(unit, {codex: () => assert.fail('unexpected dispatch')})
+  assert.match(state.error, /Branch or HEAD moved/)
+  assert.equal(state.failed_stage, 'preflight')
+  assert.equal(state.roles.writer.status, 'skipped')
+  assert.equal(git('log', '-1', '--format=%s'), 'intervening')
+})
+
+test('a concurrently staged file cannot enter the writer checkpoint', async () => {
+  const {cwd, git, unit} = fixture()
+  const bin = mkdtempSync(join(tmpdir(), 'forge-snapshot-'))
+  // Insert an unrelated edit immediately before Git snapshots the shared index.
+  writeFileSync(join(bin, 'git'), `#!/bin/sh
+PATH=\${PATH#*:}
+if [ "$2" = write-tree ]; then
+  echo keep > unrelated
+  git add -- unrelated || exit 1
+fi
+exec git "$@"
+`, {mode: 0o755})
+  const originalPath = process.env.PATH
+  process.env.PATH = bin + delimiter + originalPath
+  try {
+    const state = await forge(unit, {codex: async ({execution}) => {
+      Object.assign(execution, {actual_runtime: 'codex', completed: true})
+      writeFileSync(join(cwd, 'hello'), 'pass')
+      return {changes: [{path: 'hello', blob: git('hash-object', 'hello')}],
+        handoff: {...writer, base_sha: unit.base_sha, writer_sha: unit.base_sha}}
+    }})
+    assert.equal(state.failed_stage, 'writer')
+    assert.equal(state.error, 'Unexpected staged paths')
+    assert.equal(state.roles.editor.status, 'skipped')
+    assert.equal(git('rev-parse', 'HEAD'), unit.base_sha)
+    assert.equal(readFileSync(join(cwd, 'unrelated'), 'utf8'), 'keep\n')
+  } finally {
+    process.env.PATH = originalPath
+  }
+})

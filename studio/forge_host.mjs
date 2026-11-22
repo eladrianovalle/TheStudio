@@ -171,16 +171,16 @@ export async function forge(unit, runtimes = adapters) {
     const paths = changes.map(c => c.path)
     if (paths.length) git('add', '--', ...paths)
     ensureLocation()
-    // Compare the staged blob with the manifest as well: a concurrent write between
-    // verification and staging cannot silently become the checkpoint.
-    for (const {path, blob} of changes) {
-      const entry = git('ls-files', '--stage', '--', path)
-      if ((entry ? entry.split(' ')[1] : null) !== blob) throw Error('Staged content changed; preserving index')
-    }
-    const staged = git('diff', '--cached', '--name-only', '--no-renames', '-z').split('\0').filter(Boolean)
-    if (staged.length !== paths.length || staged.some(p => !paths.includes(p))) throw Error('Unexpected staged paths')
-    ensureLocation()
+    // Verify the immutable tree that commit-tree will use, even if another process
+    // changes the index between staging and taking this snapshot.
     const tree = git('write-tree').trim()
+    const staged = git('diff', '--name-only', '--no-renames', '-z', checkpoint, tree).split('\0').filter(Boolean)
+    if (staged.length !== paths.length || staged.some(p => !paths.includes(p))) throw Error('Unexpected staged paths')
+    for (const {path, blob} of changes) {
+      const entry = git('ls-tree', '-z', tree, '--', path)
+      const stagedBlob = entry ? entry.split('\t', 1)[0].split(' ')[2] : null
+      if (stagedBlob !== blob) throw Error('Staged content changed; preserving index')
+    }
     const message = label + ': ' + unit.unit_id
     const next = git('commit-tree', tree, '-p', checkpoint, '-m', message).trim()
     ensureLocation()
@@ -200,7 +200,6 @@ export async function forge(unit, runtimes = adapters) {
         throw Error('Target branch has a different HEAD. Check it out first and repeat the plan so its spec and gate config are used.')
       }
       git('switch', ...(exists ? [] : ['-c']), unit.branch)
-      checkpoint = head()
     }
     ensureLocation()
     state.base_sha = checkpoint
