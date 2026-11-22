@@ -14,7 +14,7 @@ from pathlib import PurePath
 from statistics import median
 from typing import Dict, Iterable, List, Optional, Sequence
 
-from obligations import Obligation, format_queue
+from obligations import EVIDENCE_PLACEHOLDER, Evidence, Obligation, format_queue
 
 # How much a shipped feature changed downstream, in three coarse buckets. Kept
 # small on purpose: a bucket someone will actually pick beats a scale nobody fills.
@@ -51,6 +51,7 @@ def parse_frontmatter(text: str) -> Dict[str, str]:
 # spec templates inside four-backtick fences precisely so an inner three-backtick block does not
 # close them early, and a stripper that assumed three would end the block in the wrong place.
 _FENCE_LINE = re.compile(r"^\s*(`{3,})")
+_EVIDENCE_FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
 
 _BUILD_PLAN_HEADING = "## Build Plan"
 
@@ -110,7 +111,7 @@ _NEAR_MISS_BUILD_PLAN_HEADING = re.compile(r"^#{2,}\s+build plan(?![a-z0-9])")
 _UNLABELLED_BUILD_PLAN_HEADING = re.compile(r"^#{2,} build plan$")
 
 
-def strip_fenced_blocks(text: str) -> str:
+def strip_fenced_blocks(text: str, *, fence: re.Pattern = _FENCE_LINE) -> str:
     """The document with every fenced code block blanked out, line for line.
 
     Fenced lines come back as empty strings rather than being deleted, so line numbers still
@@ -122,9 +123,9 @@ def strip_fenced_blocks(text: str) -> str:
     kept = []
     open_fence = ""
     for line in text.splitlines():
-        marker = _FENCE_LINE.match(line)
+        marker = fence.match(line)
         if open_fence:
-            if marker and len(marker.group(1)) >= len(open_fence):
+            if marker and marker.group(1).startswith(open_fence):
                 open_fence = ""
             kept.append("")
         elif marker:
@@ -133,6 +134,47 @@ def strip_fenced_blocks(text: str) -> str:
         else:
             kept.append(line)
     return "\n".join(kept)
+
+
+# The declaration begins a line in the author's Verdict section. A boundary after
+# the label excludes questions and unfinished conditions such as "Criterion met if ...".
+_VERDICT_LABEL = re.compile(
+    r" {0,3}(criterion (?:not )?met|inconclusive)(?: as written)?"
+    r"(?=$|[.,:;!]|\s*[-–—]\s)", re.IGNORECASE,
+)
+
+
+def parse_evidence(text: str) -> Evidence:
+    """Read the authored conclusion, keeping blank evidence distinct from a filled ambiguity."""
+    if not text.strip() or EVIDENCE_PLACEHOLDER in text:
+        return Evidence.BLANK
+
+    declarations = set()
+    in_verdict = False
+    example_depth = None
+    visible = strip_fenced_blocks(text, fence=_EVIDENCE_FENCE)
+    visible = re.sub(r"<!--.*?(?:-->|$)", "", visible, flags=re.DOTALL)
+    for line in visible.splitlines():
+        heading = _HEADING_LINE.match(line)
+        if heading:
+            depth = len(heading.group(1))
+            title = re.sub(r"\s+#+\s*$", "", line[heading.end():]).strip().casefold()
+            if depth <= 2:
+                in_verdict = depth == 2 and title == "verdict"
+            if example_depth is None or depth <= example_depth:
+                example_depth = depth if re.match(r"examples?\b", title) else None
+            continue
+        if not in_verdict or example_depth is not None:
+            continue
+        # Ignore ordinary prose, quoted examples and the template's list of options.
+        # Only a declaration can introduce further declarations on the same line.
+        plain = line.replace("**", "").replace("__", "").rstrip()
+        for clause in re.split(r"(?<=[.,!:;])\s+(?:(?:or|and|but)\s+)?", plain, flags=re.I):
+            declaration = _VERDICT_LABEL.match(clause)
+            if not declaration:
+                break
+            declarations.add(Evidence(declaration.group(1).lower()))
+    return declarations.pop() if len(declarations) == 1 else Evidence.UNCLEAR
 
 
 def build_plan_section(spec_text: str) -> str | None:

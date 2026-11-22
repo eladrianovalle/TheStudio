@@ -9,6 +9,7 @@ actually sees.
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -943,3 +944,103 @@ def test_the_dashboard_reads_the_specs_and_git_once(specs_root, monkeypatch, cap
     assert len(spec_reads) == 1, (
         f"the dashboard read the specs directory {len(spec_reads)} times for one answer"
     )
+
+
+def _queue_cli_outputs(target):
+    """Read the dashboard and SessionStart brief through their public CLI entry points."""
+    import json
+
+    def cli(*args):
+        return subprocess.run(
+            [sys.executable, str(REPO_ROOT / "studio/run_phase.py"), *args], cwd=target,
+            capture_output=True, check=True, text=True,
+        ).stdout
+
+    dashboard = cli("stats", "--artifact-root", str(target))
+    brief_json = cli("check-updates", "--target", str(target))
+    brief = json.loads(brief_json)["hookSpecificOutput"]["additionalContext"] if brief_json else ""
+    queue = dashboard.split("What this repository owes (approved specs vs. git):", 1)[1]
+    return queue, brief
+
+
+def _verification_spec(target, slug, unit_id, due="2000-01-01", *, promised=True):
+    plan = f"## Build Plan\n\n### 1. `{unit_id}` — unit outcome\n"
+    if promised:
+        plan += "\n## Verification\n\nRecord the measured verdict.\n"
+    specs = target / ".studio" / "specs"
+    specs.mkdir(parents=True, exist_ok=True)
+    (specs / f"{slug}.md").write_text(_spec(plan, slug=slug, verification_due=due))
+    return specs / f"{slug}-eval-results.md"
+
+
+@pytest.mark.parametrize(("body", "action", "due"), [
+    ("game-design-board", "failed", "2000-01-01"),
+    ("shipped-finish-check", "status: shipped", "2999-01-01"),
+    ("## Verdict\nInCoNcLuSiVe: too few runs.", "resolve", "2000-01-01"),
+    ("## Verdict\nOne of **criterion met** / **criterion not met** / **inconclusive, and why**.",
+     "clarify", "2000-01-01"),
+    ("## Verdict\nMaybe the intervention helped.", "clarify", "2000-01-01"),
+    ("## Verdict\nCriterion met.\n\n**Criterion not met.**", "clarify", "2000-01-01"),
+    ("## Verdict\nSee below.\n## Notes\n**Criterion met**", "clarify", "2000-01-01"),
+    ("## Verdict\n```md\nCriterion met.\n```\n> Criterion met.", "clarify", "2000-01-01"),
+])
+def test_evidence_action_through_both_commands(tmp_path, body, action, due):
+    target = _repo_with_commits(tmp_path / "consumer", "writer: planned_unit")
+    evidence = _verification_spec(target, "measured", "planned_unit", due)
+    if not body.startswith("##"):
+        body = (SPECS_DIR / f"{body}-eval-results.md").read_text()
+    evidence.write_text(body)
+
+    dashboard, brief = _queue_cli_outputs(target)
+    if action != "status: shipped":
+        detail = next(line.strip() for line in dashboard.splitlines()
+                      if str(evidence.relative_to(target)) in line)
+        assert f"{detail}. Built work is read from all branches" in brief
+    for output in (dashboard, brief):
+        assert action in output.lower()
+        assert "still blank" not in output
+        if action != "status: shipped":
+            assert str(evidence.relative_to(target)) in output
+            assert "status: shipped" not in output
+            assert "Discharging it is an edit to the spec" not in output
+        if action == "failed":
+            assert "revise" in output and "rerun" in output
+
+
+@pytest.mark.parametrize("blank", ["missing", "unreadable", "whitespace", "placeholder"])
+def test_blank_evidence_only_prompts_at_deadline(tmp_path, blank):
+    target = _repo_with_commits(tmp_path / "consumer", "writer: planned_unit")
+    evidence = _verification_spec(target, "measured", "planned_unit", "2999-01-01")
+    if blank == "unreadable":
+        evidence.write_bytes(b"\xff")
+    elif blank == "whitespace":
+        evidence.write_text(" \t\n\n")
+    elif blank == "placeholder":
+        evidence.write_bytes((SPECS_DIR / "message-draft-eval-results.md").read_bytes())
+
+    dashboard, brief = _queue_cli_outputs(target)
+    assert "Nothing owed" in dashboard and brief == ""
+    _verification_spec(target, "measured", "planned_unit", "2000-01-01")
+    for output in _queue_cli_outputs(target):
+        assert str(evidence.relative_to(target)) + " is still blank" in output
+        assert "status: shipped" not in output
+
+
+def test_both_commands_share_the_four_kind_queue(tmp_path):
+    target = _repo_with_commits(tmp_path / "consumer", "writer: ready", "writer: failed",
+                                "writer: overdue")
+    _verification_spec(target, "z-ready", "ready", "", promised=False)
+    evidence = _verification_spec(target, "x-failed", "failed")
+    evidence.write_text("## Verdict\nCriterion not met as written.\n")
+    _verification_spec(target, "y-overdue", "overdue")
+    _verification_spec(target, "a-unbuilt", "pending", "2999-01-01")
+
+    dashboard, brief = _queue_cli_outputs(target)
+    assert "4 obligations, most important first" in dashboard
+    ordered = ["every unit `z-ready`", str(evidence.relative_to(target)),
+               "y-overdue-eval-results.md is still blank", "`pending`, planned by"]
+    for item in ordered:
+        assert dashboard.count(item) == 1
+    assert sorted(ordered, key=dashboard.index) == ordered
+    assert "4 obligations" in brief and ordered[0] in brief
+    assert all(item not in brief for item in ordered[1:])
