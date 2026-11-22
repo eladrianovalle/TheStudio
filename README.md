@@ -385,6 +385,7 @@ studio/
   rerun.py                  # Rejection context injection for iterate-on-failure
   verdict.py                # APPROVED/REJECTED extraction
   impl_loop.py              # Implementation writer/editor loop config (LoopConfig; run as a script for knobs)
+  editor_measure.py         # Builds the proved case trees the /forge editor is measured on (not shipped to installs)
   integrations/             # Outbound run-digest webhooks (slack_digest.py → Slack/n8n)
   validators/               # DocumentValidator + CodeValidator
   studio.manifest.json      # Role definitions (14 disciplines)
