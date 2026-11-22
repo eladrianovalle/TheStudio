@@ -2319,6 +2319,37 @@ def validate_run(args: argparse.Namespace) -> None:
     print(f"{'='*60}\n")
 
 
+_REQUIRED_DECISION_FIELDS = ("priority", "question", "answer")
+
+
+def _is_blank(value: object) -> bool:
+    """True for a missing value and for text that is empty or only whitespace."""
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
+def _incomplete_entries_message(entries: list) -> str:
+    """Say which entries of a decisions file lack a required field, or "" when none do.
+
+    Entries are numbered from 1, the way a person counts them in the file. A blank
+    value counts as missing: an entry handed back with its answer still empty is not
+    an answer.
+    """
+    problems = []
+    for position, entry in enumerate(entries, start=1):
+        if not isinstance(entry, dict):
+            problems.append(f"entry {position} is not an object")
+            continue
+        for field_name in _REQUIRED_DECISION_FIELDS:
+            if _is_blank(entry.get(field_name)):
+                problems.append(f"entry {position} has no {field_name}")
+    if not problems:
+        return ""
+    return (
+        "The decisions file was not recorded: " + "; ".join(problems) + ". "
+        "Every entry needs a priority, a question and an answer. Nothing was written."
+    )
+
+
 def record_decisions(args: argparse.Namespace) -> None:
     """Record answered decisions into a run's decisions.json and regenerate decisions.md.
 
@@ -2347,6 +2378,11 @@ def record_decisions(args: argparse.Namespace) -> None:
     if args.decisions_file:
         # Batch mode: read multiple decisions from a JSON file
         batch_data = json.loads(args.decisions_file.read_text(encoding="utf-8"))
+        # Checked for the whole file before anything is appended, so one bad entry
+        # does not leave "Recorded ..." lines printed for entries that were never saved.
+        incomplete = _incomplete_entries_message(batch_data)
+        if incomplete:
+            raise ValueError(incomplete)
         for d in batch_data:
             _append(DecisionPoint(
                 priority=d["priority"],
@@ -2358,7 +2394,7 @@ def record_decisions(args: argparse.Namespace) -> None:
             ))
     else:
         # Single decision mode: validate required args
-        if args.question is None or args.answer is None or args.priority is None:
+        if _is_blank(args.question) or _is_blank(args.answer) or _is_blank(args.priority):
             raise ValueError(
                 "Single-decision mode requires --question, --answer, and --priority. "
                 "Use --decisions-file for batch mode."

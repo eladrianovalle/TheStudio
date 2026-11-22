@@ -3,11 +3,11 @@ feature: Enforcement layer, rules that code refuses
 slug: enforcement-layer
 ticket: https://github.com/eladrianovalle/TheStudio/issues/251
 # status: draft → approved (a human approved it) → shipped (built AND verified)
-status: draft
+status: approved
 studio_run: studio/output/tech/run_tech_20261121_210102
 # verification_due: the date the evidence is due (YYYY-MM-DD). Required once this spec is
 # `approved`, and only if it carries a `## Verification` section — no section, no deadline.
-verification_due:
+verification_due: 2026-12-21
 # Leave the two below EMPTY until this spec flips to `shipped`, and keep their notes on
 # comment lines like these. An inline `# ...` after the colon is read as the VALUE, and
 # `shipped_changed` has no vocabulary check to catch it — so a spec could otherwise
@@ -410,7 +410,7 @@ One file, `studio/tests/test_enforced_rules.py`, holding two lists and the tests
 | `rule` | The rule in one plain sentence |
 | `stated_in` | The command file or doc that states it |
 | `enforcer` | The function or script that refuses, as `file::name` |
-| `proof` | The test that shows the refusal, as `file::name` |
+| `proof` | The test that shows the refusal, as `file::name`. A row whose enforcer is itself a test names that test here too. |
 | `retired_prose` | Optional: a phrase from the prose step this row replaced |
 
 **`NOT_YET_ENFORCED`**: plain sentences, rules with one right answer that nothing refuses yet, with
@@ -444,18 +444,19 @@ It cannot stop someone raising the number. It makes doing so a deliberate, visib
 13. `finalize` refuses a studio run with no `integrator.md`.
 14. `finalize` refuses a studio run in which no role completed both stances.
 15. `update` does not overwrite local edits without `--force`.
-16. `update` reports a source checkout that is behind its remote with a non-zero exit.
-17. `setup` refuses an unknown role pack or role-override field.
-18. `setup` refuses a persona key in the wrong place.
-19. `setup` never overwrites an existing `implementation_loop.toml`.
-20. Studio's code imports only the standard library, plus `tomli` on Python 3.10.
-21. A spec's `status` is one of draft, approved, shipped.
-22. An approved spec with a Verification section has an evidence file.
-23. An approved spec with a Verification section has a `verification_due` date that has not passed.
-24. A shipped spec's evidence file is filled in.
-25. A shipped spec has `shipped_impact` and `shipped_changed`.
-26. An approved spec's Build Plan has the heading shape and at least one criterion per unit.
-27. A `unit_id` is unique across the repository's specs.
+16. `check-install` exits non-zero when the source checkout is behind its remote.
+17. `setup` refuses an unknown role pack.
+18. `setup` refuses an unknown role-override field.
+19. `setup` refuses a persona key in the wrong place.
+20. `setup` never overwrites an existing `implementation_loop.toml`.
+21. Studio's code imports only the standard library, plus `tomli` on Python 3.10.
+22. A spec's `status` is one of draft, approved, shipped.
+23. An approved spec with a Verification section has an evidence file.
+24. An approved spec with a Verification section has a `verification_due` date that has not passed.
+25. A shipped spec's evidence file is filled in.
+26. A shipped spec has `shipped_impact` and `shipped_changed`.
+27. An approved spec's Build Plan has the heading shape and at least one criterion per unit.
+28. A `unit_id` is unique across the repository's specs.
 
 Rows 5 to 7 cite the branch check from pull request #249, which must be merged before unit 1 is built.
 
@@ -663,13 +664,16 @@ Document order is dependency order. The first six units need no hook.
 ### 1. `enforced_rules_ratchet` — Studio's suite names every rule code refuses and fails when the unenforced list grows
 
 What gets built: `studio/tests/test_enforced_rules.py` with the two lists, the count, and the three
-assertions, seeded from the numbered lists above. Pull request #249 must be merged first.
+assertions, seeded from the numbered lists above. Three of the listed refusals exist in the code
+with no test behind them (rows 10, 13 and 14), so this unit also adds a small proving test for each,
+beside the existing tests of that code. Pull request #249 must be merged first.
 
 **Acceptance criteria:**
 - [ ] Every `ENFORCED` row names a rule, where it is stated, an enforcer and a proving test, and the suite fails when a row's enforcer or proof file is missing or no longer contains the name it cites.
 - [ ] The suite fails when `NOT_YET_ENFORCED` has more or fewer entries than `NOT_YET_ENFORCED_COUNT`.
 - [ ] A row that names `retired_prose` fails the suite while that text is still in the file named by `stated_in`.
 - [ ] `ENFORCED` has one row for each entry in this spec's numbered starting list, and `NOT_YET_ENFORCED` holds the 20 starting entries.
+- [ ] Tests show the three refusals that had none: `record-decisions` exits non-zero on an entry missing its priority, question or answer; `finalize` refuses a studio run with no `integrator.md`; and `finalize` refuses a studio run in which no role completed both stances.
 
 **Out of scope:** judgment rules; any check that the proving test asserts the right thing; shipping
 the table to installed repositories.
@@ -678,7 +682,7 @@ the table to installed repositories.
 
 What gets built: `spec_rules.py` with the moved rule code, its line in `SOURCE_FILES`, the
 `check-specs` subcommand, the brief's third block, the docs that list subcommands and modules, and
-`ENFORCED` rows 21 to 27 re-pointed at the moved functions' new names in `spec_rules.py`, so the
+`ENFORCED` rows 22 to 28 re-pointed at the moved functions' new names in `spec_rules.py`, so the
 ratchet stays green when the code leaves the test file.
 
 **Acceptance criteria:**
