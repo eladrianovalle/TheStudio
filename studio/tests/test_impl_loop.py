@@ -3,6 +3,7 @@
 import dataclasses
 import json
 import os
+import re
 import string
 import subprocess
 import sys
@@ -13,6 +14,10 @@ import pytest
 
 from config_loading import tomllib
 from impl_loop import (
+    BRANCH_DIRTY_TREE,
+    BRANCH_PROTECTED,
+    BRANCH_WRONG,
+    BranchError,
     LoopConfig,
     LoopConfigError,
     PROFILES,
@@ -28,6 +33,7 @@ from impl_loop import (
     _ALLOWED,
     _ALLOWED_SUMMARY,
     _KNOWN_BAD,
+    _PROTECTED_BRANCHES,
     _cli,
     _detected_line,
     _git_common_dir,
@@ -37,6 +43,7 @@ from impl_loop import (
     load_loop_config,
     resolve_profile,
     runtime_knobs,
+    validate_branch,
     validate_work_dir,
 )
 
@@ -813,6 +820,225 @@ def test_cli_bad_work_dir_raises_before_any_knobs_are_emitted(tmp_path):
     absent = tmp_path / "not-here"
     with pytest.raises(WorkDirError, match=WORK_DIR_MISSING):
         _cli(["impl_loop.py", "--work-dir", str(absent)])
+
+
+# --- --branch validation ---------------------------------------------------
+#
+# Real git again, for the same reason as the work-dir tests: the check is only worth
+# having if `git branch --show-current` and `git status --porcelain` answer the way
+# the code assumes.
+
+
+def _repo_on_branch(root: Path, branch: str) -> Path:
+    """A repository with one committed file, checked out on ``branch``."""
+    repo = _make_repo(root)
+    (repo / "kept.txt").write_text("committed\n")
+    _git(repo, "add", "kept.txt")
+    _git(repo, "commit", "-q", "-m", "add kept.txt")
+    # -B, not -b: `git init` may already have named its first branch this.
+    _git(repo, "checkout", "-q", "-B", branch)
+    return repo
+
+
+def test_validate_branch_accepts_a_clean_tree_on_the_expected_branch(tmp_path):
+    repo = _repo_on_branch(tmp_path / "repo", "impl/some_unit")
+    assert validate_branch(repo, "impl/some_unit") == "impl/some_unit"
+
+
+def test_validate_branch_rejects_a_tree_that_moved_to_another_branch(tmp_path):
+    """The plan named one branch and the checkout is now on another.
+
+    This is the run that put a unit's commits on someone else's pull request: another
+    session switched the checkout between the plan and the first commit.
+    """
+    repo = _repo_on_branch(tmp_path / "repo", "impl/some_unit")
+    _git(repo, "checkout", "-q", "-b", "someone-elses-work")
+
+    with pytest.raises(BranchError) as refused:
+        validate_branch(repo, "impl/some_unit")
+
+    message = str(refused.value)
+    assert BRANCH_WRONG in message
+    assert "impl/some_unit" in message
+    assert "someone-elses-work" in message
+
+
+def test_validate_branch_rejects_a_detached_head(tmp_path):
+    repo = _repo_on_branch(tmp_path / "repo", "impl/some_unit")
+    _git(repo, "checkout", "-q", "--detach")
+
+    with pytest.raises(BranchError, match=BRANCH_WRONG):
+        validate_branch(repo, "impl/some_unit")
+
+
+def test_validate_branch_rejects_a_directory_that_is_not_a_repository(tmp_path):
+    plain = tmp_path / "plain"
+    plain.mkdir()
+
+    with pytest.raises(BranchError, match=BRANCH_WRONG):
+        validate_branch(plain, "impl/some_unit")
+
+
+@pytest.mark.parametrize("protected", ["main", "master"])
+def test_validate_branch_rejects_the_main_branch_even_when_the_tree_is_on_it(tmp_path, protected):
+    """A unit's commits never go straight onto main, whoever asked for it."""
+    repo = _repo_on_branch(tmp_path / "repo", protected)
+
+    with pytest.raises(BranchError, match=BRANCH_PROTECTED):
+        validate_branch(repo, protected)
+
+
+def test_validate_branch_rejects_an_uncommitted_edit_and_names_the_file(tmp_path):
+    """The loop's revert is `git reset --hard`, which would delete this edit."""
+    repo = _repo_on_branch(tmp_path / "repo", "impl/some_unit")
+    (repo / "kept.txt").write_text("edited and not committed\n")
+
+    with pytest.raises(BranchError) as refused:
+        validate_branch(repo, "impl/some_unit")
+
+    message = str(refused.value)
+    assert BRANCH_DIRTY_TREE in message
+    assert "kept.txt" in message
+
+
+def test_validate_branch_rejects_an_untracked_file(tmp_path):
+    """The writer commits with `git add -A`, so an untracked file would ride along."""
+    repo = _repo_on_branch(tmp_path / "repo", "impl/some_unit")
+    (repo / "stray-notes.txt").write_text("not part of the unit\n")
+
+    with pytest.raises(BranchError) as refused:
+        validate_branch(repo, "impl/some_unit")
+
+    assert BRANCH_DIRTY_TREE in str(refused.value)
+    assert "stray-notes.txt" in str(refused.value)
+
+
+def test_validate_branch_accepts_a_tree_whose_only_extra_file_is_ignored(tmp_path):
+    """An ignored file is not swept up by `git add -A`, so it is not in the way."""
+    repo = _repo_on_branch(tmp_path / "repo", "impl/some_unit")
+    (repo / ".gitignore").write_text("build-output/\n")
+    _git(repo, "add", ".gitignore")
+    _git(repo, "commit", "-q", "-m", "ignore build output")
+    (repo / "build-output").mkdir()
+    (repo / "build-output" / "artifact.bin").write_text("generated\n")
+
+    assert validate_branch(repo, "impl/some_unit") == "impl/some_unit"
+
+
+def test_validate_branch_refuses_a_tree_whose_status_git_cannot_read(tmp_path):
+    """A failing `git status` is no evidence of a clean tree, so it is refused.
+
+    A corrupt index is a real way to get there: git still names the branch, because
+    that comes from HEAD, but cannot say what is uncommitted.
+    """
+    repo = _repo_on_branch(tmp_path / "repo", "impl/some_unit")
+    (repo / ".git" / "index").write_text("not an index\n")
+
+    with pytest.raises(BranchError) as refused:
+        validate_branch(repo, "impl/some_unit")
+
+    assert BRANCH_DIRTY_TREE in str(refused.value)
+    assert "git status" in str(refused.value)
+
+
+def test_validate_branch_lists_only_the_first_few_of_many_uncommitted_files(tmp_path):
+    repo = _repo_on_branch(tmp_path / "repo", "impl/some_unit")
+    for number in range(25):
+        (repo / f"stray-{number:02d}.txt").write_text("stray\n")
+
+    with pytest.raises(BranchError) as refused:
+        validate_branch(repo, "impl/some_unit")
+
+    message = str(refused.value)
+    assert "stray-00.txt" in message
+    assert "stray-24.txt" not in message
+    assert "25 uncommitted" in message
+
+
+def test_cli_branch_flag_checks_the_directory_it_was_run_from(tmp_path, monkeypatch):
+    """With no --work-dir, the tree being built is wherever /forge is standing."""
+    repo = _repo_on_branch(tmp_path / "repo", "impl/some_unit")
+    config = tmp_path / "implementation_loop.toml"
+    config.write_text(_GATE)
+    monkeypatch.chdir(repo)
+
+    knobs = json.loads(_cli(["impl_loop.py", str(config), "--branch", "impl/some_unit"]))
+
+    assert knobs["branch"] == "impl/some_unit"
+
+
+def test_cli_branch_flag_refuses_before_any_knobs_are_emitted(tmp_path, monkeypatch):
+    """A refused branch stops the run: the CLI raises instead of printing knobs."""
+    repo = _repo_on_branch(tmp_path / "repo", "impl/some_unit")
+    (repo / "kept.txt").write_text("edited and not committed\n")
+    config = tmp_path / "implementation_loop.toml"
+    config.write_text(_GATE)
+    monkeypatch.chdir(repo)
+
+    with pytest.raises(BranchError, match=BRANCH_DIRTY_TREE):
+        _cli(["impl_loop.py", str(config), "--branch", "impl/some_unit"])
+
+
+def test_cli_branch_flag_checks_the_work_dir_when_one_is_given(monkeypatch, tmp_path):
+    """With --work-dir, the branch that matters is the work directory's, not the shell's.
+
+    Studio's own checkout stands in for the work dir, as in the --work-dir test above.
+    The shell stands somewhere else entirely, on a branch that would pass, so the only
+    way this refuses is by looking at the work directory.
+    """
+    elsewhere = _repo_on_branch(tmp_path / "elsewhere", "no-such-branch-in-studio")
+    monkeypatch.chdir(elsewhere)
+
+    with pytest.raises(BranchError, match=BRANCH_WRONG):
+        _cli(["impl_loop.py", "--work-dir", str(STUDIO_ROOT), "--branch", "no-such-branch-in-studio"])
+
+
+def test_without_the_branch_flag_the_cli_checks_no_branch(tmp_path, monkeypatch):
+    """Printing the knobs alone must keep working from a dirty tree on main."""
+    repo = _repo_on_branch(tmp_path / "repo", "main")
+    (repo / "kept.txt").write_text("edited and not committed\n")
+    config = tmp_path / "implementation_loop.toml"
+    config.write_text(_GATE)
+    monkeypatch.chdir(repo)
+
+    knobs = json.loads(_cli(["impl_loop.py", str(config)]))
+
+    assert "branch" not in knobs
+
+
+def test_forge_runs_the_branch_check_and_no_longer_asks_for_one_by_hand():
+    """The check only protects a run if /forge's own steps call it.
+
+    A helper with every test green and no caller is how this gap stayed open: the
+    command used to tell the reader to run `git status --porcelain` and judge the
+    answer, and nothing failed when that step was skipped.
+    """
+    forge = (STUDIO_ROOT.parent / ".claude" / "commands" / "forge.md").read_text()
+
+    assert 'impl_loop.py --branch "<branch>"' in forge
+    assert "status --porcelain" not in forge
+
+
+@pytest.mark.parametrize(
+    ("anchor", "end"),
+    [
+        ("- If `--branch` was given and it is ", ", STOP"),
+        ("- Else if the work directory is on ", ", create"),
+    ],
+)
+def test_forge_step_3_names_exactly_the_branches_the_check_protects(anchor, end):
+    """Step 3 has two prose copies of _PROTECTED_BRANCHES.
+
+    The early stop exists so a `--branch main` is refused before the user's checkout is
+    switched; the fallback moves a run off the main branch onto `impl/<unit_id>`. If the
+    code list grows and either bullet doesn't, Step 5 still refuses the run, but only
+    after a checkout that was wasted or a branch that was never switched.
+    """
+    forge = (STUDIO_ROOT.parent / ".claude" / "commands" / "forge.md").read_text()
+
+    assert anchor in forge, f"forge.md Step 3 no longer has a bullet starting {anchor!r}"
+    names = forge.split(anchor, 1)[1].split(end, 1)[0]
+    assert set(re.findall(r"`([^`]+)`", names)) == set(_PROTECTED_BRANCHES)
 
 
 # --- detection, and the config file that is read instead of it -------------
