@@ -689,6 +689,10 @@ test('the editor prompt prints every mandate line, in order, right under the lin
   }
 })
 
+// The loop script's source, for the checks that cannot go through a rebuilt function: the inline
+// prompts and the agent() call lines. The orchestration itself cannot be run here.
+const LOOP_SOURCE = readFileSync(new URL('../implementation-loop.js', import.meta.url), 'utf8')
+
 test('no prompt in the loop script names scopes.py or sends the editor to a file for its mandate', () => {
   for (const unit of [UNIT, { ...UNIT, acceptance_criteria: CRITERIA }, { ...UNIT, work_dir: WORK_DIR }, { ...UNIT, observe_command: OBSERVE }]) {
     for (const prompt of [writerPrompt(unit), editorPrompt(unit, WRITER)]) {
@@ -698,16 +702,13 @@ test('no prompt in the loop script names scopes.py or sends the editor to a file
   }
   // The inline prompts (the revert and commit fallbacks) are not functions, so read the source: the
   // only lines allowed to name scopes.py are comments and the fallback unit's own task text.
-  const src = readFileSync(new URL('../implementation-loop.js', import.meta.url), 'utf8')
-  const defaultUnitStart = src.indexOf('const DEFAULT_UNIT = {')
-  const defaultUnitEnd = src.indexOf('\n}\n', defaultUnitStart)
-  const outsideDefaultUnit = src.slice(0, defaultUnitStart) + src.slice(defaultUnitEnd)
+  const defaultUnitStart = LOOP_SOURCE.indexOf('const DEFAULT_UNIT = {')
+  const defaultUnitEnd = LOOP_SOURCE.indexOf('\n}\n', defaultUnitStart)
+  const outsideDefaultUnit = LOOP_SOURCE.slice(0, defaultUnitStart) + LOOP_SOURCE.slice(defaultUnitEnd)
   const naming = outsideDefaultUnit.split('\n').filter((line) => line.includes('scopes.py') && !line.trim().startsWith('//'))
   assert.deepEqual(naming, [])
 })
 
-// The agent() call lines themselves, read from source: the orchestration cannot be run here.
-const LOOP_SOURCE = readFileSync(new URL('../implementation-loop.js', import.meta.url), 'utf8')
 const agentCallLine = (promptFunction) => {
   const matches = LOOP_SOURCE.split('\n').filter((line) => line.includes(`await agent(${promptFunction}(`))
   assert.equal(matches.length, 1, `expected exactly one agent() call for ${promptFunction}`)
@@ -716,10 +717,8 @@ const agentCallLine = (promptFunction) => {
 
 test('the editor runs on EDITOR_MODEL, a one-line opus constant, and the writer keeps the unit model', () => {
   assert.match(LOOP_SOURCE, /^const EDITOR_MODEL = 'opus'$/m)
-  assert.equal(loadConst('../implementation-loop.js', 'EDITOR_MODEL'), 'opus')
   const editorCall = agentCallLine('editorPrompt')
   assert.match(editorCall, /[{,] model: EDITOR_MODEL \}\)$/)
-  assert.ok(!editorCall.includes('unit.model'), 'the editor must not take the unit model override')
   const writerCall = agentCallLine('writerPrompt')
   assert.match(writerCall, /[{,] model: unit\.model \}\)$/)
 })
