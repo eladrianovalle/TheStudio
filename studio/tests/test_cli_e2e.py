@@ -199,6 +199,84 @@ class TestCLIFinalize:
         assert fin.returncode != 0
 
 
+class TestCLIRecordDecisions:
+    """`record-decisions` refuses a decision missing its priority, question or answer.
+
+    The two ways in refuse differently today. Flags (`--question`/`--answer`/`--priority`)
+    get a sentence naming all three. A `--decisions-file` entry missing a key gets only the
+    bare key name, `Error: 'priority'`, because the handler indexes the entry and lets the
+    KeyError through to `main`. Both exit 1 and write nothing.
+    """
+
+    COMPLETE_FLAGS = {"--priority": "P0", "--question": "Ship on Steam?", "--answer": "Yes"}
+    COMPLETE_ENTRY = {"priority": "P0", "question": "Ship on Steam?", "answer": "Yes"}
+
+    @staticmethod
+    def _run_dir(studio_root: Path) -> Path:
+        run_dir = studio_root / "output" / "tech" / "run_tech_decisions"
+        run_dir.mkdir(parents=True)
+        return run_dir
+
+    @staticmethod
+    def _flags(flags: dict) -> list[str]:
+        return [part for flag, value in flags.items() for part in (flag, value)]
+
+    def test_complete_flags_are_recorded(self, cli_studio_root):
+        # The control: the same call with nothing missing succeeds.
+        run_dir = self._run_dir(cli_studio_root)
+        result = _run_cli(
+            "record-decisions", "--run-dir", str(run_dir), *self._flags(self.COMPLETE_FLAGS),
+            studio_root=cli_studio_root,
+        )
+        assert result.returncode == 0, result.stderr
+        assert (run_dir / "decisions.json").exists()
+
+    @pytest.mark.parametrize("missing_flag", ["--priority", "--question", "--answer"])
+    def test_a_single_decision_missing_a_flag_is_refused(self, cli_studio_root, missing_flag):
+        run_dir = self._run_dir(cli_studio_root)
+        flags = {flag: value for flag, value in self.COMPLETE_FLAGS.items() if flag != missing_flag}
+
+        result = _run_cli(
+            "record-decisions", "--run-dir", str(run_dir), *self._flags(flags),
+            studio_root=cli_studio_root,
+        )
+
+        assert result.returncode == 1
+        assert "Single-decision mode requires --question, --answer, and --priority." in result.stderr
+        assert "Traceback" not in result.stderr
+        assert not (run_dir / "decisions.json").exists()
+
+    def test_a_complete_decisions_file_is_recorded(self, cli_studio_root, tmp_path):
+        run_dir = self._run_dir(cli_studio_root)
+        decisions_file = tmp_path / "answers.json"
+        decisions_file.write_text(json.dumps([self.COMPLETE_ENTRY]), encoding="utf-8")
+
+        result = _run_cli(
+            "record-decisions", "--run-dir", str(run_dir), "--decisions-file", str(decisions_file),
+            studio_root=cli_studio_root,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert (run_dir / "decisions.json").exists()
+
+    @pytest.mark.parametrize("missing_key", ["priority", "question", "answer"])
+    def test_a_decisions_file_entry_missing_a_key_is_refused(self, cli_studio_root, tmp_path, missing_key):
+        run_dir = self._run_dir(cli_studio_root)
+        entry = {key: value for key, value in self.COMPLETE_ENTRY.items() if key != missing_key}
+        decisions_file = tmp_path / "answers.json"
+        decisions_file.write_text(json.dumps([entry]), encoding="utf-8")
+
+        result = _run_cli(
+            "record-decisions", "--run-dir", str(run_dir), "--decisions-file", str(decisions_file),
+            studio_root=cli_studio_root,
+        )
+
+        assert result.returncode == 1
+        # Only the key's name reaches the user; see the class docstring.
+        assert result.stderr == f"Error: '{missing_key}'\n"
+        assert not (run_dir / "decisions.json").exists()
+
+
 class TestCLICleanup:
     def test_cleanup_dry_run(self, cli_studio_root):
         result = _run_cli(

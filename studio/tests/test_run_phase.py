@@ -58,6 +58,53 @@ def test_finalize_requires_required_artifacts(studio_root):
         )
 
 
+def _prepare_studio_run(studio_root):
+    """A studio run inviting marketing and engineering, with its summary already written."""
+    run_id = run_phase.prepare_run(
+        make_prepare_args(phase="studio", roles=["+marketing", "+engineering", "-design"])
+    )
+    run_dir = studio_root / "output" / "studio" / run_id
+    invited = json.loads((run_dir / "run.json").read_text())["studio_roles"]["invited"]
+    assert {"marketing", "engineering"} <= set(invited)
+    (run_dir / "summary.md").write_text("# Summary\n", encoding="utf-8")
+    return run_id, run_dir
+
+
+def _finalize_studio_run(run_id):
+    run_phase.finalize_run(make_finalize_args(phase="studio", run_id=run_id))
+
+
+def test_finalize_refuses_a_studio_run_with_no_integrator_file(studio_root):
+    run_id, run_dir = _prepare_studio_run(studio_root)
+    # One role completed both stances, so the missing integrator.md is the only gap.
+    (run_dir / "advocate--marketing--01.md").write_text("# Advocate\n", encoding="utf-8")
+    (run_dir / "contrarian--marketing--01.md").write_text("VERDICT: APPROVED\n", encoding="utf-8")
+    status_before = json.loads((run_dir / "run.json").read_text())["status"]
+
+    with pytest.raises(FileNotFoundError) as refusal:
+        _finalize_studio_run(run_id)
+
+    assert "Missing integrator roadmap (integrator.md)." in str(refusal.value)
+    assert "No Studio role produced" not in str(refusal.value)
+    assert json.loads((run_dir / "run.json").read_text())["status"] == status_before
+
+
+def test_finalize_refuses_a_studio_run_where_no_role_completed_both_stances(studio_root):
+    run_id, run_dir = _prepare_studio_run(studio_root)
+    (run_dir / "integrator.md").write_text("# Integrator\n", encoding="utf-8")
+    # Each role has one stance and not the other.
+    (run_dir / "advocate--marketing--01.md").write_text("# Advocate\n", encoding="utf-8")
+    (run_dir / "contrarian--engineering--01.md").write_text("VERDICT: APPROVED\n", encoding="utf-8")
+    status_before = json.loads((run_dir / "run.json").read_text())["status"]
+
+    with pytest.raises(FileNotFoundError) as refusal:
+        _finalize_studio_run(run_id)
+
+    assert "No Studio role produced both advocate and contrarian artifacts." in str(refusal.value)
+    assert "integrator.md" not in str(refusal.value)
+    assert json.loads((run_dir / "run.json").read_text())["status"] == status_before
+
+
 def test_parse_cli_args_normalizes_prepare_roles_tokens():
     args = run_phase.parse_cli_args(
         [
