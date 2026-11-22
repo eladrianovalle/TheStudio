@@ -51,6 +51,18 @@ WORK_DIR_NOT_A_WORKTREE = "not-a-worktree"
 WORK_DIR_DIFFERENT_REPO = "different-repo"
 WORK_DIR_UNQUOTABLE = "unquotable"
 
+# The three ways the tree a run is about to commit to can be unsafe. /forge prints the
+# one it hit, as it does for a refused --work-dir.
+BRANCH_PROTECTED = "protected-branch"
+BRANCH_WRONG = "wrong-branch"
+BRANCH_DIRTY_TREE = "dirty-tree"
+
+# A unit's commits belong on a branch a pull request can carry, never on these.
+_PROTECTED_BRANCHES = ("main", "master")
+
+# How many uncommitted paths a dirty-tree refusal lists before it only counts the rest.
+_DIRTY_PATHS_SHOWN = 10
+
 # The characters a --work-dir is allowed to contain. The path is interpolated into
 # `git -C "<path>"` inside instruction text an agent then runs, so anything that
 # survives into that string can change what runs. Listing what is accepted rather
@@ -79,6 +91,10 @@ _ALLOWED_SUMMARY = "letters, digits, and any of / . _ - ~ or a space"
 
 class WorkDirError(ValueError):
     """A --work-dir the loop must refuse before any agent spawns."""
+
+
+class BranchError(ValueError):
+    """A working tree the loop must refuse to commit to before any agent spawns."""
 
 
 class LoopConfigError(ValueError):
@@ -848,6 +864,91 @@ def validate_work_dir(work_dir: str | Path, main_repo: Path | None = None) -> Pa
     return path
 
 
+def _git_output(directory: Path, *arguments: str) -> str | None:
+    """What ``git <arguments>`` prints when run in ``directory``, or None if git refuses."""
+    result = subprocess.run(
+        ["git", *arguments],
+        cwd=str(directory),
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
+def validate_branch(directory: str | Path, expected_branch: str) -> str:
+    """Check that ``directory`` is a clean checkout of ``expected_branch``.
+
+    /forge runs this as its last step before the loop starts, on the branch its plan
+    named. Returns the branch name. Raises BranchError naming which of three failures
+    it hit:
+
+    - ``protected-branch``: the plan names main or master. The loop commits, and a
+      unit's commits never go straight onto the main branch.
+    - ``wrong-branch``: the tree is on some other branch, or on none. Another session
+      can switch a shared checkout between the plan and the first commit, and the
+      writer commits to whatever branch it finds.
+    - ``dirty-tree``: something is uncommitted. The writer commits with ``git add -A``,
+      which would sweep it into the unit, and the loop undoes a bad edit with
+      ``git reset --hard``, which would delete it.
+
+    Like the work-dir check, this lives in Python because the Workflow sandbox the
+    loop runs in cannot ask git anything.
+    """
+    path = Path(directory)
+    if expected_branch in _PROTECTED_BRANCHES:
+        raise BranchError(
+            f"branch {BRANCH_PROTECTED}: the loop commits as it goes and never commits "
+            f"straight to {expected_branch}. Switch {path} to a feature branch, such as "
+            "impl/<unit_id>, and run /forge again."
+        )
+
+    current_branch = (_git_output(path, "branch", "--show-current") or "").strip()
+    if current_branch != expected_branch:
+        found = (
+            f"is on {current_branch}"
+            if current_branch
+            else "is not on any branch (a detached HEAD, or not a git repository)"
+        )
+        raise BranchError(
+            f"branch {BRANCH_WRONG}: the plan commits to {expected_branch}, but {path} "
+            f"{found}. Something moved the checkout after the plan was made. Check it out "
+            "again, or give the run a worktree of its own with --work-dir, and run /forge "
+            "again."
+        )
+
+    status = _git_output(path, "status", "--porcelain")
+    if status is None:
+        # Git found the branch but can't say what is uncommitted (a corrupt index, a
+        # permissions problem). A tree nobody can vouch for is refused, not assumed clean.
+        raise BranchError(
+            f"branch {BRANCH_DIRTY_TREE}: `git status` failed in {path}, so there is no "
+            "telling whether anything is uncommitted. Run `git status` there, fix what it "
+            "reports, then run /forge again."
+        )
+
+    uncommitted = status.splitlines()
+    if uncommitted:
+        lines = [
+            f"branch {BRANCH_DIRTY_TREE}: {path} has {len(uncommitted)} uncommitted "
+            "path(s):",
+            "",
+        ]
+        lines += [f"    {entry}" for entry in uncommitted[:_DIRTY_PATHS_SHOWN]]
+        if len(uncommitted) > _DIRTY_PATHS_SHOWN:
+            lines.append(f"    ... and {len(uncommitted) - _DIRTY_PATHS_SHOWN} more")
+        lines += [
+            "",
+            "The writer commits with `git add -A`, so these would land in the unit's "
+            "commit, and the loop undoes a bad edit with `git reset --hard`, which would "
+            "delete the uncommitted ones. Commit or stash them there, then run /forge again.",
+        ]
+        raise BranchError("\n".join(lines))
+
+    return expected_branch
+
+
 def runtime_knobs(config: LoopConfig) -> dict:
     """Project a resolved LoopConfig onto the runtime knobs the JS workflow needs.
 
@@ -883,8 +984,15 @@ def _cli(argv: List[str]) -> str:
     ``work_dir`` key holding the resolved absolute path — that is the path /forge pins
     the rest of the run to.
 
+    ``--branch`` is the last check before the loop starts: the tree the agents will
+    commit in (the work dir, or with none the directory this was run from) must be clean
+    and on that branch, and the branch must not be main. When it passes, the emitted
+    JSON carries a ``branch`` key. Without the flag nothing about the branch is checked,
+    so printing the knobs alone works from any tree.
+
     Raises:
         WorkDirError: If ``--work-dir`` is given and is not a worktree of this repo.
+        BranchError: If ``--branch`` is given and the tree is not a clean checkout of it.
         LoopConfigError: If this repository's gate has no test command to run.
     """
     parser = argparse.ArgumentParser(
@@ -900,6 +1008,10 @@ def _cli(argv: List[str]) -> str:
         "--work-dir",
         help="Directory the loop's agents must work in; must be a git worktree of this repo.",
     )
+    parser.add_argument(
+        "--branch",
+        help="Branch the loop is about to commit to; the tree must be clean and on it.",
+    )
     args = parser.parse_args(argv[1:])
 
     path = Path(args.config_path) if args.config_path else None
@@ -908,6 +1020,10 @@ def _cli(argv: List[str]) -> str:
     if args.work_dir:
         knobs["work_dir"] = str(validate_work_dir(args.work_dir))
 
+    if args.branch:
+        tree_being_built = Path(knobs["work_dir"]) if args.work_dir else Path.cwd()
+        knobs["branch"] = validate_branch(tree_being_built, args.branch)
+
     return json.dumps(knobs)
 
 
@@ -915,8 +1031,8 @@ if __name__ == "__main__":
     import sys
     try:
         print(_cli(sys.argv))
-    except (WorkDirError, LoopConfigError) as e:
-        # Both are refusals with an explanation already written for a person: print the
+    except (WorkDirError, BranchError, LoopConfigError) as e:
+        # All three are refusals with an explanation already written for a person: print the
         # message alone, with no traceback in front of it, and stop the run.
         print(e, file=sys.stderr)
         sys.exit(1)
