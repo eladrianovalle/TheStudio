@@ -273,6 +273,9 @@ def test_two_builds_of_a_case_give_the_same_head_and_the_second_replaces_the_fir
 
     run_build(history, checkout_root, case_dirs, capsys)
     tree = checkout_root / "greeter_four"
+    builds = history["repo"] / "studio/output/editor_measure"
+    first_manifest, = builds.glob("*/manifest.json")
+    first_runner = first_manifest.with_name("measure-runner.js").read_bytes()
     first_head = git(tree, "rev-parse", "HEAD")
     (tree / "left_by_hand.txt").write_text("from before\n")
     git(tree, "branch", "left_by_hand")
@@ -280,6 +283,13 @@ def test_two_builds_of_a_case_give_the_same_head_and_the_second_replaces_the_fir
     code, output = run_build(history, checkout_root, case_dirs, capsys)
 
     assert code == 0, output
+    manifest, = builds.glob("*/manifest.json")
+    assert not first_manifest.exists()
+    assert manifest.with_name("measure-runner.js").read_bytes() == first_runner
+    data = json.loads(manifest.read_text())
+    case, = data["cases"]
+    assert data["built_at"] and str(tree) in case["prompt"]
+    assert case["head"] == first_head
     assert git(tree, "rev-parse", "HEAD") == first_head
     assert not (tree / "left_by_hand.txt").exists()
     assert git(tree, "for-each-ref", "--format=%(refname)") == f"refs/heads/impl/{UNIT}"

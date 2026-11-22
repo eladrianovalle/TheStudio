@@ -428,3 +428,7 @@ Python 3.10+ required. stdlib only, plus `tomli` on Python 3.10 (see `pyproject.
 ## License
 
 MIT. Reuse freely across your projects.
+
+## Measuring the forge editor
+
+Run `/measure-editor` in a fresh Studio worktree to compare the editor against the historical benchmark and record the outcome.

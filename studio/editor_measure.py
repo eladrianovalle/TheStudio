@@ -7,7 +7,7 @@ into a small standalone git repository that holds nothing later than that commit
 the case is what it claims, and writes the writer handoff a real editor would find there.
 The design, and why each step exists, is the section "A case" in specs/judged-rules.md.
 
-    python studio/editor_measure.py build [--root <dir>]
+    python studio/editor_measure.py {build,fingerprint,record,rule} --help
 
 Exit codes: 0 when every case built and proved, 1 when a case was refused, 2 when a
 case's commits are missing from this clone or the arguments are bad.
@@ -27,6 +27,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import editor_results as measurement
 from impl_loop import explain_unquotable_path
 
 STUDIO_ROOT = Path(__file__).resolve().parent
@@ -499,6 +500,7 @@ def build(root: Path, cases_dir: Path, patches_dir: Path, source_repo: Path) -> 
         print(f"editor_measure build: no case files in {cases_dir}; nothing to build")
         return 0
 
+    rows = []
     for case_path in case_paths:
         try:
             tree = build_case(case_path, root, patches_dir, source_repo)
@@ -508,9 +510,13 @@ def build(root: Path, cases_dir: Path, patches_dir: Path, source_repo: Path) -> 
         except CaseRefused as error:
             print(f"editor_measure build: refused {error}", file=sys.stderr)
             return 1
-        head = _git(tree, "rev-parse", "--short", "HEAD")
+        case = load_case(case_path)
+        head = _git(tree, "rev-parse", "HEAD")
+        rows.append({**case, "tree": str(tree), "name": case_path.stem, "head": head,
+                     "writer": measurement.read(handoff_path(tree, case["unit_id"]))})
         print(f"built {case_path.stem} at {tree} (head {head})")
 
+    measurement.publish_build(rows, cases_dir, patches_dir, source_repo / "studio/output/editor_measure", measurement.settings())
     print(f"editor_measure build: {len(case_paths)} case(s) built and proved under {root}")
     return 0
 
@@ -534,10 +540,47 @@ def main(
         "--root", default=DEFAULT_ROOT,
         help=f"directory the trees are built in (default {DEFAULT_ROOT})",
     )
+    subcommands.add_parser("fingerprint", help="print the current editor and case fingerprints")
+    subcommands.add_parser("record", help="record the finished workflow for the current build")
+    ruling = subcommands.add_parser("rule", help="list pending cases or record a human ruling")
+    ruling.add_argument("--run", help="workflow id (defaults to newest)")
+    ruling.add_argument("--case")
+    ruling.add_argument("--outcome", choices=("caught", "missed"))
+    ruling.add_argument("--note")
     arguments = parser.parse_args(argv)
+    output = source_repo / "studio/output/editor_measure"
+    results = cases_dir.parent / "results.json"
 
-    root = Path(arguments.root).expanduser().resolve()
-    return build(root, cases_dir, patches_dir, source_repo)
+    def repaired(case):
+        # A historical probe can overwrite tracked files. Preserve the editor's exact
+        # working state, including edits it left uncommitted, in a disposable copy.
+        with tempfile.TemporaryDirectory(prefix="studio-") as directory:
+            tree = Path(directory) / case["name"]
+            shutil.copytree(case["tree"], tree, symlinks=True)
+            place_probe_files(tree, source_repo, case["name"], case["probe"])
+            return _run_shell(case["probe"]["command"], tree).returncode == 0
+
+    try:
+        if arguments.command == "fingerprint":
+            print(json.dumps(measurement.fingerprints(cases_dir, patches_dir, measurement.settings())))
+            return 0
+        with measurement.exclusive(output):
+            if arguments.command == "build":
+                root = Path(arguments.root).expanduser().resolve()
+                if not shutil.which("node") and any(cases_dir.glob("*.json")):
+                    print("editor_measure build requires node", file=sys.stderr)
+                    return 2
+                measurement.clear_builds(output)
+                return build(root, cases_dir, patches_dir, source_repo)
+            if arguments.command == "record":
+                projects = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude")) / "projects"
+                measurement.record(output, results, projects, repaired)
+            else:
+                measurement.rule(results, arguments.run, arguments.case, arguments.outcome, arguments.note)
+        return 0
+    except (ValueError, OSError, KeyError, CaseRefused) as error:
+        print(f"editor_measure {arguments.command}: {error}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

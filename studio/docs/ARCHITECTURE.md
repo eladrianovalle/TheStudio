@@ -228,3 +228,7 @@ No direct imports or service layers are required: just CLI calls and Markdown ar
 3. Outputs: `<active_output_root>/index.md`, `<active_knowledge_root>/run_log.md`.
 
 Whenever the workflow changes, update all of the above in one commit. Studio deliberately has no hidden runtime: everything is visible, reproducible, and assistant-agnostic.
+
+## Editor measurements
+
+`studio/editor_measure.py` builds the isolated repositories and exposes the build, fingerprint, record and rule commands. `studio/editor_results.py` renders the live workflow, matches its journal and transcripts to a build, and scores its results. The source-only `/measure-editor` command launches the generated runner under `studio/output/editor_measure/`.
