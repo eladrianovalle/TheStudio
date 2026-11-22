@@ -348,9 +348,7 @@ JUDGED: list[JudgedRule] = [
     # The debate contrarian. A scoped run, which is what /spec runs, builds its prompt in
     # generate_scope_prompt: it tells the contrarian to flag what the advocate assumed but is
     # unsettled, asks every depth deliverable to end in a testable condition, and treats
-    # decisions.md as hard constraints. The quote-first rule is in CONTRARIAN_MANDATE, which that
-    # prompt includes; the finding verifier checks the same rule afterwards, and this field holds
-    # one judge, so it names the contrarian's.
+    # decisions.md as hard constraints.
     JudgedRule(
         rule="Pre-flight surfaces what is unsettled; an unknown is never papered over.",
         stated_in=".claude/commands/spec.md",
@@ -362,18 +360,13 @@ JUDGED: list[JudgedRule] = [
         judge="studio/scopes.py::generate_scope_prompt",
     ),
     JudgedRule(
-        rule="An index summary is not evidence; quote the file.",
-        stated_in=".claude/commands/spec.md",
-        judge="studio/scopes.py::CONTRARIAN_MANDATE",
-    ),
-    JudgedRule(
         rule="Settled decisions are hard constraints.",
         stated_in=".claude/commands/run-phase.md",
         judge="studio/scopes.py::generate_scope_prompt",
     ),
 ]
 
-JUDGED_WITHOUT_MEASUREMENT_COUNT = 8  # this number only goes down
+JUDGED_WITHOUT_MEASUREMENT_COUNT = 7  # this number only goes down
 
 
 # ---------------------------------------------------------------------------

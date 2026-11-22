@@ -111,17 +111,17 @@ labels by approving the spec.
 | `judge` | A separate agent decides, at a step the worker cannot skip | `JUDGED` |
 | `person` | Only a person looking at evidence can decide | Appendix A only |
 
-**Result.** 25 `listed`, 57 checkable, 6 `judge`, 30 `person`.
+**Result.** 25 `listed`, 57 checkable, 5 `judge`, 31 `person`.
 
 - The 57 checkable rows collapse to **32 entries** in `NOT_YET_ENFORCED`, because several rows share
   one mechanism. The count rises once, deliberately: from 20 to 52 if no enforcement-layer unit has
   moved an entry yet. An entry that code already refuses by the time this unit is built goes to
   `ENFORCED` with its enforcer instead.
-- `JUDGED` gets **8 rows**: the 6, plus two rules the audit counted as detected whose detector is
+- `JUDGED` gets **7 rows**: the 5, plus two rules the audit counted as detected whose detector is
   the editor: "a unit passes only when every acceptance criterion of its spec holds in the code"
   (the rule this spec measures) and "every unit ends in something usable".
-- The 30 `person` rows stay in Appendix A and nowhere else. They are the starting list for the
-  later verify-skill spec. A test file is no place for 30 sentences nothing reads.
+- The 31 `person` rows stay in Appendix A and nowhere else. They are the starting list for the
+  later verify-skill spec. A test file is no place for 31 sentences nothing reads.
 
 **`JUDGED` row fields.**
 
@@ -133,7 +133,7 @@ labels by approving the spec.
 | `results` | The tracked results file once a measurement and a mark exist, else `None` |
 
 `JUDGED_WITHOUT_MEASUREMENT_COUNT` sits beside it with the comment "this number only goes down". It
-starts at 8 and becomes 7 when the editor's first rule has a mark.
+starts at 7 and becomes 6 when the editor's first rule has a mark.
 
 **What the test asserts.**
 
@@ -571,7 +571,7 @@ What gets built: `JUDGED`, `JUDGED_WITHOUT_MEASUREMENT_COUNT` and their assertio
 Appendix A.
 
 **Acceptance criteria:**
-- [ ] `JUDGED` holds one row for each of the eight rules Appendix A lists as having a judge, each with a rule, where it is stated, a judge named as `file::name`, and no results.
+- [ ] `JUDGED` holds one row for each of the seven rules Appendix A lists as having a judge, each with a rule, where it is stated, a judge named as `file::name`, and no results.
 - [ ] The suite fails when a row's judge file is missing or no longer contains the name it cites, and when a row names a results file that does not exist.
 - [ ] The suite fails when the number of rows with no results differs from `JUDGED_WITHOUT_MEASUREMENT_COUNT`, in either direction.
 - [ ] Every entry Appendix A sends to the checkable list is in `NOT_YET_ENFORCED`, or in `ENFORCED` with an enforcer and a proof when code already refuses it, and `NOT_YET_ENFORCED_COUNT` matches the list.
@@ -683,7 +683,7 @@ proposal that a person approves with this spec. The `forge.md` and `spec.md` row
 against the command files, and the review checked seventeen more across ten files; the rest were
 sorted from the audit's one-line summaries.
 
-Totals: 25 listed, 57 checkable, 6 with a judge, 30 for a person; 118 in all.
+Totals: 25 listed, 57 checkable, 5 with a judge, 31 for a person; 118 in all.
 
 **forge.md (11)**
 
@@ -724,7 +724,7 @@ Totals: 25 listed, 57 checkable, 6 with a judge, 30 for a person; 118 in all.
 | Run `git check-ignore` on the evidence file | proxy | N12 |
 | Finalize the debate run | by design | N13 |
 | Design board is read-only; cite, don't copy | person | — |
-| An index summary is not evidence; quote the file | judge (debate contrarian, finding verifier) | JUDGED |
+| An index summary is not evidence; quote the file | person | Appendix A |
 
 **run-phase.md (9)**
 
@@ -905,7 +905,7 @@ Totals: 25 listed, 57 checkable, 6 with a judge, 30 for a person; 118 in all.
 
 Entry 14 is the later "debates as a workflow script" spec.
 
-**The eight `JUDGED` rows**
+**The seven `JUDGED` rows**
 
 | Rule | Judge |
 |---|---|
@@ -915,7 +915,6 @@ Entry 14 is the later "debates as a workflow script" spec.
 | Code is written for humans | `/forge` editor |
 | Pre-flight surfaces what is unsettled; an unknown is never papered over | debate contrarian |
 | Criteria are checkable from code | debate contrarian |
-| An index summary is not evidence; quote the file | debate contrarian and finding verifier |
 | Settled decisions are hard constraints | debate contrarian |
 
 The first two were not among the 118: the audit counted them as detected, and their detector is the
