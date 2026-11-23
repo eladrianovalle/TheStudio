@@ -78,6 +78,40 @@ def test_unsupported_source_fails_closed(repo):
         check_trees(root, base, target)
 
 
+UNITY_ASSETS = {
+    "Player.cs": b"class Player {}\n",
+    "Player.cs.meta": b"fileFormatVersion: 2\nguid: 0123456789abcdef0123456789abcdef\n",
+    "Player.prefab": b"%YAML 1.1\n%TAG !u! tag:unity3d.com,2011:\n--- !u!1001 &100 stripped\nPrefabInstance:\n",
+    "sound.wav": b"RIFF$\0\0\0WAVEfmt \x10\0\0\0\x01\0\x01\0D\xac\0\0\x88X\x01\0\x02\0\x10\0data\0\0\0\0",
+}
+
+
+def test_unity_serialization_and_binary_assets_pass_the_delivery_gate(repo):
+    root, commit = repo
+    base = commit({})
+    for path, data in UNITY_ASSETS.items():
+        (root / path).write_bytes(data)
+    head = commit({})
+    candidate = {"writer": {"unit_id": "demo"}, "pendingCommentCheck": True, "delivered": False}
+    checker = Path(__file__).resolve().parents[1] / "code_comments.py"
+    result = subprocess.run(
+        [sys.executable, checker, "--repo", root, "--base", base, "--finalize-branch", "feature"],
+        input=json.dumps(candidate), capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["verified_sha"] == head
+
+
+def test_unsupported_text_source_still_fails_beside_assets(repo):
+    root, commit = repo
+    base = commit({})
+    for path, data in UNITY_ASSETS.items():
+        (root / path).write_bytes(data)
+    target = commit({"Shader.unknownlang": "// note\n"})
+    with pytest.raises(ValueError, match="Shader.unknownlang: no comment checker"):
+        check_trees(root, base, target)
+
+
 def test_missing_parser_blocks_source(monkeypatch):
     monkeypatch.setenv("PATH", "")
     with pytest.raises(ValueError, match="Install @ast-grep"):

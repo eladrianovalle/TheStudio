@@ -199,7 +199,8 @@ Forge checks each role's changes against its starting Git tree. A new or edited
 comment in source or tests blocks delivery and identifies the file and line.
 An existing inline comment can stay when the code beside it changes. Python
 standalone explanatory strings count as comments. Interpreter shebangs, string
-literals, project documentation, and binary assets are allowed.
+literals, project documentation, binary assets, and Unity metadata and serialized
+assets are allowed.
 
 The portable host checks the proposed tree before committing it. A blocked role's
 edits stay in the worktree and the last verified commit stays on the branch. The

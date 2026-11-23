@@ -202,6 +202,10 @@ if stage == "writer":
     if not pathlib.Path("hello.txt").exists():
         pathlib.Path("hello.txt").write_text("demo")
         changes = [{"path": "hello.txt", "blob": git("hash-object", "--", "hello.txt")}]
+    if mode == "unity":
+        pathlib.Path("Player.cs.meta").write_text("fileFormatVersion: 2\nguid: 0123456789abcdef0123456789abcdef\n")
+        pathlib.Path("sound.wav").write_bytes(b"RIFF$\0\0\0WAVEfmt \x10\0\0\0\x01\0\x01\0D\xac\0\0")
+        changes += [{"path": p, "blob": git("hash-object", "--", p)} for p in ("Player.cs.meta", "sound.wav")]
     sha = git("rev-parse", "HEAD")
     handoff.update(base_sha=sha, writer_sha=sha, files_touched=[c["path"] for c in changes], mvi_claimed=True,
                    mutation_check={"performed": False, "reason": "not_configured"})
@@ -292,6 +296,16 @@ def test_claude_roles_that_work_around_a_refused_command_still_deliver(project, 
     assert state['result']['criteriaVerdicts'][0]['verdict'] == 'pass'
     for record in state['roles'].values():
         assert record['completed'] and record['refused_commands'] == 1
+
+
+def test_unity_metadata_and_binary_assets_pass_the_writer_comment_gate(project, claude_only, monkeypatch):
+    monkeypatch.setenv('CLAUDE_FORGE_FIXTURE_MODE', 'unity')
+    run = cli(project, '--spec', '.studio/specs/demo.md', '--runtime', 'claude')
+    assert run.returncode == 0, run.stdout + run.stderr
+    state = read_attempt(project, run)
+    committed = command(project, 'git', 'ls-files', check=True).stdout.split()
+    assert {'Player.cs.meta', 'sound.wav'} <= set(committed)
+    assert state['result']['criteriaVerdicts'][0]['verdict'] == 'pass'
 
 
 @pytest.mark.parametrize(('mode', 'error'), [

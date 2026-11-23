@@ -28,7 +28,8 @@ LANGUAGES = {
 BY_EXTENSION = {ext: name for name, exts in LANGUAGES.items() for ext in exts.split()}
 BY_NAME = {"Gemfile": "ruby", ".gitignore": "gitignore"}
 DOCUMENTS = {".md", ".markdown", ".rst", ".txt", ".csv", ".tsv"}
-ASSETS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".woff", ".woff2", ".pdf"}
+ASSETS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".woff", ".woff2", ".pdf", ".meta"}
+UNITY_SERIALIZED = re.compile(rb"%YAML 1\.1\r?\n%TAG !u! tag:unity3d\.com,2011:")
 INTERPRETER = re.compile(r"^#!\s*(?:/\S*/env\s+(?:-S\s+)?|/\S*/)([\w.+-]+)(?:\s|$)")
 RUNNERS = {"sh": "bash", "bash": "bash", "node": "javascript", "ruby": "ruby"}
 
@@ -80,6 +81,8 @@ def language(path, data):
         return None
     name = BY_NAME.get(Path(path).name) or BY_EXTENSION.get(suffix[1:])
     if not name:
+        if b"\0" in data[:8000] or UNITY_SERIALIZED.match(data):
+            return None
         raise ValueError(f"{path}: no comment checker for this file type")
     return name
 
