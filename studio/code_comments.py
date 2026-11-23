@@ -1,7 +1,8 @@
 import argparse
 import ast
-from collections import Counter
+from collections import Counter, deque
 from difflib import SequenceMatcher
+from html import unescape
 from io import BytesIO, StringIO
 import json
 import os
@@ -30,6 +31,34 @@ DOCUMENTS = {".md", ".markdown", ".rst", ".txt", ".csv", ".tsv"}
 ASSETS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".woff", ".woff2", ".pdf"}
 INTERPRETER = re.compile(r"^#!\s*(?:/\S*/env\s+(?:-S\s+)?|/\S*/)([\w.+-]+)(?:\s|$)")
 RUNNERS = {"sh": "bash", "bash": "bash", "node": "javascript", "ruby": "ruby"}
+
+
+JS_TYPES = set("""
+    application/ecmascript application/javascript application/x-ecmascript application/x-javascript
+    text/ecmascript text/javascript text/javascript1.0 text/javascript1.1 text/javascript1.2
+    text/javascript1.3 text/javascript1.4 text/javascript1.5 text/jscript text/livescript
+    text/x-ecmascript text/x-javascript
+""".split())
+
+HTML_EVENTS = set("""
+    abort afterprint animationcancel animationend animationiteration animationstart auxclick
+    beforeinput beforeinstallprompt beforematch beforeprint beforetoggle beforeunload beforexrselect blur cancel
+    canplay canplaythrough change click close command contextlost contextmenu contextrestored
+    contentvisibilityautostatechange copy cuechange cut dblclick deviceorientation deviceorientationabsolute devicemotion
+    drag dragend dragenter dragleave dragover dragstart drop durationchange emptied encrypted ended enterpictureinpicture error
+    focus focusin focusout formdata fullscreenchange fullscreenerror gamepadconnected
+    gamepaddisconnected gotpointercapture hashchange input invalid keydown keypress keyup
+    languagechange leavepictureinpicture load loadeddata loadedmetadata loadstart lostpointercapture message messageerror
+    mousedown mouseenter mouseleave mousemove mouseout mouseover mouseup mousewheel offline online
+    pagehide pagereveal pageshow pageswap paste pause play playing pointercancel pointerdown
+    pointerenter pointerleave pointerlockchange pointerlockerror pointermove pointerout pointerover pointerrawupdate pointerup popstate
+    progress ratechange readystatechange rejectionhandled reset resize scroll scrollend
+    scrollsnapchange scrollsnapchanging securitypolicyviolation seeked seeking select selectionchange
+    selectstart slotchange stalled storage submit suspend timeupdate toggle touchcancel touchend
+    touchmove touchstart transitioncancel transitionend transitionrun transitionstart
+    unhandledrejection unload visibilitychange volumechange waiting waitingforkey webkitanimationend
+    webkitanimationiteration webkitanimationstart webkittransitionend wheel
+""".split())
 
 
 def git(repo, *args):
@@ -78,6 +107,65 @@ def syntax_nodes(source, name, kinds):
     return json.loads(result.stdout)
 
 
+def html_body_language(tag, attributes):
+    kind = attributes.get("type", "")
+    if tag == "style":
+        return "css" if kind.lower() in {"", "text/css"} else None
+    if tag != "script" or "src" in attributes:
+        return None
+    if "type" not in attributes and attributes.get("language"):
+        kind = "text/" + attributes["language"]
+    if kind.lower() in {"importmap", "speculationrules"}:
+        return "json"
+    if kind == "" or kind.lower() == "module" or kind.strip(" \t\n\f\r").lower() in JS_TYPES:
+        return "javascript"
+    return None
+
+
+def html_attribute_comments(raw, first_line, name):
+    lang, prefix = ("css", "a{") if name == "style" else ("javascript", "function handler(event){")
+    decoded = []
+    line_numbers = []
+    for number, line in enumerate(raw.split("\n"), first_line):
+        value = unescape(line)
+        decoded.append(value)
+        line_numbers.extend([number] * (value.count("\n") + 1))
+    fragment = prefix + "\n".join(decoded) + "\n}"
+    for start, comment in tree_comments(fragment, lang):
+        for index, part in enumerate(comment.split("\n"), start - 1):
+            if part:
+                yield line_numbers[index], part
+
+
+def html_comments(source):
+    bodies = {node["range"]["byteOffset"]["start"]: node for node in syntax_nodes(source, "html", "raw_text")}
+    attributes = deque(syntax_nodes(source, "html", "attribute"))
+    for tag in syntax_nodes(source, "html", "start_tag,self_closing_tag"):
+        end = tag["range"]["byteOffset"]["end"]
+        values = {}
+        while attributes and attributes[0]["range"]["byteOffset"]["start"] < end:
+            attr = attributes.popleft()
+            raw = attr["text"]
+            key, _, tail = raw.partition("=")
+            name = key.strip().lower()
+            if name in values:
+                continue
+            value = tail.lstrip()
+            first_line = attr["range"]["start"]["line"] + 1 + raw[:len(raw) - len(value)].count("\n")
+            if value.startswith(('"', "'")):
+                value = value[1:-1]
+            values[name] = unescape(value)
+            if name == "style" or (name.startswith("on") and name[2:] in HTML_EVENTS):
+                yield from html_attribute_comments(value, first_line, name)
+        body = bodies.get(end)
+        if body:
+            name = re.match(r"<([^\s/>]+)", tag["text"])[1].lower()
+            lang = html_body_language(name, values)
+            if lang:
+                for line, comment in tree_comments(body["text"], lang):
+                    yield body["range"]["start"]["line"] + line, comment
+
+
 def tree_comments(source, name):
     errors = syntax_nodes(source, name, "ERROR")
     if errors:
@@ -93,10 +181,7 @@ def tree_comments(source, name):
             for node in syntax_nodes(argument["text"], name, "comment"):
                 yield argument["range"]["start"]["line"] + node["range"]["start"]["line"] + 1, node["text"]
     if name == "html":
-        for tag, lang in (("script", "javascript"), ("style", "css")):
-            for node in syntax_nodes(source, name, f"{tag}_element > raw_text"):
-                for line, value in tree_comments(node["text"], lang):
-                    yield node["range"]["start"]["line"] + line, value
+        yield from html_comments(source)
 
 
 def toml_comments(source):

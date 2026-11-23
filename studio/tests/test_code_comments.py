@@ -103,3 +103,36 @@ def test_native_finalizer_verifies_each_commit_before_delivery(repo, comment_rol
         assert json.loads(result.stdout) == {
             **candidate, "delivered": True, "pendingCommentCheck": False, "verified_sha": head,
         }
+
+
+@pytest.mark.parametrize(("html", "expected_lines"), [
+    ('<script type="text/template"><div class="title">Hello</div></script>', []),
+    ('<script type="text/template"><b onclick="f() /* text */">hello</b></script>', []),
+    ('<script type="application/ld+json">{"message": "/* data */"}</script>', []),
+    ('<script type="module">export const x = 1; // comment</script>', [1]),
+    ('<SCRIPT TYPE=TEXT/JAVASCRIPT>/* comment */</SCRIPT>', [1]),
+    ('<script type="importmap">{"imports": {"lib": "/lib.js"}}</script>', []),
+    ('<button onclick="alert(1) /* new explanation */">Go</button>', [1]),
+    ('<div style="color: red; /* new explanation */">Go</div>', [1]),
+    ('<button ONCLICK =\n "return &quot;/* text */&quot;;\n // comment">Go</button>', [3]),
+    ('<button onclick="f()&#10;&#47;* comment *&#47;">Go</button>', [1]),
+    ('<div style="--label: &quot;/* text */&quot;;">Go</div>', []),
+    ('<div data-onclick="/* data */" title="// data" only="some / text">Go</div>', []),
+    ('<button onclick="return false" style=color:red>Go</button>', []),
+    ('<input onfocus="return false; // comment" />', [1]),
+    ('<style>span { color: red; /* explanation */ }</style>', [1]),
+    ('<script type="text/javascript; charset=utf-8">// data</script>', []),
+    ('<script type="text/plain">// data</script>\n<script>// comment</script>', [2]),
+])
+def test_forge_html_comments_in_git_changes(repo, html, expected_lines):
+    root, commit = repo
+    base = commit({})
+    target = commit({"index.html": html})
+    if expected_lines:
+        with pytest.raises(ValueError) as failure:
+            check_trees(root, base, target)
+        assert str(failure.value).splitlines() == [
+            f"index.html:{line}: agent-added code comment" for line in expected_lines
+        ]
+    else:
+        check_trees(root, base, target)
