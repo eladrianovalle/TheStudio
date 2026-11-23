@@ -5,8 +5,9 @@ import { randomUUID } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 import { runLoop } from './forge_loop.mjs'
 import { runCodex } from './forge_codex.mjs'
+import { runClaude } from './forge_claude.mjs'
 
-const adapters = {codex: runCodex}
+const adapters = {codex: runCodex, claude: runClaude}
 
 function executable(name) {
   return (process.env.PATH || '').split(delimiter).some(dir => {
@@ -65,7 +66,7 @@ function handoffValue(value, schema) {
 }
 
 const changesSchema = {type: 'array', items: {type: 'object', additionalProperties: false,
-  required: ['path', 'blob'], properties: {path: {type: 'string'}, blob: {type: ['string', 'null']}}}}
+  required: ['path', 'blob'], properties: {path: {type: 'string'}, blob: {anyOf: [{type: 'string'}, {type: 'null'}]}}}}
 
 function rolePrompt(prompt, stage, checkpoint, writer) {
   // Keep the common mandate, unit, criteria, read scope and gate instructions. The native
@@ -88,6 +89,19 @@ function rolePrompt(prompt, stage, checkpoint, writer) {
     'exact blob from git hash-object -- <path> (null for a deletion). Recheck your changes before hashing. ' +
     'Include all of these paths in handoff.files_touched. Use [] for no changes. ' +
     'Do not write handoff files or reviewer concern records yourself.'
+}
+
+// Headless Claude needs explicit approval for Git inspection and configured gates.
+function claudeCommands(unit, stage, writer) {
+  const git = `git -C "${unit.work_dir}"`
+  const commands = [unit.test_command, unit.observe_command]
+  if (stage === 'writer') {
+    commands.push(git + ' rev-parse --short HEAD', ...unit.static_checks)
+    if (unit.require_mutation_check !== false) commands.push(unit.mutation_command)
+  } else {
+    commands.push(`${git} diff ${writer.base_sha}..${writer.writer_sha}`)
+  }
+  return commands.filter(command => command && !command.includes('{paths}'))
 }
 
 function checkIdentity(record) {
@@ -239,8 +253,14 @@ export async function forge(unit, runtimes = adapters) {
       if (!adapter) throw Error('Unsupported runtime ' + req.runtime)
       const schema = {type: 'object', additionalProperties: false, required: ['handoff', 'changes'],
         properties: {handoff: transportSchema(options.schema), changes: changesSchema}}
-      const reply = await adapter({cwd, model: req.model, schema, execution: record,
-        prompt: rolePrompt(prompt, stage, checkpoint, writer)})
+      const claude = req.runtime === 'claude'
+      let portablePrompt = rolePrompt(prompt, stage, checkpoint, writer)
+      if (claude && stage === 'writer' && unit.static_checks.some(command => command.includes('{paths}'))) {
+        portablePrompt += '\nThe host expands and runs static checks containing {paths}. ' +
+          'Run any other configured static checks yourself.'
+      }
+      const reply = await adapter({cwd, model: req.model, schema, execution: record, prompt: portablePrompt,
+        commands: claude ? claudeCommands(unit, stage, writer) : undefined})
       const handoff = handoffValue(reply?.handoff, options.schema)
       if (handoff.unit_id !== unit.unit_id || handoff.stage !== stage ||
           (stage === 'writer' && (handoff.base_sha !== checkpoint || handoff.writer_sha !== checkpoint))) {

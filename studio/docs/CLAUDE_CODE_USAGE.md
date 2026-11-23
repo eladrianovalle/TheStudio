@@ -477,12 +477,22 @@ Override keys replace the base; unspecified keys inherit from the manifest. Vali
 
 ## Implementation Loop (`/forge`)
 
-From a terminal with Node.js and an authenticated Codex CLI, run
-`python .studio/source/run_phase.py forge --runtime codex --spec <slug> --unit <unit_id>`
-in an installed project. In the Studio source repo use `studio/run_phase.py`.
-Add `--plan` to inspect the target branch, roles and criteria before the writer starts.
-The portable host starts a fresh editor, runs the configured tests in the worktree,
-and reports the writer and editor results. The Claude Code slash command remains available.
+In an installed project, run
+`python .studio/source/run_phase.py forge --runtime claude --spec <slug> --unit <unit_id>`
+to use Claude for both roles. In the Studio source repo use `studio/run_phase.py`.
+The portable command defaults to Codex for both roles. Use `--writer-runtime` or
+`--editor-runtime` to override one role, and `--writer-model` or `--editor-model`
+to pin its model. An explicit pin requires matching runtime evidence. Add `--plan`
+to inspect the target branch, selections and criteria without starting either role.
+
+A build requires Node.js and the authenticated CLI for each enabled runtime. The
+host starts a fresh context for each role, runs the configured tests in the worktree
+and reports the last verified checkpoint. Each attempt records the two role selections,
+observed model identities when available, and stage outcomes under
+`.studio/output/impl_loop/<unit_id>/`.
+
+The Claude Code `/forge` command uses the native workflow by default. Passing a
+portable runtime or model selector routes that invocation to the portable command.
 
 Brings the advocate/contrarian cadence into **implementation**, the writer/editor analogue of the planning-phase debate. One agent writes a complete unit; a fresh editor agent refines it; then it's delivered.
 

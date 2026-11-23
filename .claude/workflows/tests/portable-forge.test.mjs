@@ -4,6 +4,7 @@ import {execFileSync} from 'node:child_process'
 import {mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {delimiter, join} from 'node:path'
+import {randomUUID} from 'node:crypto'
 import {forge} from '../../../studio/forge_host.mjs'
 import {runLoop} from '../../../studio/forge_loop.mjs'
 
@@ -24,14 +25,16 @@ test('native and portable loops agree on recorded handoffs at both gates', async
     [{...writer, stuck: 'fixture', mvi_claimed: false}, null, true, true],
     [writer, null, false, true], [writer, {...editor, tests: {...tests, passed: false}}, true, true],
   ]) {
-    const unit = {unit_id: 'demo', acceptance_criteria: ['Works.'], editor_enabled: enabled}
+    const unit = {unit_id: 'demo', acceptance_criteria: ['Works.'], editor_enabled: enabled, model: 'sonnet'}
     const events = []
     const host = {phase: () => {}, log: () => {}, agent: async (_, opt) => {
-      events.push(opt.label)
+      events.push([opt.label, opt.model])
       return structuredClone(opt.phase === 'Writer' ? w : e)
     }}
     const legacy = await nativeLoop(unit, host.agent, host.phase, host.log)
     const labels = events.splice(0)
+    assert.deepEqual(labels[0], ['writer:demo', 'sonnet'])
+    if (e) assert.deepEqual(labels[1], ['editor:demo', 'opus'])
     const portable = await runLoop(unit, host)
     assert.deepEqual(portable, legacy)
     assert.deepEqual(events, labels)
@@ -177,3 +180,55 @@ exec git "$@"
     process.env.PATH = originalPath
   }
 })
+
+for (const writerRuntime of ['codex', 'claude']) {
+  for (const editorRuntime of ['codex', 'claude']) {
+    test('dispatches ' + writerRuntime + ' writer and ' + editorRuntime + ' editor with their own pins', async () => {
+      const {cwd, git, unit} = fixture()
+      unit.roles = {writer: {runtime: writerRuntime, model: 'writer-pin'},
+        editor: {runtime: editorRuntime, model: 'editor-pin'}}
+      const calls = []
+      const adapter = runtime => async ({model, execution, prompt, cwd: actualCwd}) => {
+        const stage = calls.length === 0 ? 'writer' : 'editor'
+        const session = randomUUID()
+        calls.push([stage, runtime, model, session])
+        assert.equal(actualCwd, cwd)
+        assert.equal(execution.session_id, null)
+        assert.deepEqual(execution.observed_models, [])
+        assert.match(prompt, /Works\./)
+        Object.assign(execution, {actual_runtime: runtime, completed: true, session_id: session,
+          observed_models: [model]})
+        if (stage === 'writer') {
+          assert.match(prompt, /You are the WRITER/)
+          writeFileSync(join(cwd, 'hello'), 'pass')
+          return {changes: [{path: 'hello', blob: git('hash-object', '--', 'hello')}],
+            handoff: {...writer, base_sha: unit.base_sha, writer_sha: unit.base_sha}}
+        }
+        const writerSha = git('rev-parse', 'HEAD')
+        assert.notEqual(writerSha, unit.base_sha)
+        assert.ok(prompt.includes(unit.base_sha + '..' + writerSha))
+        assert.match(prompt, /Writer handoff:/)
+        return {changes: [], handoff: editor}
+      }
+      const state = await forge(unit, {claude: adapter('claude'), codex: adapter('codex')})
+      assert.equal(state.error, undefined)
+      assert.equal(state.result.flagged, false)
+      assert.deepEqual(state.result.criteriaVerdicts, [grade])
+      assert.deepEqual(calls.map(call => call.slice(0, 3)), [
+        ['writer', writerRuntime, 'writer-pin'], ['editor', editorRuntime, 'editor-pin'],
+      ])
+      assert.notEqual(calls[0][3], calls[1][3])
+      const journal = JSON.parse(readFileSync(state.record, 'utf8'))
+      for (const [role, runtime, pin, session] of calls) {
+        const record = journal.roles[role]
+        assert.equal(record.requested_runtime, runtime)
+        assert.equal(record.actual_runtime, runtime)
+        assert.equal(record.requested_model, pin)
+        assert.deepEqual(record.observed_models, [pin])
+        assert.equal(record.session_id, session)
+        assert.equal(record.completed, true)
+        assert.equal(record.host_test.passed, true)
+      }
+    })
+  }
+}

@@ -57,6 +57,7 @@ SOURCE_FILES = [
     "forge_loop.mjs",
     "forge_host.mjs",
     "forge_codex.mjs",
+    "forge_claude.mjs",
     "config_loading.py",
     "stats.py",
     "obligations.py",

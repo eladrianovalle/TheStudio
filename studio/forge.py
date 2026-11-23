@@ -18,10 +18,12 @@ def add_parser(subparsers):
     parser.add_argument("--branch")
     parser.add_argument("--work-dir")
     parser.add_argument("--test")
-    parser.add_argument("--runtime", choices=["codex", "claude"], default="codex")
+    parser.add_argument("--runtime", choices=["codex", "claude"], default="codex",
+                        help="Default runtime for both roles (default: codex).")
     for role in ("writer", "editor"):
-        parser.add_argument(f"--{role}-runtime", choices=["codex", "claude"])
-        parser.add_argument(f"--{role}-model")
+        parser.add_argument(f"--{role}-runtime", choices=["codex", "claude"],
+                            help=f"Override the runtime for the {role} only.")
+        parser.add_argument(f"--{role}-model", help=f"Pin the {role} model on its selected runtime.")
     parser.add_argument("--plan", action="store_true")
 
 
