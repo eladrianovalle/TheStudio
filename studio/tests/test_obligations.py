@@ -8,19 +8,25 @@ the reading: the dashboard block in `test_stats.py`, the session brief in `test_
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
+
+import pytest
 
 from obligations import (
+    EVIDENCE_FOLLOW_UP,
     EVIDENCE_OVERDUE,
     RANK,
     STALE_STATUS,
     UNBUILT_UNIT,
+    Evidence,
     Obligation,
     SpecView,
     derive,
     evidence_file_for,
+    format_queue,
     parse_due,
 )
-from stats import PlannedUnit, reconcile_units
+from stats import PlannedUnit, parse_evidence, reconcile_units
 
 TODAY = date(2026, 9, 25)
 
@@ -42,7 +48,7 @@ def _view(
     status: str = "approved",
     promises_evidence: bool = False,
     verification_due: str = "",
-    evidence_is_blank: bool = True,
+    evidence: Evidence = Evidence.BLANK,
 ) -> SpecView:
     return SpecView(
         slug=slug,
@@ -50,7 +56,7 @@ def _view(
         status=status,
         promises_evidence=promises_evidence,
         verification_due=verification_due,
-        evidence_is_blank=evidence_is_blank,
+        evidence=evidence,
         units=units,
     )
 
@@ -153,7 +159,7 @@ def test_a_built_spec_whose_evidence_is_in_owes_the_flip():
         _unit("built_one"),
         promises_evidence=True,
         verification_due="2099-01-01",
-        evidence_is_blank=False,
+        evidence=Evidence.PASSED,
     )
 
     assert [owed.kind for owed in _queue([view], built=["built_one"])] == [STALE_STATUS]
@@ -181,7 +187,7 @@ def test_a_spec_waiting_on_evidence_owes_neither_a_flip_nor_anything_else():
         _unit("built_one"),
         promises_evidence=True,
         verification_due="2099-01-01",
-        evidence_is_blank=True,
+        evidence=Evidence.BLANK,
     )
 
     assert _queue([view], built=["built_one"]) == []
@@ -283,7 +289,7 @@ def test_evidence_that_is_in_owes_nothing_however_late_it_was():
         _unit("built_one"),
         promises_evidence=True,
         verification_due="2020-01-01",
-        evidence_is_blank=False,
+        evidence=Evidence.PASSED,
     )
 
     assert [owed.kind for owed in _queue([view], built=["built_one"])] == [STALE_STATUS]
@@ -337,7 +343,7 @@ def test_the_queue_sorts_by_kind_then_spec_then_subject():
         (UNBUILT_UNIT, "first_owed"),
         (UNBUILT_UNIT, "second_owed"),
     ]
-    assert RANK == (STALE_STATUS, EVIDENCE_OVERDUE, UNBUILT_UNIT)
+    assert RANK == (STALE_STATUS, EVIDENCE_FOLLOW_UP, EVIDENCE_OVERDUE, UNBUILT_UNIT)
 
 
 def test_two_specs_sharing_a_slug_each_keep_their_own_units():
@@ -346,9 +352,9 @@ def test_two_specs_sharing_a_slug_each_keep_their_own_units():
     A spec's units are matched by the file that planned them as well as by their ids, so one
     spec's built work can never be read as another's.
     """
-    first = SpecView("shared", "specs/a-feature.md", "approved", False, "", True,
+    first = SpecView("shared", "specs/a-feature.md", "approved", False, "", Evidence.BLANK,
                      (PlannedUnit("shared", "built_one", "t", "", "", "specs/a-feature.md"),))
-    second = SpecView("shared", "specs/b-feature.md", "approved", False, "", True,
+    second = SpecView("shared", "specs/b-feature.md", "approved", False, "", Evidence.BLANK,
                       (PlannedUnit("shared", "owed_one", "t", "", "", "specs/b-feature.md"),))
     queue = _queue([first, second], built=["built_one"])
 
@@ -380,3 +386,76 @@ def test_the_derived_values_cannot_be_edited_after_the_fact():
     assert dataclasses.fields(Obligation)
     for shape in (Obligation, SpecView):
         assert shape.__dataclass_params__.frozen, f"{shape.__name__} must be frozen"
+
+
+@pytest.mark.parametrize(("record", "expected"), [
+    ("## Verdict\n**Criterion met**, on one controlled pair.", Evidence.PASSED),
+    ("## Verdict ##\n__Criterion met.__", Evidence.PASSED),
+    ("## Verdict\nCriterion<!-- formatting note --> met.", Evidence.PASSED),
+    ("Criterion met.", Evidence.UNCLEAR),
+    ("## Results\nCriterion met.", Evidence.UNCLEAR),
+    ("## Verdict#\nCriterion met.", Evidence.UNCLEAR),
+    ("## Verdict\n### Decision\nCRITERION NOT MET AS WRITTEN.", Evidence.FAILED),
+    ("## Verdict\nInconclusive — missing a baseline.", Evidence.INCONCLUSIVE),
+    ("## Verdict\nCriterion met? We cannot tell.", Evidence.UNCLEAR),
+    ("## Verdict\nCriterion met only if next week's trial passes.", Evidence.UNCLEAR),
+    ("## Verdict\nCriterion met. Criterion not met.", Evidence.UNCLEAR),
+    ("## Verdict\nCriterion met, but criterion not met.", Evidence.UNCLEAR),
+    ("## Verdict\nCriterion met, on the pilot; criterion not met, on the full evaluation.", Evidence.UNCLEAR),
+    ("## Verdict\nCriterion met, on the pilot, but criterion not met, on the full evaluation.", Evidence.UNCLEAR),
+    ("## Verdict\nCriterion met, on the pilot, for example: inconclusive.", Evidence.PASSED),
+    ("## Verdict\nCriterion met, for example: inconclusive; criterion not met.", Evidence.UNCLEAR),
+    ("## Verdict\nCriterion met. For example, inconclusive; criterion not met.", Evidence.PASSED),
+    ("## Verdict\nCriterion met: criterion not met.", Evidence.UNCLEAR),
+    ("## Verdict\nCriterion met — criterion not met.", Evidence.UNCLEAR),
+    ("## Verdict\nCriterion met, criterion not met or inconclusive.", Evidence.UNCLEAR),
+    ("## Verdict\nCriterion met. For example, inconclusive.", Evidence.PASSED),
+    ("## Verdict\n**Criterion met.** **Inconclusive.**", Evidence.UNCLEAR),
+    ("## Verdict\n### Example\nCriterion met.", Evidence.UNCLEAR),
+    ("## Verdict\n### Example\nCriterion met.\n### Conclusion\nInconclusive.", Evidence.INCONCLUSIVE),
+    ("## Verdict\nCriterion met / criterion not met / inconclusive", Evidence.UNCLEAR),
+    ("## Verdict\nExample: criterion met.\n    Criterion met.", Evidence.UNCLEAR),
+    ("## Verdict\n~~~markdown\nCriterion met.\n~~~", Evidence.UNCLEAR),
+    ("## Verdict\n<!--\nCriterion met.\n-->", Evidence.UNCLEAR),
+    ("## Verdict\n# Appendix\nCriterion met.", Evidence.UNCLEAR),
+    ("## Verdict\n\nFILL_ME\nCriterion met.", Evidence.BLANK),
+    ("  \n", Evidence.BLANK),
+])
+def test_only_an_authored_verdict_supplies_the_result(record, expected):
+    assert parse_evidence(record) is expected
+
+
+@pytest.mark.parametrize("case", ["unbuilt", "escalated", "dropped", "empty", "draft", "no_git"])
+def test_failed_measurement_only_creates_follow_up_for_completed_approved_work(case):
+    units = [] if case == "empty" else [_unit("one", dropped=case == "dropped")]
+    view = _view(*units, status="draft" if case == "draft" else "approved",
+                 promises_evidence=True, evidence=Evidence.FAILED)
+    built = None if case == "no_git" else ({"one"} if case == "draft" else set())
+    ledger = reconcile_units(units, built, {"one"} if case == "escalated" else set(), set())
+    queue = derive([view], ledger, today=TODAY)
+    assert [owed.kind for owed in queue] == ([UNBUILT_UNIT] if case == "unbuilt" else [])
+
+
+@pytest.mark.parametrize(("result", "instruction"), [
+    (Evidence.FAILED, "shows the measurement failed — revise the spec or rerun the evaluation"),
+    (Evidence.INCONCLUSIVE, "is inconclusive — resolve the uncertainty"),
+    (Evidence.UNCLEAR, "has no clear verdict — clarify the declaration under `## Verdict`"),
+])
+def test_filled_follow_up_has_one_action_and_path(result, instruction):
+    view = _view(_unit("one"), evidence=result, promises_evidence=True, verification_due="2000-01-01")
+    queue = _queue([view], built=["one"])
+    assert format_queue(queue)[0] == "  Evidence needs follow-up: 1"
+    assert queue == [
+        Obligation(EVIDENCE_FOLLOW_UP, "a-feature", "specs/a-feature.md",
+                   f"Evidence for `a-feature` (specs/a-feature-eval-results.md) {instruction}", "", ""),
+    ]
+
+
+@pytest.mark.parametrize(("slug", "result"), [
+    ("game-design-board", Evidence.FAILED),
+    ("shipped-finish-check", Evidence.PASSED),
+    ("message-draft", Evidence.BLANK),
+])
+def test_published_results_record(slug, result):
+    path = Path(__file__).resolve().parents[2] / "specs" / f"{slug}-eval-results.md"
+    assert parse_evidence(path.read_text()) is result
