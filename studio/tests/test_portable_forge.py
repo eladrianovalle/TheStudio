@@ -58,7 +58,7 @@ def test_plan_uses_target_layout_and_preserves_tree(project, installed):
     plan = json.loads(r.stdout)
     assert plan['branch'] == 'impl/demo_unit'
     assert plan['acceptance_criteria'] == ['Prints **demo**.']
-    assert plan['roles'] == {'writer': {'runtime': 'codex', 'model': 'w'}, 'editor': {'runtime': 'claude', 'model': None}}
+    assert plan['roles'] == {'writer': {'runtime': 'claude', 'model': 'w'}, 'editor': {'runtime': 'claude', 'model': None}}
     assert sorted(project.rglob('*')) == before
     assert command(project, 'git', 'branch', '--show-current').stdout.strip() == 'main'
 
@@ -101,7 +101,7 @@ def test_missing_selected_editor_is_reported_before_writer(project, tmp_path_fac
     codex.write_text(f'#!/bin/sh\ntouch "{sentinel}"\n')
     codex.chmod(0o755)
     monkeypatch.setenv('PATH', str(binaries))
-    r = cli(project, 'Build a demo', '--editor-runtime', 'claude')
+    r = cli(project, 'Build a demo', '--writer-runtime', 'codex', '--editor-runtime', 'claude')
     state = json.loads(r.stdout)
     assert r.returncode and state['failed_stage'] == 'editor'
     assert state['roles']['writer']['status'] == 'skipped'
@@ -141,7 +141,10 @@ def test_extensionless_path_preserves_wrapped_criterion(project):
 
 
 @pytest.mark.parametrize(('selection', 'writer_runtime', 'editor_runtime'), [
-    ([], 'codex', 'codex'),
+    ([], 'claude', 'claude'),
+    (['--runtime', 'codex'], 'codex', 'codex'),
+    (['--writer-runtime', 'codex'], 'codex', 'claude'),
+    (['--editor-runtime', 'codex'], 'claude', 'codex'),
     (['--runtime', 'claude'], 'claude', 'claude'),
     (['--runtime', 'claude', '--writer-runtime', 'codex'], 'codex', 'claude'),
     (['--runtime', 'claude', '--editor-runtime', 'codex'], 'claude', 'codex'),

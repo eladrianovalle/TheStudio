@@ -25,7 +25,7 @@ export async function runClaude({ cwd, prompt, schema, model, execution, command
     '--print', '--verbose', '--no-session-persistence', '--session-id', sessionId,
     '--input-format', 'stream-json', '--output-format', 'stream-json',
     '--json-schema', JSON.stringify(schema), '--permission-mode', 'acceptEdits',
-    '--strict-mcp-config', '--disable-slash-commands',
+    '--strict-mcp-config', '--disable-slash-commands', '--setting-sources', 'project,local',
     '--tools', 'Read,Edit,Write,Grep,Glob,Bash,StructuredOutput',
     '--allowedTools', 'Bash(git hash-object -- *)',
     ...commands.map(command => `Bash(${command})`),

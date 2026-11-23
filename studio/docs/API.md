@@ -15,7 +15,7 @@ Supported commands:
 | Command | Description |
 | --- | --- |
 | `prepare` | Creates a new run directory, instructions.md, and updates the active output index. |
-| `forge` | Builds a unit with a writer and a separate editor. Set the default for both roles with `--runtime` (defaults to `codex`), override either role with `--writer-runtime` or `--editor-runtime`, and pin each model with `--writer-model` or `--editor-model`. Select an approved unit with `--spec` and `--unit`. Use `--plan` to preview the branch, role selections and acceptance criteria. |
+| `forge` | Builds a unit with a writer and a separate editor. Set the default for both roles with `--runtime` (defaults to `claude`; name `codex` to use Codex), override either role with `--writer-runtime` or `--editor-runtime`, and pin each model with `--writer-model` or `--editor-model`. Select an approved unit with `--spec` and `--unit`. Use `--plan` to preview the branch, role selections and acceptance criteria. |
 | `finalize` | Validates artifacts, updates `run.json`, refreshes the active index, and appends to the active run log. |
 | `cleanup` | Manually enforces run retention budgets (age + total size). |
 | `validate` | Runs validators for a prepared/finalized run using validation config. |

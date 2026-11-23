@@ -20,8 +20,8 @@ def add_parser(subparsers):
     parser.add_argument("--branch")
     parser.add_argument("--work-dir")
     parser.add_argument("--test")
-    parser.add_argument("--runtime", choices=["codex", "claude"], default="codex",
-                        help="Default runtime for both roles (default: codex).")
+    parser.add_argument("--runtime", choices=["codex", "claude"], default="claude",
+                        help="Default runtime for both roles (default: claude).")
     for role in ("writer", "editor"):
         parser.add_argument(f"--{role}-runtime", choices=["codex", "claude"],
                             help=f"Override the runtime for the {role} only.")

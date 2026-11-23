@@ -203,9 +203,9 @@ python studio/run_phase.py stats --phase studio   # filter to one phase
 python studio/run_phase.py stats --json           # machine-readable aggregate (includes a shipped_specs key)
 
 # Build a spec unit with a Claude writer and a separate Claude editor
-python studio/run_phase.py forge --runtime claude --spec <slug> --unit <unit_id>
+python studio/run_phase.py forge --spec <slug> --unit <unit_id>
 # Use a Codex writer and a Claude editor, with an optional editor model pin
-python studio/run_phase.py forge --editor-runtime claude --editor-model <model> --spec <slug> --unit <unit_id>
+python studio/run_phase.py forge --writer-runtime codex --editor-model <model> --spec <slug> --unit <unit_id>
 
 # Cross-repo install
 python studio/run_phase.py init --target /path/to/project

@@ -106,6 +106,7 @@ def test_correlates_provider_alias_and_role_turns(tmp_path):
     args = json.loads((tmp_path / "called.json").read_text())
     assert args[args.index("--session-id") + 1] == execution["session_id"]
     assert args[args.index("--model") + 1] == "sonnet"
+    assert args[args.index("--setting-sources") + 1] == "project,local"
 
 
 def test_default_model_and_older_stream_can_complete_with_unknown_identity(tmp_path):
