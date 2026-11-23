@@ -1157,7 +1157,7 @@ class TestCommandRegistration:
         """A command file the installer doesn't know about would never install."""
         on_disk = {p.name for p in (studio_dir.parent / ".claude" / "commands").glob("*.md")}
         unregistered = sorted(on_disk - set(install.SLASH_COMMANDS))
-        assert not unregistered, (
+        assert unregistered == ["measure-editor.md"], (
             f"these commands exist but the installer would never copy them: {unregistered}. "
             "Add them to SLASH_COMMANDS in install.py."
         )

@@ -1,0 +1,21 @@
+{
+  "unit_id": "board_cited_spec",
+  "source": "review_fix",
+  "fix_sha": "941e64cb117924d11d4a1da349081f8183e1918f",
+  "writer_sha": "dc5eb56a2c5f2fa66f5c69d9ab2a2d487649175e",
+  "spec_file": "specs/game-design-board.md",
+  "acceptance_criteria": [
+    "`.claude/commands/spec.md` instructs that when a spec is scoped against a design board, the spec names the board region it was scoped from, and that the spec never copies board content it could cite instead.",
+    "The same clause states that `/spec` never writes to the board, so scoping stays read-only.",
+    "The clause is conditional on the repo declaring a board and names no vendor; a run in a repo with no board is unchanged.",
+    "`node --test .claude/workflows/tests/workflow-shells.test.mjs` passes and the doc-parity suite is green."
+  ],
+  "test_command": "python -m pytest -q studio/tests/test_design_board.py studio/tests/test_doc_parity.py && node --test .claude/workflows/tests/workflow-shells.test.mjs",
+  "probe": {
+    "from_sha": "941e64cb117924d11d4a1da349081f8183e1918f",
+    "paths": [],
+    "command": "PYTHONPATH=studio:studio/tests python - <<'PY'\nimport re\nimport subprocess\nfrom pathlib import Path\nfrom tempfile import TemporaryDirectory\n\nfrom install import install_studio\n\nwith TemporaryDirectory() as directory:\n    target = Path(directory)\n    subprocess.run(['git', 'init', '--quiet', str(target)], check=True)\n    install_studio(target, Path.cwd() / \"studio\", install_hook=False)\n    installed = (target / \".claude/commands/spec.md\").read_text(encoding=\"utf-8\")\n    clause = installed.split(\"**Scoping against a design board:**\", 1)[1].split(\"\\n\\n\", 1)[0]\n    guide_paths = re.findall(r\"`([^`]*DESIGN_BOARD\\.md)`\", clause)\n    assert guide_paths, clause\n    assert (target / guide_paths[0]).is_file(), guide_paths\n    assert guide_paths[1:] == [\"studio/docs/DESIGN_BOARD.md\"], guide_paths\n    assert (Path.cwd() / guide_paths[1]).is_file()\nPY"
+  },
+  "kind": "clean",
+  "patch": "linden.patch"
+}

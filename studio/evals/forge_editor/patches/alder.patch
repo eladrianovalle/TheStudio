@@ -1,0 +1,12 @@
+--- a/specs/unit-acceptance-criteria.md
++++ b/specs/unit-acceptance-criteria.md
+@@ -381,8 +381,7 @@
+    - **Acceptance criteria:**
+      - [ ] Passing `acceptance_criteria: [...]` in `args` makes the editor return one `criteria_verdicts`
+            entry per criterion, each with `criterion`, `verdict`, and `evidence`.
+-     - [ ] With zero criteria, both prompts' output is byte-identical to today's, and `criteria_verdicts`
+-           comes back empty.
++     - [ ] With zero criteria, the writer prompt is byte-identical to today's, the editor prompt adds only the one sentence telling it to leave `criteria_verdicts` empty, and nothing else in either prompt changes.
+      - [ ] A failing criterion delivers `{ delivered: true, flagged: true }` with nothing reverted and no
+            retry.
+      - [ ] The failing criteria appear in the run log and the verdicts appear in the return payload.

@@ -1,0 +1,24 @@
+{
+  "unit_id": "work_dir_validation",
+  "source": "review_fix",
+  "fix_sha": "4817b75cfe3622ea8d84e4b128455dcd75999b48",
+  "writer_sha": "940de25715128e25132ba5eec230aea7c11fe4ab",
+  "spec_file": "specs/forge-work-dir.md",
+  "acceptance_criteria": [
+    "A path that does not exist stops the run before the loop, naming that reason.",
+    "A path that exists but is not a git worktree stops the run, naming that reason.",
+    "A worktree belonging to a different repository stops the run, naming that reason.",
+    "The same-repo check compares `--git-common-dir` using `--path-format=absolute`, proven by a test that fails when the flag is removed.",
+    "With a work dir set, `/forge` resolves `scriptPath` into that directory rather than the main repo.",
+    "With a work dir set, Step 3's branch selection and dirty-tree check report on the work dir, not the current directory."
+  ],
+  "test_command": "python -m pytest -q studio/tests/test_impl_loop.py",
+  "probe": {
+    "from_sha": "4817b75cfe3622ea8d84e4b128455dcd75999b48",
+    "paths": [],
+    "command": "PYTHONPATH=studio:studio/tests python - <<'PY'\nfrom pathlib import Path\nfrom tempfile import TemporaryDirectory\n\nfrom impl_loop import WorkDirError, validate_work_dir\n\nroot = Path.cwd()\naccepted = []\nwith TemporaryDirectory(dir=root) as directory:\n    parent = Path(directory)\n    assert validate_work_dir(parent, main_repo=root) in (None, parent.resolve())\n    for name in ('draft\"notes', 'trailing' + chr(92)):\n        folder = parent / name\n        folder.mkdir()\n        try:\n            validate_work_dir(folder, main_repo=root)\n        except WorkDirError as error:\n            assert 'unquotable' in str(error), error\n        else:\n            accepted.append(name)\nassert not accepted, f\"Validator accepted unsupported path names: {accepted}\"\nPY"
+  },
+  "kind": "defect",
+  "breaks_criterion": null,
+  "defect": "The work directory validator accepts path names that its downstream double-quoted path format cannot represent."
+}

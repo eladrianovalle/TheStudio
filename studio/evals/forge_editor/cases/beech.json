@@ -1,0 +1,24 @@
+{
+  "unit_id": "board_conversation",
+  "source": "review_fix",
+  "fix_sha": "28b3795e04b3dff679b6811d725a30f76f420707",
+  "writer_sha": "83520f6ba00298bc2256a0515955bba6781c4b03",
+  "spec_file": "specs/game-design-board.md",
+  "acceptance_criteria": [
+    "`studio/docs/DESIGN_BOARD.md` exists and states, in order: locate with the structural call before any content read; structure gives addresses and never content; every claim about the game is sourced to a region read this turn; re-read the destination region in the same turn before any write; propose the exact item and destination before writing; and say so plainly when something cannot be sourced.",
+    "The discipline is conditional throughout — a repo that names no board behaves exactly as it does today, and a test asserts the shipped text contains no board-vendor product name (assert absence of the *category*, following `studio/tests/test_run_phase.py:161`, which names no tool).",
+    "`studio/docs/CODING_PRINCIPLES.md` gains a pointer of three lines or fewer that names no vendor, and the file's existing sections are unchanged.",
+    "`DESIGN_BOARD.md` appears in `SOURCE_FILES`, and a test asserts a fresh `install_studio` into a temp target puts the file on disk and records it in `MANIFEST.json`.",
+    "`studio/docs/DESIGN_BOARD.md` states that agent writes go to the destination the repo designates, and that a repo may name further destinations by purpose, with everything falling to the default when it names only one.",
+    "`cd studio && python -m pytest tests/ -q` passes and `ruff check .` from the repo root is clean."
+  ],
+  "test_command": "python -m pytest -q studio/tests/test_design_board.py",
+  "probe": {
+    "from_sha": "28b3795e04b3dff679b6811d725a30f76f420707",
+    "paths": [],
+    "command": "PYTHONPATH=studio:studio/tests python - <<'PY'\nfrom test_design_board import _mid_sentence_capitalized_words\n\nsnippets = [\n    \"Open with a listing that\\nVendorname returns for free.\",\n    \"- Open with a listing that\\n  Vendorname returns for free.\",\n    \"## Open with a listing that\\nVendorname returns for free\",\n]\nassert _mid_sentence_capitalized_words(\"Open what Vendorname returns.\") == [\"Vendorname\"]\nmissed = [snippet for snippet in snippets if _mid_sentence_capitalized_words(snippet) != [\"Vendorname\"]]\nassert not missed, f\"Wrapped lines skipped by the vendor-name guard: {missed}\"\nPY"
+  },
+  "kind": "defect",
+  "breaks_criterion": 2,
+  "defect": "The shipped vendor-name guard overlooks a name when it starts a wrapped continuation line."
+}

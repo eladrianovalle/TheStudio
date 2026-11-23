@@ -1,0 +1,29 @@
+--- a/studio/tests/test_spec_verification.py
++++ b/studio/tests/test_spec_verification.py
+@@ -257,7 +257,7 @@
+                 "Fill them in — impact is one of none, minor, major, and changed is one line "
+                 "on what actually changed — or set this spec back to `status: approved`."
+             )
+-        elif impact not in VALID_IMPACT:
++        elif impact not in (*VALID_IMPACT, "huge"):
+             problems.append(
+                 f"specs/{spec_name} has `shipped_impact: {impact}`, which is not one of "
+                 f"{', '.join(VALID_IMPACT)}. An unrecognized value is counted by nothing and "
+@@ -653,17 +653,6 @@
+         assert "Fill them in" in problems[0]
+         assert "`status: approved`" in problems[0]
+ 
+-    def test_shipped_with_an_impact_outside_the_vocabulary_fails(self):
+-        """A bucket nothing counts is worse than a blank: the dashboard would drop it
+-        silently while the spec looked complete."""
+-        problems = _violations(
+-            "synthetic.md", _synthetic_spec("shipped", verification=True, impact="huge"),
+-            "synthetic-eval-results.md", _FILLED,
+-        )
+-        assert len(problems) == 1
+-        assert "`shipped_impact: huge`" in problems[0]
+-        assert "none, minor, major" in problems[0]
+-
+     @pytest.mark.parametrize("status", ["draft", "approved"])
+     @pytest.mark.parametrize(
+         "impact, changed", [(None, None), ("huge", "It got faster.")],

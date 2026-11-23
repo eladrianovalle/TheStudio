@@ -89,7 +89,8 @@ from integrations.slack_digest import (
 
 from config_loading import tomllib
 from obligations import (
-    EVIDENCE_PLACEHOLDER,
+    EVIDENCE_FOLLOW_UP,
+    Evidence,
     Obligation,
     SpecView,
     derive,
@@ -105,6 +106,7 @@ from stats import (
     format_stats,
     mentioned_unit_ids,
     parse_build_plan,
+    parse_evidence,
     parse_frontmatter,
     reconcile_units,
     summarize_session_health,
@@ -3147,19 +3149,13 @@ def _project_root_for_specs(specs_dir: Path) -> Path:
     return specs_dir.parent.parent if specs_dir.parent.name == ".studio" else specs_dir.parent
 
 
-def _evidence_is_blank(spec_path: Path) -> bool:
-    """Whether a spec's evidence file still has nothing in it.
-
-    Missing and unreadable both read as blank, which is the safe direction: it can produce an
-    obligation to go and look, never a claim that evidence exists. A file still carrying the
-    skeleton's placeholders is blank too — that is what the spec-verification suite refuses a
-    ``shipped`` flip over.
-    """
+def _read_evidence(spec_path: Path) -> Evidence:
+    """An unreadable record takes the same deadline reminder as a missing one."""
     evidence_path = spec_path.with_name(evidence_file_for(spec_path.name))
     try:
-        return EVIDENCE_PLACEHOLDER in evidence_path.read_text(encoding="utf-8")
-    except OSError:
-        return True
+        return parse_evidence(evidence_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError):
+        return Evidence.BLANK
 
 
 def _obligations_and_ledger(
@@ -3215,7 +3211,7 @@ def _obligations_and_ledger(
                     line.startswith("## Verification") for line in spec_text.splitlines()
                 ),
                 verification_due=parse_frontmatter(spec_text).get("verification_due", ""),
-                evidence_is_blank=_evidence_is_blank(spec_path),
+                evidence=_read_evidence(spec_path),
                 units=units,
             ))
             planned.extend(units)
@@ -3258,9 +3254,10 @@ def _unfinished_context(target: Path) -> str:
         return ""
 
     top = queue[0]
+    action = ""
     if top.command:
         action = f"Tell the user they can discharge it with: {top.command}. "
-    else:
+    elif top.kind != EVIDENCE_FOLLOW_UP:
         action = "Discharging it is an edit to the spec, not a command. "
     escape = f"To close it on purpose instead, {top.silence}. " if top.silence else ""
     return OBLIGATION_ADDITIONAL_CONTEXT.format(
