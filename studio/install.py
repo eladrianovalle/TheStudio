@@ -54,6 +54,7 @@ SOURCE_FILES = [
     "setup.py",
     "impl_loop.py",
     "forge.py",
+    "code_comments.py",
     "forge_loop.mjs",
     "forge_host.mjs",
     "forge_codex.mjs",

@@ -539,7 +539,7 @@ export async function runLoop(args, {agent, phase, log}) {
   if (!entryGate) {
     // deliver_on_gate_fail: do not spin. Leave the writer's state, flag it.
     log(`Entry gate failed (mvi_claimed=${writer.mvi_claimed}, tests.passed=${writer.tests?.passed}). Delivering flagged, no editor pass.`)
-    return { delivered: true, flagged: true, editorRan: false, writer }
+    return { delivered: false, pendingCommentCheck: true, flagged: true, editorRan: false, writer }
   }
 
   // Config knob (editor.mandate="off" → editor_enabled=false, merged into args by /forge):
@@ -556,7 +556,7 @@ export async function runLoop(args, {agent, phase, log}) {
     log(promisedGrades
       ? `editor_enabled=false (mandate off) but the unit carried ${unitCriteria(unit).length} acceptance criterion(a) — nobody graded them, so this ships FLAGGED. Turn the editor mandate on, or run without criteria.`
       : `editor_enabled=false (mandate off) — delivering the writer's version, no editor pass.`)
-    return { delivered: true, flagged: promisedGrades, editorRan: false, finalVersion: 'writer', writer }
+    return { delivered: false, pendingCommentCheck: true, flagged: promisedGrades, editorRan: false, finalVersion: 'writer', writer }
   }
 
   phase('Edit')
@@ -650,7 +650,7 @@ export async function runLoop(args, {agent, phase, log}) {
   }
   log(`Done. editorRan=${!!editor} editHeld=${editHeld} mvi_verdict=${editor?.mvi_verdict} reverted=${editor?.reverted} committed=${editor?.committed} concerns=${reviewerConcerns.length} criteria=${criteriaVerdicts.length}`)
   return {
-    delivered: true,
+    delivered: false, pendingCommentCheck: true,
     flagged: !exitGate,                // delivered, but editor couldn't confirm a usable green unit
     editorRan: true,
     finalVersion: editHeld ? 'editor' : 'writer',

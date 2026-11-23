@@ -193,6 +193,25 @@ real tool (`mutation_command`) and reports its result, but it still sits in the 
 the writer runs it and reports, and no deterministic exit-gate blocks on survivors yet, so
 calling it "non-negotiable" would still overstate it.
 
+#### Code comments
+
+Forge checks each role's changes against its starting Git tree. A new or edited
+comment in source or tests blocks delivery and identifies the file and line.
+An existing inline comment can stay when the code beside it changes. Python
+standalone explanatory strings count as comments. Interpreter shebangs, string
+literals, project documentation, and binary assets are allowed.
+
+The portable host checks the proposed tree before committing it. A blocked role's
+edits stay in the worktree and the last verified commit stays on the branch. The
+native workflow returns a pending result. The slash command runs the checker
+against each commit from preflight through HEAD before it reports delivery.
+
+Studio handles Python, TOML, and Git ignore files directly. JavaScript, TypeScript,
+JSX, TSX, C, C++, C#, Rust, Go, Java, Kotlin, Bash, Ruby, Lua, CSS, HTML, YAML,
+and JSON use the ast-grep CLI, version 0.51.3. Install it with
+`npm install -g @ast-grep/cli@0.51.3`. An unknown source type, missing parser,
+or parse failure blocks the run.
+
 ### 3. The mandates (prompts as data)
 
 Authored the same way personas and roles already are: shipped defaults that a project-local file

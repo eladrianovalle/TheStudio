@@ -1023,6 +1023,9 @@ def _cli(argv: List[str]) -> str:
     if args.branch:
         tree_being_built = Path(knobs["work_dir"]) if args.work_dir else Path.cwd()
         knobs["branch"] = validate_branch(tree_being_built, args.branch)
+        knobs["base_sha"] = subprocess.check_output(
+            ["git", "-C", tree_being_built, "rev-parse", "HEAD"], text=True,
+        ).strip()
 
     return json.dumps(knobs)
 

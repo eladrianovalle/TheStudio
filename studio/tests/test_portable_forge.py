@@ -197,9 +197,9 @@ handoff = {"stage": stage, "unit_id": "demo_unit", "files_touched": [],
            "tests": {"command": "true", "passed": True, "exit_code": 0}}
 if stage == "writer":
     assert "Bash(git -C " in " ".join(args) and "rev-parse --short HEAD)" in " ".join(args)
-    if not pathlib.Path("hello").exists():
-        pathlib.Path("hello").write_text("demo")
-        changes = [{"path": "hello", "blob": git("hash-object", "--", "hello")}]
+    if not pathlib.Path("hello.txt").exists():
+        pathlib.Path("hello.txt").write_text("demo")
+        changes = [{"path": "hello.txt", "blob": git("hash-object", "--", "hello.txt")}]
     sha = git("rev-parse", "HEAD")
     handoff.update(base_sha=sha, writer_sha=sha, files_touched=[c["path"] for c in changes], mvi_claimed=True,
                    mutation_check={"performed": False, "reason": "not_configured"})
@@ -208,12 +208,12 @@ else:
     assert "Writer handoff:" in prompt and "Prints **demo**." in prompt
     assert any(re.fullmatch(r"Bash\(git -C .+ diff [0-9a-f]+\.\.[0-9a-f]+\)", a) for a in args)
     if mode in {"conflict", "reroute"}:
-        pathlib.Path("hello").write_text("editor edit")
-        changes = [{"path": "hello", "blob": git("hash-object", "--", "hello")}]
-        handoff["files_touched"] = ["hello"]
+        pathlib.Path("hello.txt").write_text("editor edit")
+        changes = [{"path": "hello.txt", "blob": git("hash-object", "--", "hello.txt")}]
+        handoff["files_touched"] = ["hello.txt"]
     handoff.update(mvi_verdict=True, edits="Reviewed", reverted=False, committed=False,
                    criteria_verdicts=[{"criterion": "Prints **demo**.", "verdict": "pass",
-                                       "evidence": "Read hello at the tested checkpoint."}])
+                                       "evidence": "Read hello.txt at the tested checkpoint."}])
 send("result", subtype="success", is_error=False, result=secret,
      modelUsage={secret: {}}, structured_output={"handoff": handoff, "changes": changes})
 '''
@@ -293,4 +293,4 @@ def test_claude_editor_failure_preserves_writer_checkpoint(project, claude_only,
     assert state['roles']['editor']['status'] == 'failed'
     assert state['roles']['writer']['status'] == 'completed'
     assert command(project, 'git', 'log', '-1', '--format=%s').stdout.strip() == 'writer: demo_unit'
-    assert (project / 'hello').read_text() == 'demo'
+    assert (project / 'hello.txt').read_text() == 'demo'
