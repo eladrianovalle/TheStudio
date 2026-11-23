@@ -343,6 +343,59 @@ def test_build_refuses_a_criterion_the_spec_file_does_not_hold(history, checkout
 # --- criterion 4: a case whose recipe cannot be honoured is refused ---------
 
 
+# --- a case file that is not a usable recipe -----------------------------------
+#
+# These are refused when the file is read, before any tree is made. Each refusal had
+# no test of its own: deleting one left the suite green.
+
+
+def test_build_refuses_a_kind_it_does_not_know(history, checkout_root, case_dirs, capsys):
+    write_case(case_dirs[0], "greeter_six", defect_case(history, kind="other"))
+
+    code, output = run_build(history, checkout_root, case_dirs, capsys)
+
+    assert code == 1
+    assert "case greeter_six" in output
+    assert "kind 'other' is not one of" in output
+    assert not (checkout_root / "greeter_six").exists()
+
+
+def test_build_refuses_a_source_it_does_not_know(history, checkout_root, case_dirs, capsys):
+    write_case(case_dirs[0], "greeter_seven", defect_case(history, source="somewhere"))
+
+    code, output = run_build(history, checkout_root, case_dirs, capsys)
+
+    assert code == 1
+    assert "case greeter_seven" in output
+    assert "source 'somewhere' is not one of" in output
+    assert not (checkout_root / "greeter_seven").exists()
+
+
+def test_build_refuses_a_case_with_no_criteria(history, checkout_root, case_dirs, capsys):
+    write_case(case_dirs[0], "greeter_eight", defect_case(history, acceptance_criteria=[]))
+
+    code, output = run_build(history, checkout_root, case_dirs, capsys)
+
+    assert code == 1
+    assert "case greeter_eight" in output
+    assert "acceptance_criteria is empty" in output
+    assert not (checkout_root / "greeter_eight").exists()
+
+
+def test_build_refuses_a_defect_with_nothing_to_show_the_defect(history, checkout_root, case_dirs, capsys):
+    """Without a probe nothing proves the defect is there, so the case could be a clean tree."""
+    unproven = defect_case(history)
+    del unproven["probe"]
+    write_case(case_dirs[0], "greeter_nine", unproven)
+
+    code, output = run_build(history, checkout_root, case_dirs, capsys)
+
+    assert code == 1
+    assert "case greeter_nine" in output
+    assert "a defect case needs a probe" in output
+    assert not (checkout_root / "greeter_nine").exists()
+
+
 def test_build_refuses_a_patch_that_does_not_apply(history, checkout_root, case_dirs, capsys):
     cases, patches = case_dirs
     (patches / "stale.patch").write_text(
