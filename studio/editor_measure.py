@@ -401,6 +401,34 @@ def prove_probe(tree: Path, source_repo: Path, name: str, case: dict) -> None:
         )
 
 
+def prove_probe_passes_without_plant(tree: Path, source_repo: Path, name: str, case: dict, patches_dir: Path) -> None:
+    """Run a plant's probe with the plant taken out; refuse the case unless it passes there.
+
+    prove_probe shows the probe fails on the planted tree, but a broken probe fails
+    everywhere. Passing without the plant is what shows the plant is the defect it finds.
+
+    The plant is taken out by reversing its patch in the working tree only: git apply
+    without --index writes no object and leaves the index alone, so the commit and object
+    store stay as built, and restore_tree then removes the reversal and the probe files
+    as it does after every proof step. The unplanted tree is therefore exactly the built
+    tree minus the patch, with no second checkout to build and clean up.
+    """
+    probe = case.get("probe")
+    if not probe:
+        return
+    if case.get("patch"):
+        _git(tree, "apply", "--reverse", str(patches_dir / case["patch"]))
+    place_probe_files(tree, source_repo, name, probe)
+    result = _run_shell(probe["command"], tree)
+    restore_tree(tree)
+    if result.returncode != 0:
+        raise CaseRefused(
+            f"case {name}: the plant's probe `{probe['command']}` fails without the plant too "
+            f"(exit {result.returncode}), so it does not show the plant is the defect:\n"
+            f"{_output_tail(result)}"
+        )
+
+
 # --- the writer handoff -----------------------------------------------------
 
 
@@ -458,6 +486,8 @@ def build_case(case_path: Path, root: Path, patches_dir: Path, source_repo: Path
         prove_criteria(tree, name, case)
         tests = prove_test_command(tree, name, case)
         prove_probe(tree, source_repo, name, case)
+        if case["source"] == "plant":
+            prove_probe_passes_without_plant(tree, source_repo, name, case, patches_dir)
     except subprocess.CalledProcessError as error:
         command = " ".join(shlex.quote(part) for part in error.cmd)
         raise CaseRefused(f"case {name}: `{command}` failed:\n{(error.stderr or '').strip()}") from error

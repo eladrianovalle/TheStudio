@@ -9,7 +9,7 @@ The fake history is a unit called `greeter` whose writer forgot the "!" its spec
 
     base -> writer: greeter -> editor: greeter -> fix greeting -> later
               |\\
-              | +-> plant commit                      (source of the plant patches)
+              | +-> plant commit                      (source of the plant patches and their probe)
               +---> writer: other_unit -> after other (another unit in between)
               +---> side one -+-> merge -> after merge  (a merge in between)
               +---> side two -+
@@ -46,6 +46,7 @@ CRITERIA = [
 ]
 CHECKS = "import app\nassert app.greet().startswith('hello')\n"
 BANG_PROBE = "import app\nassert app.greet().endswith('!'), app.greet()\n"
+HELLO_PROBE = "import app\nassert app.greet().startswith('hello'), app.greet()\n"
 
 WRITER_IDENTITY = {
     "GIT_AUTHOR_NAME": "Writer Agent",
@@ -108,9 +109,12 @@ def history(tmp_path_factory):
     write(repo, "notes.md", "something later\n")
     shas["later"] = commit_all(repo, "later work")
 
+    # The plant breaks the "hello" the writer got right and weakens the check that covered it,
+    # as a writer faking done would. Its probe passes on the writer's tree and fails on the plant.
     git(repo, "checkout", "--quiet", "-b", "plant", shas["writer"])
-    write(repo, "app.py", "def greet():\n    return 'hello'  # planted\n")
-    write(repo, "run_checks.py", CHECKS + "# planted\n")
+    write(repo, "app.py", "def greet():\n    return 'hullo'  # planted\n")
+    write(repo, "run_checks.py", "import app\nassert app.greet()\n# planted\n")
+    write(repo, "probe_hello.py", HELLO_PROBE)
     shas["plant"] = commit_all(repo, "plant source")
 
     git(repo, "checkout", "--quiet", "-b", "other", shas["writer"])
@@ -177,6 +181,15 @@ def clean_case(history, **overrides) -> dict:
     case = defect_case(history, kind="clean", tree_sha=history["fix"])
     del case["breaks_criterion"]
     del case["defect"]
+    case.update(overrides)
+    return case
+
+
+def plant_case(history, patch: str, **overrides) -> dict:
+    """A defect planted on the writer's tree: its probe passes on the writer's tree and fails once planted."""
+    probe = {"from_sha": history["plant"], "paths": ["probe_hello.py"], "command": f"{PYTHON} probe_hello.py"}
+    case = defect_case(history, source="plant", patch=patch, probe=probe)
+    del case["fix_sha"]
     case.update(overrides)
     return case
 
@@ -362,12 +375,31 @@ def test_build_refuses_a_plant_that_touches_a_file_outside_the_unit_diff(history
 def test_a_plant_inside_the_unit_diff_builds(history, checkout_root, case_dirs, capsys):
     cases, patches = case_dirs
     patch = write_patch(history, patches, "narrow.patch", "app.py", "run_checks.py")
-    write_case(cases, "greeter_eleven", defect_case(history, source="plant", patch=patch))
+    write_case(cases, "greeter_eleven", plant_case(history, patch))
 
     code, output = run_build(history, checkout_root, case_dirs, capsys)
 
     assert code == 0, output
-    assert "# planted" in (checkout_root / "greeter_eleven" / "app.py").read_text()
+    tree = checkout_root / "greeter_eleven"
+    assert "# planted" in (tree / "app.py").read_text()
+    # Running the probe without the plant leaves the tree as the other proof steps do.
+    assert_holds_nothing_later(tree, history, ["editor", "fix", "later", "plant"])
+    leftovers = git(tree, "status", "--porcelain", "--ignored", "--untracked-files=all")
+    assert leftovers == f"?? .studio/output/impl_loop/{UNIT}/impl--{UNIT}--writer.json"
+
+
+def test_build_refuses_a_plant_whose_probe_also_fails_without_the_plant(history, checkout_root, case_dirs, capsys):
+    cases, patches = case_dirs
+    patch = write_patch(history, patches, "narrow.patch", "app.py", "run_checks.py")
+    # The "!" probe fails on the writer's tree too, so it cannot show that the plant is the defect.
+    bang_probe = {"from_sha": history["fix"], "paths": ["probe_bang.py"], "command": f"{PYTHON} probe_bang.py"}
+    write_case(cases, "greeter_fourteen", plant_case(history, patch, probe=bang_probe))
+
+    code, output = run_build(history, checkout_root, case_dirs, capsys)
+
+    assert code == 1
+    assert "case greeter_fourteen" in output
+    assert "fails without the plant" in output
 
 
 def test_build_refuses_a_tree_sha_with_another_units_writer_commit_in_between(history, checkout_root, case_dirs, capsys):
@@ -389,6 +421,51 @@ def test_build_refuses_a_tree_sha_with_a_merge_commit_in_between(history, checko
     assert code == 1
     assert "case greeter_thirteen" in output
     assert f"merge commit {history['merge']}" in output
+
+
+# --- a case file the build cannot rely on is refused before anything is built
+
+
+def test_build_refuses_a_case_of_an_unknown_kind(history, checkout_root, case_dirs, capsys):
+    write_case(case_dirs[0], "greeter_fifteen", defect_case(history, kind="other"))
+
+    code, output = run_build(history, checkout_root, case_dirs, capsys)
+
+    assert code == 1
+    assert "case greeter_fifteen" in output
+    assert "kind 'other'" in output
+
+
+def test_build_refuses_a_case_of_an_unknown_source(history, checkout_root, case_dirs, capsys):
+    write_case(case_dirs[0], "greeter_sixteen", defect_case(history, source="other"))
+
+    code, output = run_build(history, checkout_root, case_dirs, capsys)
+
+    assert code == 1
+    assert "case greeter_sixteen" in output
+    assert "source 'other'" in output
+
+
+def test_build_refuses_a_case_with_no_acceptance_criteria(history, checkout_root, case_dirs, capsys):
+    write_case(case_dirs[0], "greeter_seventeen", defect_case(history, acceptance_criteria=[]))
+
+    code, output = run_build(history, checkout_root, case_dirs, capsys)
+
+    assert code == 1
+    assert "case greeter_seventeen" in output
+    assert "acceptance_criteria is empty" in output
+
+
+def test_build_refuses_a_defect_case_with_no_probe(history, checkout_root, case_dirs, capsys):
+    case = defect_case(history)
+    del case["probe"]
+    write_case(case_dirs[0], "greeter_eighteen", case)
+
+    code, output = run_build(history, checkout_root, case_dirs, capsys)
+
+    assert code == 1
+    assert "case greeter_eighteen" in output
+    assert "needs a probe" in output
 
 
 # --- criterion 5: no tell in the location, and missing history exits 2 ------
