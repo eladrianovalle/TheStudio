@@ -197,6 +197,8 @@ handoff = {"stage": stage, "unit_id": "demo_unit", "files_touched": [],
            "tests": {"command": "true", "passed": True, "exit_code": 0}}
 if stage == "writer":
     assert "Bash(git -C " in " ".join(args) and "rev-parse --short HEAD)" in " ".join(args)
+    assert any(re.fullmatch(r"Bash\(git -C .+ rev-parse HEAD\)", a) for a in args)
+    assert any(re.fullmatch(r"Bash\(git -C .+ hash-object -- \*\)", a) for a in args)
     if not pathlib.Path("hello.txt").exists():
         pathlib.Path("hello.txt").write_text("demo")
         changes = [{"path": "hello.txt", "blob": git("hash-object", "--", "hello.txt")}]
@@ -214,7 +216,8 @@ else:
     handoff.update(mvi_verdict=True, edits="Reviewed", reverted=False, committed=False,
                    criteria_verdicts=[{"criterion": "Prints **demo**.", "verdict": "pass",
                                        "evidence": "Read hello.txt at the tested checkpoint."}])
-send("result", subtype="success", is_error=False, result=secret,
+refusals = [{"tool_name": "Bash", "tool_input": {"command": secret}}] if mode == "refused" else []
+send("result", subtype="success", is_error=False, result=secret, permission_denials=refusals,
      modelUsage={secret: {}}, structured_output={"handoff": handoff, "changes": changes})
 '''
 
@@ -279,6 +282,16 @@ def test_installed_claude_only_build_and_retry(project, claude_only, monkeypatch
         'completed': False, 'status': 'skipped',
     }
     assert json.loads(Path(first['record']).read_text()) == first
+
+
+def test_claude_roles_that_work_around_a_refused_command_still_deliver(project, claude_only, monkeypatch):
+    monkeypatch.setenv('CLAUDE_FORGE_FIXTURE_MODE', 'refused')
+    run = cli(project, '--spec', '.studio/specs/demo.md', '--runtime', 'claude')
+    assert run.returncode == 0, run.stdout + run.stderr
+    state = read_attempt(project, run)
+    assert state['result']['criteriaVerdicts'][0]['verdict'] == 'pass'
+    for record in state['roles'].values():
+        assert record['completed'] and record['refused_commands'] == 1
 
 
 @pytest.mark.parametrize(('mode', 'error'), [

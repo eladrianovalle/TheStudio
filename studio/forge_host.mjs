@@ -97,9 +97,9 @@ function rolePrompt(prompt, stage, checkpoint, writer) {
 // Headless Claude needs explicit approval for Git inspection and configured gates.
 function claudeCommands(unit, stage, writer) {
   const git = `git -C "${unit.work_dir}"`
-  const commands = [unit.test_command, unit.observe_command]
+  const commands = [unit.test_command, unit.observe_command, git + ' hash-object -- *', git + ' status *']
   if (stage === 'writer') {
-    commands.push(git + ' rev-parse --short HEAD', ...unit.static_checks)
+    commands.push(git + ' rev-parse --short HEAD', git + ' rev-parse HEAD', ...unit.static_checks)
     if (unit.require_mutation_check !== false) commands.push(unit.mutation_command)
   } else {
     commands.push(`${git} diff ${writer.base_sha}..${writer.writer_sha}`)

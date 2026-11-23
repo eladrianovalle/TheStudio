@@ -102,7 +102,7 @@ def test_correlates_provider_alias_and_role_turns(tmp_path):
                          "observed_models": [default, fallback],
                          "reroutes": [{"from": default, "to": fallback}],
                          "confirmed_aliases": [{"alias": "sonnet", "model": default}],
-                         "session_id": execution["session_id"]}
+                         "refused_commands": 0, "session_id": execution["session_id"]}
     args = json.loads((tmp_path / "called.json").read_text())
     assert args[args.index("--session-id") + 1] == execution["session_id"]
     assert args[args.index("--model") + 1] == "sonnet"
@@ -130,7 +130,6 @@ def test_uncorrelated_initialization_cannot_confirm_a_requested_alias(tmp_path):
 @pytest.mark.parametrize(("events", "exit_code", "error"), [
     ([assistant("<synthetic>", error="authentication_failed"), result(is_error=True)], 1, "authenticat"),
     ([assistant("<synthetic>", error="rate_limit"), result(is_error=True)], 1, "limit"),
-    ([result(permission_denials=[{"tool_input": SECRET}])], 0, "permission"),
     ([result(structured_output=None)], 0, "handoff"),
     ([result(session_id="other")], 0, "result"),
     ([result(), result()], 0, "result"),
@@ -143,6 +142,24 @@ def test_failures_do_not_publish_a_completed_identity(tmp_path, events, exit_cod
     assert "result" not in reply
     assert not reply["execution"]["completed"]
     assert reply["execution"]["observed_models"] == []
+
+
+def test_refused_commands_are_counted_without_failing_a_completed_role(tmp_path):
+    refusals = [{"tool_name": "Bash", "tool_input": {"command": SECRET}}] * 2
+    reply = run(tmp_path, [assistant("claude-sonnet-5-5"),
+                           {"type": "system", "subtype": "permission_denied", "message": SECRET},
+                           result(permission_denials=refusals)])
+    assert reply["result"] == ENVELOPE
+    assert reply["execution"]["completed"]
+    assert reply["execution"]["refused_commands"] == 2
+
+
+def test_refused_commands_are_counted_when_the_role_fails(tmp_path):
+    reply = run(tmp_path, [assistant("claude-sonnet-5-5"),
+                           result(structured_output=None, permission_denials=[{"tool_input": SECRET}])])
+    assert "handoff" in reply["error"]
+    assert not reply["execution"]["completed"]
+    assert reply["execution"]["refused_commands"] == 1
 
 
 def test_unavailable_executable_retains_unknown_actual_runtime(tmp_path):

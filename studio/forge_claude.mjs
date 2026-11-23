@@ -19,7 +19,7 @@ export async function runClaude({ cwd, prompt, schema, model, execution, command
   const requestId = randomUUID();
   Object.assign(execution, {
     actual_runtime: null, session_id: null, completed: false,
-    observed_models: [], reroutes: [], confirmed_aliases: [],
+    observed_models: [], reroutes: [], confirmed_aliases: [], refused_commands: 0,
   });
   const args = [
     '--print', '--verbose', '--no-session-persistence', '--session-id', sessionId,
@@ -85,7 +85,6 @@ export async function runClaude({ cwd, prompt, schema, model, execution, command
         }
       } else if (!terminal && event.type === 'system') {
         if (event.subtype === 'model_refusal_fallback') reroute(event.original_model, event.fallback_model);
-        if (event.subtype === 'permission_denied') failure = 'Claude tool permission denied';
       }
     }
   } catch {
@@ -94,7 +93,7 @@ export async function runClaude({ cwd, prompt, schema, model, execution, command
   }
   const code = await closed;
   if (launchError) throw new Error('Claude executable unavailable');
-  if (terminal?.permission_denials?.length) failure = 'Claude tool permission denied';
+  if (Array.isArray(terminal?.permission_denials)) execution.refused_commands = terminal.permission_denials.length;
   if (failure) throw new Error(failure);
   if (assistantError && (code !== 0 || terminal?.is_error)) throw new Error('Claude: ' + assistantError);
   if (code !== 0) throw new Error('Claude process exited without success');
