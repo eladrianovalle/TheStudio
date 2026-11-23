@@ -101,17 +101,17 @@ Mind the word collision. Studio's contrarian also ends with `VERDICT: APPROVED` 
 
 **Your docs, your code, and your updates are all read by a person. Write for that person.**
 
-**Docs, comments, docstrings, commit messages, PR descriptions.**
+**Docs, commit messages, PR descriptions.**
 - Use plain language. If a term of art is unavoidable, define it the first time or pick a simpler word.
 - Cut the tells of machine-written prose: inflated phrasing, filler, hedging, and padding add length without adding meaning.
 - Say what a thing does and why it matters, not just its name. "Refuses to overwrite your local edits" beats "enforces the clobber-guard precondition."
 - Match the voice already in the file instead of importing your own.
-- A number in a comment is a claim: cite something that ships with the file (a test, a fixture), or say what the number was evidence for and drop it. "Slow when the cache is cold" beats "slow on 3 of the 5 machines I tried", and a line number goes stale the next time anyone edits the file.
 - Match the length of a file to what it actually has to say — no filler sections, no restating one point three ways. CLAUDE.md and architecture docs drift toward bloat because appending is easier than editing, so prefer editing a line over appending a section.
 - The test: could a teammate who is new to the code read it once and understand it, without asking you to translate?
 
 **Code.** Its first reader is a person, not the compiler, so write code for humans. Simple and readable are not the same thing: simple code has few moving parts, readable code spells those parts out. Aim for both, and never trade readability away to save lines.
-- Name things in full, for what they are. `remaining_budget` over `rb`, `resolve_source_dir` over `rsd`. A good name is a comment you don't have to write.
+- **Agents write zero comments in code, including tests.** This includes inline comments, block comments, documentation comments, and explanatory docstrings. Put any rationale worth keeping in the project documentation.
+- Name things in full, for what they are. `remaining_budget` over `rb`, `resolve_source_dir` over `rsd`.
 - Reach for the plain, conventional form a reader expects: explicit and a little verbose over compact and clever, one obvious thing per line rather than a dense expression to decode. Cleverness is a cost paid again by everyone who reads the code later.
 - The test: could a teammate seeing this file for the first time read it top to bottom and follow it, without you narrating over their shoulder?
 

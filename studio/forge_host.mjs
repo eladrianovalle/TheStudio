@@ -1,13 +1,15 @@
 import { execFileSync, spawnSync } from 'node:child_process'
-import { accessSync, constants, closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { accessSync, constants, closeSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { delimiter, join, isAbsolute, normalize } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { tmpdir } from 'node:os'
 import { pathToFileURL } from 'node:url'
 import { runLoop } from './forge_loop.mjs'
 import { runCodex } from './forge_codex.mjs'
 import { runClaude } from './forge_claude.mjs'
 
 const adapters = {codex: runCodex, claude: runClaude}
+const commentChecker = readFileSync(new URL('./code_comments.py', import.meta.url))
 
 function executable(name) {
   return (process.env.PATH || '').split(delimiter).some(dir => {
@@ -84,6 +86,7 @@ function rolePrompt(prompt, stage, checkpoint, writer) {
     prompt += '\nWriter handoff: ' + JSON.stringify(writer) + '\nReturn committed=false; the host commits after testing.'
   }
   return prompt + '\nWork directly in the supplied directory. Leave Git refs and the index alone. ' +
+    'Write zero comments in code and tests, including documentation comments and explanatory docstrings. ' +
     'The host owns staging, commits, recovery and all run records. Return the structured envelope. ' +
     'For changes list ONLY files you personally changed with their final repository-relative path and ' +
     'exact blob from git hash-object -- <path> (null for a deletion). Recheck your changes before hashing. ' +
@@ -180,7 +183,33 @@ export async function forge(unit, runtimes = adapters) {
     if (!test(unit.test_command).passed) throw Error('Restored writer checkpoint failed its test')
     validateChanges([])
   }
-  function commit(changes, label) {
+  function checkComments(changes) {
+    const paths = changes.map(change => change.path)
+    if (!paths.length) return git('rev-parse', checkpoint + '^{tree}').trim()
+    const temp = mkdtempSync(join(tmpdir(), 'studio-index-'))
+    try {
+      const env = {...process.env, GIT_INDEX_FILE: join(temp, 'index')}
+      const snapshot = (...args) => execFileSync('git', ['--literal-pathspecs', ...args], {cwd, env, encoding: 'utf8'})
+      snapshot('read-tree', checkpoint)
+      snapshot('add', '--', ...paths)
+      const tree = snapshot('write-tree').trim()
+      const staged = git('diff', '--name-only', '--no-renames', '-z', checkpoint, tree).split('\0').filter(Boolean)
+      if (staged.length !== paths.length || staged.some(p => !paths.includes(p))) throw Error('Unexpected staged paths')
+      for (const {path, blob} of changes) {
+        const entry = git('ls-tree', '-z', tree, '--', path)
+        const stagedBlob = entry ? entry.split('\t', 1)[0].split(' ')[2] : null
+        if (stagedBlob !== blob) throw Error('Staged content changed; preserving index')
+      }
+      const checker = join(temp, 'code_comments.py')
+      writeFileSync(checker, commentChecker)
+      execFileSync(process.env.STUDIO_FORGE_PYTHON || 'python3', [checker, '--base', checkpoint, '--tree', tree],
+        {cwd, stdio: ['ignore', 'pipe', 'pipe']})
+      return tree
+    } finally {
+      rmSync(temp, {recursive: true, force: true})
+    }
+  }
+  function commit(changes, label, checkedTree) {
     validateChanges(changes)
     const paths = changes.map(c => c.path)
     if (paths.length) git('add', '--', ...paths)
@@ -188,13 +217,7 @@ export async function forge(unit, runtimes = adapters) {
     // Verify the immutable tree that commit-tree will use, even if another process
     // changes the index between staging and taking this snapshot.
     const tree = git('write-tree').trim()
-    const staged = git('diff', '--name-only', '--no-renames', '-z', checkpoint, tree).split('\0').filter(Boolean)
-    if (staged.length !== paths.length || staged.some(p => !paths.includes(p))) throw Error('Unexpected staged paths')
-    for (const {path, blob} of changes) {
-      const entry = git('ls-tree', '-z', tree, '--', path)
-      const stagedBlob = entry ? entry.split('\t', 1)[0].split(' ')[2] : null
-      if (stagedBlob !== blob) throw Error('Staged content changed; preserving index')
-    }
+    if (tree !== checkedTree) throw Error('Content changed after comment verification')
     const message = label + ': ' + unit.unit_id
     const next = git('commit-tree', tree, '-p', checkpoint, '-m', message).trim()
     ensureLocation()
@@ -285,8 +308,9 @@ export async function forge(unit, runtimes = adapters) {
         for (const cmd of checks) {
           if (!test(cmd.replaceAll('{paths}', quoted)).passed) handoff.static_ok = false
         }
+        const checkedTree = checkComments(reply.changes)
         if (handoff.stuck || (handoff.tests.passed && handoff.mvi_claimed && (!checks.length || handoff.static_ok !== false))) {
-          commit(reply.changes, handoff.stuck ? 'writer(stuck)' : 'writer')
+          commit(reply.changes, handoff.stuck ? 'writer(stuck)' : 'writer', checkedTree)
           if (!handoff.stuck) state.last_verified_sha = checkpoint
         }
         handoff.writer_sha = checkpoint
@@ -296,7 +320,7 @@ export async function forge(unit, runtimes = adapters) {
         handoff.reverted = true
         handoff.committed = false
       } else {
-        if (paths.length) commit(reply.changes, 'editor')
+        if (paths.length) commit(reply.changes, 'editor', checkComments(reply.changes))
         handoff.committed = true
         state.last_verified_sha = checkpoint
       }
@@ -306,6 +330,10 @@ export async function forge(unit, runtimes = adapters) {
       return handoff
     }
     state.result = await runLoop(unit, {agent, log: () => {}, phase: () => {}})
+    if (state.result.pendingCommentCheck) {
+      state.result.pendingCommentCheck = false
+      state.result.delivered = true
+    }
     const concerns = state.result.reviewerConcerns || []
     if (concerns.length) {
       const dir = join(cwd, 'reviewer-concerns')

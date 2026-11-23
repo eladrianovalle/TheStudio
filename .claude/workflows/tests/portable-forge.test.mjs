@@ -11,9 +11,9 @@ import {runLoop} from '../../../studio/forge_loop.mjs'
 const native = readFileSync(new URL('../implementation-loop.js', import.meta.url), 'utf8')
 const Native = Object.getPrototypeOf(async () => {}).constructor
 const nativeLoop = new Native('args', 'agent', 'phase', 'log', native.replace('export const meta', 'const meta'))
-const grade = {criterion: 'Works.', verdict: 'pass', evidence: 'test -f hello returned 0'}
-const tests = {command: 'test -f hello', passed: true, exit_code: 0}
-const writer = {unit_id: 'demo', tests, mvi_claimed: true, stage: 'writer', files_touched: ['hello'],
+const grade = {criterion: 'Works.', verdict: 'pass', evidence: 'test -f hello.txt returned 0'}
+const tests = {command: 'test -f hello.txt', passed: true, exit_code: 0}
+const writer = {unit_id: 'demo', tests, mvi_claimed: true, stage: 'writer', files_touched: ['hello.txt'],
   mutation_check: {performed: false, reason: 'not_configured'}}
 const editor = {unit_id: 'demo', tests, mvi_verdict: true, stage: 'editor', edits: 'Reviewed',
   criteria_verdicts: [grade], reverted: false, committed: true}
@@ -36,6 +36,8 @@ test('native and portable loops agree on recorded handoffs at both gates', async
     assert.deepEqual(labels[0], ['writer:demo', 'sonnet'])
     if (e) assert.deepEqual(labels[1], ['editor:demo', 'opus'])
     const portable = await runLoop(unit, host)
+    assert.equal(legacy.delivered, false)
+    assert.equal(legacy.pendingCommentCheck, true)
     assert.deepEqual(portable, legacy)
     assert.deepEqual(events, labels)
     assert.equal(portable.flagged, flagged)
@@ -59,7 +61,7 @@ function fixture() {
   const sha = runGit('rev-parse', 'HEAD')
   const unit = {unit_id: 'demo', work_dir: cwd, starting_branch: 'feature', branch: 'feature',
     base_sha: sha, title: 'Works', instructions: 'Build', acceptance_criteria: ['Works.'],
-    test_command: 'test "$(cat hello)" = pass', static_checks: [], require_mutation_check: false,
+    test_command: 'test "$(cat hello.txt)" = pass', static_checks: [], require_mutation_check: false,
     roles: {writer: {runtime: 'codex', model: null}, editor: {runtime: 'codex', model: null}}}
   return {cwd, git: runGit, unit}
 }
@@ -83,8 +85,8 @@ for (const scenario of ['pass', 'separate pins', 'missing grade', 'red writer', 
       }
       if (count === 1) {
         if (scenario === 'concurrent') await assert.rejects(forge(unit, {codex: adapter}), /owns this worktree/)
-        writeFileSync(join(cwd, 'hello'), scenario === 'red writer' ? 'fail' : 'pass')
-        return {changes: [{path: 'hello', blob: git('hash-object', 'hello')}],
+        writeFileSync(join(cwd, 'hello.txt'), scenario === 'red writer' ? 'fail' : 'pass')
+        return {changes: [{path: 'hello.txt', blob: git('hash-object', 'hello.txt')}],
           handoff: {...writer, base_sha: unit.base_sha, writer_sha: unit.base_sha}}
       }
       if (scenario === 'malformed') return {}
@@ -93,8 +95,8 @@ for (const scenario of ['pass', 'separate pins', 'missing grade', 'red writer', 
       if (scenario === 'extra file') writeFileSync(join(cwd, 'unrelated'), 'keep')
       const changes = []
       if (scenario === 'red editor' || scenario === 'wrong hash') {
-        writeFileSync(join(cwd, 'hello'), 'failed edit')
-        changes.push({path: 'hello', blob: scenario === 'wrong hash' ? 'incorrect' : git('hash-object', 'hello')})
+        writeFileSync(join(cwd, 'hello.txt'), 'failed edit')
+        changes.push({path: 'hello.txt', blob: scenario === 'wrong hash' ? 'incorrect' : git('hash-object', 'hello.txt')})
       }
       return {changes, handoff: {...editor, files_touched: changes.map(c => c.path),
         unit_id: scenario === 'wrong unit' ? 'other' : 'demo',
@@ -119,13 +121,13 @@ for (const scenario of ['pass', 'separate pins', 'missing grade', 'red writer', 
       }
       assert.equal(state.result.flagged, ['red editor', 'missing grade'].includes(scenario))
       assert.equal(git('status', '--porcelain'), '')
-      assert.equal(readFileSync(join(cwd, 'hello'), 'utf8'), 'pass')
+      assert.equal(readFileSync(join(cwd, 'hello.txt'), 'utf8'), 'pass')
       assert.equal(state.last_verified_sha, git('rev-parse', 'HEAD'))
     } else {
       assert.equal(state.failed_stage, 'editor')
-      assert.equal(git('show', state.last_verified_sha + ':hello'), 'pass')
+      assert.equal(git('show', state.last_verified_sha + ':hello.txt'), 'pass')
       if (scenario === 'extra file') assert.ok(existsSync(join(cwd, 'unrelated')))
-      if (scenario === 'wrong hash') assert.equal(readFileSync(join(cwd, 'hello'), 'utf8'), 'failed edit')
+      if (scenario === 'wrong hash') assert.equal(readFileSync(join(cwd, 'hello.txt'), 'utf8'), 'failed edit')
       if (scenario === 'unexpected commit') assert.equal(git('log', '-1', '--format=%s'), 'external')
       if (scenario === 'branch movement') assert.equal(git('branch', '--show-current'), 'other')
     }
@@ -167,8 +169,8 @@ exec git "$@"
   try {
     const state = await forge(unit, {codex: async ({execution}) => {
       Object.assign(execution, {actual_runtime: 'codex', completed: true})
-      writeFileSync(join(cwd, 'hello'), 'pass')
-      return {changes: [{path: 'hello', blob: git('hash-object', 'hello')}],
+      writeFileSync(join(cwd, 'hello.txt'), 'pass')
+      return {changes: [{path: 'hello.txt', blob: git('hash-object', 'hello.txt')}],
         handoff: {...writer, base_sha: unit.base_sha, writer_sha: unit.base_sha}}
     }})
     assert.equal(state.failed_stage, 'writer')
@@ -200,8 +202,8 @@ for (const writerRuntime of ['codex', 'claude']) {
           observed_models: [model]})
         if (stage === 'writer') {
           assert.match(prompt, /You are the WRITER/)
-          writeFileSync(join(cwd, 'hello'), 'pass')
-          return {changes: [{path: 'hello', blob: git('hash-object', '--', 'hello')}],
+          writeFileSync(join(cwd, 'hello.txt'), 'pass')
+          return {changes: [{path: 'hello.txt', blob: git('hash-object', '--', 'hello.txt')}],
             handoff: {...writer, base_sha: unit.base_sha, writer_sha: unit.base_sha}}
         }
         const writerSha = git('rev-parse', 'HEAD')
@@ -231,4 +233,25 @@ for (const writerRuntime of ['codex', 'claude']) {
       }
     })
   }
+}
+
+for (const offender of ['writer', 'editor']) {
+  test('added ' + offender + ' comment blocks a green Forge run', async () => {
+    const {cwd, git, unit} = fixture()
+    unit.test_command = 'true'
+    const state = await forge(unit, {codex: async ({execution}) => {
+      Object.assign(execution, {actual_runtime: 'codex', completed: true})
+      const role = existsSync(join(cwd, 'app.py')) ? 'editor' : 'writer'
+      writeFileSync(join(cwd, 'app.py'), role === offender ? 'x = 2 # note\n' : 'x = 1\n')
+      return {changes: [{path: 'app.py', blob: git('hash-object', 'app.py')}],
+        handoff: {...(role === 'writer' ? {...writer, base_sha: unit.base_sha, writer_sha: unit.base_sha} : editor),
+          files_touched: ['app.py']}}
+    }})
+    assert.equal(state.failed_stage, offender)
+    assert.match(state.error, /app\.py:1: agent-added code comment/)
+    assert.equal(state.result?.delivered, undefined)
+    assert.equal(git('rev-parse', 'HEAD'), state.last_verified_sha)
+    assert.equal(git('diff', '--cached', '--name-only'), '')
+    if (offender === 'writer') assert.equal(state.roles.editor.status, 'skipped')
+  })
 }

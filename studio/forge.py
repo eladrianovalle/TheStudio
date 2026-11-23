@@ -1,9 +1,11 @@
 """Resolve one portable Forge unit before starting its Node orchestration host."""
 import json
+import os
 from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 
 from impl_loop import load_loop_config, project_config_root, runtime_knobs, validate_work_dir
 from stats import build_plan_section, parse_build_plan, parse_frontmatter, UNIT_OPENER
@@ -119,5 +121,6 @@ def run(args):
     if not node:
         raise ValueError("Forge host requires Node.js")
     host = Path(__file__).with_name("forge_host.mjs")
-    result = subprocess.run([node, host], input=json.dumps(plan), text=True, cwd=cwd)
+    result = subprocess.run([node, host], input=json.dumps(plan), text=True, cwd=cwd,
+                            env={**os.environ, "STUDIO_FORGE_PYTHON": sys.executable})
     raise SystemExit(result.returncode)
