@@ -54,6 +54,12 @@ class EnforcedRule(NamedTuple):
 
 
 ENFORCED: list[EnforcedRule] = [
+    EnforcedRule(
+        rule="Agents write zero comments in code, including tests.",
+        stated_in="studio/docs/CODING_PRINCIPLES.md",
+        enforcer="studio/code_comments.py::check_trees",
+        proof="studio/tests/test_code_comments.py::test_new_comment_blocks_delivery",
+    ),
     # 1
     EnforcedRule(
         rule="A `--work-dir` with nothing at that path is refused.",

@@ -40,7 +40,7 @@ For each finding, note: file, line range, and which anti-pattern.
 Check test files for structural violations:
 
 - **Mixed frameworks:** JUnit 4 + JUnit 5 annotations in the same file, pytest functions mixed with `unittest.TestCase` subclasses in the same file, mixing assertion libraries inconsistently.
-- **Missing scenario structure:** test functions that jump straight to code without any Given-When-Then structure (either in comments, docstrings, or naming). Not every test needs formal GWT, but complex tests with setup-action-assert phases should have them.
+- **Missing scenario structure:** in a complex test, can a reader identify the setup, action, and assertion from the test name and executable steps?
 - **Missing parameterized tests:** pure functions (validators, formatters, calculators, parsers) being tested with copy-pasted individual test cases when parameterized tests would be clearer and more thorough.
 - **Missing edge cases:** boundary conditions that are obvious from the function signature (empty input, None/null, zero, negative, max values) but have no corresponding test case.
 - **Orphaned test utilities:** test helpers, fixtures, or factories that are defined but never used.
@@ -59,7 +59,7 @@ Aggregate all findings from the three agents. For each finding:
 
 1. **Verify it:** confirm the finding is real by reading the source code the test is supposed to cover. The source code is ground truth; if a test contradicts the code, the test is wrong.
 2. **Classify it**:
-   - **Auto-fix:** tautological assertions, missing GWT comments, framework mixing, parameterizable tests. Fix these directly.
+   - **Auto-fix:** tautological assertions, unclear test names, framework mixing, parameterizable tests. Fix these directly.
    - **Flag for approval:** deleting tests entirely, major rewrites that change what's being asserted, anything where the test semantics change significantly. Describe the problem and proposed fix, then ask before proceeding.
    - **Skip:** false positives, cosmetic issues, tests where the "violation" is actually the right call for that specific case.
 3. **Fix it:** rewrite bad tests following AI-TDD methodology:

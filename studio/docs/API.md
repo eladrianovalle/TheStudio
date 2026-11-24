@@ -1,6 +1,6 @@
 # API Reference (run_phase.py)
 
-Studio exposes exactly one supported interface: `run_phase.py`. This script prepares instructions, validates artifacts, and keeps indexes/logs up to date so runs stay reproducible (Claude Code is the supported assistant path). This document describes the command-line contract, JSON schema, and file formats you can rely on when integrating Studio into other repositories or tooling.
+Studio's command-line interface is `run_phase.py`. It prepares instructions, validates artifacts, and records runs. Claude Code supplies the packaged slash commands. The portable `forge` subcommand can also run a graded build with Codex, Claude, or both.
 
 ---
 
@@ -15,6 +15,7 @@ Supported commands:
 | Command | Description |
 | --- | --- |
 | `prepare` | Creates a new run directory, instructions.md, and updates the active output index. |
+| `forge` | Builds a unit with a writer and a separate editor. Set the default for both roles with `--runtime` (defaults to `claude`; name `codex` to use Codex), override either role with `--writer-runtime` or `--editor-runtime`, and pin each model with `--writer-model` or `--editor-model`. Select an approved unit with `--spec` and `--unit`. Use `--plan` to preview the branch, role selections and acceptance criteria. |
 | `finalize` | Validates artifacts, updates `run.json`, refreshes the active index, and appends to the active run log. |
 | `cleanup` | Manually enforces run retention budgets (age + total size). |
 | `validate` | Runs validators for a prepared/finalized run using validation config. |
