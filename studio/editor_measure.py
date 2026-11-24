@@ -323,6 +323,19 @@ def due_dates_shifted(text: str, elapsed: timedelta) -> str:
     return DUE_DATE_LINE.sub(move, text[:front_matter_end]) + text[front_matter_end:]
 
 
+def recommit(tree: Path, commit: str, parents: list[str], change_index) -> str:
+    environment = identity_environment(tree, commit)
+    with tempfile.TemporaryDirectory(prefix="studio-") as directory:
+        environment["GIT_INDEX_FILE"] = str(Path(directory) / "index")
+        _git(tree, "read-tree", commit, env=environment)
+        change_index(environment)
+        new_tree = _git(tree, "write-tree", env=environment)
+
+    message = _git_bytes(tree, "cat-file", "commit", commit).partition(b"\n\n")[2].decode("utf-8")
+    parent_arguments = [argument for parent in parents for argument in ("-p", parent)]
+    return _git(tree, "commit-tree", "--no-gpg-sign", new_tree, *parent_arguments, env=environment, stdin=message)
+
+
 def recommit_with_due_dates_shifted(tree: Path, commit: str, parents: list[str], elapsed: timedelta) -> str:
     changed = []
     for line in _git(tree, "ls-tree", "-r", commit, "--", "specs").splitlines():
@@ -339,18 +352,12 @@ def recommit_with_due_dates_shifted(tree: Path, commit: str, parents: list[str],
     if not changed and parents == original_parents:
         return _git(tree, "rev-parse", commit)
 
-    environment = identity_environment(tree, commit)
-    with tempfile.TemporaryDirectory(prefix="studio-") as directory:
-        environment["GIT_INDEX_FILE"] = str(Path(directory) / "index")
-        _git(tree, "read-tree", commit, env=environment)
+    def write_moved_dates(environment: dict) -> None:
         for mode, path, moved in changed:
             blob = _git(tree, "hash-object", "-w", "--stdin", stdin=moved)
             _git(tree, "update-index", "--cacheinfo", f"{mode},{blob},{path}", env=environment)
-        new_tree = _git(tree, "write-tree", env=environment)
 
-    message = _git_bytes(tree, "cat-file", "commit", commit).partition(b"\n\n")[2].decode("utf-8")
-    parent_arguments = [argument for parent in parents for argument in ("-p", parent)]
-    return _git(tree, "commit-tree", "--no-gpg-sign", new_tree, *parent_arguments, env=environment, stdin=message)
+    return recommit(tree, commit, parents, write_moved_dates)
 
 
 def shift_due_dates_to_today(tree: Path) -> None:
@@ -365,6 +372,33 @@ def shift_due_dates_to_today(tree: Path) -> None:
     new_head = recommit_with_due_dates_shifted(tree, head, [new_base], elapsed)
     if new_head != head:
         _git(tree, "-c", "core.logAllRefUpdates=false", "reset", "--quiet", "--hard", new_head)
+
+
+def apply_base_patch(tree: Path, name: str, case: dict, patches_dir: Path) -> None:
+    patch_path = patches_dir / case["base_patch"]
+    if not patch_path.is_file():
+        raise CaseRefused(f"case {name}: base patch {case['base_patch']} is not in {patches_dir}")
+    writer_files = set(_git(tree, "diff", "--name-only", "HEAD^", "HEAD").splitlines())
+    overlap = sorted(files_in_patch(tree, patch_path) & writer_files)
+    if overlap:
+        raise CaseRefused(
+            f"case {name}: base patch {case['base_patch']} touches {', '.join(overlap)}, "
+            "which the writer commit changes, so it would change the diff the editor reviews"
+        )
+
+    def apply_to_index(environment: dict) -> None:
+        if subprocess.run(
+            ["git", "-C", str(tree), "apply", "--cached", str(patch_path)],
+            env=environment, capture_output=True,
+        ).returncode != 0:
+            raise CaseRefused(f"case {name}: base patch {case['base_patch']} does not apply to the writer's parent")
+
+    head = _git(tree, "rev-parse", "HEAD")
+    base = _git(tree, "rev-parse", "HEAD^")
+    base_parents = _git(tree, "rev-parse", f"{base}^@").splitlines()
+    new_base = recommit(tree, base, base_parents, apply_to_index)
+    new_head = recommit(tree, head, [new_base], apply_to_index)
+    _git(tree, "-c", "core.logAllRefUpdates=false", "reset", "--quiet", "--hard", new_head)
 
 
 def shape_tree(tree: Path, name: str, case: dict, patches_dir: Path) -> None:
@@ -384,6 +418,8 @@ def shape_tree(tree: Path, name: str, case: dict, patches_dir: Path) -> None:
     nothing_changed = _git_succeeds(tree, "diff", "--cached", "--quiet", "HEAD")
     if not nothing_changed:
         amend_keeping_identity(tree, case["writer_sha"])
+    if case.get("base_patch"):
+        apply_base_patch(tree, name, case, patches_dir)
     shift_due_dates_to_today(tree)
 
 

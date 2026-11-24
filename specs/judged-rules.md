@@ -189,6 +189,7 @@ name of the directory the editor will work in, and the only name the editor ever
 | `writer_sha` | yes | The real `writer:` commit, full id |
 | `tree_sha` | no | A later commit whose tree replaces the writer commit's tree |
 | `patch` | no | A file under `patches/`, applied on top |
+| `base_patch` | no | A file under `patches/`, applied to the writer commit and its parent alike. It may touch only files the writer did not change, so the editor's diff stays as it was |
 | `spec_file` | yes | The spec the criteria come from |
 | `acceptance_criteria` | yes, at least one | The criteria, word for word as the spec stands in the built tree |
 | `test_command` | yes | A command covering the unit's own test files |
@@ -221,7 +222,9 @@ build before an editor is paid for, instead of surfacing in their verdicts.
    commit brings only its ancestors.
 2. If `tree_sha` is set, replace the index and working tree with that commit's tree. If `patch` is
    set, apply it. Delete `reviewer-concerns/<unit_id>.md` if present. If anything changed, amend the
-   commit, keeping the real writer commit's message, author, committer and both dates.
+   commit, keeping the real writer commit's message, author, committer and both dates. If
+   `base_patch` is set, apply it to the writer commit and to its parent, rewriting each with its own
+   message, author, committer and dates.
 3. Move every spec's `verification_due` forward by the days since the writer commit, rewriting
    the writer commit and its parent with their own message, author, committer and dates.
 4. Delete `.git/FETCH_HEAD` and `.git/logs`, then `git gc --prune=now`.
@@ -242,7 +245,12 @@ same pull request. The defect case is the tree at the writer commit. Its clean t
 
 Both cases of a pair carry identical criteria, the same test command and the same probe, so the
 probe is shown to fail on the defect and pass once it is fixed, as a plant's is. If a later commit
-narrowed a criterion, that change goes into both trees as part of their `patch`. A person sorts the
+narrowed a criterion, that change goes into both trees as part of their `patch`. A clean twin
+that breaks one of its own criteria is corrected before it is measured, so an editor that finds the
+fault is not scored with a false alarm. A fault in the code is corrected by a `patch`. Criteria
+that contradict each other are reworded by a `base_patch` in both trees, so the new wording reads
+as the approved spec the writer started from, not as the writer editing its own definition of
+done. A person sorts the
 candidate fix commits before the case set is built, and the sort is recorded as a table in the pull
 request that adds the cases. Expect mostly plants: most candidates turn out not to be a defect in
 the unit that precedes them, and a unit yields a pair only when it also has checkbox criteria and a

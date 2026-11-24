@@ -21,5 +21,6 @@
     "command": "python -m pytest -q studio/tests/test_hook_install.py -k 'no_source_update_registers_nothing or up_to_date_update_registers_once_the_script_lands'"
   },
   "kind": "clean",
-  "tree_sha": "a99b6f7fc0d41f6744cccaa6cc0c124fc018ae6a"
+  "tree_sha": "a99b6f7fc0d41f6744cccaa6cc0c124fc018ae6a",
+  "patch": "sycamore.patch"
 }

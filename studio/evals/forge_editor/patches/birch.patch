@@ -12,6 +12,21 @@ index 75ae8a2..328c69a 100644
  The heading is what bounds an entry: a unit runs to the next `###`, so a nested list inside one can
  never be read as another unit. Once a spec is `approved`, Studio's spec-verification suite refuses
  any other shape.
+diff --git a/specs/unit-acceptance-criteria.md b/specs/unit-acceptance-criteria.md
+index 1895700..6f8e08d 100644
+--- a/specs/unit-acceptance-criteria.md
++++ b/specs/unit-acceptance-criteria.md
+@@ -95,8 +95,8 @@ The criteria are the part `/forge` depends on, so write them with care:
+ - **Keep them checkable from the code and its tests.** The `/forge` editor reads the diff and runs the
+   unit's tests; it has no browser and no Play mode. A criterion that only a human at the screen can
+   judge belongs in `/smoke`, not here.
+-- **`<unit_id>` is a short snake_case handle, unique repo-wide** — no other spec may plan the same id.
+-  `/forge --spec <slug> --unit <unit_id>` pulls this unit's criteria; don't rename it once approved.
++- **`<unit_id>` is a short snake_case handle, unique within this spec.** `/forge --spec <slug> --unit
++  <unit_id>` is how the builder pulls this unit's criteria, so don't rename it once the spec is approved.
+ ```
+ 
+ Plus a Key Rules line: **The Build Plan is a contract, not a summary.** Each unit carries checkable
 diff --git a/studio/docs/ARCHITECTURE.md b/studio/docs/ARCHITECTURE.md
 index 304f0ce..13e53d3 100644
 --- a/studio/docs/ARCHITECTURE.md
@@ -51,7 +66,7 @@ index 44a8a2a..c54c3a1 100644
      if not headings:
          return None
 diff --git a/studio/tests/test_spec_verification.py b/studio/tests/test_spec_verification.py
-index aef9cb1..d72e413 100644
+index 4664e31..a3bc835 100644
 --- a/studio/tests/test_spec_verification.py
 +++ b/studio/tests/test_spec_verification.py
 @@ -80,6 +80,14 @@ _APPROVAL_EVIDENCE_STEP = "**If the spec carries a `## Verification` section**"
@@ -69,7 +84,7 @@ index aef9cb1..d72e413 100644
  # The id pattern, bound for bound the same as the one the reconciler will use. An id this rule
  # accepted but a reader could not see would be silently dropped from the ledger instead of
  # rejected here, which is the failure this rule exists to prevent.
-@@ -159,6 +167,20 @@ def _unit_entries(build_plan: str) -> list[_UnitEntry]:
+@@ -153,6 +161,20 @@ def _unit_entries(build_plan: str) -> list[_UnitEntry]:
      return entries
  
  
@@ -90,7 +105,7 @@ index aef9cb1..d72e413 100644
  def _build_plan_problems(spec_name: str, spec_text: str) -> list[str]:
      """Rule 7, for one spec: every way its Build Plan departs from the canonical shape.
  
-@@ -170,7 +192,8 @@ def _build_plan_problems(spec_name: str, spec_text: str) -> list[str]:
+@@ -164,7 +186,8 @@ def _build_plan_problems(spec_name: str, spec_text: str) -> list[str]:
          return []
  
      entries = _unit_entries(build_plan)
@@ -100,7 +115,7 @@ index aef9cb1..d72e413 100644
          return [
              f"specs/{spec_name} is marked `status: approved` and has a `## Build Plan` "
              "section, but nothing in it opens a unit. Every unit starts with a heading like "
-@@ -179,7 +202,14 @@ def _build_plan_problems(spec_name: str, spec_text: str) -> list[str]:
+@@ -173,7 +196,14 @@ def _build_plan_problems(spec_name: str, spec_text: str) -> list[str]:
              "can follow up on."
          ]
  
@@ -116,7 +131,7 @@ index aef9cb1..d72e413 100644
      for entry in entries:
          if not entry.opener.startswith("###"):
              problems.append(
-@@ -199,10 +229,11 @@ def _build_plan_problems(spec_name: str, spec_text: str) -> list[str]:
+@@ -193,10 +223,11 @@ def _build_plan_problems(spec_name: str, spec_text: str) -> list[str]:
              )
          if not _TITLE_AFTER_ID.match(entry.tail.lstrip("*").strip()):
              problems.append(
@@ -132,7 +147,7 @@ index aef9cb1..d72e413 100644
              )
          if not _CRITERION.search(entry.body) and not _DROPPED.search(entry.body):
              problems.append(
-@@ -227,6 +258,14 @@ def _duplicate_unit_ids(specs: list[tuple[str, str]]) -> list[str]:
+@@ -221,6 +252,14 @@ def _duplicate_unit_ids(specs: list[tuple[str, str]]) -> list[str]:
      silences an approved spec's just as well. The complaint is raised only when at least one
      of the colliding specs is `approved`, which lets a draft reuse an id while the argument is
      still running and catches it at the commit that approves it.
@@ -147,7 +162,7 @@ index aef9cb1..d72e413 100644
      """
      planned: dict[str, list[str]] = {}
      approved: set[str] = set()
-@@ -237,19 +276,27 @@ def _duplicate_unit_ids(specs: list[tuple[str, str]]) -> list[str]:
+@@ -231,19 +270,27 @@ def _duplicate_unit_ids(specs: list[tuple[str, str]]) -> list[str]:
          if build_plan is None:
              continue
          for entry in _unit_entries(build_plan):
@@ -178,7 +193,7 @@ index aef9cb1..d72e413 100644
      return problems
  
  
-@@ -992,6 +1039,38 @@ class TestBuildPlanShape:
+@@ -994,6 +1041,38 @@ class TestBuildPlanShape:
          assert "`synthetic_unit`" in problems[0]
          assert "specs/one.md" in problems[0] and "specs/two.md" in problems[0]
  
@@ -217,7 +232,7 @@ index aef9cb1..d72e413 100644
      def test_a_collision_between_drafts_is_left_alone(self):
          """A draft is an argument in progress, and two arguments may reach for the same handle.
          The commit that approves one of them is where it has to be settled."""
-@@ -1039,10 +1118,13 @@ class TestBuildPlanShape:
+@@ -1041,10 +1120,13 @@ class TestBuildPlanShape:
                  f"{SPEC_COMMAND.name}'s Build Plan template shows no one-line outcome after "
                  f"`{entry.unit_id}`, which rule 7 demands."
              )
@@ -235,7 +250,21 @@ index aef9cb1..d72e413 100644
          assert "unique repo-wide" in build_plan, (
              f"{SPEC_COMMAND.name}'s Build Plan template no longer says a `unit_id` is unique "
              "repo-wide, but `_duplicate_unit_ids` enforces exactly that across the directory."
-@@ -1356,6 +1438,75 @@ class TestSyntheticSpecs:
+@@ -1075,8 +1157,12 @@ class TestBuildPlanShape:
+         made this change does, three times — so an occurrence in double quotes is allowed and a
+         bare one is not.
+         """
++        unshipped_specs = [
++            spec for spec in SPECS_DIR.glob("*.md")
++            if parse_frontmatter(spec.read_text(encoding="utf-8")).get("status") != "shipped"
++        ]
+         docs = sorted(
+-            [*SPECS_DIR.glob("*.md"), *(REPO_ROOT / ".claude" / "commands").glob("*.md"),
++            [*unshipped_specs, *(REPO_ROOT / ".claude" / "commands").glob("*.md"),
+              *(REPO_ROOT / "studio" / "docs").glob("*.md"),
+              REPO_ROOT / "README.md", REPO_ROOT / "CLAUDE.md"]
+         )
+@@ -1358,6 +1444,75 @@ class TestSyntheticSpecs:
          assert "specs/synthetic.md" in problems[0]
          assert "nothing in it opens a unit" in problems[0]
  
@@ -311,7 +340,7 @@ index aef9cb1..d72e413 100644
      def test_approved_with_a_unit_written_as_a_list_item_fails(self):
          """The shape most older specs use. It is not wrong markdown; it is a boundary a
          reader has to guess at, which is why the heading replaced it."""
-@@ -1410,7 +1561,27 @@ class TestSyntheticSpecs:
+@@ -1412,7 +1567,27 @@ class TestSyntheticSpecs:
              "synthetic-eval-results.md", None,
          )
          assert len(problems) == 1
@@ -340,7 +369,7 @@ index aef9cb1..d72e413 100644
  
      def test_approved_with_a_unit_holding_no_criteria_fails(self):
          problems = _violations(
-@@ -1630,6 +1801,28 @@ class TestSyntheticSpecs:
+@@ -1612,6 +1787,28 @@ class TestSyntheticSpecs:
          assert build_plan is not None
          assert [entry.unit_id for entry in _unit_entries(build_plan)] == ["synthetic_unit"]
  
