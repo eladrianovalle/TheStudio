@@ -269,7 +269,12 @@ quietly. Real pairs first, plants to fill, `as_built` clean cases to fill the cl
 ### The measuring loop
 
 **The command.** `/measure-editor`, typed by the user in a session started in a fresh worktree of
-the branch being measured. It is the user's opt-in to run the Workflow tool, as `/forge` is.
+the branch being measured. It is the user's opt-in to run the Workflow tool, as `/forge` is. It is run
+headless, `claude -p --setting-sources project,local --strict-mcp-config --permission-mode auto --allowedTools Workflow -- "/measure-editor"`: in an interactive session
+Claude Code relays the launching command to every case editor, and `record` voids a case whose
+editor was shown it. `--allowedTools Workflow` is needed because the built runner carries every
+case's prompt, too large for the approval dialog, which then offers no way to approve it. Rulings
+are answered afterwards in an ordinary session.
 
 1. Runs `python studio/editor_measure.py build`. A non-zero exit stops the run.
 2. Calls the Workflow tool by `scriptPath`, pointing at the built runner. No args.
