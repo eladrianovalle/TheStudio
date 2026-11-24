@@ -531,4 +531,4 @@ In addition to phase runners, these slash commands are available:
 
 ## Measuring the forge editor
 
-In a fresh Studio worktree with full history, run `/measure-editor` to build the checkouts and launch one pinned editor per case. After recording the workflow, answer the pending rulings. Measurements and the baseline mark live in `studio/evals/forge_editor/results.json`.
+In a fresh Studio worktree with full history, start Claude Code with `claude --setting-sources project,local --strict-mcp-config --allowedTools Workflow` and run `/measure-editor`. The flags keep personal hooks and MCP tools away from the case editors and let the runner launch: it is too large for the approval dialog, which then offers no way to approve it. The command builds the checkouts and launches one pinned editor per case. After recording the workflow, answer the pending rulings. Measurements and the baseline mark live in `studio/evals/forge_editor/results.json`.

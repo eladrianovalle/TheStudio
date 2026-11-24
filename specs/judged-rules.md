@@ -269,7 +269,9 @@ quietly. Real pairs first, plants to fill, `as_built` clean cases to fill the cl
 ### The measuring loop
 
 **The command.** `/measure-editor`, typed by the user in a session started in a fresh worktree of
-the branch being measured. It is the user's opt-in to run the Workflow tool, as `/forge` is.
+the branch being measured. It is the user's opt-in to run the Workflow tool, as `/forge` is. The session
+is started with `--allowedTools Workflow`: the built runner carries every case's prompt, which is
+too large for the approval dialog to show, and the dialog then offers no way to approve it.
 
 1. Runs `python studio/editor_measure.py build`. A non-zero exit stops the run.
 2. Calls the Workflow tool by `scriptPath`, pointing at the built runner. No args.

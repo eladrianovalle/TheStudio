@@ -431,4 +431,4 @@ MIT. Reuse freely across your projects.
 
 ## Measuring the forge editor
 
-Run `/measure-editor` in a fresh Studio worktree to compare the editor against the historical benchmark and record the outcome.
+Run `/measure-editor` in a fresh Studio worktree, in a session started with `claude --setting-sources project,local --strict-mcp-config --allowedTools Workflow`, to compare the editor against the historical benchmark and record the outcome.
