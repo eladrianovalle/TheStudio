@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -191,12 +192,13 @@ def write_patch(history, patches_dir: Path, name: str, *paths: str, to: str = "p
     return name
 
 
-def run_build(history, root, case_dirs, capsys, source_repo=None):
+def run_build(history, root, case_dirs, capsys, source_repo=None, whole_suite=f"{PYTHON} run_checks.py"):
     cases, patches = case_dirs
     code = editor_measure.main(
         ["build", "--root", str(root)],
         cases_dir=cases, patches_dir=patches,
         source_repo=source_repo or history["repo"],
+        whole_suite=whole_suite,
     )
     captured = capsys.readouterr()
     return code, captured.out + captured.err
@@ -563,6 +565,87 @@ def test_the_proof_files_from_a_later_commit_never_reach_the_defect_tree(history
     tree = checkout_root / "greeter_one"
     assert not (tree / "probe_bang.py").exists()
     assert not list(tree.rglob("__pycache__"))
+
+
+# --- the tree an editor runs the whole suite in ----------------------------
+
+DUE_CHECK = """import datetime, pathlib, re, sys
+today = datetime.date.today()
+for spec in pathlib.Path("specs").glob("*.md"):
+    front = spec.read_text().split("\\n---", 1)[0]
+    for due in re.findall(r"^verification_due: (\\S+)", front, re.MULTILINE):
+        if datetime.date.fromisoformat(due) < today:
+            sys.exit(f"{spec} was due {due}")
+"""
+
+
+def dated_spec(due: date, prose_date: date) -> str:
+    return (
+        f"---\nstatus: approved\nverification_due: {due.isoformat()}   # 30 days from approval\n---\n"
+        f"{SPEC_TEXT}\n```\nverification_due: {prose_date.isoformat()}\n```\n"
+    )
+
+
+@pytest.fixture
+def dated_history(tmp_path):
+    repo = tmp_path / "dated_source"
+    repo.mkdir()
+    git(repo, "init", "--quiet", "--initial-branch=main")
+    git(repo, "config", "user.email", "someone@example.com")
+    git(repo, "config", "user.name", "Someone")
+    git(repo, "config", "commit.gpgsign", "false")
+    written = date.today() - timedelta(days=100)
+    when = f"{written.isoformat()}T12:00:00 +0000"
+
+    write(repo, "specs/greeter.md", dated_spec(written + timedelta(days=30), written - timedelta(days=5)))
+    write(repo, "app.py", "def greet():\n    return 'hi'\n")
+    write(repo, "run_checks.py", "import app\nassert app.greet()\n")
+    write(repo, "due_check.py", DUE_CHECK)
+    base = commit_all(repo, "base\n\nThe base body.\n", env={"GIT_AUTHOR_DATE": when, "GIT_COMMITTER_DATE": when})
+
+    write(repo, "app.py", "def greet():\n    return 'hello'\n")
+    write(repo, "specs/second.md", f"---\nverification_due: {(written + timedelta(days=10)).isoformat()}\n---\n# Second\n")
+    writer = commit_all(repo, WRITER_MESSAGE, env={**WRITER_IDENTITY, "GIT_AUTHOR_DATE": when, "GIT_COMMITTER_DATE": when})
+    return {"repo": repo, "base": base, "writer": writer}
+
+
+def test_due_dates_move_forward_by_the_time_since_the_writer_commit_so_the_whole_suite_passes(dated_history, checkout_root, case_dirs, capsys):
+    write_case(case_dirs[0], "greeter_dated", {
+        "unit_id": UNIT,
+        "kind": "clean",
+        "source": "as_built",
+        "writer_sha": dated_history["writer"],
+        "spec_file": "specs/greeter.md",
+        "acceptance_criteria": CRITERIA,
+        "test_command": f"{PYTHON} run_checks.py",
+    })
+
+    whole_suite = f"{PYTHON} due_check.py && {PYTHON} run_checks.py"
+    code, output = run_build(dated_history, checkout_root, case_dirs, capsys, whole_suite=whole_suite)
+
+    assert code == 0, output
+    tree = checkout_root / "greeter_dated"
+    today = date.today()
+    written = today - timedelta(days=100)
+    assert (tree / "specs/greeter.md").read_text() == dated_spec(today + timedelta(days=30), written - timedelta(days=5))
+    assert git(tree, "diff", "--name-only", "HEAD^", "HEAD").splitlines() == ["app.py", "specs/second.md"]
+    assert f"+verification_due: {(today + timedelta(days=10)).isoformat()}" in git(tree, "diff", "HEAD^", "HEAD")
+    assert commit_identity(tree, "HEAD^") == commit_identity(dated_history["repo"], dated_history["base"])
+    assert commit_identity(tree, "HEAD") == commit_identity(dated_history["repo"], dated_history["writer"])
+    assert git(tree, "rev-list", "--count", "HEAD") == "2"
+    leftovers = git(tree, "status", "--porcelain", "--ignored", "--untracked-files=all")
+    assert leftovers == f"?? .studio/output/impl_loop/{UNIT}/impl--{UNIT}--writer.json"
+    assert_holds_nothing_later(tree, dated_history, [])
+
+
+def test_build_refuses_a_case_whose_whole_suite_fails_though_its_own_test_command_passes(history, checkout_root, case_dirs, capsys):
+    write_case(case_dirs[0], "greeter_red", defect_case(history))
+
+    code, output = run_build(history, checkout_root, case_dirs, capsys, whole_suite=f"{PYTHON} -c \"raise SystemExit(3)\"")
+
+    assert code == 1
+    assert "refused case greeter_red: the whole suite" in output
+    assert "exits 3" in output
 
 
 # --- the command line -------------------------------------------------------

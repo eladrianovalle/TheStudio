@@ -10,7 +10,7 @@
     "No document still describes the convention as four rules, or states that the only trigger is a human typing `shipped`.",
     "The full suite passes and `ruff check .` is clean."
   ],
-  "test_command": "python -m pytest -q studio/tests/test_spec_verification.py -k 'not test_every_spec_satisfies_the_convention'",
+  "test_command": "python -m pytest -q studio/tests/test_spec_verification.py",
   "breaks_criterion": 2,
   "defect": "The /spec approval step sets the verification deadline to 60 days instead of 30.",
   "patch": "magnolia.patch",

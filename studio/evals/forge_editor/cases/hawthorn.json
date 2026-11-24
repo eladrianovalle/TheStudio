@@ -14,7 +14,7 @@
     "The three existing tests that assert exact violation counts still pass with their assertions unchanged.",
     "`specs/find-before-you-grep.md` carries a `verification_due` date and the full suite is green — the rule ships with the repo passing, not with a known-red spec."
   ],
-  "test_command": "python -m pytest -q studio/tests/test_spec_verification.py -k 'not test_every_spec_satisfies_the_convention'",
+  "test_command": "python -m pytest -q studio/tests/test_spec_verification.py",
   "breaks_criterion": 3,
   "defect": "An approved spec can pass its verification deadline unnoticed when the evidence file has no placeholders.",
   "patch": "hawthorn.patch",

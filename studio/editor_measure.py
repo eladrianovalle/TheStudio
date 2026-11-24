@@ -20,11 +20,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, timedelta
 from pathlib import Path
 
 import editor_results as measurement
@@ -37,7 +40,16 @@ PATCHES_DIR = STUDIO_ROOT / "evals" / "forge_editor" / "patches"
 
 # Outside the repository on purpose: the editor sees the path it works in, and a tree under
 # studio/evals/ would say what it is before the editor read a line.
-DEFAULT_ROOT = "~/.studio/checkouts"
+DEFAULT_ROOT = "~/checkouts"
+
+WHOLE_SUITE = (
+    "cd studio && ruff check . && python -m pytest tests/ -q"
+    " && cd .. && node --test .claude/workflows/tests/*.test.mjs"
+)
+
+BUILD_WORKERS = 6
+
+DUE_DATE_LINE = re.compile(r"^(verification_due:[ \t]*)(\d{4})-(\d{2})-(\d{2})", re.MULTILINE)
 
 # Words that would tell the editor its tree is a case. A root or tree name holding any of
 # them, in any case and anywhere in the name, is refused.
@@ -63,7 +75,7 @@ class HistoryMissing(Exception):
 # --- running git and commands ----------------------------------------------
 
 
-def _git(directory: Path, *arguments: str, env: dict | None = None) -> str:
+def _git(directory: Path, *arguments: str, env: dict | None = None, stdin: str | None = None) -> str:
     """Run `git -C <directory> <arguments>` and return what it printed, stripped.
 
     Raises subprocess.CalledProcessError when git refuses; the build turns that into a
@@ -74,9 +86,18 @@ def _git(directory: Path, *arguments: str, env: dict | None = None) -> str:
         capture_output=True,
         text=True,
         env=env,
+        input=stdin,
         check=True,
     )
     return result.stdout.strip()
+
+
+def _git_bytes(directory: Path, *arguments: str) -> bytes:
+    return subprocess.run(
+        ["git", "-C", str(directory), *arguments],
+        capture_output=True,
+        check=True,
+    ).stdout
 
 
 def _git_succeeds(directory: Path, *arguments: str) -> bool:
@@ -259,15 +280,10 @@ def apply_patch(tree: Path, name: str, case: dict, patches_dir: Path) -> None:
     _git(tree, "apply", "--index", str(patch_path))
 
 
-def amend_keeping_identity(tree: Path, writer_sha: str) -> None:
-    """Amend HEAD with the staged changes, keeping the writer commit's message and identity.
-
-    Author, committer and both dates are copied from the real commit, so the amended
-    commit looks like the one the writer made and two builds give the same commit id.
-    """
+def identity_environment(tree: Path, commit: str) -> dict:
     identity = _git(
         tree, "show", "--no-patch", "--date=raw",
-        "--format=%an%x00%ae%x00%ad%x00%cn%x00%ce%x00%cd", writer_sha,
+        "--format=%an%x00%ae%x00%ad%x00%cn%x00%ce%x00%cd", commit,
     )
     author_name, author_email, author_date, committer_name, committer_email, committer_date = identity.split("\x00")
     environment = dict(os.environ)
@@ -277,11 +293,78 @@ def amend_keeping_identity(tree: Path, writer_sha: str) -> None:
     environment["GIT_COMMITTER_NAME"] = committer_name
     environment["GIT_COMMITTER_EMAIL"] = committer_email
     environment["GIT_COMMITTER_DATE"] = committer_date
+    return environment
+
+
+def amend_keeping_identity(tree: Path, writer_sha: str) -> None:
+    """Amend HEAD with the staged changes, keeping the writer commit's message and identity.
+
+    Author, committer and both dates are copied from the real commit, so the amended
+    commit looks like the one the writer made and two builds give the same commit id.
+    """
     _git(
         tree, "commit", "--amend", "--quiet", "--no-edit", "--cleanup=verbatim",
         "--no-verify", "--no-gpg-sign",
-        env=environment,
+        env=identity_environment(tree, writer_sha),
     )
+
+
+def due_dates_shifted(text: str, elapsed: timedelta) -> str:
+    if not text.startswith("---\n"):
+        return text
+    front_matter_end = text.find("\n---", 4)
+    if front_matter_end == -1:
+        return text
+
+    def move(match: re.Match) -> str:
+        due = date(int(match[2]), int(match[3]), int(match[4]))
+        return match[1] + (due + elapsed).isoformat()
+
+    return DUE_DATE_LINE.sub(move, text[:front_matter_end]) + text[front_matter_end:]
+
+
+def recommit_with_due_dates_shifted(tree: Path, commit: str, parents: list[str], elapsed: timedelta) -> str:
+    changed = []
+    for line in _git(tree, "ls-tree", "-r", commit, "--", "specs").splitlines():
+        details, _, path = line.partition("\t")
+        mode, _, blob = details.split(" ")
+        if not path.endswith(".md"):
+            continue
+        text = _git_bytes(tree, "cat-file", "blob", blob).decode("utf-8")
+        moved = due_dates_shifted(text, elapsed)
+        if moved != text:
+            changed.append((mode, path, moved))
+
+    original_parents = _git(tree, "rev-parse", f"{commit}^@").splitlines()
+    if not changed and parents == original_parents:
+        return _git(tree, "rev-parse", commit)
+
+    environment = identity_environment(tree, commit)
+    with tempfile.TemporaryDirectory(prefix="studio-") as directory:
+        environment["GIT_INDEX_FILE"] = str(Path(directory) / "index")
+        _git(tree, "read-tree", commit, env=environment)
+        for mode, path, moved in changed:
+            blob = _git(tree, "hash-object", "-w", "--stdin", stdin=moved)
+            _git(tree, "update-index", "--cacheinfo", f"{mode},{blob},{path}", env=environment)
+        new_tree = _git(tree, "write-tree", env=environment)
+
+    message = _git_bytes(tree, "cat-file", "commit", commit).partition(b"\n\n")[2].decode("utf-8")
+    parent_arguments = [argument for parent in parents for argument in ("-p", parent)]
+    return _git(tree, "commit-tree", "--no-gpg-sign", new_tree, *parent_arguments, env=environment, stdin=message)
+
+
+def shift_due_dates_to_today(tree: Path) -> None:
+    written = date.fromisoformat(_git(tree, "show", "--no-patch", "--format=%cs", "HEAD"))
+    elapsed = date.today() - written
+    if elapsed <= timedelta(0):
+        return
+    head = _git(tree, "rev-parse", "HEAD")
+    base = _git(tree, "rev-parse", "HEAD^")
+    base_parents = _git(tree, "rev-parse", f"{base}^@").splitlines()
+    new_base = recommit_with_due_dates_shifted(tree, base, base_parents, elapsed)
+    new_head = recommit_with_due_dates_shifted(tree, head, [new_base], elapsed)
+    if new_head != head:
+        _git(tree, "-c", "core.logAllRefUpdates=false", "reset", "--quiet", "--hard", new_head)
 
 
 def shape_tree(tree: Path, name: str, case: dict, patches_dir: Path) -> None:
@@ -301,6 +384,7 @@ def shape_tree(tree: Path, name: str, case: dict, patches_dir: Path) -> None:
     nothing_changed = _git_succeeds(tree, "diff", "--cached", "--quiet", "HEAD")
     if not nothing_changed:
         amend_keeping_identity(tree, case["writer_sha"])
+    shift_due_dates_to_today(tree)
 
 
 def strip_history(tree: Path) -> None:
@@ -360,6 +444,16 @@ def prove_test_command(tree: Path, name: str, case: dict) -> dict:
             f"{_output_tail(result)}"
         )
     return {"command": command, "passed": True, "exit_code": 0}
+
+
+def prove_whole_suite(tree: Path, name: str, whole_suite: str) -> None:
+    result = _run_shell(whole_suite, tree)
+    restore_tree(tree)
+    if result.returncode != 0:
+        raise CaseRefused(
+            f"case {name}: the whole suite `{whole_suite}` exits {result.returncode} in the built tree, "
+            f"and an editor that runs it would see that failure:\n{_output_tail(result)}"
+        )
 
 
 def place_probe_files(tree: Path, source_repo: Path, name: str, probe: dict) -> None:
@@ -455,7 +549,7 @@ def write_writer_handoff(tree: Path, case: dict, tests: dict) -> Path:
 # --- the build command ------------------------------------------------------
 
 
-def build_case(case_path: Path, root: Path, patches_dir: Path, source_repo: Path) -> Path:
+def build_case(case_path: Path, root: Path, patches_dir: Path, source_repo: Path, whole_suite: str) -> Path:
     """Build, prove and hand off one case. Returns the tree; raises CaseRefused or HistoryMissing."""
     name = case_path.stem
     problem = explain_bad_location(name, "tree name")
@@ -474,6 +568,7 @@ def build_case(case_path: Path, root: Path, patches_dir: Path, source_repo: Path
         strip_history(tree)
         prove_criteria(tree, name, case)
         tests = prove_test_command(tree, name, case)
+        prove_whole_suite(tree, name, whole_suite)
         prove_probe(tree, source_repo, name, case)
         if case["source"] == "plant":
             prove_unplanted(tree, name, case, patches_dir, source_repo)
@@ -484,7 +579,7 @@ def build_case(case_path: Path, root: Path, patches_dir: Path, source_repo: Path
     return tree
 
 
-def build(root: Path, cases_dir: Path, patches_dir: Path, source_repo: Path) -> int:
+def build(root: Path, cases_dir: Path, patches_dir: Path, source_repo: Path, whole_suite: str) -> int:
     """Build every case under ``cases_dir`` into ``root``, stopping at the first that fails.
 
     Returns the exit code: 0 all built and proved, 1 a case refused, 2 history missing
@@ -501,15 +596,26 @@ def build(root: Path, cases_dir: Path, patches_dir: Path, source_repo: Path) -> 
         return 0
 
     rows = []
-    for case_path in case_paths:
-        try:
-            tree = build_case(case_path, root, patches_dir, source_repo)
-        except HistoryMissing as error:
-            print(f"editor_measure build: {error}", file=sys.stderr)
-            return 2
-        except CaseRefused as error:
-            print(f"editor_measure build: refused {error}", file=sys.stderr)
-            return 1
+    pool = ThreadPoolExecutor(max_workers=BUILD_WORKERS)
+    try:
+        builds = [
+            (case_path, pool.submit(build_case, case_path, root, patches_dir, source_repo, whole_suite))
+            for case_path in case_paths
+        ]
+        trees = []
+        for case_path, pending in builds:
+            try:
+                trees.append((case_path, pending.result()))
+            except HistoryMissing as error:
+                print(f"editor_measure build: {error}", file=sys.stderr)
+                return 2
+            except CaseRefused as error:
+                print(f"editor_measure build: refused {error}", file=sys.stderr)
+                return 1
+    finally:
+        pool.shutdown(cancel_futures=True)
+
+    for case_path, tree in trees:
         case = load_case(case_path)
         head = _git(tree, "rev-parse", "HEAD")
         rows.append({**case, "tree": str(tree), "name": case_path.stem, "head": head,
@@ -526,6 +632,7 @@ def main(
     cases_dir: Path = CASES_DIR,
     patches_dir: Path = PATCHES_DIR,
     source_repo: Path = REPO_ROOT,
+    whole_suite: str = WHOLE_SUITE,
 ) -> int:
     """Parse the command line and run the subcommand. The directories are parameters for tests."""
     parser = argparse.ArgumentParser(
@@ -571,7 +678,7 @@ def main(
                     print("editor_measure build requires node", file=sys.stderr)
                     return 2
                 measurement.clear_builds(output)
-                return build(root, cases_dir, patches_dir, source_repo)
+                return build(root, cases_dir, patches_dir, source_repo, whole_suite)
             if arguments.command == "record":
                 projects = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude")) / "projects"
                 measurement.record(output, results, projects, repaired)
