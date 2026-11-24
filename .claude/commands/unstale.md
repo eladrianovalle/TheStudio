@@ -74,6 +74,8 @@ Check every doc matched by `doc_globs` (README, CHANGELOG, CLAUDE.md/AGENTS.md, 
 
 #### Agent 2: Code Comment & Docstring Audit
 
+Remove obsolete commentary. Put useful explanations that need updating in project documentation.
+
 Check source files matched by `source_globs` for:
 
 - **Stale doc comments:** function docstrings / doc comments (`///`, `/** */`, `"""`) that describe old behavior or wrong parameters

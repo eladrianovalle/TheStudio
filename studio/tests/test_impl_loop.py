@@ -521,7 +521,7 @@ def test_studios_own_gate_config_is_committed_and_loads():
 
     config = load_loop_config(own_config)
     assert "pytest" in config.test_command
-    assert config.static_checks == ["ruff check {paths}"]
+    assert config.static_checks == ["ruff check studio"]
     assert config.require_mutation_check is True
     assert "mutmut" in config.mutation_command
 

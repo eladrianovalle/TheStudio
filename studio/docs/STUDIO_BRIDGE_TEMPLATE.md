@@ -11,7 +11,7 @@ Its job is to hold the two things Studio cannot work out for itself: what this p
 
 ## 2. Studio location
 - Studio root: set via the `STUDIO_ROOT` environment variable (e.g., `export STUDIO_ROOT="/path/to/studio"`).
-- You drive Studio through its slash commands — `/run-phase`, `/run-studio-phase`, `/spec`, `/forge`, `/studio-setup`. There is no runtime and no API; the debate happens inside your assistant.
+- Use `/run-phase`, `/run-studio-phase`, `/spec`, `/forge` and `/studio-setup` for Claude Code workflows. To build a spec unit with Codex from a terminal, run `python .studio/source/run_phase.py forge --runtime codex --spec <slug> --unit <unit_id>`.
 - Artifacts land in this repo under `.studio/output/`. Override with `STUDIO_ARTIFACT_ROOT` if you need them elsewhere.
 
 ## 3. Canon

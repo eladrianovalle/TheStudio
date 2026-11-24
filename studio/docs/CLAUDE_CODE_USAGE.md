@@ -477,6 +477,24 @@ Override keys replace the base; unspecified keys inherit from the manifest. Vali
 
 ## Implementation Loop (`/forge`)
 
+In an installed project, run
+`python .studio/source/run_phase.py forge --spec <slug> --unit <unit_id>`
+to use Claude for both roles. In the Studio source repo use `studio/run_phase.py`.
+Codex runs only when you name it: `--runtime codex` for both roles, or
+`--writer-runtime codex` or `--editor-runtime codex` for one. Pin a role's model
+with `--writer-model` or `--editor-model`; an explicit pin requires matching runtime evidence. Add `--plan`
+to inspect the target branch, selections and criteria without starting either role.
+
+A build requires Node.js and the authenticated CLI for each enabled runtime. The
+host starts a fresh context for each role, runs the configured tests in the worktree
+and reports the last verified checkpoint. A Claude role loads the project's settings and
+ignores your personal ones, so a personal hook cannot write files into the build. Each attempt records the two role selections,
+observed model identities when available, and stage outcomes under
+`.studio/output/impl_loop/<unit_id>/`.
+
+The Claude Code `/forge` command uses the native workflow by default. Passing a
+portable runtime or model selector routes that invocation to the portable command.
+
 Brings the advocate/contrarian cadence into **implementation**, the writer/editor analogue of the planning-phase debate. One agent writes a complete unit; a fresh editor agent refines it; then it's delivered.
 
 ```
