@@ -1,0 +1,91 @@
+diff --git a/.claude/commands/forge.md b/.claude/commands/forge.md
+index 069c071..3a1199f 100644
+--- a/.claude/commands/forge.md
++++ b/.claude/commands/forge.md
+@@ -125,7 +125,7 @@ the JSON — Step 5 reuses it instead of running the command again.
+ three reasons it hit, and the path it tried:
+ 
+ - **missing** — there is no directory at that path;
+-- **not-a-worktree** — the directory exists but is not inside a git worktree;
++- **not-a-worktree** — the directory exists but is not the top level of a git worktree;
+ - **different-repo** — it is a worktree of some other repository, not this one.
+ 
+ Tell the user which reason it was and which path was tried. Never continue without the work
+diff --git a/studio/impl_loop.py b/studio/impl_loop.py
+index e273d96..b4d51f6 100644
+--- a/studio/impl_loop.py
++++ b/studio/impl_loop.py
+@@ -209,6 +209,18 @@ def _git_common_dir(directory: Path) -> str | None:
+     return os.path.realpath(result.stdout.strip())
+ 
+ 
++def _worktree_top(directory: Path) -> str | None:
++    result = subprocess.run(
++        ["git", "rev-parse", "--show-toplevel"],
++        cwd=str(directory),
++        capture_output=True,
++        text=True,
++    )
++    if result.returncode != 0:
++        return None
++    return os.path.realpath(result.stdout.strip())
++
++
+ def validate_work_dir(work_dir: str | Path, main_repo: Path | None = None) -> str | None:
+     """Check that ``work_dir`` is a git worktree of this repository.
+ 
+@@ -227,12 +239,12 @@ def validate_work_dir(work_dir: str | Path, main_repo: Path | None = None) -> st
+             (defaults to this module's own checkout). Exposed for testing.
+     """
+     path = Path(work_dir).expanduser()
+-    if not path.is_dir():
++    if not path.exists():
+         return f"work-dir {WORK_DIR_MISSING}: no directory at {path}"
+ 
+-    work_dir_git = _git_common_dir(path)
+-    if work_dir_git is None:
+-        return f"work-dir {WORK_DIR_NOT_A_WORKTREE}: {path} is not inside a git worktree"
++    work_dir_git = _git_common_dir(path) if path.is_dir() else None
++    if work_dir_git is None or _worktree_top(path) != os.path.realpath(path):
++        return f"work-dir {WORK_DIR_NOT_A_WORKTREE}: {path} is not the top level of a git worktree"
+ 
+     main_repo_git = _git_common_dir(main_repo if main_repo is not None else STUDIO_ROOT)
+     if work_dir_git != main_repo_git:
+diff --git a/studio/tests/test_impl_loop.py b/studio/tests/test_impl_loop.py
+index 593aca0..ef295c4 100644
+--- a/studio/tests/test_impl_loop.py
++++ b/studio/tests/test_impl_loop.py
+@@ -383,6 +383,22 @@ def test_validate_work_dir_rejects_a_directory_that_is_not_a_worktree(tmp_path):
+     assert str(plain) in problem
+ 
+ 
++@pytest.mark.parametrize("inside", ["sub", ".git"])
++def test_validate_work_dir_rejects_a_path_inside_a_worktree_that_is_not_its_top(tmp_path, inside):
++    repo = _make_repo(tmp_path / "repo")
++    (repo / "sub").mkdir()
++    problem = validate_work_dir(repo / inside, main_repo=repo)
++    assert problem is not None and WORK_DIR_NOT_A_WORKTREE in problem
++
++
++def test_validate_work_dir_calls_an_existing_file_not_a_worktree(tmp_path):
++    repo = _make_repo(tmp_path / "repo")
++    existing_file = tmp_path / "notes.txt"
++    existing_file.write_text("x")
++    problem = validate_work_dir(existing_file, main_repo=repo)
++    assert problem is not None and WORK_DIR_NOT_A_WORKTREE in problem
++
++
+ def test_validate_work_dir_rejects_a_worktree_of_another_repository(tmp_path):
+     """Criterion 3: a genuine worktree of some OTHER repo names 'different-repo'.
+ 
+@@ -434,8 +450,8 @@ def test_cli_work_dir_flag_reports_the_resolved_path():
+     checkout stands in for the work dir here: the CLI compares against this repo, so
+     only a directory in this repo can pass.
+     """
+-    knobs = json.loads(_cli(["impl_loop.py", "--work-dir", str(STUDIO_ROOT)]))
+-    assert knobs["work_dir"] == str(STUDIO_ROOT)
++    knobs = json.loads(_cli(["impl_loop.py", "--work-dir", str(STUDIO_ROOT.parent)]))
++    assert knobs["work_dir"] == str(STUDIO_ROOT.parent)
+     assert knobs["editor_enabled"] is True
+ 
+ 

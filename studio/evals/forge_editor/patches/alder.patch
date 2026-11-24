@@ -1,12 +1,36 @@
---- a/specs/unit-acceptance-criteria.md
-+++ b/specs/unit-acceptance-criteria.md
-@@ -381,8 +381,7 @@
-    - **Acceptance criteria:**
-      - [ ] Passing `acceptance_criteria: [...]` in `args` makes the editor return one `criteria_verdicts`
-            entry per criterion, each with `criterion`, `verdict`, and `evidence`.
--     - [ ] With zero criteria, both prompts' output is byte-identical to today's, and `criteria_verdicts`
--           comes back empty.
-+     - [ ] With zero criteria, the writer prompt is byte-identical to today's, the editor prompt adds only the one sentence telling it to leave `criteria_verdicts` empty, and nothing else in either prompt changes.
-      - [ ] A failing criterion delivers `{ delivered: true, flagged: true }` with nothing reverted and no
-            retry.
-      - [ ] The failing criteria appear in the run log and the verdicts appear in the return payload.
+diff --git a/.claude/workflows/implementation-loop.js b/.claude/workflows/implementation-loop.js
+index 154ffe2..103b9cc 100644
+--- a/.claude/workflows/implementation-loop.js
++++ b/.claude/workflows/implementation-loop.js
+@@ -225,8 +225,7 @@ function editorPrompt(u, writer) {
+       `This can overturn the writer's claim.`,
+     ] : [
+       `Then render mvi_verdict: AUTHORITATIVELY judge "if we stopped here, could someone use this unit?" against`,
+-      `the title "${u.title}" (no acceptance criteria were supplied — this run had no --spec pointer). Leave`,
+-      `criteria_verdicts empty. This can overturn the writer's claim.`,
++      `the title "${u.title}". Leave criteria_verdicts empty. This can overturn the writer's claim.`,
+     ]),
+     ``,
+     `Keep your edits rationale under ${u.output_budget || 400} words.`,
+diff --git a/.claude/workflows/tests/workflow-shells.test.mjs b/.claude/workflows/tests/workflow-shells.test.mjs
+index 9a7736f..acdc13e 100644
+--- a/.claude/workflows/tests/workflow-shells.test.mjs
++++ b/.claude/workflows/tests/workflow-shells.test.mjs
+@@ -145,7 +145,7 @@ test('editorPrompt asks for a graded verdict on each criterion it was handed', (
+   // The MVI question survives alongside the criteria; it is not replaced by them.
+   assert.match(prompt, /only if the unit is usable as a complete interaction AND every criterion passes/)
+   // The title-only branch must not also be present.
+-  assert.ok(!prompt.includes('no acceptance criteria were supplied'))
++  assert.ok(!prompt.includes('Leave criteria_verdicts empty'))
+ })
+ 
+ test('with zero criteria the editor still judges against the title', () => {
+@@ -154,7 +154,7 @@ test('with zero criteria the editor still judges against the title', () => {
+   assert.ok(prompt.includes(`the title "${UNIT.title}"`))
+   assert.ok(!prompt.includes('For EACH criterion'))
+   assert.equal(numberedLines(prompt).length, 0)
+-  assert.match(prompt, /Leave\ncriteria_verdicts empty/)
++  assert.ok(prompt.includes(`the title "${UNIT.title}". Leave criteria_verdicts empty. This can overturn the writer's claim.`))
+   assert.equal(editorPrompt({ ...UNIT, acceptance_criteria: [] }, WRITER), prompt)
+ })
+ 

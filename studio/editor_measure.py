@@ -466,6 +466,14 @@ def prove_criteria(tree: Path, name: str, case: dict) -> None:
             )
 
 
+def prove_spec_untouched(tree: Path, name: str, case: dict) -> None:
+    if _git(tree, "diff", "--name-only", "HEAD^", "HEAD", "--", case["spec_file"]):
+        raise CaseRefused(
+            f"case {name}: the writer commit changes {case['spec_file']}, so the editor would see the "
+            "unit edit its own criteria; put that change in a base_patch instead"
+        )
+
+
 def prove_test_command(tree: Path, name: str, case: dict) -> dict:
     """Run the case's test command in the tree; refuse unless it exits 0.
 
@@ -603,6 +611,7 @@ def build_case(case_path: Path, root: Path, patches_dir: Path, source_repo: Path
         shape_tree(tree, name, case, patches_dir)
         strip_history(tree)
         prove_criteria(tree, name, case)
+        prove_spec_untouched(tree, name, case)
         tests = prove_test_command(tree, name, case)
         prove_whole_suite(tree, name, whole_suite)
         prove_probe(tree, source_repo, name, case)

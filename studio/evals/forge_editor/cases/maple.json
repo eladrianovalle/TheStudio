@@ -18,6 +18,6 @@
   "probe": {
     "from_sha": "d200136c2efdaf5674d320621db1691b204cae34",
     "paths": [],
-    "command": "PYTHONPATH=studio:studio/tests python - <<'PY'\nfrom test_spec_verification import _synthetic_spec, _violations\n\nspec = _synthetic_spec(\"shipped\", verification=False, impact=\"huge\", changed=\"It starts sooner.\")\nviolations = _violations(\"synthetic.md\", spec, \"synthetic-eval-results.md\", None)\nassert len(violations) == 1 and \"none, minor, major\" in violations[0], violations\nPY"
+    "command": "PYTHONPATH=studio:studio/tests python - <<'PY'\nfrom test_spec_verification import _violations\n\nspec = '---\\nfeature: Synthetic\\nslug: synthetic\\nstatus: shipped\\nshipped_impact: huge\\nshipped_changed: It starts sooner.\\n---\\n\\n# Synthetic — Architecture Spec\\n\\n## Build Plan\\n\\n1. Build it.\\n'\nviolations = _violations(\"synthetic.md\", spec, \"synthetic-eval-results.md\", None)\nassert len(violations) == 1 and \"none, minor, major\" in violations[0], violations\nPY"
   }
 }

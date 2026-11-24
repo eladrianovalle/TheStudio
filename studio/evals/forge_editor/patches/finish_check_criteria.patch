@@ -1,8 +1,24 @@
-diff --git a/specs/shipped-finish-check.md b/specs/shipped-finish-check.md
-index 9f79614..c71f8fd 100644
 --- a/specs/shipped-finish-check.md
 +++ b/specs/shipped-finish-check.md
-@@ -333,9 +333,35 @@ global-registration removal step.
+@@ -166,12 +166,11 @@
+ `_install_stop_hook` mirrors `_install_sessionstart_hook` exactly: find our entry by marker
+ substring, remove it, re-add when enabled, drop emptied `Stop` and `hooks` containers, and reproduce
+ the three shape guards — a settings file that is not a JSON object, a non-dict `hooks`, a non-list
+-`hooks.Stop` each print one warning and leave the file untouched. It never raises.
+-
+-In `update_studio` the call sits **immediately after the existing SessionStart call**, not later. The
+-early returns for *no source*, *up to date* and *blocked on local edits* all sit below that point, so
+-a call placed after them would make `update --no-finish-check` a silent no-op on a current repo,
+-leaving the hook running.
++`hooks.Stop` each print one warning and leave `hooks.Stop` exactly as it was. It never raises.
++
++In `update_studio` the call is made on **every path**, including the early returns for *no source*,
++*up to date* and *blocked on local edits*. A call made only after them would make
++`update --no-finish-check` a silent no-op on a current repo, leaving the hook running.
+ 
+ `--no-finish-check` is its own flag on both `init` and `update`; `.studio/finish-check.off` is its own
+ sentinel. Neither shares with the update nudge, because someone who wants update nudges but not a
+@@ -333,9 +332,34 @@
  
  - [ ] After `init`, `.claude/settings.local.json` holds exactly one `hooks.Stop` entry containing the marker substring, with absolute interpreter and script paths; a second and third `init` leave exactly one, and none of them alters the SessionStart entry.
  - [ ] `init --no-finish-check` writes no entry, and `update --no-finish-check` removes one a previous install wrote **including when the install is already up to date**; the `.studio/finish-check.off` sentinel produces the same result as the flag on both subcommands.
@@ -37,5 +53,4 @@ index 9f79614..c71f8fd 100644
 +
 +Narrowing a criterion after measuring against it is normally how a criterion stops meaning anything,
 +which is why the original is quoted here rather than replaced silently. Anyone auditing this can see
-+both the bar that was set and the bar that was met, and disagree with the change. The tests did not
-+move: they already asserted the narrowed claim, because that is what the code was always doing.
++both the bar that was set and the bar that was met, and disagree with the change.

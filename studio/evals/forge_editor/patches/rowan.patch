@@ -1,0 +1,73 @@
+diff --git a/.claude/workflows/implementation-loop.js b/.claude/workflows/implementation-loop.js
+index f2a8fa6..6ee03ef 100644
+--- a/.claude/workflows/implementation-loop.js
++++ b/.claude/workflows/implementation-loop.js
+@@ -225,8 +225,7 @@ function editorPrompt(u, writer) {
+       `This can overturn the writer's claim.`,
+     ] : [
+       `Then render mvi_verdict: AUTHORITATIVELY judge "if we stopped here, could someone use this unit?" against`,
+-      `the title "${u.title}" (no acceptance criteria were supplied — this run had no --spec pointer). Leave`,
+-      `criteria_verdicts empty. This can overturn the writer's claim.`,
++      `the title "${u.title}". Leave criteria_verdicts empty. This can overturn the writer's claim.`,
+     ]),
+     ``,
+     `Keep your edits rationale under ${u.output_budget || 400} words.`,
+diff --git a/.claude/workflows/tests/workflow-shells.test.mjs b/.claude/workflows/tests/workflow-shells.test.mjs
+index 67a2b23..8438127 100644
+--- a/.claude/workflows/tests/workflow-shells.test.mjs
++++ b/.claude/workflows/tests/workflow-shells.test.mjs
+@@ -145,7 +145,7 @@ test('editorPrompt asks for a graded verdict on each criterion it was handed', (
+   // The MVI question survives alongside the criteria; it is not replaced by them.
+   assert.match(prompt, /only if the unit is usable as a complete interaction AND every criterion passes/)
+   // The title-only branch must not also be present.
+-  assert.ok(!prompt.includes('no acceptance criteria were supplied'))
++  assert.ok(!prompt.includes('Leave criteria_verdicts empty'))
+ })
+ 
+ test('with zero criteria the editor still judges against the title', () => {
+@@ -154,7 +154,7 @@ test('with zero criteria the editor still judges against the title', () => {
+   assert.ok(prompt.includes(`the title "${UNIT.title}"`))
+   assert.ok(!prompt.includes('For EACH criterion'))
+   assert.equal(numberedLines(prompt).length, 0)
+-  assert.match(prompt, /Leave\ncriteria_verdicts empty/)
++  assert.ok(prompt.includes(`the title "${UNIT.title}". Leave criteria_verdicts empty. This can overturn the writer's claim.`))
+   assert.equal(editorPrompt({ ...UNIT, acceptance_criteria: [] }, WRITER), prompt)
+ })
+ 
+diff --git a/specs/unit-acceptance-criteria.md b/specs/unit-acceptance-criteria.md
+index 05667b6..3acfa8d 100644
+--- a/specs/unit-acceptance-criteria.md
++++ b/specs/unit-acceptance-criteria.md
+@@ -275,18 +275,8 @@ through two channels is the accumulation the mandate tells us to collapse.
+ 
+ ### When a criterion fails
+ 
+-One failure → the exit gate fails → the existing `{ delivered: true, flagged: true }`.
+-
+-**The gate reads the grades directly, not just `mvi_verdict`.** The first version of this design routed
+-everything through the boolean: a failing criterion was supposed to make the editor set
+-`mvi_verdict=false`, and the gate would notice. That trusts an agent to stay consistent with itself
+-across two fields. It doesn't hold — an editor can return `verdict: 'fail'` on a criterion while
+-claiming `mvi_verdict: true`, or hand back three verdicts for five criteria, and the run would ship
+-unflagged. That is worse than having no criteria at all, because it manufactures confidence instead of
+-merely lacking it. So the gate also requires that every criterion the unit carried came back graded
+-`pass`. Two conditions, no new field, and the same shape as the two safety nets the loop already has
+-for red-without-revert and kept-without-commit. A unit that carried no criteria is untouched by the
+-rule.
++One failure → `mvi_verdict=false` → the existing exit gate fails → the existing
++`{ delivered: true, flagged: true }`.
+ 
+ - **The code still ships.** Nothing reverts. Revert exists for *broken green*, not unmet scope.
+ - **No retry.** The loop spec is explicit: the writer runs once, the editor runs once, the unit is
+@@ -391,9 +381,8 @@ mean anything.
+    - **Acceptance criteria:**
+      - [ ] Passing `acceptance_criteria: [...]` in `args` makes the editor return one `criteria_verdicts`
+            entry per criterion, each with `criterion`, `verdict`, and `evidence`.
+-     - [ ] With zero criteria, the writer prompt is byte-identical to today's, the editor prompt adds
+-           only the one sentence telling it to leave `criteria_verdicts` empty, and nothing else in
+-           either prompt changes.
++     - [ ] With zero criteria, both prompts' output is byte-identical to today's, and `criteria_verdicts`
++           comes back empty.
+      - [ ] A failing criterion delivers `{ delivered: true, flagged: true }` with nothing reverted and no
+            retry.
+      - [ ] The failing criteria appear in the run log and the verdicts appear in the return payload.

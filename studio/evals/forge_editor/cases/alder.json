@@ -5,7 +5,7 @@
   "writer_sha": "bb754ce995628f083eaef67897f3c3f9be2d9b76",
   "spec_file": "specs/unit-acceptance-criteria.md",
   "acceptance_criteria": [
-    "Passing `acceptance_criteria: [...]` in `args` makes the editor return one `criteria_verdicts` entry per criterion, each with `criterion`, `verdict`, and `evidence`.",
+    "Passing `acceptance_criteria: [...]` in `args` makes the editor prompt ask for one `criteria_verdicts` entry per criterion, each with `criterion`, `verdict`, and `evidence`, and the editor's handoff schema requires those three fields on every entry.",
     "With zero criteria, the writer prompt is byte-identical to today's, the editor prompt adds only the one sentence telling it to leave `criteria_verdicts` empty, and nothing else in either prompt changes.",
     "A failing criterion delivers `{ delivered: true, flagged: true }` with nothing reverted and no retry.",
     "The failing criteria appear in the run log and the verdicts appear in the return payload.",
@@ -20,5 +20,6 @@
   "kind": "defect",
   "breaks_criterion": 3,
   "defect": "An explicit failing criterion can be delivered unflagged when the editor also returns a true MVI verdict.",
-  "patch": "alder.patch"
+  "patch": "alder.patch",
+  "base_patch": "loop_grades_criteria.patch"
 }

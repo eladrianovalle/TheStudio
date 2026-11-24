@@ -5,7 +5,7 @@
   "writer_sha": "bb754ce995628f083eaef67897f3c3f9be2d9b76",
   "spec_file": "specs/unit-acceptance-criteria.md",
   "acceptance_criteria": [
-    "Passing `acceptance_criteria: [...]` in `args` makes the editor return one `criteria_verdicts` entry per criterion, each with `criterion`, `verdict`, and `evidence`.",
+    "Passing `acceptance_criteria: [...]` in `args` makes the editor prompt ask for one `criteria_verdicts` entry per criterion, each with `criterion`, `verdict`, and `evidence`, and the editor's handoff schema requires those three fields on every entry.",
     "With zero criteria, the writer prompt is byte-identical to today's, the editor prompt adds only the one sentence telling it to leave `criteria_verdicts` empty, and nothing else in either prompt changes.",
     "A failing criterion delivers `{ delivered: true, flagged: true }` with nothing reverted and no retry.",
     "The failing criteria appear in the run log and the verdicts appear in the return payload.",
@@ -18,5 +18,7 @@
     "command": "node --input-type=module <<'JS'\nimport assert from 'node:assert/strict'\nimport { readFileSync } from 'node:fs'\n\nconst source = readFileSync('.claude/workflows/implementation-loop.js', 'utf8')\nconst AsyncFunction = Object.getPrototypeOf(async function () {}).constructor\nconst run = new AsyncFunction('args', 'agent', 'phase', 'log', source.replace(/^export const meta/m, 'const meta'))\nconst criterion = 'The score remains visible.'\nconst phases = []\nconst editor = {\n  tests: { passed: true }, mvi_verdict: true, reverted: false, committed: true,\n  criteria_verdicts: [{ criterion, verdict: 'fail', evidence: 'The score was absent.' }],\n}\nconst result = await run({ acceptance_criteria: [criterion] }, async (_prompt, options) => {\n  phases.push(options.phase)\n  return options.phase === 'Writer' ? { mvi_claimed: true, tests: { passed: true } } : editor\n}, () => {}, () => {})\nassert.deepEqual(phases, ['Writer', 'Edit'])\nassert.equal(result.delivered, true)\nassert.equal(result.editor.reverted, false)\nassert.equal(result.flagged, true, 'A failing criterion was delivered unflagged')\nJS"
   },
   "kind": "clean",
-  "tree_sha": "b02338d2431ac63b8aa0cc6ce6b3944c27aca4e6"
+  "tree_sha": "b02338d2431ac63b8aa0cc6ce6b3944c27aca4e6",
+  "patch": "rowan.patch",
+  "base_patch": "loop_grades_criteria.patch"
 }
