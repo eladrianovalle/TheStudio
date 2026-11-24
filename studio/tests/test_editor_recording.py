@@ -169,6 +169,16 @@ def test_harness_wrapped_prompt_is_unwrapped_before_matching(recording, prompt, 
     assert path.exists() == recorded
 
 
+def test_harness_wrapped_multiline_prompt_with_a_blank_line_is_recorded(recording):
+    cli, path, manifest_path, workflow = recording
+    prompt = "Review caught\n\n  Indented step\nLast line"
+    manifest = measurement.read(manifest_path)
+    manifest["cases"][0]["prompt"] = prompt
+    measurement.write(manifest_path, manifest)
+    jsonl(workflow / "agent-0.jsonl", harness_wrapped(prompt))
+    assert cli("record") == 0
+    assert measurement.read(path)["runs"][0]["cases"][0]["case"] == "caught"
+
 def test_harness_wrapped_prompt_with_an_unindented_line_is_void(recording):
     cli, path, _, workflow = recording
     turns = harness_wrapped("Review caught")
