@@ -22,5 +22,6 @@
   },
   "kind": "defect",
   "breaks_criterion": null,
-  "defect": "A suffixed Build Plan heading below the real section displaces the real units."
+  "defect": "A suffixed Build Plan heading below the real section displaces the real units.",
+  "patch": "cypress.patch"
 }

@@ -242,7 +242,9 @@ same pull request. The defect case is the tree at the writer commit. Its clean t
 
 Both cases of a pair carry identical criteria, the same test command and the same probe, so the
 probe is shown to fail on the defect and pass once it is fixed, as a plant's is. If a later commit
-narrowed a criterion, that change goes into both trees as part of their `patch`. A person sorts the
+narrowed a criterion, that change goes into both trees as part of their `patch`. A clean twin
+that breaks one of its own criteria is corrected by a `patch` before it is measured, in both trees
+when the fault is in both, so an editor that finds the fault is not scored with a false alarm. A person sorts the
 candidate fix commits before the case set is built, and the sort is recorded as a table in the pull
 request that adds the cases. Expect mostly plants: most candidates turn out not to be a defect in
 the unit that precedes them, and a unit yields a pair only when it also has checkbox criteria and a
