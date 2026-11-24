@@ -10,7 +10,7 @@
     "Taking any one currently-approved spec, rewriting a single unit entry into the numbered-bold form, and re-running the suite turns it red with a sentence naming that spec; restoring the heading form turns it green.",
     "A test walking the whole specs directory fails when two specs plan the same `unit_id`, and passes against the current tree.",
     "`cd studio && python -m pytest tests/test_spec_verification.py -q` is green against the real `specs/` directory with no spec file modified, and `ruff check .` from the repo root is clean.",
-    "`spec.md`'s template shows the heading form and says `unit_id` is unique repo-wide; `forge.md` points at that shape instead of restating a format in its own words; no doc still says \"unique within this spec\", except a `status: shipped` spec, which is a historical record and is left unchanged."
+    "`spec.md`'s template shows the heading form and says `unit_id` is unique repo-wide; `forge.md` points at that shape instead of restating a format in its own words; no doc outside a shipped spec still says \"unique within this spec\"."
   ],
   "test_command": "python -m pytest -q studio/tests/test_spec_verification.py",
   "probe": {
@@ -21,5 +21,6 @@
     "command": "python -m pytest -q studio/tests/test_spec_verification.py -k test_a_suffixed_build_plan_heading_is_not_the_build_plan"
   },
   "kind": "clean",
-  "patch": "birch.patch"
+  "patch": "birch.patch",
+  "base_patch": "build_plan_criteria.patch"
 }

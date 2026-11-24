@@ -16,6 +16,7 @@ The fake history is a unit called `greeter` whose writer forgot the "!" its spec
 """
 from __future__ import annotations
 
+import difflib
 import json
 import os
 import shlex
@@ -396,6 +397,60 @@ def test_build_refuses_a_defect_with_nothing_to_show_the_defect(history, checkou
     assert "case greeter_nine" in output
     assert "a defect case needs a probe" in output
     assert not (checkout_root / "greeter_nine").exists()
+
+
+def write_spec_patch(patches_dir: Path, name: str, new_spec: str) -> str:
+    diff = difflib.unified_diff(
+        SPEC_TEXT.splitlines(keepends=True), new_spec.splitlines(keepends=True),
+        "a/specs/greeter.md", "b/specs/greeter.md",
+    )
+    (patches_dir / name).write_text("".join(diff), encoding="utf-8")
+    return name
+
+
+def test_a_base_patch_changes_the_writer_commit_and_its_parent_but_not_the_diff(history, checkout_root, case_dirs, capsys):
+    cases, patches = case_dirs
+    reworded = "The checks script passes on every run."
+    base_patch = write_spec_patch(patches, "criteria.patch", SPEC_TEXT.replace("The checks script passes.", reworded))
+    write_case(cases, "greeter_based", defect_case(
+        history, acceptance_criteria=[CRITERIA[0], reworded], base_patch=base_patch,
+    ))
+
+    code, output = run_build(history, checkout_root, case_dirs, capsys)
+
+    assert code == 0, output
+    tree = checkout_root / "greeter_based"
+    for commit in ("HEAD", "HEAD^"):
+        assert reworded in git(tree, "show", f"{commit}:specs/greeter.md")
+    assert git(tree, "diff", "HEAD^", "HEAD") == git(history["repo"], "diff", history["base"], history["writer"])
+    assert commit_identity(tree, "HEAD") == commit_identity(history["repo"], history["writer"])
+    assert commit_identity(tree, "HEAD^") == commit_identity(history["repo"], history["base"])
+    assert git(tree, "rev-list", "--count", "HEAD") == "2"
+
+
+def test_build_refuses_a_base_patch_touching_a_file_the_writer_changed(history, checkout_root, case_dirs, capsys):
+    cases, patches = case_dirs
+    base_patch = write_patch(history, patches, "app.patch", "app.py", to="fix")
+    write_case(cases, "greeter_overlap", defect_case(history, base_patch=base_patch))
+
+    code, output = run_build(history, checkout_root, case_dirs, capsys)
+
+    assert code == 1
+    assert "case greeter_overlap" in output
+    assert "app.py" in output and "which the writer commit changes" in output
+
+
+def test_build_refuses_a_base_patch_that_does_not_apply(history, checkout_root, case_dirs, capsys):
+    cases, patches = case_dirs
+    (patches / "stale.patch").write_text(
+        "--- a/specs/greeter.md\n+++ b/specs/greeter.md\n@@ -1 +1 @@\n-# Nothing like this\n+# Greeter\n"
+    )
+    write_case(cases, "greeter_stale", defect_case(history, base_patch="stale.patch"))
+
+    code, output = run_build(history, checkout_root, case_dirs, capsys)
+
+    assert code == 1
+    assert "case greeter_stale" in output and "does not apply to the writer's parent" in output
 
 
 def test_build_refuses_a_patch_that_does_not_apply(history, checkout_root, case_dirs, capsys):

@@ -12,19 +12,6 @@ index 75ae8a2..328c69a 100644
  The heading is what bounds an entry: a unit runs to the next `###`, so a nested list inside one can
  never be read as another unit. Once a spec is `approved`, Studio's spec-verification suite refuses
  any other shape.
-diff --git a/specs/completion-ledger.md b/specs/completion-ledger.md
-index 6b9b943..4915812 100644
---- a/specs/completion-ledger.md
-+++ b/specs/completion-ledger.md
-@@ -569,7 +569,7 @@ template to the heading form, corrects its "unique within this spec" sentence to
- - [ ] Taking any one currently-approved spec, rewriting a single unit entry into the numbered-bold form, and re-running the suite turns it red with a sentence naming that spec; restoring the heading form turns it green.
- - [ ] A test walking the whole specs directory fails when two specs plan the same `unit_id`, and passes against the current tree.
- - [ ] `cd studio && python -m pytest tests/test_spec_verification.py -q` is green against the real `specs/` directory with no spec file modified, and `ruff check .` from the repo root is clean.
--- [ ] `spec.md`'s template shows the heading form and says `unit_id` is unique repo-wide; `forge.md` points at that shape instead of restating a format in its own words; no doc still says "unique within this spec".
-+- [ ] `spec.md`'s template shows the heading form and says `unit_id` is unique repo-wide; `forge.md` points at that shape instead of restating a format in its own words; no doc still says "unique within this spec", except a `status: shipped` spec, which is a historical record and is left unchanged.
- 
- **Out of scope:** any reconciliation, any git reading, any change to `check-updates`, and any edit to a `shipped` spec's Build Plan.
- 
 diff --git a/specs/unit-acceptance-criteria.md b/specs/unit-acceptance-criteria.md
 index 1895700..6f8e08d 100644
 --- a/specs/unit-acceptance-criteria.md
