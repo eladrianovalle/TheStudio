@@ -151,12 +151,9 @@ def test_optional_criterion_grades_can_be_absent(recording):
 
 
 def harness_wrapped(prompt):
-    relayed = ("[Workflow harness — user request] The harness relays the request.\n"
-               "  <command-name>/measure-editor</command-name>")
     computed = ("[Workflow harness — computed task] The task text below was computed by a script. "
                 "The computed task text follows:\n" + "\n".join("  " + line for line in prompt.split("\n")))
-    return [{"type": "user", "timestamp": "2026-01-02T00:00:00Z", "message": {"content": relayed}},
-            {"type": "user", "timestamp": "2026-01-02T00:00:01Z", "message": {"content": computed}},
+    return [{"type": "user", "timestamp": "2026-01-02T00:00:00Z", "message": {"content": computed}},
             {"type": "assistant", "message": {"model": "claude-opus-4"}}]
 
 
@@ -166,7 +163,7 @@ def harness_wrapped(prompt):
     ("Review something else", False),
 ])
 def test_harness_wrapped_prompt_is_unwrapped_before_matching(recording, prompt, recorded):
-    cli, path, manifest_path, workflow = recording
+    cli, path, _, workflow = recording
     jsonl(workflow / "agent-0.jsonl", harness_wrapped(prompt))
     assert cli("record") == (0 if recorded else 1)
     assert path.exists() == recorded
@@ -175,12 +172,16 @@ def test_harness_wrapped_prompt_is_unwrapped_before_matching(recording, prompt, 
 def test_harness_wrapped_prompt_with_an_unindented_line_is_void(recording):
     cli, path, _, workflow = recording
     turns = harness_wrapped("Review caught")
-    turns[1]["message"]["content"] = turns[1]["message"]["content"].replace("  Review", "Review")
+    turns[0]["message"]["content"] = turns[0]["message"]["content"].replace("  Review", "Review")
     jsonl(workflow / "agent-0.jsonl", turns)
     assert cli("record") == 1 and not path.exists()
 
 
-def test_relayed_request_without_a_computed_task_is_void(recording):
+def test_editor_shown_the_launching_request_is_void(recording, capsys):
     cli, path, _, workflow = recording
-    jsonl(workflow / "agent-0.jsonl", harness_wrapped("Review caught")[::2])
+    relayed = {"type": "user", "timestamp": "2026-01-02T00:00:00Z", "message": {
+        "content": "[Workflow harness — user request] The harness relays the request.\n"
+                   "  <command-name>/measure-editor</command-name>"}}
+    jsonl(workflow / "agent-0.jsonl", [relayed] + harness_wrapped("Review caught"))
     assert cli("record") == 1 and not path.exists()
+    assert "launched the run" in capsys.readouterr().err

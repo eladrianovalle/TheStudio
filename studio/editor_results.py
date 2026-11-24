@@ -138,15 +138,11 @@ def user_text(row):
     return content
 
 
-def task_prompt(user_rows):
-    texts = [user_text(row) for row in user_rows[:2]]
-    if not texts or not isinstance(texts[0], str):
-        return None
-    if not texts[0].startswith(RELAYED_REQUEST_HEADER):
-        return texts[0]
-    if len(texts) < 2 or not isinstance(texts[1], str) or not texts[1].startswith(COMPUTED_TASK_HEADER):
-        return None
-    _, lead, task = texts[1].partition(COMPUTED_TASK_LEAD)
+def task_prompt(first_user_row):
+    text = user_text(first_user_row)
+    if not isinstance(text, str) or not text.startswith(COMPUTED_TASK_HEADER):
+        return text
+    _, lead, task = text.partition(COMPUTED_TASK_LEAD)
     lines = task.split("\n")
     if not lead or not all(line.startswith(COMPUTED_TASK_INDENT) for line in lines):
         return None
@@ -156,7 +152,10 @@ def task_prompt(user_rows):
 def transcript_model(rows, case, manifest):
     if not rows or timestamp(rows[0]["timestamp"]) <= timestamp(manifest["built_at"]):
         raise ValueError("transcript predates this build")
-    if task_prompt([r for r in rows if r.get("type") == "user"]) != case["prompt"]:
+    first = next((r for r in rows if r.get("type") == "user"), {})
+    if str(user_text(first)).startswith(RELAYED_REQUEST_HEADER):
+        raise ValueError("the editor was shown the request that launched the run; launch it headless")
+    if task_prompt(first) != case["prompt"]:
         raise ValueError("first user prompt differs from the built prompt")
     models = {r["message"]["model"] for r in rows if r.get("type") == "assistant"}
     if len(models) != 1 or manifest["model"] not in next(iter(models)):
