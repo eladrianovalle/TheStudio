@@ -219,7 +219,9 @@ build before an editor is paid for, instead of surfacing in their verdicts.
 whether the defect was repaired, and editors routinely delete or rename test helpers while they
 clean up. A probe that imports a fixture from the unit's test file then crashes on a tree whose
 defect is fixed, and a repair is scored as a miss. So a probe may import from the tree only the
-code it tests; any spec text, evidence file or helper it needs is written into the command.
+code it tests; any spec text, evidence file or helper it needs is written into the command. It judges
+the behaviour, not how the code reports it, so a repair that keeps the unit's own interface passes:
+a validator that returns its refusal and one that raises it count alike.
 
 **How a tree is built.** `python studio/editor_measure.py build [--root <dir>]`, for each case:
 
