@@ -22,5 +22,6 @@
   },
   "kind": "clean",
   "tree_sha": "a99b6f7fc0d41f6744cccaa6cc0c124fc018ae6a",
-  "patch": "sycamore.patch"
+  "patch": "sycamore.patch",
+  "base_patch": "finish_check_criteria.patch"
 }

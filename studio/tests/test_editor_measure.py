@@ -440,6 +440,20 @@ def test_build_refuses_a_base_patch_touching_a_file_the_writer_changed(history, 
     assert "app.py" in output and "which the writer commit changes" in output
 
 
+def test_build_refuses_a_case_whose_writer_commit_changes_its_own_spec(history, checkout_root, case_dirs, capsys):
+    cases, patches = case_dirs
+    reworded = "The checks script passes on every run."
+    patch = write_spec_patch(patches, "criteria_in_diff.patch", SPEC_TEXT.replace("The checks script passes.", reworded))
+    write_case(cases, "greeter_moved", clean_case(
+        history, tree_sha=None, patch=patch, acceptance_criteria=[CRITERIA[0], reworded],
+    ))
+
+    code, output = run_build(history, checkout_root, case_dirs, capsys)
+
+    assert code == 1
+    assert "case greeter_moved" in output and "changes specs/greeter.md" in output
+
+
 def test_build_refuses_a_base_patch_that_does_not_apply(history, checkout_root, case_dirs, capsys):
     cases, patches = case_dirs
     (patches / "stale.patch").write_text(

@@ -1,0 +1,29 @@
+--- a/specs/unit-acceptance-criteria.md
++++ b/specs/unit-acceptance-criteria.md
+@@ -227,8 +227,7 @@
+       `This can overturn the writer's claim.`,
+     ] : [
+       `Then render mvi_verdict: AUTHORITATIVELY judge "if we stopped here, could someone use this unit?" against`,
+-      `the title "${u.title}" (no acceptance criteria were supplied — this run had no --spec pointer). Leave`,
+-      `criteria_verdicts empty. This can overturn the writer's claim.`,
++      `the title "${u.title}". Leave criteria_verdicts empty. This can overturn the writer's claim.`,
+     ]),
+ ```
+ 
+@@ -379,10 +378,12 @@
+    `test_workflow_shells.py`'s new wiring class, `IMPLEMENTATION_LOOP_SPEC.md`, and the `CLAUDE.md` /
+    `README.md` / `CHANGELOG.md` lines.
+    - **Acceptance criteria:**
+-     - [ ] Passing `acceptance_criteria: [...]` in `args` makes the editor return one `criteria_verdicts`
+-           entry per criterion, each with `criterion`, `verdict`, and `evidence`.
+-     - [ ] With zero criteria, both prompts' output is byte-identical to today's, and `criteria_verdicts`
+-           comes back empty.
++     - [ ] Passing `acceptance_criteria: [...]` in `args` makes the editor prompt ask for one
++           `criteria_verdicts` entry per criterion, each with `criterion`, `verdict`, and `evidence`,
++           and the editor's handoff schema requires those three fields on every entry.
++     - [ ] With zero criteria, the writer prompt is byte-identical to today's, the editor prompt adds
++           only the one sentence telling it to leave `criteria_verdicts` empty, and nothing else in
++           either prompt changes.
+      - [ ] A failing criterion delivers `{ delivered: true, flagged: true }` with nothing reverted and no
+            retry.
+      - [ ] The failing criteria appear in the run log and the verdicts appear in the return payload.

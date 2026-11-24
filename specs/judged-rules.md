@@ -215,6 +215,14 @@ pytest suite and the workflow tests) in every tree, in place, and refuses the ca
 That makes any later rot, a new date-bound test or a path a test treats differently, stop the
 build before an editor is paid for, instead of surfacing in their verdicts.
 
+**Why a probe carries its own fixtures.** A probe runs again on the editor's finished tree to see
+whether the defect was repaired, and editors routinely delete or rename test helpers while they
+clean up. A probe that imports a fixture from the unit's test file then crashes on a tree whose
+defect is fixed, and a repair is scored as a miss. So a probe may import from the tree only the
+code it tests; any spec text, evidence file or helper it needs is written into the command. It judges
+the behaviour, not how the code reports it, so a repair that keeps the unit's own interface passes:
+a validator that returns its refusal and one that raises it count alike.
+
 **How a tree is built.** `python studio/editor_measure.py build [--root <dir>]`, for each case:
 
 1. `git init -b impl/<unit_id> <root>/<tree name>`, then `git fetch <this repository's path>
@@ -245,7 +253,8 @@ same pull request. The defect case is the tree at the writer commit. Its clean t
 
 Both cases of a pair carry identical criteria, the same test command and the same probe, so the
 probe is shown to fail on the defect and pass once it is fixed, as a plant's is. If a later commit
-narrowed a criterion, that change goes into both trees as part of their `patch`. A clean twin
+narrowed a criterion, that change goes into both trees as a `base_patch`, so it reads as the
+approved spec rather than as the writer changing its own goalposts. A clean twin
 that breaks one of its own criteria is corrected before it is measured, so an editor that finds the
 fault is not scored with a false alarm. A fault in the code is corrected by a `patch`. Criteria
 that contradict each other are reworded by a `base_patch` in both trees, so the new wording reads
@@ -267,7 +276,8 @@ fix that touches a test.
 
 **Proof, for every case.** The test command and the whole suite exit 0 in the built tree. A defect
 case's probe exits non-zero. A clean case's probe, if it has one, exits 0. Each criterion appears, with whitespace
-collapsed, in `spec_file` as it stands in the built tree. A `tree_sha` is refused when a merge
+collapsed, in `spec_file` as it stands in the built tree, and the writer commit leaves `spec_file`
+unchanged, so the editor never sees a unit edit its own criteria. A `tree_sha` is refused when a merge
 commit or another unit's `writer:` commit lies between it and the writer commit. A case that fails
 any check stops the build and is named.
 

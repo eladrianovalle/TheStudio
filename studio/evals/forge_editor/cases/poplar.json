@@ -23,5 +23,5 @@
   "kind": "defect",
   "breaks_criterion": null,
   "defect": "Updating an older install can register the Stop hook even when its script is unavailable.",
-  "patch": "poplar.patch"
+  "base_patch": "finish_check_criteria.patch"
 }

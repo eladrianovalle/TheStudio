@@ -17,6 +17,6 @@
   "probe": {
     "from_sha": "ed64f200c4339f8f4257d81d2eda2cdd7dd09406",
     "paths": [],
-    "command": "PYTHONPATH=studio:studio/tests python - <<'PY'\nfrom test_spec_verification import SPEC_COMMAND, _approval_step\n\nstep = _approval_step(SPEC_COMMAND.read_text(encoding=\"utf-8\"))\nassert \"set `verification_due` to 30 days\" in step, step\nPY"
+    "command": "python - <<'PY'\nfrom pathlib import Path\n\ntext = Path(\".claude/commands/spec.md\").read_text(encoding=\"utf-8\")\nmarker = \"**If the spec carries a `## Verification` section**\"\nassert marker in text, \"the approval step that creates the evidence file is gone\"\nstep = text.split(marker, 1)[1].split(\"```markdown\", 1)[0]\nassert \"set `verification_due` to 30 days\" in step, step\nPY"
   }
 }
