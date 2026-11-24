@@ -12,8 +12,8 @@
 # The suite runs from the package directory: tests/ import the modules beside them.
 test_command = "cd studio && python -m pytest tests/ -q"
 
-# {paths} is replaced with the files the unit touched. Configured in studio/pyproject.toml.
-static_checks = ["ruff check {paths}"]
+# Let Ruff discover Python files in this mixed Python and JavaScript package, as in CI.
+static_checks = ["ruff check studio"]
 
 # mutmut reads its scope and runner from studio/setup.cfg, so it has to run from there.
 require_mutation_check = true

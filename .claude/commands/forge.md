@@ -16,6 +16,14 @@ opt-in to run the `implementation-loop` workflow (which spawns multiple agents).
 asks in natural language to "implement X with the loop" / "run the writer-editor loop on X",
 treat that as an invocation of this command.
 
+## Portable runtime selection
+
+If the invocation supplies any of `--runtime`, `--writer-runtime`, `--editor-runtime`,
+`--writer-model` or `--editor-model`, run `python .studio/source/run_phase.py forge`
+with the supplied arguments (use `python studio/run_phase.py forge` in Studio's source checkout).
+Pass each argument literally, including `--plan`. Report the command's result and stop there.
+For calls without those selectors, continue with the native Claude Workflow below.
+
 ## Arguments
 
 - `$ARGUMENTS`: Required. Free-text description of the ONE unit to build. Should describe a
@@ -254,6 +262,10 @@ loop also flags this combination if it is reached another way, but a contradicti
 agent runs should cost nothing to discover — the same reason a mistyped `--spec` stops in Step 1
 instead of quietly downgrading to an ungraded run.
 
+Before dispatch, copy the Studio checker's `code_comments.py` from beside `impl_loop.py`
+to a temporary directory outside the worktree. Keep its absolute path and the preflight
+`base_sha` for Step 6. This pins the verifier for units that edit Studio itself.
+
 Then call the **Workflow** tool **by `scriptPath`** (NOT `name`; see Gotchas), pointing at the
 workflow copy that belongs to the tree being built, and merging the config knobs into the unit args:
 
@@ -318,9 +330,27 @@ one-agent run reports a review that never happened.
 - If `editor_enabled` is false (config `mandate = "off"`), the loop skips the editor pass and
   delivers the writer's version (`editorRan: false`).
 
-### Step 6: Report the result
+### Step 6: Verify the native commits and report the result
 
-The workflow returns `{ delivered, flagged, editorRan, finalVersion, reviewerConcerns, criteriaVerdicts, writer, editor }`.
+The native Workflow returns a candidate with `delivered: false`. If it carries
+`pendingCommentCheck: true`, pass the unmodified JSON on stdin to the Studio checker.
+Use the worktree and branch selected in Step 3 and the full `base_sha` printed by
+the Step 5 preflight. Use the checker copy saved before dispatch.
+
+```bash
+python3 "<saved-checker>/code_comments.py" --repo "<worktree>" --base "<preflight base_sha>" --finalize-branch "<branch>" < "<candidate.json>"
+```
+
+Save the candidate outside the worktree. Only the checker's successful JSON result
+can mark the run delivered. On a nonzero exit, report the diagnostic and stop.
+If the workflow failed before producing a candidate, report that failure directly.
+The checker inspects each commit from the preflight SHA through the branch tip,
+including writer-only runs. The portable host runs the same check on each proposed
+Git tree before committing. Agent code and tests must contain zero new comments.
+Python, TOML, and Git ignore files use Studio’s Python runtime. Other supported source languages require
+ast-grep (`npm install -g @ast-grep/cli@0.51.3`). Unknown source types block delivery.
+
+The verified result includes `{ delivered, flagged, editorRan, finalVersion, reviewerConcerns, criteriaVerdicts, writer, editor }`.
 Summarize for the user:
 
 - **Writer escalated?** (`writer.stuck`): if present, lead with this — the writer stopped on purpose
