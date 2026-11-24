@@ -12,7 +12,7 @@
     "`cd studio && python -m pytest tests/test_spec_verification.py -q` is green against the real `specs/` directory with no spec file modified, and `ruff check .` from the repo root is clean.",
     "`spec.md`'s template shows the heading form and says `unit_id` is unique repo-wide; `forge.md` points at that shape instead of restating a format in its own words; no doc still says \"unique within this spec\"."
   ],
-  "test_command": "python -m pytest -q studio/tests/test_spec_verification.py -k 'not test_every_spec_satisfies_the_convention'",
+  "test_command": "python -m pytest -q studio/tests/test_spec_verification.py",
   "probe": {
     "from_sha": "6b67e2f2c2497e496a7c1e485f977ee1c1715c41",
     "paths": [

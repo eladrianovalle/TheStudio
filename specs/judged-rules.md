@@ -196,11 +196,23 @@ name of the directory the editor will work in, and the only name the editor ever
 | `defect` | `defect` | One sentence saying what is wrong, for the person ruling. It never reaches the editor. |
 | `probe` | `defect`, and the clean twin of a `review_fix` pair; optional for other `clean` | `from_sha`, `paths`, `command`: files taken from another commit and a command that exits 0 only when the defect is absent |
 
-**Why the test command is narrowed.** A real editor is told to run the repository's whole suite.
-In a historic tree that suite fails today: one test checks evidence deadlines against the calendar,
-and the old specs' deadlines have passed. So each case names the unit's own test files. No tree is
-doctored and the proof cannot rot as dates pass. The cost is a prompt that differs from a real one
-in that line.
+**Why a tree's due dates are moved.** A real editor runs the repository's whole suite, whatever
+the handoff's test command names. In a historic tree that suite fails today, because one test
+checks each spec's `verification_due` against the calendar and the old deadlines have passed. A
+baseline run showed it: most editors found the suite red, and the clean cases' false alarms
+were that failure. So the build moves every `verification_due` in the front matter of each spec
+under `specs/` forward by the days between the writer commit and the build, which makes the tree
+read as if the writer committed it today: a date written "30 days from approval" is 30 days from
+now. The move is made in the writer commit and in its parent alike, so the diff the editor reviews
+changes only where the writer itself wrote a date. Each rewritten commit keeps its message,
+author, committer and dates. The parent's own diff shows the moved dates to an editor that reads
+that far back.
+
+**Why the whole suite is proved.** An editor that finds a red test the writer did not cause is
+measured on that test rather than on the unit. So the build runs the suite CI runs (`ruff`, the
+pytest suite and the workflow tests) in every tree, in place, and refuses the case when it fails.
+That makes any later rot, a new date-bound test or a path a test treats differently, stop the
+build before an editor is paid for, instead of surfacing in their verdicts.
 
 **How a tree is built.** `python studio/editor_measure.py build [--root <dir>]`, for each case:
 
@@ -210,9 +222,11 @@ in that line.
 2. If `tree_sha` is set, replace the index and working tree with that commit's tree. If `patch` is
    set, apply it. Delete `reviewer-concerns/<unit_id>.md` if present. If anything changed, amend the
    commit, keeping the real writer commit's message, author, committer and both dates.
-3. Delete `.git/FETCH_HEAD` and `.git/logs`, then `git gc --prune=now`.
-4. Prove the case, then `git reset --hard` and `git clean -fdx` so the proof leaves nothing.
-5. Write `<tree>/.studio/output/impl_loop/<unit_id>/impl--<unit_id>--writer.json`, with
+3. Move every spec's `verification_due` forward by the days since the writer commit, rewriting
+   the writer commit and its parent with their own message, author, committer and dates.
+4. Delete `.git/FETCH_HEAD` and `.git/logs`, then `git gc --prune=now`.
+5. Prove the case, then `git reset --hard` and `git clean -fdx` so the proof leaves nothing.
+6. Write `<tree>/.studio/output/impl_loop/<unit_id>/impl--<unit_id>--writer.json`, with
    `writer_sha`, `base_sha` and `files_touched` read from the built tree, and an empty
    `load_bearing` list. The historic writer's items are not in public history. A real editor may not
    edit a load-bearing item and must revert or escalate instead, so a case editor can repair a
@@ -243,8 +257,8 @@ fix that touches a test.
 4. It names the criterion it breaks.
 5. The patch's added lines hold none of the telltale words.
 
-**Proof, for every case.** The test command exits 0 in the built tree. A defect case's probe exits
-non-zero. A clean case's probe, if it has one, exits 0. Each criterion appears, with whitespace
+**Proof, for every case.** The test command and the whole suite exit 0 in the built tree. A defect
+case's probe exits non-zero. A clean case's probe, if it has one, exits 0. Each criterion appears, with whitespace
 collapsed, in `spec_file` as it stands in the built tree. A `tree_sha` is refused when a merge
 commit or another unit's `writer:` commit lies between it and the writer commit. A case that fails
 any check stops the build and is named.
@@ -256,7 +270,7 @@ quietly. Real pairs first, plants to fill, `as_built` clean cases to fill the cl
 
 | Tell | Handling |
 |---|---|
-| Location | `--root` defaults to `~/.studio/checkouts`. The build refuses a root or tree name holding any of: eval, case, plant, defect, clean, test, fixture, judge, measure, probe. The branch is the unit's real one and is not checked. The path must pass `explain_unquotable_path`. |
+| Location | `--root` defaults to `~/checkouts`. A root under `~/.studio` made one test that skips paths holding `.studio` find no modules, and the whole-suite proof now refuses any root a test treats differently. The build refuses a root or tree name holding any of: eval, case, plant, defect, clean, test, fixture, judge, measure, probe. The branch is the unit's real one and is not checked. The path must pass `explain_unquotable_path`. |
 | History | Nothing later than the writer commit exists in the tree. An amended commit carries the real commit's message, author and dates. |
 | A previous review | The build deletes the unit's `reviewer-concerns` file from every tree. |
 | Handoff files | The build writes the writer handoff a real editor would find. |
@@ -264,7 +278,8 @@ quietly. Real pairs first, plants to fill, `as_built` clean cases to fill the cl
 | The session's context | Every agent is shown the session's skill listing, branch and recent commits. `measure-editor.md` carries `disable-model-invocation: true` so the command stays out of that listing. The branch name and commit subjects are not hidden; the evidence file records what the baseline editors were shown. |
 | The code index | A session index answers from today's code, fix included, through an MCP tool or a shell command. `/measure-editor` is run from a session started in a fresh worktree of the branch being measured, where there is no index. A case whose editor called a tool beginning `mcp__` is void. |
 | The answer key | Case files and patches live in the checkout each editor's shell starts in. The prompt sends it to the tree. Nothing stops it reading elsewhere; the Verification section checks that none did. |
-| The clock, and `.git` as a directory | Not hidden. |
+| The clock | Spec due dates are moved so the tree reads as if written today. Commit dates are not moved. |
+| `.git` as a directory | Not hidden. |
 
 ### The measuring loop
 
@@ -527,14 +542,15 @@ come from that.
 - **`record` depends on files Claude Code writes for its own purposes.** Their layout is not a
   published contract. A change stops recording, loudly, and nothing else.
 - **A case tree is not exactly what a real editor sees:** a narrowed test command, a standalone
-  repository, a clock months ahead of its newest commit, a session that lists other commands, and a
-  writer handoff with no load-bearing items, which can turn a flag into a repair.
+  repository, a clock months ahead of its newest commit, spec due dates moved to match that clock, a
+  session that lists other commands, and a writer handoff with no load-bearing items, which can turn
+  a flag into a repair.
 - **Two Appendix A labels are inconsistent with their neighbours** and are the approver's call:
   `/smoke` "launch in the background" is `person` while its sibling steps are `by design`, and
   `/handoff` "re-verify on resume" is `person` while "verify before writing" is `proxy`.
-- **Not checked:** that many unit test commands can run at once without colliding; that
-  `disable-model-invocation` keeps the command out of an agent's skill listing on the installed
-  Claude Code; that historic units' tests are green on today's Python, beyond one unit.
+- **Not checked:** that many unit test commands can run at once without colliding (the build runs
+  six trees' suites at a time, which only partly checks it); that `disable-model-invocation` keeps
+  the command out of an agent's skill listing on the installed Claude Code.
 
 ## Verification
 
