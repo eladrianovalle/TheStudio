@@ -165,7 +165,8 @@ It no longer contains `status: shipped`, `shipped_impact`, or "an edit to the sp
 
 ### The command: `.claude/commands/sprint-review.md`
 
-Steps, in order. Each stop happens before the meeting, never after the human has answered.
+Steps, in order. Each stop happens before the meeting, never after the human has answered, except
+the batch's own two: no answer to commit, and every answer dropped by the version check.
 
 0. **Studio path.** `.studio/source/run_phase.py`, else `studio/run_phase.py` (the rule `/spec` uses).
 1. **Preflight.**
@@ -217,7 +218,9 @@ Steps, in order. Each stop happens before the meeting, never after the human has
       during the meeting, so your answer was about an older version; left out. Run /sprint-review
       again to review it as it is now." A row that survives is edited from exactly the files the human
       answered about, so it is still finished, still `status: approved`, and its criterion is the one
-      they saw.
+      they saw. If no row survives, `git worktree remove` the worktree, `git branch -D` its branch,
+      and stop: "Every answered spec changed on `<default>` during the meeting — nothing to commit, no
+      pull request. Run /sprint-review again to review them as they are now."
    4. Apply the writes (next section), then `git add -- <each path written>`. Explicit paths only;
       `git add` already refuses an ignored path.
    5. One commit, push, `gh pr create --base <default>` **without `--draft`**: the batch is finished
@@ -398,7 +401,7 @@ What gets built: `.claude/commands/sprint-review.md` with the steps above, regis
 
 **Acceptance criteria:**
 - [ ] `.claude/commands/sprint-review.md` exists, `sprint-review.md` is in `install.SLASH_COMMANDS`, and `test_install.py`'s unregistered-command check still lists only `measure-editor.md`.
-- [ ] The command file holds steps 0–5 in order, with each stop message in this spec word for word: `gh` signed out, open `sprint-review/*` PR, fetch failure, `obligations` null, `default_branch` null, nothing finished, no yes and no hold.
+- [ ] The command file holds steps 0–5 in order, with each stop message in this spec word for word: `gh` signed out, open `sprint-review/*` PR, fetch failure, `obligations` null, `default_branch` null, nothing finished, no yes and no hold, every answered row dropped by the version check.
 - [ ] The command file says only a row whose `units_off_default_branch` is exactly `[]` and whose spec and results file match `origin/<default>` takes an answer, and offers exactly yes, edit and hold.
 - [ ] The batch step compares each answered row's spec and results file in the worktree with the ids kept at the meeting and drops a changed row with this spec's "changed on `<default>` during the meeting" message word for word, before any write.
 - [ ] The batch step uses `git worktree add -b sprint-review/<YYYY-MM-DD-HHMM> … origin/<default>`, `git add --` with explicit paths, one commit, and `gh pr create` without `--draft`; the PR lookup uses `-F --grep` and no `\b`.
