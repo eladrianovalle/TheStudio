@@ -51,7 +51,7 @@ flowchart TD
         PY["packs.py<br/>validate config, run the asset command,<br/>judge the report"]
         CP["run_phase.py check-packs"]
         KN["impl_loop.load_knobs()<br/>appends check-packs to static_checks"]
-        SN["session-start brief<br/>(reads the saved report, runs nothing)"]
+        SN["session-start brief<br/>(reads the saved problems, runs nothing)"]
     end
     subgraph Repo["The repository"]
         TOML["[packs.game.art] in<br/>.studio/implementation_loop.toml<br/>asset_command, routes"]
@@ -64,7 +64,7 @@ flowchart TD
     PJ --> PY
     PY -->|"runs"| AC
     AC -->|"stdout JSON"| PY
-    PY -->|"saves a copy"| SAVED[("git-dir/studio/pack-reports/game-art.json")]
+    PY -->|"saves the report and its problems"| SAVED[("git-dir/studio/pack-reports/game-art.json")]
     SAVED --> SN
     PY -->|"exit 0 / 1 / 2"| FG
     SN -->|"names the doc, first problem"| Agent["agent at session start"]
@@ -75,8 +75,8 @@ A repository declares the pack with a table in the gate config it already has. W
 its settings, Studio sees the table and adds one command, `check-packs`, to the static checks. That
 command runs the repository's own asset command, reads the JSON the command prints, and judges it
 against the pack's contract. A non-zero exit fails the unit, the same as a failing linter. Every run
-saves a copy of the report inside the git directory, so the next session's brief can say what the
-last report found without running anything.
+saves the report and every problem the check found inside the git directory, so the next session's
+brief can say what the last check found without running anything.
 
 ## How It Works (Technical)
 
@@ -161,13 +161,26 @@ The asset command prints the report as JSON on stdout. Everything else it prints
 Runs from the git toplevel of the current directory.
 
 1. Load and validate `[packs]`. If none is declared, exit 0.
-2. For each declared department: record `git status --porcelain`, run `asset_command` through the
-   shell from the repository root with no timeout (the same as the gate's test command), capture
-   stdout, and record `git status --porcelain` again.
-3. Save the captured stdout to `<git-dir>/studio/pack-reports/<pack>-<dept>.json`. The git directory
-   is per-worktree and never shows up as an untracked file, which `code_comments.finalize` would
+2. For each declared department: take a tree snapshot, run `asset_command` through the shell from
+   the repository root with no timeout (the same as the gate's test command), capture stdout, and
+   take a tree snapshot again.
+3. Judge it, and print each problem prefixed `<pack>.<dept>:`, then `See <doc path>`.
+4. Save `{"problems": [...], "stdout": "<captured stdout>"}` to
+   `<git-dir>/studio/pack-reports/<pack>-<dept>.json`. `problems` is every message step 3 printed for
+   this department, the runner's own (exit code, changed tree, tracked binaries) as well as the
+   report's, so the session brief can repeat them without re-judging. The git directory is
+   per-worktree and never shows up as an untracked file, which `code_comments.finalize` would
    otherwise refuse.
-4. Judge it, and print each problem prefixed `<pack>.<dept>:`, then `See <doc path>`.
+
+**The tree snapshot** must see content, not just status. The writer's change is uncommitted when the
+check runs, so a file can already read ` M` or `??` before the command runs and read the same after
+it rewrites the file; comparing two `git status --porcelain` listings would pass that. The snapshot
+is therefore the entries of `git status --porcelain=v1 -z --untracked-files=all`, each with a hash of
+every path it names: the file's bytes, or "missing". `--untracked-files=all` lists each untracked
+file instead of collapsing a new directory to one line. The tree changed if an entry appears,
+disappears or changes status, or if a path's hash differs; the message names the first such path. A
+clean tracked file the command edits shows up as a new entry, so only dirty paths are ever hashed.
+Ignored paths are never listed, so writing under them passes.
 
 Exit **0** when clean (`game.art: 12 assets within budget`, or `game.art: 0 assets`), **1** on any
 problem, **2** when it could not check at all: a bad `[packs]` table, or not a git tree.
@@ -223,14 +236,16 @@ spec is approved, not built here.
 ### At session start
 
 `packs.session_note(target) -> str` runs as its own `try` block in `_do_check_updates`, after the
-unfinished-work block. It reads `[packs]` and the saved reports, finds the git directory with
+unfinished-work block. It reads `[packs]` and the saved results, finds the git directory with
 `git rev-parse --absolute-git-dir` (5-second timeout), and runs nothing else.
 
 - No `[packs]`: it says nothing.
 - A pack declared: `This repository uses Studio's game pack. Read <doc path> before building or
   changing an asset.` This is the only pointer that reaches an agent before it builds, and the
   measurements-first rule only works if it is read first.
-- A failing saved report or a malformed `[packs]` table adds `N pack problem(s); first: <msg>.`
+- A saved result whose `problems` is not empty, or a malformed `[packs]` table, adds
+  `N pack problem(s); first: <msg>.` The count is the saved `problems` list, so a command that
+  exited non-zero, changed the tree or left a tracked binary is reported too, not only a bad report.
 - Any exception is swallowed. The session always continues, and the update notice and the
   unfinished-work sentence are never lost.
 
@@ -342,7 +357,9 @@ What gets built: `studio/packs/game/pack.json`, `studio/packs/game/ASSET_PIPELIN
 **Acceptance criteria:**
 - [ ] `pack.json` declares `mesh` and `animation` only, and the suite checks, for every shipped pack, that its doc exists, every kind has at least one metric, and `allowed_by_route` is one of its routes.
 - [ ] `report_problems` returns exactly the message in the failure table for each row, and `[]` for a clean report and for `{"assets": []}`.
-- [ ] `check-packs` reads the report from the asset command's stdout, saves it under `<git-dir>/studio/pack-reports/`, exits 0, 1 or 2 as specified, fails output that isn't JSON with its first 80 characters quoted, and fails a command that changes the working tree, naming the path.
+- [ ] `check-packs` reads the report from the asset command's stdout, saves it with every problem it printed under `<git-dir>/studio/pack-reports/`, exits 0, 1 or 2 as specified, fails output that isn't JSON with its first 80 characters quoted, and fails a command that changes the working tree, naming the path.
+- [ ] With the writer's change already in the tree, a command that appends to an already-modified tracked file fails naming that file, a command that rewrites an existing untracked, unignored file fails naming that file, and a command that writes only under an ignored path passes.
+- [ ] A command that prints a clean report but exits non-zero saves a result whose `problems` holds the exit-code message.
 - [ ] With the hand-authored route not allowed, an untracked, unignored `.PNG` fails, an ignored one passes, and a tracked `.png` deleted in the worktree passes.
 - [ ] `install` ships `packs.py` and both pack files into a temporary target, and the new `ENFORCED` row passes `test_enforced_rules.py`.
 
@@ -369,9 +386,9 @@ of the existing update-check tests.
 
 **Acceptance criteria:**
 - [ ] With no `[packs]`, `check-updates` prints nothing new.
-- [ ] With a pack declared, the brief names the doc by a path that opens from the project root, and adds nothing else when the saved report is clean or missing.
-- [ ] A failing saved report, or a malformed `[packs]` table, adds the problem count and the first problem.
-- [ ] A malformed `[packs]` table or report never removes the update notice or the unfinished-work sentence, and `check-updates` exits 0.
+- [ ] With a pack declared, the brief names the doc by a path that opens from the project root, and adds nothing else when the saved result has no problems or is missing.
+- [ ] A saved result with problems, including one from a command that exited non-zero, or a malformed `[packs]` table, adds the problem count and the first problem.
+- [ ] A malformed `[packs]` table or saved result never removes the update notice or the unfinished-work sentence, and `check-updates` exits 0.
 - [ ] `session_note` runs no command other than `git rev-parse`.
 
 **Out of scope:** running the asset command; stale detection; a "no report yet" sentence.
