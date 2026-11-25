@@ -88,8 +88,7 @@ into tracked files, and runs a privacy check before anything is pushed.
 
 | Component | Change | Responsibility |
 |---|---|---|
-| `.claude/commands/correct.md` | new | The command. Added to `SLASH_COMMANDS` in `studio/install.py`. |
-| `THIRD_PARTY_NOTICES.md` | new | pstack's full MIT notice. |
+| `.claude/commands/correct.md` | new | The command, ending with pstack's full MIT notice. Added to `SLASH_COMMANDS` in `studio/install.py`. |
 | `CLAUDE.md`, `studio/docs/CODING_PRINCIPLES.md` | edit | The two-clause repeat sentence in principle §4, identical in both (the mirror test holds them equal, and the second file is injected into every installed repository's `CLAUDE.md`). |
 | `CLAUDE.md` | edit | One line outside the principles section naming Studio's rule table and its judgment-call appendices. |
 | `studio/code_comments.py` | edit | `check_trees` ends its findings with one `Fix:` and `See CLAUDE.md` pair. |
@@ -181,7 +180,15 @@ else `studio/<file>`.
 > ```
 >
 > Adapted from the `correct` skill in pstack, Copyright (c) 2026 Lauren Tan, MIT License. Full
-> notice: `THIRD_PARTY_NOTICES.md`.
+> notice: the license section below.
+
+After the reply block the command ends with a `## pstack license` section holding pstack's full MIT
+notice, copied verbatim from pstack's license file: the line "Copyright (c) 2026 Lauren Tan", the
+permission notice and the warranty disclaimer. The notice lives inside the command rather than in a
+separate file because the command is the copy that ships. `install` and `update` copy every file
+in `SLASH_COMMANDS` verbatim, so the notice reaches every installed repository with the command and
+needs no installer change. A root `THIRD_PARTY_NOTICES.md` would not: the installer copies only the
+files it lists, so installed repositories would get a credit line pointing at a file they don't have.
 
 The quoted sentences are hers, from pstack's `harness/pstack/claude-code/skills/correct/SKILL.md` in
 the `cursor/plugins` repository.
@@ -394,6 +401,9 @@ in the PR body, which the check itself covers.
 - **`See` is the row's `stated_in`**, not a new principle ID or a `fix` field on rows. A `fix` field
   checked against the enforcer's file was rejected as unsound: one string passes every row in a
   shared file. The check reads each row's own proof.
+- **The notice ships inside the command.** A separate notices file would need its own install and
+  update handling, and the copy in an installed repository would depend on it. Embedded, the notice
+  can't be separated from the text it covers.
 - **A shipped refusal names a shipped file** (R4). Three of the ten refusals would otherwise print a
   path that does not exist in the repositories that meet them most.
 - **Ten refusals now, nineteen under a down-only count.** Her rule ("If the pattern is already
@@ -487,10 +497,11 @@ file, and `test_enforced_rules.py`, with the proofs that assert the new lines.
 
 ### 2. `correct_command` — the operator runs `/correct` after correcting an agent, in Studio or any installed repo, and a repeat leaves with its check, its proof and its table move
 
-Adds the command, the notice, the §4 sentence, the expiry test and the docs.
+Adds the command with its embedded notice, the §4 sentence, the expiry test and the docs.
 
 **Acceptance criteria:**
-- [ ] `.claude/commands/correct.md` has `disable-model-invocation: true`, a description starting "Use when", the sweep and steps 1–7, the reply block and the pstack credit line, and `THIRD_PARTY_NOTICES.md` holds pstack's full MIT notice with "Copyright (c) 2026 Lauren Tan".
+- [ ] `.claude/commands/correct.md` has `disable-model-invocation: true`, a description starting "Use when", the sweep and steps 1–7, the reply block, the pstack credit line, and a closing `## pstack license` section holding pstack's full MIT notice with "Copyright (c) 2026 Lauren Tan" and the MIT permission and warranty text.
+- [ ] After `install` into a temporary repository, the installed `.claude/commands/correct.md` holds the full notice; after `update` from a Studio source whose `correct.md` changed, it still does. No `THIRD_PARTY_NOTICES.md` is referenced by the command.
 - [ ] The command contains "Group the mistakes into classes. A class counts once it has happened twice.", "Hide internals so the wrong import fails. Replace hand-synced lists with one source of truth." and "Fix or delete any test that still passes when the behavior it checks breaks, or that fails when only the internals change."; it does not contain "has no past instance", `studio/tests/`, `cd studio` or `specs/judged-rules.md`.
 - [ ] `correct.md` is in `SLASH_COMMANDS`, and the registration test's list of unregistered command files does not include it.
 - [ ] `CLAUDE.md` and `CODING_PRINCIPLES.md` carry the two-clause §4 sentence word for word, the mirror test passes, and `CLAUDE.md` outside the principles section has one line naming `studio/tests/test_enforced_rules.py` as `/correct`'s rule table.
