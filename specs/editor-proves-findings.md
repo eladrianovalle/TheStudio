@@ -44,7 +44,7 @@ limits a new run must stay within. It passes only if it catches a historical def
 baseline runs missed, in both of its own runs.
 
 The fleet's PR reviewers and responders are not covered here. They get their own spec in the
-Multica repo (decision 1).
+review fleet's own repository (decision 1).
 
 ## Architecture at a Glance
 
@@ -208,7 +208,7 @@ decision 2 asks for.
 ## Key Decisions
 
 - **Two specs** (owner, decision 1). This one covers the `/forge` editor and is measured on Studio's
-  benchmark. The fleet reviewers and responders get their own in the Multica repo.
+  benchmark. The fleet reviewers and responders get their own in the review fleet's own repository.
 - **Break it and prove it ship together, as one variable.** A proof bar alone only filters a list;
   break-it is what fills it. The proof still earns its place, because it is what makes a ruling
   checkable. In the source they are one paragraph.
@@ -373,4 +373,4 @@ with replay tests in `studio/tests/test_editor_recording.py` that drive `record`
 
 **Out of scope for both units:** the two judged runs and the evidence file, which are the owner's
 work; rerunning proofs in live `/forge`; fleet reviewers and responders, which get their own spec in
-the Multica repo (decision 1).
+the review fleet's own repository (decision 1).
