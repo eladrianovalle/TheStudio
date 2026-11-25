@@ -187,12 +187,18 @@ Steps, in order. Each stop happens before the meeting, never after the human has
    | Still open | Units not on the default branch, plus every `- **Dropped:** <date> — <reason>` line in the Build Plan. Empty → "nothing". |
    | Draft `shipped_impact` | `none`, `minor` or `major`, drafted from the spec's purpose and the merged commit subjects. |
    | Draft `shipped_changed` | One plain line on what changed for someone using it, written from what the feature does, not from the fact that it landed. |
+   | Same as `<default>` | For the spec file and its results file (`obligations.evidence_file_for(spec_file)`): `git hash-object -- <path>` here against `git rev-parse --verify --quiet origin/<default>:<path>`, a file present on only one side counting as different. Both the same → yes, and the two `origin/<default>` ids (or "absent") are kept for step 5. Otherwise → "differs from `<default>`". |
+
+   The feed's eligibility, the Verification column and the drafts are all read from this checkout's
+   copies, which can carry uncommitted or unmerged edits. The batch edits the default branch's copies.
+   The last column is what lets an answer about one stand for the other.
 
 4. **The meeting.** All rows at once, numbered. **Only a row whose `units_off_default_branch` is
-   exactly `[]` takes an answer**; any other row is shown with "not on `<default>` yet, or can't tell —
-   it will come back next time". A row with an absolute `spec_file` (a spec reached through a symlink
-   outside the repo) takes no answer either. A row the human does not answer is left alone; there is
-   no "skip".
+   exactly `[]` and whose spec and results file are the same as `<default>` takes an answer**; any
+   other row is shown with its reason ("not on `<default>` yet", "differs from `<default>`", or "can't
+   tell") and "it will come back next time". A row with an absolute `spec_file` (a spec reached through
+   a symlink outside the repo) takes no answer either. A row the human does not answer is left alone;
+   there is no "skip".
    - **yes** — use the drafts.
    - **edit** — yes, with the human's `shipped_impact` and/or `shipped_changed`, verbatim. Re-ask if
      `shipped_impact` is not exactly `none`, `minor` or `major`, or `shipped_changed` is empty or more
@@ -205,8 +211,13 @@ Steps, in order. Each stop happens before the meeting, never after the human has
    2. `git worktree add -b sprint-review/<YYYY-MM-DD-HHMM> <mktemp -d>/sprint-review origin/<default>`.
       Every edit happens in that worktree, so the session's own checkout, uncommitted work and current
       branch are never touched.
-   3. Re-read each answered spec in the worktree. If it is missing or not `status: approved` there,
-      drop it and tell the human: "`<slug>` is missing or not `status: approved` on `<default>`; left out."
+   3. In the worktree, compare each answered row's spec and results file (`git rev-parse --verify
+      --quiet HEAD:<path>`) with the ids kept in step 3. If either changed, appeared or disappeared on
+      `<default>` during the meeting, drop the row and tell the human: "`<slug>` changed on `<default>`
+      during the meeting, so your answer was about an older version; left out. Run /sprint-review
+      again to review it as it is now." A row that survives is edited from exactly the files the human
+      answered about, so it is still finished, still `status: approved`, and its criterion is the one
+      they saw.
    4. Apply the writes (next section), then `git add -- <each path written>`. Explicit paths only;
       `git add` already refuses an ignored path.
    5. One commit, push, `gh pr create --base <default>` **without `--draft`**: the batch is finished
@@ -263,6 +274,12 @@ distinction the command would report "nothing finished" when the truth is "could
 would leave the spec at the top of every session brief, hiding the next unbuilt unit behind it, and
 bring it back at every review with nothing learned. Writing the criterion reuses machinery already
 built and adds no state.
+
+**An answer is applied only to the files it was given about.** The meeting reads the session's
+checkout; the batch edits `origin/<default>`, which can differ from it and can move during the meeting.
+A row takes an answer only when its spec and results file match the default branch, and the batch
+drops any row whose files changed since. Re-asking a changed row inside the batch was the other choice;
+dropping it is simpler, and the next run asks about the new version anyway.
 
 **One field, not two, for merge status.** `units_off_default_branch` is the yes/no answer and the
 names of the unmerged units at once; a boolean plus a list could disagree.
@@ -382,7 +399,8 @@ What gets built: `.claude/commands/sprint-review.md` with the steps above, regis
 **Acceptance criteria:**
 - [ ] `.claude/commands/sprint-review.md` exists, `sprint-review.md` is in `install.SLASH_COMMANDS`, and `test_install.py`'s unregistered-command check still lists only `measure-editor.md`.
 - [ ] The command file holds steps 0–5 in order, with each stop message in this spec word for word: `gh` signed out, open `sprint-review/*` PR, fetch failure, `obligations` null, `default_branch` null, nothing finished, no yes and no hold.
-- [ ] The command file says only a row whose `units_off_default_branch` is exactly `[]` takes an answer, and offers exactly yes, edit and hold.
+- [ ] The command file says only a row whose `units_off_default_branch` is exactly `[]` and whose spec and results file match `origin/<default>` takes an answer, and offers exactly yes, edit and hold.
+- [ ] The batch step compares each answered row's spec and results file in the worktree with the ids kept at the meeting and drops a changed row with this spec's "changed on `<default>` during the meeting" message word for word, before any write.
 - [ ] The batch step uses `git worktree add -b sprint-review/<YYYY-MM-DD-HHMM> … origin/<default>`, `git add --` with explicit paths, one commit, and `gh pr create` without `--draft`; the PR lookup uses `-F --grep` and no `\b`.
 - [ ] The hold step replaces an existing `## Verification` section rather than adding a second, sets `verification_due` 30 days out, and points at the skeleton in `.claude/commands/spec.md` instead of carrying a copy (the skeleton's `Verification Results` title line does not appear in `sprint-review.md`).
 
