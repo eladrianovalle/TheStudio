@@ -171,8 +171,9 @@ never product code) are kept word for word.
 5. **Triage** (pstack): doc drift and harness gaps are fixed; product gaps are reported and kept out
    of the PR.
 6. **Ship or stop.**
-   - **changed:** **[S]** every path in `git diff --name-only origin/main` must sit inside the
-     skill's directory, or the outcome is `blocked: <path> is outside edit scope`. **[S]** If an
+   - **changed:** **[S]** stage everything with `git add -A`, then every path in `git diff
+     --cached --name-only origin/main` must sit inside the skill's directory, untracked files
+     included, or the outcome is `blocked: <path> is outside edit scope`. **[S]** If an
      open PR's head branch starts with `verify/maintain-` (`gh pr list --state open --json
      number,headRefName`), the outcome is `blocked: earlier maintenance PR #N is still open`. The
      full coverage and the product-gap report are still in the reply; only the second PR is
@@ -199,13 +200,16 @@ says at least once a day):
   - `WorkingDirectory` to the repo root;
   - `EnvironmentVariables` → `PATH` including `/opt/homebrew/bin`, because launchd starts jobs with
     `/usr/bin:/bin:/usr/sbin:/sbin` and `claude`, `node` and `gh` live in Homebrew's prefix;
-  - `ProgramArguments` for `claude -p "/maintain-verification-skill" --setting-sources project,local
-    --permission-mode auto`;
+  - `ProgramArguments` for `claude -p "/maintain-verification-skill" --setting-sources project
+    --settings <absolute path to the scheduler's settings file> --permission-mode auto`;
   - `StandardOutPath` and `StandardErrorPath` to a log outside the checkout.
 
   The scheduler's allow rules (its Launch and Drive commands, `git push`, `gh pr list`, `gh pr
-  create`) go in the repo root's untracked `.claude/settings.local.json`, which
-  `--setting-sources project,local` loads, so no other session in the repo gets push and PR rights.
+  create`) go in a dedicated settings file outside the checkout, beside the log, which only the
+  plist passes with `--settings`. Not in `.claude/settings.local.json`: every session in the repo
+  loads that file, and `--setting-sources` only picks which sources load, so it would grant push and
+  PR rights to all of them. `--setting-sources project` keeps the owner's local and user rules out
+  of the scheduled run; `--settings` applies whatever the sources are.
   **Run-time note:** launchd runs a missed job when the machine wakes, coalescing missed runs into
   one. On a Mac that sleeps overnight, the pass (a worktree, a dependency install, a dev server,
   headless Chromium on the GPU) would start as the owner sits down to work. Schedule it for a time
@@ -292,7 +296,7 @@ Studio issue #280 for the first adopter.
   | Maintain runs in a worktree off `origin/main` | Silent on where it runs | The adopter's checkout is on a demo branch with uncommitted files |
   | The hand-off points at a schedule | "Suggest a cadence only if they ask" | Owner's decision 1; her guide says run it at least daily |
   | Refuse when a `verify-*` skill exists; headless with several candidates ends `blocked` | Silent; "ask" | Additions. A second run would overwrite a maintained map; a headless run can't ask |
-  | `git diff --name-only` scope gate; `OUTCOME:` line | Edit scope as a rule; outcome stated | Enforce her rules in a form a scheduled log can check |
+  | `git diff --cached --name-only` scope gate; `OUTCOME:` line | Edit scope as a rule; outcome stated | Enforce her rules in a form a scheduled log can check |
   | No commit from the generator; the maintenance PR opens ready for review into `main` | Silent | Studio's git rules |
 
 - **The open-PR check sits in step 6, not step 0.** The advocate's first draft blocked at step 0,
@@ -438,7 +442,7 @@ Depends on unit 1's test file and doc rows.
 - [ ] `.claude/commands/maintain-verification-skill.md` exists, is listed in `SLASH_COMMANDS`, has `disable-model-invocation: true`, passes `test_command_descriptions.py`, and is covered by every test in `test_verification_commands.py`.
 - [ ] Its body keeps pstack's outcomes `clean`, `changed` and `blocked` with their definitions word for word, the edit scope, and steps 0-6, including the live pass "Required even when source looks clean", the three invariants and the `verified-unreachable` rule.
 - [ ] Step 0 locates `.claude/skills/verify-*/`, ends `blocked` with several candidates when headless, runs the pass in a fresh worktree off `origin/main` after `git fetch origin`, removes it at the end, and makes no `gh` call. The source wave uses `Explore` agents told "do not edit files" and requires an empty `git status --porcelain` afterwards.
-- [ ] Step 6 ends `blocked` when `git diff --name-only origin/main` names a path outside the skill directory, and ends `blocked` after full coverage and the product-gap report while a PR whose head branch starts with `verify/maintain-` is open. Otherwise it pushes one `verify/maintain-<YYYY-MM-DD>` branch and opens one ready-for-review PR into `main`. Every run's last line is `OUTCOME: clean|changed|blocked — <one line>`.
-- [ ] `CLAUDE_CODE_USAGE.md` documents the hand-run and the local daily recipe: a per-user LaunchAgent in `~/Library/LaunchAgents/` with `StartCalendarInterval`, `WorkingDirectory` at the repo root, `PATH` including `/opt/homebrew/bin`, the `claude -p` line, logs outside the checkout, the scheduler's `git push` and `gh pr` allow rules in `.claude/settings.local.json`, and the run-time note on wake. It has no cloud `/schedule` recipe, and `README.md` has a row for the command.
+- [ ] Step 6 stages everything with `git add -A` and ends `blocked` when `git diff --cached --name-only origin/main` names a path outside the skill directory, so a new untracked file counts, and ends `blocked` after full coverage and the product-gap report while a PR whose head branch starts with `verify/maintain-` is open. Otherwise it pushes one `verify/maintain-<YYYY-MM-DD>` branch and opens one ready-for-review PR into `main`. Every run's last line is `OUTCOME: clean|changed|blocked — <one line>`.
+- [ ] `CLAUDE_CODE_USAGE.md` documents the hand-run and the local daily recipe: a per-user LaunchAgent in `~/Library/LaunchAgents/` with `StartCalendarInterval`, `WorkingDirectory` at the repo root, `PATH` including `/opt/homebrew/bin`, the `claude -p` line, logs outside the checkout, `--setting-sources project` with `--settings` naming a dedicated file outside the checkout that holds the scheduler's `git push` and `gh pr` allow rules (never `.claude/settings.local.json`, which every session in the repo loads), and the run-time note on wake. It has no cloud `/schedule` recipe, and `README.md` has a row for the command.
 
 **Out of scope:** a scheduler inside Studio, the cloud `/schedule` path, R, F and M (the owner runs those in the adopter), and the adopter's observe entry.
