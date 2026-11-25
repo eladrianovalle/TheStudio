@@ -175,11 +175,14 @@ Runs from the git toplevel of the current directory.
 **The tree snapshot** must see content, not just status. The writer's change is uncommitted when the
 check runs, so a file can already read ` M` or `??` before the command runs and read the same after
 it rewrites the file; comparing two `git status --porcelain` listings would pass that. The snapshot
-is therefore the entries of `git status --porcelain=v1 -z --untracked-files=all`, each with a hash of
-every path it names: the file's bytes, or "missing". `--untracked-files=all` lists each untracked
-file instead of collapsing a new directory to one line. The tree changed if an entry appears,
-disappears or changes status, or if a path's hash differs; the message names the first such path. A
-clean tracked file the command edits shows up as a new entry, so only dirty paths are ever hashed.
+is therefore the entries of `git status --porcelain=v1 -z --untracked-files=all`, each with a
+fingerprint of every path it names: the mode git would record (`100644`, `100755`, or `120000` for a
+symlink) and a hash of the file's bytes, or "missing". The mode is there because `chmod +x` on an
+already-modified file changes neither its status nor its bytes. `--untracked-files=all` lists each
+untracked file instead of collapsing a new directory to one line. The tree changed if an entry
+appears, disappears or changes status, or if a path's fingerprint differs; the message names the
+first such path. A clean tracked file the command edits shows up as a new entry, so only dirty paths
+are ever hashed.
 Ignored paths are never listed, so writing under them passes.
 
 Exit **0** when clean (`game.art: 12 assets within budget`, or `game.art: 0 assets`), **1** on any
@@ -358,7 +361,7 @@ What gets built: `studio/packs/game/pack.json`, `studio/packs/game/ASSET_PIPELIN
 - [ ] `pack.json` declares `mesh` and `animation` only, and the suite checks, for every shipped pack, that its doc exists, every kind has at least one metric, and `allowed_by_route` is one of its routes.
 - [ ] `report_problems` returns exactly the message in the failure table for each row, and `[]` for a clean report and for `{"assets": []}`.
 - [ ] `check-packs` reads the report from the asset command's stdout, saves it with every problem it printed under `<git-dir>/studio/pack-reports/`, exits 0, 1 or 2 as specified, fails output that isn't JSON with its first 80 characters quoted, and fails a command that changes the working tree, naming the path.
-- [ ] With the writer's change already in the tree, a command that appends to an already-modified tracked file fails naming that file, a command that rewrites an existing untracked, unignored file fails naming that file, and a command that writes only under an ignored path passes.
+- [ ] With the writer's change already in the tree, a command that appends to an already-modified tracked file fails naming that file, a command that rewrites an existing untracked, unignored file fails naming that file, a command that only sets the executable bit on an already-modified tracked file fails naming that file, and a command that writes only under an ignored path passes.
 - [ ] A command that prints a clean report but exits non-zero saves a result whose `problems` holds the exit-code message.
 - [ ] With the hand-authored route not allowed, an untracked, unignored `.PNG` fails, an ignored one passes, and a tracked `.png` deleted in the worktree passes.
 - [ ] `install` ships `packs.py` and both pack files into a temporary target, and the new `ENFORCED` row passes `test_enforced_rules.py`.
