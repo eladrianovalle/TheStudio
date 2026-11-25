@@ -129,8 +129,11 @@ All of today's voids stay: no result, an `mcp__` tool, a prompt mismatch, a star
 `built_at`, a relayed request, the wrong model, a moved HEAD. For each case's transcript
 `agent-<id>.jsonl`, `record` reads three parts:
 
-- **context**: the raw text of every line before the first row whose `type` is `assistant`. This
-  holds everything Claude Code assembled for the model.
+- **context**: the decoded text of every row before the first row whose `type` is `assistant`.
+  This holds everything Claude Code assembled for the model. Each row is parsed as JSON and every
+  string value in it, at any depth, is taken as it decodes, so `\n` becomes a real line break and no
+  quote or bracket of the JSON syntax is kept. The values are joined with a line break, so the end of
+  a string value is also the end of a line. The raw JSONL is never searched.
 - **actions**: the JSON text of the `input` of every `tool_use` block in `assistant` rows.
 - **results**: the text of every `tool_result` block.
 
@@ -138,10 +141,10 @@ A case is void when any of these holds:
 
 | Rule | Condition | What it catches |
 |---|---|---|
-| Started elsewhere | context does not contain `Primary working directory: ` + `launch_folder` followed directly by the end of that line | another starting folder, one whose path merely begins with the launch folder's, or a Claude Code release that stops rendering the line (fails closed) |
+| Started elsewhere | no line of the decoded context ends with `Primary working directory: ` + `launch_folder`, that is, the folder is followed directly by a line break or the end of a string value | another starting folder, one whose path merely begins with the launch folder's, or a Claude Code release that stops rendering the line (fails closed) |
 | Unexpected instructions | the paths matched by `Contents of (\S+) \(` in context are not exactly `instruction_files` | the auto-memory index, a stray `CLAUDE.md`, a missing copy, or changed rendering (an empty set fails closed) |
 | Saw git status | context contains `Current branch:` | the measuring repo's branch, status and commit titles |
-| Touched the measurement | context or actions contain a `forbidden_paths` entry, after normalizing `..` segments. The launch session's own `tool-results/` folder is exempt; it is the journal path's `parents[2] / "tool-results"`, where editors read their own long tool output. | the measuring checkout (willow's command in #275), other sessions' transcripts, auto memory |
+| Touched the measurement | context or actions contain a `forbidden_paths` entry, after normalizing `..` segments. The launch session's own `tool-results/` folder is exempt; `collect_journal` finds the journal at `<projects>/<project>/<session>/subagents/workflows/<run>/journal.jsonl`, so the folder is the journal path's `parents[3] / "tool-results"`, where editors read their own long tool output. | the measuring checkout (willow's command in #275), other sessions' transcripts, auto memory |
 | Saw the runner | `runner_token` appears in actions or results | an editor that listed, searched or opened the runner, which holds all 18 prompts and shows the trees are paired copies |
 
 Results are searched only for the token, because tree files legitimately mention the main
@@ -250,7 +253,7 @@ After this unit a blind run can be launched, and today's `record` accepts it.
 - [ ] The manifest holds `launch_folder`, `runner_token`, `instruction_files` (the config dir's `CLAUDE.md` first when it exists, then the copy), `forbidden_paths` (source checkout, main checkout and `<config dir>/projects/`, each also in `~/` form when under the home directory) and `launch_fingerprint`, which is identical across two builds of the same inputs and changes when the copy, the settings, the global `CLAUDE.md` or the root changes.
 - [ ] The build exits 2 and names the reason for a root inside a git work tree, and for a root holding experiment, rubric, score, compare, benchmark, candidate or arena; the runner template's text holds no telltale word.
 - [ ] The build's last printed line, split at `&&` and each part read with `shlex.split`, is: a `cd` into the launch folder; `claude -p --setting-sources project,local --strict-mcp-config --permission-mode auto --allowedTools Workflow --` with a prompt whose `scriptPath` is `<launch_folder>/.claude/<runner_token>.js`; a `cd` into the source checkout; `python studio/editor_measure.py record`; `python studio/editor_measure.py rule`.
-- [ ] `.claude/commands/measure-editor.md` is deleted, the install test fails for any unregistered command file, `git grep measure-editor` finds only the relayed-request test data, and the gate's messages, README, `CLAUDE_CODE_USAGE.md`, `ARCHITECTURE.md`, `IMPLEMENTATION_LOOP_SPEC.md` and the judged-rules measuring-loop and tells text describe building and then pasting the printed line.
+- [ ] `.claude/commands/measure-editor.md` is deleted, the install test fails for any unregistered command file, `git grep measure-editor -- ':!specs/'` finds only the relayed-request test data (specs keep the name as history), and the gate's messages, README, `CLAUDE_CODE_USAGE.md`, `ARCHITECTURE.md`, `IMPLEMENTATION_LOOP_SPEC.md` and the judged-rules measuring-loop and tells text describe building and then pasting the printed line.
 
 **Out of scope:** the transcript checks in `record`, and the gate's launch rule.
 
@@ -259,9 +262,9 @@ After this unit a blind run can be launched, and today's `record` accepts it.
 Depends on unit 1's manifest fields.
 
 **Acceptance criteria:**
-- [ ] A replayed run records when its editors' context rows keep the exact rendering of the recorded clean session `04e25678`, showing `Primary working directory: <launch_folder>` and exactly the manifest's instruction files. Only paths and personal details are replaced; that session holds the owner's email and home path, which must not enter the public repository. The run carries `launch_fingerprint` and `claude_code_version`, which is null when no row carries a `version`.
-- [ ] `record` writes nothing and names the void case and what it saw, in plain words, for each of these: another starting folder, one whose path only begins with the launch folder's, no starting-folder line, an extra or missing instruction file, no instruction lines, `Current branch:` in the context, a forbidden path in the context, a forbidden path in a tool input in absolute or `~/` form, a read of the session's `subagents/` folder, a `tool-results/../` path into it, and the runner token in a tool input or a tool result.
-- [ ] A tool result containing the main checkout's path does not void the case, and neither does a read of the launch session's own `tool-results/` file.
+- [ ] A replayed run records when its editors' context rows keep the exact rendering of the recorded clean session `04e25678`, written to disk as JSONL with `json.dumps` and read back by `record`, with the starting-folder line once followed by further lines in the same text value and once at the end of a text value, showing `Primary working directory: <launch_folder>` and exactly the manifest's instruction files. Only paths and personal details are replaced; that session holds the owner's email and home path, which must not enter the public repository. The run carries `launch_fingerprint` and `claude_code_version`, which is null when no row carries a `version`.
+- [ ] `record` writes nothing and names the void case and what it saw, in plain words, for each of these: another starting folder, one whose path only begins with the launch folder's, no starting-folder line, an extra or missing instruction file, no instruction lines, `Current branch:` in the context, a forbidden path in the context, a forbidden path in a tool input in absolute or `~/` form, a read of the session's `subagents/` folder, a `tool-results/../` path into it, a read of `<session>/subagents/tool-results/`, which is not the exempt folder, and the runner token in a tool input or a tool result.
+- [ ] A tool result containing the main checkout's path does not void the case, and neither does a read of the launch session's own `<session>/tool-results/` file, with the fixture laid out as `<projects>/<project>/<session>/subagents/workflows/<run>/journal.jsonl` and found by `collect_journal`.
 - [ ] With a mark whose baseline runs carry no launch fingerprint, the gate passes while the run it reads carries none, and fails with "The mark was set from runs with no recorded launch. Record two baseline runs and set the mark again." once that run carries one; `check_mark` and spread still compare exactly the prompt and cases fingerprints.
 - [ ] The judged-rules void-case paragraph, its "Not covered" line ("the instruction files and the Claude Code version are recorded per run and compared nowhere") and its failure table describe the five launch checks in plain words.
 
