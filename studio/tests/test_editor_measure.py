@@ -31,6 +31,7 @@ from pathlib import Path
 import pytest
 
 import editor_measure
+from test_editor_recording import editor_context
 
 STUDIO_DIR = Path(__file__).resolve().parents[1]
 PYTHON = shlex.quote(sys.executable)
@@ -913,6 +914,7 @@ def test_the_last_printed_line_launches_from_the_folder_and_records_from_the_sou
 def test_record_accepts_a_run_launched_from_the_built_folder(history, checkout_root, case_dirs, capsys, claude_config):
     cases, patches = case_dirs
     write_case(cases, "greeter_two", clean_case(history))
+    (claude_config / "CLAUDE.md").write_text("# Everywhere\n")
     code, output = run_build(history, checkout_root, case_dirs, capsys)
     assert code == 0, output
     manifest = only_manifest(history)
@@ -925,8 +927,8 @@ def test_record_accepts_a_run_launched_from_the_built_folder(history, checkout_r
     journal = [{"type": "started", "agentId": "a1", "label": case["name"]},
                {"type": "result", "agentId": "a1", "result": editor, "toolsUsed": ["Read", "Bash"]}]
     started = (datetime.now(timezone.utc) + timedelta(minutes=1)).isoformat()
-    transcript = [{"type": "user", "timestamp": started, "message": {"content": case["prompt"]}},
-                  {"type": "assistant", "message": {"model": f"claude-{manifest['model']}-4"}}]
+    transcript = editor_context(manifest["launch_folder"], claude_config, case["prompt"], started) + [
+        {"type": "assistant", "message": {"model": f"claude-{manifest['model']}-4"}}]
     (workflow / "journal.jsonl").write_text("".join(json.dumps(row) + "\n" for row in journal))
     (workflow / "agent-a1.jsonl").write_text("".join(json.dumps(row) + "\n" for row in transcript))
 
@@ -936,6 +938,8 @@ def test_record_accepts_a_run_launched_from_the_built_folder(history, checkout_r
     run, = json.loads((cases.parent / "results.json").read_text())["runs"]
     assert run["run_id"] == "wf-blind"
     assert [row["outcome"] for row in run["cases"]] == ["passed"]
+    assert run["launch_fingerprint"] == manifest["launch_fingerprint"]
+    assert run["claude_code_version"] == "2.1.332"
 
 
 # --- the command line -------------------------------------------------------

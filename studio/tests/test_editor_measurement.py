@@ -11,6 +11,9 @@ from test_enforced_rules import JUDGED
 MEASURE_AGAIN = (
     "Run `python studio/editor_measure.py build` in a fresh worktree and paste the line it prints."
 )
+NO_RECORDED_LAUNCH = (
+    "The mark was set from runs with no recorded launch. Record two baseline runs and set the mark again."
+)
 
 
 def check_mark(results, linked):
@@ -41,6 +44,9 @@ def check_run(results, current, names, model):
         if row.get("ruled"):
             assert row.get("note", "").strip(), row
     if mark := results["mark"]:
+        baselines = [r for r in results["runs"] if r["run_id"] in mark["baseline_runs"]]
+        if run.get("launch_fingerprint"):
+            assert all(b.get("launch_fingerprint") for b in baselines), NO_RECORDED_LAUNCH
         counts = measurement.totals(run)
         assert counts["missed"] <= mark["max_missed"] and counts["false_alarm"] <= mark["max_false_alarms"], (
             f"Measured {counts['missed']} missed, {counts['false_alarm']} false alarms against {mark}"
@@ -126,3 +132,37 @@ def test_marks_require_two_matching_baselines_and_a_link():
         results["runs"][-1]["cases"][0]["outcome"] = outcome
         with pytest.raises(AssertionError, match="against"):
             check_run(results, CURRENT, ["oak"], "opus")
+
+
+def test_a_run_with_a_recorded_launch_is_not_judged_against_a_mark_set_without_one():
+    results = sample()
+    results["runs"].append({**results["runs"][0], "run_id": "b"})
+    results["mark"] = {"baseline_runs": ["a", "b"], "max_missed": 1, "max_false_alarms": 0}
+    check_mark(results, True)
+    check_run(results, CURRENT, ["oak"], "opus")
+
+    results["runs"].append({**results["runs"][0], "run_id": "c", "launch_fingerprint": "launch-1"})
+    with pytest.raises(AssertionError, match=re.escape(NO_RECORDED_LAUNCH)):
+        check_run(results, CURRENT, ["oak"], "opus")
+
+    results["runs"][1]["launch_fingerprint"] = "launch-1"
+    with pytest.raises(AssertionError, match=re.escape(NO_RECORDED_LAUNCH)):
+        check_run(results, CURRENT, ["oak"], "opus")
+
+    results["runs"][0]["launch_fingerprint"] = "launch-0"
+    check_run(results, CURRENT, ["oak"], "opus")
+
+
+def test_baselines_and_spread_compare_only_the_prompt_and_cases_fingerprints(capsys):
+    row = {"case": "oak", "kind": "clean", "outcome": "passed", "gate": {"passed": True}}
+    results = sample()
+    results["runs"] = [
+        {**results["runs"][0], "run_id": "a", "cases": [row]},
+        {**results["runs"][0], "run_id": "b", "cases": [{**row, "outcome": "false_alarm"}],
+         "launch_fingerprint": "launch-1", "claude_code_version": "2.1.332"},
+    ]
+    results["mark"] = {"baseline_runs": ["a", "b"], "max_missed": 0, "max_false_alarms": 1}
+    check_mark(results, True)
+
+    measurement.report(results, results["runs"][1])
+    assert "Spread from a: 1 oak" in capsys.readouterr().out

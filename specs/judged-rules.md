@@ -295,7 +295,7 @@ quietly. Real pairs first, plants to fill, `as_built` clean cases to fill the cl
 | How it is launched | The owner pastes the line `build` prints. It starts a headless session in the launch folder `<root>/harbor-notes/`, so every editor starts there, and the prompt reaches the tree through `work_dir`, the route a real `/forge --work-dir` run uses. |
 | The session's context | The launch folder is not a git repository, so no agent is shown a branch, a status or commit titles. It holds a byte copy of `CLAUDE.md`, a `.claude/settings.json` that turns auto-memory off, and the runner under a random name in `.claude/`, and nothing else. There is no measuring command to appear in the skill listing. |
 | The code index | A session index answers from today's code, fix included, through an MCP tool or a shell command. `build` runs in a fresh worktree of the branch being measured, the session starts in the launch folder, and the printed line passes `--strict-mcp-config`, so there is no index. A case whose editor called a tool beginning `mcp__` is void. |
-| The answer key | Case files and patches stay in the worktree `build` ran in. Each editor's shell starts in the launch folder, which holds none of them, and the prompt sends it to the tree. Nothing stops it reading elsewhere; the Verification section checks that none did. |
+| The answer key | Case files and patches stay in the worktree `build` ran in. Each editor's shell starts in the launch folder, which holds none of them, and the prompt sends it to the tree. A case whose editor names that worktree by an absolute or `~/` path is void; the Verification section checks the rest. |
 | The clock | Spec due dates are moved so the tree reads as if written today. Commit dates are not moved. |
 | `.git` as a directory | Not hidden. |
 
@@ -361,9 +361,31 @@ tree as the editor left it, and scores the row.
 **A void case** has no result; or a result row with no tool list, or one naming a tool beginning
 `mcp__`; or a transcript whose first user turn differs from the manifest's prompt for that tree, or
 that began before `built_at`; or a turn that ran on a model outside the pinned family; or a tree
-that no longer descends from the built commit. Cases that did not all run on one model id void the
-run. A run with a void case is not recorded. It is thrown away and the measurement is launched again
-whole.
+that no longer descends from the built commit.
+
+A case is also void when its transcript shows the editor could have seen the measurement. `record`
+reads three parts of each case's transcript: the context, which is all the text Claude Code put in
+front of the editor before its first reply; the input of every tool the editor called; and the text
+every tool sent back. Five launch checks run on them:
+
+- **Started elsewhere.** No line of the context ends with `Primary working directory: ` and the
+  launch folder. This catches another starting folder, one whose path only begins with the launch
+  folder's, and a Claude Code release that stops printing the line.
+- **Unexpected instructions.** The files the context loads, one `Contents of <path> (` line each,
+  are not exactly the manifest's `instruction_files`. This catches the auto-memory index, a stray
+  `CLAUDE.md`, a missing copy, and a context with no such line at all.
+- **Saw git status.** The context holds `Current branch:`.
+- **Touched the measurement.** The context or a tool input names a path inside one of the
+  manifest's `forbidden_paths` (the source checkout, every worktree, and Claude Code's `projects/`
+  folder), written absolute or from `~/`, once any `..` in it is resolved. The launch session's own
+  `tool-results/` folder is allowed, because editors read their own long tool output there.
+- **Saw the runner.** The runner's random name appears in a tool input or in what a tool sent back.
+  Tool output is searched for nothing else, because tree files mention the main checkout's path.
+
+Each void message names the case and what the editor saw, for example `willow: a tool input names
+~/Repos/_TheGameStudio/studio, and editors must not touch ~/Repos/_TheGameStudio`. Cases that did
+not all run on one model id void the run. A run with a void case is not recorded. It is thrown away
+and the measurement is launched again whole.
 
 ### Scoring
 
@@ -407,7 +429,9 @@ would have shipped unflagged.
 | `runs` | A list, oldest first. Nothing is removed. |
 
 Each run: `run_id` (the workflow id), `measured_on`, `prompt_fingerprint`, `cases_fingerprint`,
-`model`, and `cases`, one row per case with `case`, `outcome`, the signals that produced it and, on
+`launch_fingerprint` (the build's hash of the launch folder's path, its `CLAUDE.md` copy, its
+settings and the global `CLAUDE.md`), `claude_code_version` (every version the case transcripts
+name, or null when none does), `model`, and `cases`, one row per case with `case`, `outcome`, the signals that produced it and, on
 a ruled row, a note. Totals are not stored; the test and the report derive them with one function.
 
 **What is fingerprinted.**
@@ -423,7 +447,8 @@ a ruled row, a note. Totals are not stored; the test and the report derive them 
 - `cases_fingerprint`: SHA-256 over the bytes of every case file and patch, in name order.
 
 Not covered: which Opus version answered, the reasoning effort the session passed down, the writer
-prompt, and the prompt lines no case renders.
+prompt, and the prompt lines no case renders; the instruction files and the Claude Code version are
+recorded per run and compared nowhere.
 
 **The mark.** Both baseline runs are recorded as ordinary runs. `record` prints the cases whose
 outcome differs between them; that count is the spread. The user then picks `max_missed` and
@@ -440,7 +465,9 @@ passes with no new measurement. The run it reads must have exactly one row for e
 set, none `needs_ruling`, a note on every ruled row, and a `model` that contains `EDITOR_MODEL`.
 
 *With a mark.* Both baseline runs are in the file and share both fingerprints, and the run's missed
-count is at most `max_missed` and its false alarms at most `max_false_alarms`. The file has a mark
+count is at most `max_missed` and its false alarms at most `max_false_alarms`. When the run carries a
+`launch_fingerprint`, both baseline runs must carry one too, or the gate fails with "The mark was set
+from runs with no recorded launch. Record two baseline runs and set the mark again." The file has a mark
 if and only if the editor's `JUDGED` row names it, so setting the mark and lowering
 `JUDGED_WITHOUT_MEASUREMENT_COUNT` are one commit.
 
@@ -473,11 +500,16 @@ baseline is two of those. Beside the tokens is the person's time: about 8 ruling
 | Build | Shallow clone, or node not installed | The build exits 2 and says which is missing |
 | Runner | Launched unbuilt, or by name | `not_built`, no agent |
 | Runner | An agent dies, or a turn falls back to another model | The case is void; `record` writes nothing and names it; the run is launched again whole |
-| Runner | An editor works in the main checkout instead of its tree | Not caught mechanically. The pinned `git -C` keeps its git commands in the tree. Checked in Verification. |
 | Runner | Many test commands at once collide on something outside their trees | Unchecked. Would show as editors reporting red tests on clean cases |
+| Record | An editor's context or tool input names the main checkout, a worktree or Claude Code's session transcripts | The case is void; `record` writes nothing and names the path. A relative path or `$HOME` is not caught; Verification checks for it |
+| Record | An editor started outside the launch folder, or a Claude Code release stops printing the starting-folder line | The case is void; `record` names the folder it saw, or says the line is missing |
+| Record | An editor loaded other instruction files than the launch's (auto memory, a stray `CLAUDE.md`), or a release changes how they are printed | The case is void; `record` names the extra or missing files, or says there were none |
+| Record | An editor was shown a git status | The case is void; `record` says its context held `Current branch:` |
+| Record | An editor listed, searched or opened the runner | The case is void; `record` names the runner it saw |
 | Record | A run launched before the newest build is recorded after it | Its transcripts' prompts or start times do not match the manifest; every case is void, `record` writes nothing and says why |
 | Record | Claude Code changes where or how it writes the journal | `record` finds no journal matching the build and says what it looked for. Nothing can be recorded until it is fixed |
 | Scoring | Many rows need a ruling | The suite stays red until they are made; `rule` lets the user finish later |
+| Gate | The run it reads has a recorded launch and the mark's baseline runs do not | The suite fails with "The mark was set from runs with no recorded launch. Record two baseline runs and set the mark again." |
 | Gate | The editor's prompt changes on a branch | The suite is red there until measured. `/forge` in this repository cannot pass its entry gate on that branch |
 | Gate | A prompt edit is reverted | The gate finds the earlier run for that prompt; no new measurement |
 | Gate | A newer Opus version answers | Nothing fails. The next measurement records the new id |
