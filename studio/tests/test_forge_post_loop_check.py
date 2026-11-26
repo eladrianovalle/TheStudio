@@ -260,20 +260,22 @@ def test_launching_over_an_unreadable_record_refuses_and_names_the_file(workspac
     assert path.read_text() == "{ this is not a record"
 
 
-def test_launching_while_another_launch_holds_the_tree_refuses_and_writes_no_record(workspace):
-    fcntl = pytest.importorskip("fcntl")
+def test_launching_while_another_run_holds_the_tree_refuses_and_writes_no_record(workspace):
     repo = workspace["repo"]
     lock_path = record_path(repo).with_name("studio-forge.lock")
 
-    with lock_path.open("a+b") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        held = launch(workspace, "--unit", "demo")
+    lock_path.write_text("")
+    held = launch(workspace, "--unit", "demo")
+    held_wrote_record = record_path(repo).exists()
+    assert lock_path.exists()
+    lock_path.unlink()
     released = launch(workspace, "--unit", "demo")
 
     assert held.returncode == 1
     assert held.stdout == ""
     assert "launch-in-progress" in held.stderr
     assert str(lock_path) in held.stderr
+    assert not held_wrote_record
     assert released.returncode == 0, released.stderr
     assert read_record(repo)["started_at"] == json.loads(released.stdout)["launched_at"]
 
@@ -482,22 +484,39 @@ def test_a_launch_while_a_stamped_record_is_checked_again_refuses_instead_of_rep
     assert not record_path(repo).exists()
 
 
-def test_check_while_another_launch_or_check_holds_the_tree_exits_2_and_runs_no_test(workspace):
-    fcntl = pytest.importorskip("fcntl")
+def test_check_while_another_run_holds_the_tree_exits_2_and_runs_no_test(workspace):
     repo = workspace["repo"]
     commit_writer(repo)
     path = write_record(workspace)
     lock_path = path.with_name("studio-forge.lock")
 
-    with lock_path.open("a+b") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        held = check(repo)
+    lock_path.write_text("")
+    held = check(repo)
 
     assert held.returncode == 2
     assert held.stdout == ""
     assert str(lock_path) in held.stderr
+    assert lock_path.exists()
     assert not workspace["test_log"].exists()
     assert read_record(repo)["checked_at"] is None
+
+
+def test_launch_and_check_leave_no_lock_behind_for_the_portable_host(workspace):
+    repo = workspace["repo"]
+    lock_path = record_path(repo).with_name("studio-forge.lock")
+
+    empty = check(repo)
+    assert empty.returncode == 2
+    assert not lock_path.exists()
+
+    launched = launch(workspace, "--unit", "demo")
+    assert launched.returncode == 0, launched.stderr
+    assert not lock_path.exists()
+
+    commit_writer(repo)
+    checked = check(repo)
+    assert checked.returncode == 0, checked.stderr
+    assert not lock_path.exists()
 
 
 def test_check_without_a_record_exits_2_and_runs_nothing(workspace):

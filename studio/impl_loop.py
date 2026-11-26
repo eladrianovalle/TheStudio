@@ -1107,18 +1107,16 @@ def _read_record(path: Path) -> dict:
 
 @contextmanager
 def _record_lock(lock_path: Path, refusal: Exception):
-    with lock_path.open("a+b") as lock:
-        try:
-            if os.name == "nt":
-                import msvcrt
-                lock.seek(0)
-                msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError as error:
-            raise refusal from error
+    # The same protocol as the portable host (forge_host.mjs): the lock is held while the file exists.
+    try:
+        descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError as error:
+        raise refusal from error
+    try:
         yield
+    finally:
+        os.close(descriptor)
+        lock_path.unlink()
 
 
 def open_loop_record(
@@ -1133,9 +1131,9 @@ def open_loop_record(
     path = _git_dir(root) / LOOP_RECORD_NAME
     lock_path = path.with_name(LOOP_LOCK_NAME)
     refusal = RecordError(_with_fix(
-        f"{RECORD_LAUNCHING}: another /forge launch or check holds {lock_path} and is using the loop record "
-        "for this tree right now, so nothing was launched.",
-        "let it finish, then run /forge again.",
+        f"{RECORD_LAUNCHING}: another /forge run, launch or check holds {lock_path} and is using this tree "
+        "right now, so nothing was launched.",
+        f"let it finish, then run /forge again; if nothing is running, remove {lock_path}.",
     ))
     with _record_lock(lock_path, refusal):
         if path.exists():
@@ -1221,8 +1219,8 @@ def check_loop(tree: Path) -> int:
     path = git_dir / LOOP_RECORD_NAME
     lock_path = git_dir / LOOP_LOCK_NAME
     refusal = CheckError(
-        f"Could not check: another /forge launch or check holds {lock_path} and is using the loop record "
-        "for this tree right now. No test was run."
+        f"Could not check: another /forge run, launch or check holds {lock_path} and is using this tree "
+        f"right now. No test was run. If nothing is running, remove {lock_path}."
     )
     with _record_lock(lock_path, refusal):
         return _check_record(tree, path)

@@ -454,7 +454,11 @@ and prints the exact `--check` command for that tree; over a record it cannot re
 `unreadable-record`, naming the file; a record that was checked and kept its problems is replaced.
 A launch holds an exclusive lock on `studio-forge.lock` beside the record from reading the record to
 writing the new one, so two launches at once cannot both pass: the second refuses with
-`launch-in-progress` instead of overwriting the first run's record.
+`launch-in-progress` instead of overwriting the first run's record. The lock is the portable host's:
+holding it means creating the file exclusively, and releasing it means removing the file, so a
+native launch or check refuses while a portable run owns the tree and leaves nothing behind that
+would make the portable host refuse later. A process killed while holding it leaves the file, and
+the refusal names it to remove.
 
 **After the loop, `impl_loop.py --check [--work-dir <tree>]` says whether the unit is clean.**
 `/forge` runs it first in its report step. It reads git and the record, never the agents' handoffs.
@@ -470,7 +474,7 @@ clean, record removed. Exit 1: not clean, record stamped with `checked_at` and `
 printed as a sentence on stderr; checking a stamped record checks again. The check holds the same
 lock from reading the record to removing or stamping it, so a launch during a recheck refuses with
 `launch-in-progress` instead of having its new record deleted or overwritten. Exit 2: nothing was
-checked (no record, an unreadable one, the lock held by a launch or another check, not a git tree,
+checked (no record, an unreadable one, the lock held by a run, a launch or another check, not a git tree,
 bad arguments), and no test ran.
 
 **What it does not do.** It reduces the blast radius of a run pointed at the wrong directory; it
