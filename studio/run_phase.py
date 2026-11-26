@@ -3364,6 +3364,14 @@ def _do_check_updates(args: argparse.Namespace) -> None:
     except Exception:
         pass
 
+    try:
+        import packs
+        pack_note = packs.session_note(target)
+        if pack_note:
+            blocks.append(pack_note)
+    except Exception:
+        pass
+
     if blocks:
         print(json.dumps({
             "hookSpecificOutput": {

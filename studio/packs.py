@@ -18,6 +18,7 @@ PACKS_DIR = Path(__file__).resolve().parent / "packs"
 DEPARTMENT_KEYS = ("asset_command", "routes")
 BINARY_ASSETS_SHOWN = 10
 OUTPUT_QUOTED_CHARACTERS = 80
+SESSION_GIT_TIMEOUT_SECONDS = 5
 
 
 class PackConfigError(ValueError):
@@ -300,21 +301,24 @@ def check_department(department: Department, root: Path) -> DepartmentResult:
     return DepartmentResult(problems, completed.stdout, asset_count)
 
 
+def result_path(git_dir: Path, department: Department) -> Path:
+    return git_dir / "studio" / "pack-reports" / f"{department.pack['name']}-{department.name}.json"
+
+
 def save_result(git_dir: Path, department: Department, result: DepartmentResult) -> Path:
-    folder = git_dir / "studio" / "pack-reports"
-    folder.mkdir(parents=True, exist_ok=True)
-    path = folder / f"{department.pack['name']}-{department.name}.json"
+    path = result_path(git_dir, department)
+    path.parent.mkdir(parents=True, exist_ok=True)
     saved = {"problems": result.problems, "stdout": result.stdout}
     path.write_text(json.dumps(saved, indent=2) + "\n", encoding="utf-8")
     return path
 
 
-def _git_path(directory: Path, flag: str) -> Path | None:
+def _git_path(directory: Path, flag: str, timeout: float | None = None) -> Path | None:
     try:
         completed = subprocess.run(
-            ["git", "rev-parse", flag], cwd=directory, capture_output=True, text=True
+            ["git", "rev-parse", flag], cwd=directory, capture_output=True, text=True, timeout=timeout
         )
-    except OSError:
+    except (OSError, subprocess.TimeoutExpired):
         return None
     if completed.returncode != 0 or not completed.stdout.strip():
         return None
@@ -372,3 +376,47 @@ def check_packs(config: Path | None = None, cwd: Path | None = None) -> int:
             print(f"{department.label}: {problem}")
         print(f"See {_shown_path(pack_doc_path(department.pack), root)}")
     return 1 if failed else 0
+
+
+def _saved_problems(git_dir: Path, department: Department) -> list[str]:
+    try:
+        saved = json.loads(result_path(git_dir, department).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    problems = saved.get("problems") if isinstance(saved, dict) else None
+    if not isinstance(problems, list):
+        return []
+    return [f"{department.label}: {problem}" for problem in problems if isinstance(problem, str)]
+
+
+def _problem_sentence(problems: list[str]) -> str:
+    noun = "pack problem" if len(problems) == 1 else "pack problems"
+    first_problem = problems[0].rstrip(".")
+    return f"{len(problems)} {noun}; first: {first_problem}."
+
+
+def session_note(target: Path) -> str:
+    config_path = project_config_root(target) / ".studio" / "implementation_loop.toml"
+    if not config_path.is_file():
+        return ""
+    try:
+        departments = load_declaration(config_path)
+    except PackConfigError as error:
+        return _problem_sentence([str(error)])
+    if not departments:
+        return ""
+    sentences: list[str] = []
+    used_packs = {department.pack["name"]: department.pack for department in departments}
+    for pack in used_packs.values():
+        doc = _shown_path(pack_doc_path(pack), target)
+        sentences.append(
+            f"This repository uses Studio's {pack['name']} pack. Read {doc} before building or changing an asset."
+        )
+    git_dir = _git_path(target, "--absolute-git-dir", timeout=SESSION_GIT_TIMEOUT_SECONDS)
+    problems: list[str] = []
+    if git_dir is not None:
+        for department in departments:
+            problems.extend(_saved_problems(git_dir, department))
+    if problems:
+        sentences.append(_problem_sentence(problems))
+    return " ".join(sentences)
