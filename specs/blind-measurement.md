@@ -3,7 +3,7 @@ feature: Blind measurement, so the /forge editor cannot tell it is being measure
 slug: blind-measurement
 ticket: https://github.com/eladrianovalle/TheStudio/issues/276
 # status: draft → approved (a human approved it) → shipped (built AND verified)
-status: draft
+status: approved
 studio_run: studio/output/tech/run_tech_20261125_155747
 # verification_due: the date the evidence is due (YYYY-MM-DD). Required once this spec is
 # `approved`, and only if it carries a `## Verification` section — no section, no deadline.

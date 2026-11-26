@@ -2,7 +2,9 @@
 import hashlib
 import json
 import os
+import posixpath
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -81,7 +83,11 @@ def clear_builds(output):
         shutil.rmtree(manifest.parent)
 
 
-def publish_build(rows, cases, patches, output, knobs):
+def runner_path(launch):
+    return Path(launch["launch_folder"]) / ".claude" / f"{launch['runner_token']}.js"
+
+
+def publish_build(rows, cases, patches, output, knobs, launch):
     units = []
     for row in rows:
         unit = {**knobs, "unit_id": row["unit_id"], "title": row["unit_id"].replace("_", " "),
@@ -96,16 +102,17 @@ def publish_build(rows, cases, patches, output, knobs):
     source = (DATASET / "measure-runner.js").read_text(encoding="utf-8")
     stamp = datetime.now(timezone.utc)
     destination = output / stamp.strftime("%Y%m%dT%H%M%S%fZ")
-    manifest = {**fingerprints(cases, patches, knobs), "model": built["model"], "cases": rows}
+    manifest = {**fingerprints(cases, patches, knobs), "model": built["model"], **launch, "cases": rows}
+    runner_path(launch).write_text(
+        source.replace("name: 'unbuilt'", f"name: '{launch['runner_token']}'")
+        .replace("const BUILT = null", "const BUILT = " + json.dumps(built)),
+        encoding="utf-8")
     with tempfile.TemporaryDirectory(dir=output) as temporary:
         staging = Path(temporary) / "build"
         staging.mkdir()
-        (staging / "measure-runner.js").write_text(
-            source.replace("const BUILT = null", "const BUILT = " + json.dumps(built)), encoding="utf-8")
         manifest["built_at"] = datetime.now(timezone.utc).isoformat()
         write(staging / "manifest.json", manifest)
         staging.rename(destination)
-    print(f"Runner: {destination / 'measure-runner.js'}")
     return destination
 
 
@@ -163,6 +170,172 @@ def transcript_model(rows, case, manifest):
     return models.pop()
 
 
+STARTING_FOLDER_LINE = "Primary working directory: "
+INSTRUCTION_FILE_LINE = re.compile(r"Contents of (.+?) \(")
+GIT_STATUS_LINE = "Current branch:"
+PATH_IN_TEXT = re.compile(r"(?:~/|/)[^\s\"'`\\;|&()<>,:*?\[\]{}$=]*")
+PATH_START = re.compile(r"(?<![\w.~/-])(?=~/|/)")
+SPACED_PATH_IN_TEXT = re.compile(r"(?:~/|/)[^\n]{0,1024}")
+RESOLVING = re.compile(r"/\.|//")
+
+
+def decoded_strings(value):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from decoded_strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from decoded_strings(item)
+
+
+def whole_paths(value):
+    for text in decoded_strings(value):
+        words = [text]
+        lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        try:
+            words += list(lexer)
+        except ValueError:
+            pass
+        yield from (word for word in words if word.startswith(("/", "~/")))
+
+
+def transcript_parts(rows):
+    first_assistant = next((i for i, row in enumerate(rows) if row.get("type") == "assistant"), len(rows))
+    context = "\n".join(text for row in rows[:first_assistant] for text in decoded_strings(row))
+    actions = []
+    action_paths = []
+    results = []
+    for row in rows:
+        message = row.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "tool_use" and row.get("type") == "assistant":
+                actions.append(json.dumps(block.get("input"), ensure_ascii=False))
+                action_paths.extend(whole_paths(block.get("input")))
+            elif block.get("type") == "tool_result":
+                results.extend(decoded_strings(block.get("content")))
+    return context, "\n".join(actions), action_paths, "\n".join(results)
+
+
+def with_home_forms(paths):
+    home = str(Path.home())
+    listed = []
+    for path in paths:
+        forms = [path]
+        if path.startswith(home + "/"):
+            forms.append("~" + path[len(home):])
+        for form in forms:
+            if form not in listed:
+                listed.append(form)
+    return listed
+
+
+def is_inside(path, folder):
+    folder = posixpath.normpath(folder)
+    return path == folder or path.startswith(folder + "/")
+
+
+def path_into_measurement(text, paths, forbidden_paths, exempt_folder):
+    exempt_forms = with_home_forms([str(exempt_folder)])
+    for seen in PATH_IN_TEXT.findall(text) + paths:
+        normalized = posixpath.normpath(seen)
+        if any(is_inside(normalized, exempt) for exempt in exempt_forms):
+            continue
+        for forbidden in forbidden_paths:
+            if is_inside(normalized, forbidden):
+                return seen, forbidden
+    for forbidden in forbidden_paths:
+        folder = posixpath.normpath(forbidden)
+        if not any(character.isspace() for character in folder):
+            continue
+        for match in re.finditer(re.escape(folder) + r"(?=/|[^\w.\-]|$)", text):
+            if any(text.startswith(exempt, match.start()) for exempt in exempt_forms):
+                continue
+            return folder, forbidden
+    folders = {posixpath.normpath(forbidden): forbidden for forbidden in forbidden_paths}
+    for start in PATH_START.finditer(text):
+        written = SPACED_PATH_IN_TEXT.match(text, start.start()).group(0).rstrip()
+        resolving = RESOLVING.search(written)
+        if resolving is None:
+            continue
+        if any(is_inside(posixpath.normpath(written), exempt) for exempt in exempt_forms):
+            continue
+        for end in component_ends(written):
+            if end <= resolving.start():
+                continue
+            candidate = written[:end]
+            forbidden = folders.get(posixpath.normpath(candidate))
+            if forbidden is not None:
+                return candidate, forbidden
+    return None
+
+
+def component_ends(written):
+    for index, character in enumerate(written):
+        if not (character.isalnum() or character in "._-~"):
+            yield index
+    yield len(written)
+
+
+def launch_problem(rows, manifest, exempt_folder):
+    context, actions, action_paths, results = transcript_parts(rows)
+    launch_folder = manifest["launch_folder"]
+    lines = context.split("\n")
+    if not any(line.endswith(STARTING_FOLDER_LINE + launch_folder) for line in lines):
+        started_in = []
+        for line in lines:
+            if STARTING_FOLDER_LINE in line:
+                folder = line.split(STARTING_FOLDER_LINE, 1)[1]
+                if folder not in started_in:
+                    started_in.append(folder)
+        if started_in:
+            return f"the editor started in {', '.join(started_in)}, not in the launch folder {launch_folder}"
+        return (f"no line of the editor's context says which folder it started in "
+                f"(looked for '{STARTING_FOLDER_LINE}{launch_folder}')")
+
+    loaded = set(INSTRUCTION_FILE_LINE.findall(context))
+    expected = set(manifest["instruction_files"])
+    if not loaded:
+        return "the editor's context lists no instruction files, so it cannot show it loaded exactly the launch's"
+    extra = sorted(loaded - expected)
+    missing = sorted(expected - loaded)
+    differences = []
+    if extra:
+        differences.append(f"the editor loaded instruction files the launch does not: {', '.join(extra)}")
+    if missing:
+        differences.append(f"the editor did not load instruction files the launch does: {', '.join(missing)}")
+    if differences:
+        return ", and ".join(differences)
+
+    if GIT_STATUS_LINE in context:
+        return f"the editor was shown a git status (its context holds '{GIT_STATUS_LINE}')"
+
+    for where, text, paths in (("the editor's context", context, []), ("a tool input", actions, action_paths)):
+        found = path_into_measurement(text, paths, manifest["forbidden_paths"], exempt_folder)
+        if found:
+            seen, forbidden = found
+            return f"{where} names {seen}, and editors must not touch {forbidden}"
+
+    token = manifest["runner_token"]
+    if token in actions:
+        return f"a tool input names the runner {token}"
+    if token in results:
+        return f"a tool result shows the runner {token}"
+    return None
+
+
+def claude_code_version(transcripts):
+    versions = {row["version"] for rows in transcripts for row in rows if isinstance(row.get("version"), str)}
+    return ", ".join(sorted(versions)) or None
+
+
 def collect_journal(manifest, projects, used):
     names = {c["name"] for c in manifest["cases"]}
     rejected = []
@@ -181,6 +354,7 @@ def collect_journal(manifest, projects, used):
             continue
         records = {}
         models = {}
+        transcripts = []
         errors = []
         for case in manifest["cases"]:
             name = case["name"]
@@ -198,13 +372,17 @@ def collect_journal(manifest, projects, used):
                     raise ValueError("missing editor result")
                 transcript = json_lines(path.parent / f"agent-{agent}.jsonl")
                 models[name] = transcript_model(transcript, case, manifest)
+                problem = launch_problem(transcript, manifest, path.parents[3] / "tool-results")
+                if problem:
+                    raise ValueError(problem)
+                transcripts.append(transcript)
                 records[name] = editor
             except (ValueError, KeyError, TypeError, AttributeError, OSError) as error:
                 errors.append(f"{name}: {error}")
         if len(set(models.values())) > 1:
             errors.extend(f"{name}: mixed models ({model})" for name, model in models.items())
         if not errors:
-            return run_id, next(iter(models.values())), records
+            return run_id, next(iter(models.values())), records, claude_code_version(transcripts)
         rejected.extend(errors)
     raise ValueError("Void cases: " + "; ".join(rejected or sorted(names)))
 
@@ -238,7 +416,7 @@ def record(output, path, projects, probe):
         raise ValueError("Build the cases before recording.")
     manifest = read(manifests[0])
     results = read_results(path)
-    run_id, model, editors = collect_journal(manifest, projects, {r["run_id"] for r in results["runs"]})
+    run_id, model, editors, version = collect_journal(manifest, projects, {r["run_id"] for r in results["runs"]})
     cases = manifest["cases"]
     moved = [c["name"] for c in cases if not (Path(c["tree"]) / ".git").is_dir() or subprocess.run(
         ["git", "-C", c["tree"], "merge-base", "--is-ancestor", c["head"], "HEAD"],
@@ -255,7 +433,8 @@ def record(output, path, projects, probe):
                        "outcome": outcome(case, editor, gate, repaired), "gate": gate, "editor": editor,
                        "probe_passed": repaired})
     run = {"run_id": run_id, "model": model, "measured_on": datetime.now(timezone.utc).isoformat(),
-           "cases": scored, **{k: manifest[k] for k in ("prompt_fingerprint", "cases_fingerprint")}}
+           "cases": scored, **{k: manifest[k] for k in ("prompt_fingerprint", "cases_fingerprint")},
+           "launch_fingerprint": manifest["launch_fingerprint"], "claude_code_version": version}
     results["runs"].append(run)
     write(path, results)
     report(results, run)

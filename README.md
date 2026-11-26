@@ -440,4 +440,4 @@ MIT. Reuse freely across your projects.
 
 ## Measuring the forge editor
 
-Run `claude -p --setting-sources project,local --strict-mcp-config --permission-mode auto --allowedTools Workflow -- "/measure-editor"` from a fresh Studio worktree to compare the editor against the historical benchmark and record the outcome.
+In a fresh Studio worktree of the branch being measured, run `python studio/editor_measure.py build`, then paste the line it prints. The build makes the case trees and a plain launch folder, `~/checkouts/harbor-notes/`, that says nothing about measuring. The line starts a headless Claude session in that folder, so every editor starts there, then changes back into the worktree to record the run and list the cases that need a ruling. Measurements and the mark live in `studio/evals/forge_editor/results.json`.
