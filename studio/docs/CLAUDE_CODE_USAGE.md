@@ -197,7 +197,7 @@ python studio/run_phase.py recompute-clarity --phase studio --run-id run_studio_
 
 The agent **verdict** (APPROVED/REJECTED) tells you what the debate concluded. It doesn't tell you whether the run led anywhere. Studio used to ask you to type that in — a 1-5 rating, a "did it ship" flag — and in five months across ten repos nobody ever did, so all of that is gone. Nothing on the dashboard is a number a person has to remember to supply.
 
-**What replaced it:** the one question worth answering — *did this feature ship, and what did it change?* — is answered in the feature's own spec, at the moment you know it. When you flip a spec to `status: shipped`, you fill in two more lines of its frontmatter:
+**What replaced it:** the one question worth answering — *did this feature ship, and what did it change?* — is answered in the feature's own spec, at the moment you know it. When a spec's work is finished, `/sprint-review` goes through it with you and flips it to `status: shipped` along with two more lines of its frontmatter:
 
 ```yaml
 status: shipped
@@ -304,7 +304,7 @@ you installed from? If so, you get a single line telling you to run `/studio-upd
 **2. Something this repository owes.** It works out everything unfinished — a unit an `approved`
 spec planned that nothing built, a spec whose work is all done while its frontmatter still says
 `approved`, a spec whose promised evidence is past its date — and names **one**: the most important,
-with the command that discharges it or, when it is a frontmatter edit, what to change. It says how
+with the command that discharges it or, when it is an edit, what to change. It says how
 many there are in total and never prints the list. Nothing is stored: it re-derives the answer from
 your specs and your git log every time, so it can never hold a stale "done" nobody can see is wrong.
 For an unbuilt unit the two ways to make it stop are to build it, or to open a PR adding a line under
@@ -315,8 +315,9 @@ that unit in the spec:
 ```
 
 Both the date and the reason are required — a bare "dropped" is a way to silence the nudge without
-deciding anything. A spec left at `approved` with all its work done is silenced by the edit it is
-asking for: `status: shipped`, plus the `shipped_impact` and `shipped_changed` lines. Built work is
+deciding anything. A spec left at `approved` with all its work done points at `/sprint-review`, which
+reviews every finished spec with you and flips the ones you approve in one pull request; leave its
+frontmatter alone until then. Built work is
 read from **all** branches, unmerged ones included, so a teammate who hasn't fetched can see a
 different count. For the whole list, including work that was built without any spec planning it, run
 `python studio/run_phase.py stats`.

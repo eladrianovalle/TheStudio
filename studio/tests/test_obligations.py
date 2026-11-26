@@ -122,7 +122,7 @@ def test_an_escalated_unit_is_not_reported_as_unbuilt():
 # --- criterion 2: finished work whose frontmatter has not caught up ------------
 
 
-def test_a_spec_with_every_unit_built_owes_the_flip_to_shipped():
+def test_a_spec_with_every_unit_built_is_sent_to_sprint_review():
     """The three-times-in-one-week case: a feature that landed and is missing from `stats`."""
     queue = _queue(
         [_view(_unit("built_one"), _unit("built_two"))],
@@ -134,11 +134,13 @@ def test_a_spec_with_every_unit_built_owes_the_flip_to_shipped():
     assert owed.spec_file == "specs/a-feature.md"
     assert owed.detail == (
         "every unit `a-feature` plans in specs/a-feature.md is built or dropped and nothing "
-        "is waiting on evidence, but its frontmatter still says `status: approved` — edit it "
-        "to `status: shipped` and fill in `shipped_impact` and `shipped_changed`"
+        "is waiting on evidence, but its frontmatter still says `status: approved`. Leave the "
+        "frontmatter alone: finished specs are reviewed with the human and flipped together "
+        "in one pull request"
     )
-    # An edit, not a command — and there is no honest way to close it without making the edit.
-    assert owed.command == ""
+    assert "status: shipped" not in owed.detail
+    assert "shipped_impact" not in owed.detail
+    assert owed.command == "/sprint-review"
     assert owed.silence == ""
 
 

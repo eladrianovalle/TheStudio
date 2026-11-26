@@ -175,3 +175,55 @@ def test_a_hold_points_at_the_spec_command_skeleton_instead_of_copying_it():
 def test_the_command_tables_list_sprint_review(doc):
     text = (REPO_ROOT / doc).read_text(encoding="utf-8")
     assert re.search(r"^\| `/sprint-review` \|", text, re.MULTILINE)
+
+
+@pytest.mark.parametrize(
+    ("doc", "manual_flip", "pointer"),
+    [
+        (
+            "studio/docs/CLAUDE_CODE_USAGE.md",
+            "is silenced by the edit it is asking for",
+            "A spec left at `approved` with all its work done points at `/sprint-review`",
+        ),
+        (
+            "studio/docs/CLAUDE_CODE_USAGE.md",
+            "When you flip a spec to `status: shipped`",
+            "`/sprint-review` goes through it with you and flips it to `status: shipped`",
+        ),
+        (
+            "studio/docs/API.md",
+            "A completed spec can flip to `status: shipped`",
+            "waits for `/sprint-review`",
+        ),
+        (
+            "studio/docs/API.md",
+            "for a spec whose frontmatter or evidence file is what is owed",
+            "`/sprint-review` for a finished spec still at `approved`",
+        ),
+        (
+            "studio/docs/ARCHITECTURE.md",
+            "completed specs ready for a status flip",
+            "completed specs still at `approved`, which point at `/sprint-review`",
+        ),
+        (
+            ".claude/commands/spec.md",
+            "You set it to `shipped` when you fill the file in",
+            "`/sprint-review` flips it to `shipped` with the human",
+        ),
+    ],
+)
+def test_the_docs_point_finished_specs_at_sprint_review(doc, manual_flip, pointer):
+    text = collapse_whitespace((REPO_ROOT / doc).read_text(encoding="utf-8"))
+    assert manual_flip not in text
+    assert pointer in text
+
+
+def test_no_studio_doc_tells_the_reader_the_flip_silences_the_brief():
+    docs = sorted((REPO_ROOT / "studio" / "docs").rglob("*"))
+    offenders = [
+        str(path.relative_to(REPO_ROOT))
+        for path in docs
+        if path.is_file()
+        and "is silenced by the edit it is asking for" in path.read_text(encoding="utf-8")
+    ]
+    assert offenders == []

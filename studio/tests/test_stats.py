@@ -581,7 +581,7 @@ def test_each_kind_gets_its_own_heading_its_own_count_and_its_own_indent():
         "",
         "What this repository owes (approved specs vs. git):",
         "  3 obligations, most important first:",
-        "  Finished but still `approved` — the frontmatter owes a flip: 1",
+        "  Finished but still `approved` — waiting for /sprint-review: 1",
         "    every unit `b-feature` plans is built",
         "  Planned and never built: 2",
         "    `first`, planned by `a-feature`, is not in any commit",
@@ -826,9 +826,6 @@ def test_stats_prints_the_obligation_queue(specs_root, monkeypatch, capsys):
 
 def test_stats_prints_the_two_spec_level_obligations(specs_root, monkeypatch, capsys):
     """A spec finished but still `approved`, and one whose evidence is past due.
-
-    Both are edits rather than commands, so each has to say in words what to change — a
-    kind of obligation with no `/forge` line under it is the reason `command` can be empty.
     """
     _seed_spec(specs_root, _spec("## Build Plan\n\n### 1. `already_built` — done\n"))
     _seed_spec(specs_root, _spec(
@@ -842,8 +839,11 @@ def test_stats_prints_the_two_spec_level_obligations(specs_root, monkeypatch, ca
 
     output = _stats_output(capsys)
 
-    assert "Finished but still `approved` — the frontmatter owes a flip: 1" in output
-    assert "`status: shipped`" in output and "`shipped_impact`" in output
+    assert "Finished but still `approved` — waiting for /sprint-review: 1" in output
+    finished_row = output.index("every unit `a-feature` plans in")
+    assert output[finished_row:].splitlines()[1].strip() == "Run: /sprint-review"
+    queue = output.split("What this repository owes (approved specs vs. git):", 1)[1]
+    assert "status: shipped" not in queue
     assert "Evidence overdue — the results file is still blank: 1" in output
     assert "specs/b-feature-eval-results.md is still blank" in output
     # The overdue spec is waiting on evidence, so it owes no flip — and the finished one
@@ -977,7 +977,7 @@ def _verification_spec(target, slug, unit_id, due="2000-01-01", *, promised=True
 
 @pytest.mark.parametrize(("body", "action", "due"), [
     ("game-design-board", "failed", "2000-01-01"),
-    ("shipped-finish-check", "status: shipped", "2999-01-01"),
+    ("shipped-finish-check", "/sprint-review", "2999-01-01"),
     ("## Verdict\nInCoNcLuSiVe: too few runs.", "resolve", "2000-01-01"),
     ("## Verdict\nOne of **criterion met** / **criterion not met** / **inconclusive, and why**.",
      "clarify", "2000-01-01"),
@@ -996,17 +996,17 @@ def test_evidence_action_through_both_commands(tmp_path, body, action, due):
     evidence.write_text(body)
 
     dashboard, brief = _queue_cli_outputs(target)
-    if action != "status: shipped":
+    if action != "/sprint-review":
         detail = next(line.strip() for line in dashboard.splitlines()
                       if str(evidence.relative_to(target)) in line)
         assert f"{detail}. Built work is read from all branches" in brief
     for output in (dashboard, brief):
         assert action in output.lower()
         assert "still blank" not in output
-        if action != "status: shipped":
+        assert "status: shipped" not in output
+        assert "Discharging it is an edit to the spec" not in output
+        if action != "/sprint-review":
             assert str(evidence.relative_to(target)) in output
-            assert "status: shipped" not in output
-            assert "Discharging it is an edit to the spec" not in output
         if action == "failed":
             assert "revise" in output and "rerun" in output
 

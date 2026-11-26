@@ -43,7 +43,7 @@ EVIDENCE_PLACEHOLDER = "FILL_ME"
 # The heading under each group of obligations in the dashboard. The list is sorted by RANK,
 # so a group is however many obligations of one kind sit together in it.
 _KIND_HEADINGS = {
-    STALE_STATUS: "Finished but still `approved` — the frontmatter owes a flip",
+    STALE_STATUS: "Finished but still `approved` — waiting for /sprint-review",
     EVIDENCE_FOLLOW_UP: "Evidence needs follow-up",
     EVIDENCE_OVERDUE: "Evidence overdue — the results file is still blank",
     UNBUILT_UNIT: "Planned and never built",
@@ -243,10 +243,10 @@ def _completed_spec(
         detail=(
             f"every unit `{spec.slug}` plans in {spec.spec_file} is built or dropped and "
             f"nothing is waiting on evidence, but its frontmatter still says "
-            f"`status: approved` — edit it to `status: shipped` and fill in "
-            f"`shipped_impact` and `shipped_changed`"
+            f"`status: approved`. Leave the frontmatter alone: finished specs are reviewed "
+            f"with the human and flipped together in one pull request"
         ),
-        command="",
+        command="/sprint-review",
         silence="",
         units_off_default_branch=units_off_default_branch,
     )

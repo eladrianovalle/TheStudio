@@ -591,8 +591,9 @@ def test_dropping_a_unit_moves_the_brief_on_and_then_to_the_frontmatter(tmp_path
     _do_check_updates(types.SimpleNamespace(target=str(target)))
     context = _context(capsys)
     assert "this repository owes 1 obligation" in context
-    assert "`status: shipped`" in context
-    assert "an edit to the spec, not a command" in context
+    assert "Tell the user they can discharge it with: /sprint-review" in context
+    assert "status: shipped" not in context
+    assert "an edit to the spec" not in context
     assert "/forge" not in context
 
     spec_path.write_text(
