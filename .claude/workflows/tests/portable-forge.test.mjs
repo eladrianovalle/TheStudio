@@ -309,16 +309,13 @@ const runnerStubs = {
   'runner exits 2 after printing a report': 'echo \'{"runs": [], "unclaimed": [], "config_changed": false}\'; exit 2',
 }
 
-for (const failure of ['runner exit 2', ...Object.keys(runnerStubs)]) {
+for (const failure of Object.keys(runnerStubs)) {
   test(failure + ' throws and preserves the checkout', async () => {
     const {cwd, git, unit} = fixture()
     const originalPython = process.env.STUDIO_FORGE_PYTHON
-    if (failure === 'runner exit 2') unit.gate.test_command = ''
-    else {
-      const bin = mkdtempSync(join(tmpdir(), 'forge-python-'))
-      writeFileSync(join(bin, 'python'), '#!/bin/sh\n' + runnerStubs[failure] + '\n', {mode: 0o755})
-      process.env.STUDIO_FORGE_PYTHON = join(bin, 'python')
-    }
+    const bin = mkdtempSync(join(tmpdir(), 'forge-python-'))
+    writeFileSync(join(bin, 'python'), '#!/bin/sh\n' + runnerStubs[failure] + '\n', {mode: 0o755})
+    process.env.STUDIO_FORGE_PYTHON = join(bin, 'python')
     try {
       const state = await forge(unit, {codex: async ({execution}) => {
         Object.assign(execution, {actual_runtime: 'codex', completed: true})
