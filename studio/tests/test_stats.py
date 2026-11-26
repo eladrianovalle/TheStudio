@@ -1107,13 +1107,16 @@ def test_the_default_branch_falls_back_to_origin_master_once_origin_head_is_remo
     assert run_phase._default_branch(repo) == "master"
 
 
-def test_the_default_branch_prefers_origin_main_over_origin_master(tmp_path):
+def test_both_main_and_master_with_no_origin_head_is_no_default_branch(tmp_path):
     repo, _ = _make_source(tmp_path)
     _git(repo, "push", "-q", "origin", "main:master")
     _git(repo, "fetch", "-q", "origin")
     _git(repo, "update-ref", "--no-deref", "-d", "refs/remotes/origin/HEAD")
 
-    assert run_phase._default_branch(repo) == "main"
+    assert run_phase._default_branch(repo) is None
+
+    _git(repo, "remote", "set-head", "origin", "master")
+    assert run_phase._default_branch(repo) == "master"
 
 
 def test_a_repository_with_no_remote_has_no_default_branch_even_with_a_local_main(tmp_path):

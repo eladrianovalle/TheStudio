@@ -181,8 +181,10 @@ export async function forge(unit, runtimes = adapters) {
       else git('restore', '--source', checkpoint, '--worktree', '--', path)
     }
     validateChanges([])
-    if (!test(unit.test_command).passed) throw Error('Restored writer checkpoint failed its test')
+    const restored = test(unit.test_command)
+    if (!restored.passed) throw Error('Restored writer checkpoint failed its test')
     validateChanges([])
+    return restored
   }
   function checkComments(changes) {
     const paths = changes.map(change => change.path)
@@ -317,7 +319,8 @@ export async function forge(unit, runtimes = adapters) {
         handoff.writer_sha = checkpoint
         writer = handoff
       } else if (!handoff.tests.passed || handoff.reverted) {
-        recover(reply.changes)
+        handoff.reverted_edit_tests = handoff.tests
+        handoff.tests = recover(reply.changes)
         handoff.reverted = true
         handoff.committed = false
       } else {

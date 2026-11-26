@@ -343,7 +343,7 @@ class TestTheMaintainCommandCarriesTheStudioSteps(unittest.TestCase):
         self.assertNotEqual(fetch, -1)
         self.assertNotEqual(worktree_add, -1)
         self.assertLess(fetch, worktree_add, "the worktree must be cut after the fetch")
-        self.assertRegex(locate, r"git worktree add --detach \S+ origin/main")
+        self.assertRegex(locate, r"git worktree add --detach \S+ origin/<default>")
         self.assertIn("git worktree remove", locate)
 
     def test_step_zero_makes_no_gh_call(self):
@@ -366,10 +366,18 @@ class TestTheMaintainCommandCarriesTheStudioSteps(unittest.TestCase):
             "a coordinator index edit before the check would read as a child's edit",
         )
 
+    def test_the_default_branch_is_resolved_from_the_remote_never_assumed(self):
+        locate = maintain_step(self.body, 0)
+        self.assertIn("git symbolic-ref --short refs/remotes/origin/HEAD", locate)
+        self.assertIn("git remote set-head origin --auto", locate)
+        self.assertIn("blocked: cannot tell this repository's default branch", locate)
+        self.assertNotIn("origin/main", self.body)
+        self.assertNotIn("--base main", self.body)
+
     def test_step_six_stages_everything_before_the_scope_gate(self):
         ship = maintain_step(self.body, 6)
         stage = ship.find("git add -A")
-        scope_gate = ship.find("git diff --cached --name-only origin/main")
+        scope_gate = ship.find("git diff --cached --name-only origin/<default>")
         self.assertNotEqual(stage, -1)
         self.assertNotEqual(scope_gate, -1)
         self.assertLess(stage, scope_gate, "untracked files only show in the gate once staged")
@@ -377,7 +385,9 @@ class TestTheMaintainCommandCarriesTheStudioSteps(unittest.TestCase):
 
     def test_an_open_maintenance_pr_blocks_after_the_coverage_report(self):
         ship = maintain_step(self.body, 6)
-        open_pr_check = ship.find("gh pr list --state open --json number,headRefName")
+        open_pr_check = ship.find(
+            'gh pr list --state open --search "head:verify/maintain-" --limit 1000 --json number,headRefName'
+        )
         self.assertNotEqual(open_pr_check, -1)
         self.assertIn("`verify/maintain-`", ship)
         self.assertIn("earlier maintenance PR #N is still open", ship)
@@ -392,7 +402,7 @@ class TestTheMaintainCommandCarriesTheStudioSteps(unittest.TestCase):
         self.assertLess(open_pr_check, push)
         self.assertLess(push, create)
         self.assertIn("verify/maintain-<YYYY-MM-DD>", ship)
-        self.assertRegex(ship, r"gh pr create[^`]*--base main")
+        self.assertRegex(ship, r"gh pr create[^`]*--base <default>")
         self.assertNotIn("--draft", ship)
         self.assertIn("ready for review", ship)
 

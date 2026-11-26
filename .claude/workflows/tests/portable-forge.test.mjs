@@ -119,7 +119,12 @@ for (const scenario of ['pass', 'separate pins', 'missing grade', 'red writer', 
         assert.equal(record.requested_model, pin)
         assert.deepEqual(record.observed_models, pin ? [pin] : [])
       }
-      assert.equal(state.result.flagged, ['red editor', 'missing grade'].includes(scenario))
+      assert.equal(state.result.flagged, scenario === 'missing grade')
+      if (scenario === 'red editor') {
+        assert.equal(state.result.editor.reverted, true)
+        assert.equal(state.result.editor.tests.passed, true)
+        assert.equal(state.result.editor.reverted_edit_tests.passed, false)
+      }
       assert.equal(git('status', '--porcelain'), '')
       assert.equal(readFileSync(join(cwd, 'hello.txt'), 'utf8'), 'pass')
       assert.equal(state.last_verified_sha, git('rev-parse', 'HEAD'))

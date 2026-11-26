@@ -680,7 +680,11 @@ def _gate_config_path(path: Path | None, repo_root: Path) -> Path:
     return repo_root / ".studio" / "implementation_loop.toml"
 
 
-def load_loop_config(path: Path | None = None, studio_root: Path | None = None) -> LoopConfig:
+def load_loop_config(
+    path: Path | None = None,
+    studio_root: Path | None = None,
+    test_command_override: str | None = None,
+) -> LoopConfig:
     """
     Load loop configuration from TOML, mirroring load_scopes_config().
 
@@ -744,7 +748,7 @@ def load_loop_config(path: Path | None = None, studio_root: Path | None = None) 
     defaults = LoopConfig(test_command="")
     resolved = LoopConfig(
         deliver_on_gate_fail=loop.get("deliver_on_gate_fail", defaults.deliver_on_gate_fail),
-        test_command=gate.get("test_command", defaults.test_command),
+        test_command=test_command_override or gate.get("test_command", defaults.test_command),
         static_checks=gate.get("static_checks", list(defaults.static_checks)),
         require_mutation_check=gate.get("require_mutation_check", defaults.require_mutation_check),
         mutation_command=gate.get("mutation_command", defaults.mutation_command),
