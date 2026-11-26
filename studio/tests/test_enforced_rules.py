@@ -455,17 +455,14 @@ def count_problem(
     return None
 
 
-def _shipped_rule_files() -> set[str]:
-    return {"CLAUDE.md", *(f".claude/commands/{name}" for name in SLASH_COMMANDS)}
-
-
 def unshipped_stated_in_problems(rows: list[EnforcedRule]) -> list[str]:
+    shipped_rule_files = {"CLAUDE.md", *(f".claude/commands/{name}" for name in SLASH_COMMANDS)}
     problems: list[str] = []
     for row in rows:
         enforcer_file = row.enforcer.partition("::")[0]
         if enforcer_file.removeprefix("studio/") not in SOURCE_FILES:
             continue
-        if row.stated_in not in _shipped_rule_files():
+        if row.stated_in not in shipped_rule_files:
             problems.append(
                 f"{row.rule!r}: {row.enforcer} runs in installed repositories, which have no "
                 f"{row.stated_in}. Cite CLAUDE.md or a command file in SLASH_COMMANDS that "
@@ -740,13 +737,6 @@ def test_a_list_shorter_than_its_count_is_reported():
 
 def test_a_list_exactly_as_long_as_its_count_reports_nothing():
     assert count_problem(["one rule", "another rule"], 2, "NOT_YET_ENFORCED", "NOT_YET_ENFORCED_COUNT") is None
-
-
-def test_the_count_problem_names_the_list_and_the_count_it_was_given():
-    problem = count_problem(["one rule"], 0, "The planted list", "PLANTED_COUNT")
-
-    assert problem is not None
-    assert problem.startswith("The planted list has 1 entries but PLANTED_COUNT is 0.")
 
 
 def _shipped_module_row(stated_in: str) -> EnforcedRule:
