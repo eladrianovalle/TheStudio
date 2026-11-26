@@ -3329,9 +3329,9 @@ def _unfinished_context(target: Path) -> str:
 
 
 def _do_check_updates(args: argparse.Namespace) -> None:
-    """Print the SessionStart brief: an available update, unfinished planned work, or nothing.
+    """Print the SessionStart brief: an available update, unfinished planned work, the packs in use, or nothing.
 
-    Two sources of news, and each gets its own ``try``. A single wrapper around both would let
+    Three sources of news, and each gets its own ``try``. A single wrapper around them would let
     one malformed spec or one odd git state silence the update nudge that every installed copy
     depends on — and worse, ``compute_update_check`` records that it has shown a notice as a
     side effect of being asked, so a failure between that write and the ``print`` would consume
@@ -3343,7 +3343,7 @@ def _do_check_updates(args: argparse.Namespace) -> None:
     the day it shipped. Each source decides on its own whether it has something to say.
 
     Invoked by the SessionStart hook, so it must NEVER fail the session: every path is wrapped
-    and the process always exits 0. When neither source has news nothing is printed at all —
+    and the process always exits 0. When no source has news nothing is printed at all —
     not an empty object — because a nudge that fires when there is no news is one people learn
     to skip.
     """
