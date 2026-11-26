@@ -155,7 +155,7 @@ def test_an_unchecked_native_launch_refuses_the_portable_run(project, tmp_path_f
     if record == 'unchecked':
         base = command(project, 'git', 'rev-parse', 'HEAD').stdout.strip()
         open_loop_record(project, unit_id='native_unit', branch='impl/native_unit', base_sha=base,
-                         test_command='true', pack_check=None)
+                         test_command='true', pack_check=None, suites={}, gate_config=None)
     elif record == 'not json':
         record_file.write_text('not json')
     else:

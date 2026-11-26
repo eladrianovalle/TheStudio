@@ -53,6 +53,7 @@ SOURCE_FILES = [
     "clarity.py",
     "setup.py",
     "impl_loop.py",
+    "gate_routes.py",
     "forge.py",
     "code_comments.py",
     "forge_loop.mjs",

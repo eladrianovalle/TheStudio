@@ -54,7 +54,7 @@ flowchart TD
     Guard -->|reads| Record[("loop record<br/>in the tree's git dir")]
     Guard -->|reads| Policy[("guard.toml<br/>per-repo policy")]
     Guard -->|"nothing, deny, or ask"| Git["git / gh runs, or doesn't"]
-    Forge -->|"2. after the loop: --check"| Check["impl_loop.py --check<br/>runs the repo's test command"]
+    Forge -->|"2. after the loop: --check"| Check["impl_loop.py --check<br/>runs the repo's routed gate"]
     Check -->|"clean: deletes / problems: stamps"| Record
     Launch -->|writes| Record
 
@@ -265,6 +265,8 @@ and goes away with the worktree.
 | `base_sha` | `HEAD` at launch |
 | `test_command` | This repository's `[gate] test_command`, as loaded at launch |
 | `pack_check` | The `check-packs` command `impl_loop.load_knobs()` added to the static checks at launch, or `null` when the repository declares no pack (see `specs/pack-mechanism.md`) |
+| `suites` | The `[gate.suites]` tables as loaded at launch, `{name: {"command", "paths"}}`; an older record without it reads as `{}` (see `specs/gate-suites.md`) |
+| `gate_config` | The config file the launch read, relative to its repository's top level, or `null` when that file is outside any repository; an older record without it reads as `null` |
 | `started_at` | UTC ISO timestamp |
 | `checked_at` | `null` until a check runs and finds problems |
 | `problems` | What that check found, as plain sentences |
@@ -312,7 +314,8 @@ report step. It does not read anything the agents wrote.
 |---|---|
 | `wrong-branch` | the tree is not on the record's `branch` |
 | `no-writer-commit` | no commit whose subject starts with `writer: <unit_id>` lies between the record's `base_sha` and `HEAD` |
-| `tests-failed` | the record's `test_command` exits non-zero when the check runs it |
+| `tests-failed` | a command of the routed gate exits non-zero when the check runs it; each red one is its own problem, naming its suite or the default test command |
+| `gate-config-changed` | the record's `gate_config` is among the files changed since `base_sha`; the tests still run |
 | `packs-failed` | the record's `pack_check` is set and exits non-zero when the check runs it |
 
 The two git checks run first. The test command and the pack check run only when both pass, so a
@@ -320,15 +323,22 @@ launch whose loop never ran closes without a suite run. Once they start, both ru
 fails, so one check reports every problem. The pack check is the only static check `--check` runs:
 it is the one whose failure the native workflow takes on the writer's word, and the editor branch
 never re-runs it. Its output goes to stderr like the tests', and a `packs-failed` detail carries the
-first line `check-packs` printed. The test command is the repository's configured gate command,
-run through the shell from the tree's root with its output sent to stderr. A per-unit `--test`
-still shapes what the writer runs but never reaches the check. A stuck writer's `writer(stuck):`
+first line `check-packs` printed. The tests are the repository's routed gate: every file changed since
+`base_sha` (committed, staged, unstaged, deleted or untracked, minus Studio's run records and
+concerns files) picks the record's `suites` that cover it, and the default `test_command` runs for
+any file no suite covers and when nothing changed. Each runs through the shell from the tree's root
+with its output sent to stderr, and every one runs even after another fails. A per-unit `--test`
+still shapes what the writer runs but never reaches the check. `gate-config-changed` cannot be
+cleared by checking again, because `base_sha` is fixed; once a person has read the change they
+delete the record, or relaunch. A stuck writer's `writer(stuck):`
 commit does not satisfy `no-writer-commit`, so partial work needs a person's yes before it is pushed.
 
 It prints one JSON object on stdout: `{"clean": true|false, "unit_id", "branch", "tests":
-{"command", "exit_code"}, "packs": {"command", "exit_code"} | null, "problems": [{"name", "detail"}]}`. Exit 0: clean, record removed. Exit 1:
+[{"suite", "command", "exit_code"}], "packs": {"command", "exit_code"} | null, "problems": [{"name", "detail"}]}`. Exit 0: clean, record removed. Exit 1:
 not clean, record stamped, each problem printed as a sentence on stderr. Exit 2: could not check (no
-record, unreadable record, not a git tree, bad arguments); no test is run.
+record, unreadable record, not a git tree, a failed git listing, bad arguments); no test is run.
+`tests` lists each run in file order with the default last as `suite: null`, and is `[]` when a git
+check failed.
 
 ### Spec rules that ship
 
@@ -559,8 +569,10 @@ pass.
   repositories legitimately merge into other branches.
 - **A merge asks; it is not refused.** The standing rule is that an agent merges only when asked.
   Where nobody can answer, the same rule refuses.
-- **The check that runs the tests is in scope**, and it always runs the repository's gate command.
-  A per-unit command cannot soften it. One extra suite run per unit is accepted.
+- **The check that runs the tests is in scope**, and it always runs the repository's routed gate:
+  the suites the unit's changes fall under, plus the default `test_command` for anything no suite
+  covers (revised by `specs/gate-suites.md`). A per-unit command cannot soften it. One extra run of
+  the routed gate per unit is accepted.
 - **A failed check makes pushes ask.** `/forge` has always delivered a failed unit flagged, not
   blocked, and that call belongs to a person.
 - **A guard that cannot run refuses**: missing, crashed, timed out, or handed input it cannot read.
@@ -757,7 +769,7 @@ the refusal in `implementation-loop.js`, `--check`, the `forge.md` Step 5 and 6 
 loop-spec and usage docs.
 
 **Acceptance criteria:**
-- [ ] `impl_loop.py --branch <b> --unit <id>` writes the record, with the nine fields listed under "The loop record", into the tree's git directory and prints `launched_at` with the knobs; `--branch` without a unit id exits non-zero; no other invocation writes a record.
+- [ ] `impl_loop.py --branch <b> --unit <id>` writes the record, with the eleven fields listed under "The loop record", into the tree's git directory and prints `launched_at` with the knobs; `--branch` without a unit id exits non-zero; no other invocation writes a record.
 - [ ] Launching in a tree whose record was never checked exits 1 with `unchecked-loop` and prints the exact `--check` command for that tree; over a record that cannot be read it exits 1 with `unreadable-record`, naming the file; over a record that was checked and kept its problems, the launch replaces it.
 - [ ] `--check` exits 0 and removes the record only when the tree is on the recorded branch, a commit whose subject starts with `writer: <unit_id>` lies between the recorded base and `HEAD`, the recorded test command passes when `--check` runs it, and the recorded `pack_check`, when it is not `null`, passes too; a record whose `pack_check` is `null` runs no pack check and prints `"packs": null`.
 - [ ] Each failure exits 1 under its own name (`wrong-branch`, `no-writer-commit`, `tests-failed`, `packs-failed`) and leaves the record stamped; neither the test command nor the pack check is run when either git check fails; a red test command and a red pack check are both reported by one `--check`; `--check` on a stamped record checks again.

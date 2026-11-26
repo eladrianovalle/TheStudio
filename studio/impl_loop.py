@@ -16,6 +16,7 @@ See studio/docs/IMPLEMENTATION_LOOP_SPEC.md §4 for the table shape.
 from __future__ import annotations
 
 from config_loading import tomllib
+import gate_routes
 import argparse
 import configparser
 import json
@@ -1021,11 +1022,31 @@ def pack_check_command(path: Path | None = None) -> str | None:
     return f'"{sys.executable}" "{run_phase}" check-packs --config "{config_path}"'
 
 
+def _gate_suites(config_path: Path) -> tuple[dict, str | None]:
+    with open(config_path, "rb") as handle:
+        gate = tomllib.load(handle).get("gate", {})
+    top_level = _git_output(config_path.parent, "rev-parse", "--show-toplevel")
+    if top_level is None:
+        gate_config = None
+        repository_root = _tree_root(Path.cwd())
+    else:
+        repository_root = Path(top_level.strip()).resolve()
+        gate_config = config_path.relative_to(repository_root).as_posix()
+    if "suites" not in gate:
+        return {}, gate_config
+    try:
+        suites = gate_routes.check_suites(gate["suites"], repository_root, config_path)
+    except gate_routes.SuiteError as error:
+        raise LoopConfigError(_with_fix(str(error), error.fix)) from error
+    return suites, gate_config
+
+
 def load_knobs(path: Path | None = None, test_command_override: str | None = None) -> dict:
     knobs = runtime_knobs(load_loop_config(path, test_command_override=test_command_override))
     pack_check = pack_check_command(path)
     if pack_check is not None:
         knobs["static_checks"] = [*knobs["static_checks"], pack_check]
+    knobs["suites"], knobs["gate_config"] = _gate_suites(_resolve_config_path(path, STUDIO_ROOT).resolve())
     return knobs
 
 
@@ -1040,6 +1061,7 @@ CHECK_WRONG_BRANCH = "wrong-branch"
 CHECK_NO_WRITER_COMMIT = "no-writer-commit"
 CHECK_TESTS_FAILED = "tests-failed"
 CHECK_PACKS_FAILED = "packs-failed"
+CHECK_GATE_CONFIG_CHANGED = "gate-config-changed"
 
 _RECORD_TEXT_FIELDS = ("unit_id", "branch", "tree", "base_sha", "test_command", "started_at")
 _RECORD_OPTIONAL_TEXT_FIELDS = ("pack_check", "checked_at")
@@ -1102,7 +1124,15 @@ def _read_record(path: Path) -> dict:
             raise ValueError(f"its {name} is missing or is neither text nor null")
     if not isinstance(record.get("problems"), list):
         raise ValueError("its problems is missing or is not a list")
-    return record
+    suites = record.get("suites", {})
+    try:
+        gate_routes.check_suites(suites, None, path)
+    except gate_routes.SuiteError as error:
+        raise ValueError(f"its suites is malformed: {error}") from error
+    gate_config = record.get("gate_config")
+    if not (gate_config is None or isinstance(gate_config, str)):
+        raise ValueError("its gate_config is neither text nor null")
+    return {**record, "suites": suites, "gate_config": gate_config}
 
 
 @contextmanager
@@ -1126,6 +1156,8 @@ def open_loop_record(
     base_sha: str,
     test_command: str,
     pack_check: str | None,
+    suites: dict,
+    gate_config: str | None,
 ) -> str:
     root = _tree_root(tree)
     path = _git_dir(root) / LOOP_RECORD_NAME
@@ -1160,6 +1192,8 @@ def open_loop_record(
             "base_sha": base_sha,
             "test_command": test_command,
             "pack_check": pack_check,
+            "suites": suites,
+            "gate_config": gate_config,
             "started_at": launched_at,
             "checked_at": None,
             "problems": [],
@@ -1194,10 +1228,6 @@ def _git_problems(root: Path, record: dict) -> list[dict]:
                       f"`writer: {record['unit_id']}`.",
         })
     return problems
-
-
-def _run_test_command(command: str, root: Path) -> int:
-    return subprocess.run(command, shell=True, cwd=str(root), stdout=sys.stderr, stderr=sys.stderr).returncode
 
 
 def _run_pack_check(command: str, root: Path) -> tuple[int, str]:
@@ -1238,18 +1268,24 @@ def _check_record(tree: Path, path: Path) -> int:
 
     root = _tree_root(tree)
     problems = _git_problems(root, record)
-    tests = {"command": record["test_command"], "exit_code": None}
+    tests = []
     packs = None
     if record["pack_check"] is not None:
         packs = {"command": record["pack_check"], "exit_code": None}
 
     if not problems:
-        tests["exit_code"] = _run_test_command(record["test_command"], root)
-        if tests["exit_code"] != 0:
-            problems.append({
-                "name": CHECK_TESTS_FAILED,
-                "detail": f"the test command `{record['test_command']}` exited {tests['exit_code']}.",
-            })
+        try:
+            changed = gate_routes.changed_files(root, record["base_sha"])
+            gate_config_changed = gate_routes.config_changed(root, record["base_sha"], record["gate_config"])
+        except gate_routes.RoutesError as error:
+            raise CheckError(f"Could not check: {error}. No test was run.") from error
+        if gate_config_changed:
+            problems.append(_gate_config_changed_problem(record))
+        routes, _unclaimed = gate_routes.route(record["suites"], record["test_command"], changed)
+        tests = gate_routes.run(root, routes)
+        for test_run in tests:
+            if test_run["exit_code"] != 0:
+                problems.append(_tests_failed_problem(test_run))
         if packs is not None:
             packs["exit_code"], first_line = _run_pack_check(record["pack_check"], root)
             if packs["exit_code"] != 0:
@@ -1278,13 +1314,37 @@ def _check_record(tree: Path, path: Path) -> int:
     }))
     if not clean:
         sentences = "\n".join(f"{problem['name']}: {problem['detail']}" for problem in problems)
-        print(_with_fix(
-            f"The /forge unit {record['unit_id']} is not clean.\n{sentences}",
+        fix = (
             "fix what each problem names and run the check again; until it passes, tell the user before "
-            "the branch is pushed.",
-        ), file=sys.stderr)
+            "the branch is pushed."
+        )
+        if any(problem["name"] == CHECK_GATE_CONFIG_CHANGED for problem in problems):
+            fix += (
+                f" Checking again cannot clear {CHECK_GATE_CONFIG_CHANGED}: once a person has read that change, "
+                f"delete {path} or launch the unit again."
+            )
+        print(_with_fix(f"The /forge unit {record['unit_id']} is not clean.\n{sentences}", fix), file=sys.stderr)
         return 1
     return 0
+
+
+def _tests_failed_problem(test_run: dict) -> dict:
+    if test_run["suite"] is None:
+        named = "the default test command"
+    else:
+        named = f"the {test_run['suite']} suite's command"
+    return {
+        "name": CHECK_TESTS_FAILED,
+        "detail": f"{named} `{test_run['command']}` exited {test_run['exit_code']}.",
+    }
+
+
+def _gate_config_changed_problem(record: dict) -> dict:
+    return {
+        "name": CHECK_GATE_CONFIG_CHANGED,
+        "detail": f"{record['gate_config']} changed since {record['base_sha']}, so the next launch on this branch "
+                  "would be gated by a config this unit wrote; a person should read that change.",
+    }
 
 
 def _spec_file(spec: str) -> Path | None:
@@ -1346,7 +1406,7 @@ def _parse_arguments(argv: List[str]) -> argparse.Namespace:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="After a /forge run: re-run the recorded test command and say whether the unit is clean.",
+        help="After a /forge run: run the recorded suites the unit's changes fall under, plus the default, and say whether the unit is clean.",
     )
     args = parser.parse_args(argv[1:])
     if args.check:
@@ -1380,6 +1440,8 @@ def _launch(args: argparse.Namespace) -> str:
             base_sha=knobs["base_sha"],
             test_command=knobs["test_command"],
             pack_check=pack_check_command(path),
+            suites=knobs["suites"],
+            gate_config=knobs["gate_config"],
         )
 
     return json.dumps(knobs)

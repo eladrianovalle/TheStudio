@@ -373,18 +373,28 @@ python .studio/source/impl_loop.py --check
 # with --work-dir: python .studio/source/impl_loop.py --check --work-dir "<work_dir>"
 ```
 
-It re-runs this repository's own test command itself (and the pack check, when a pack is
-declared), and checks that the tree is still on `<branch>` and holds a `writer: <unit_id>` commit
-since the launch. It reads nothing the agents wrote. It prints one JSON object:
-`{"clean", "unit_id", "branch", "tests": {"command", "exit_code"}, "packs", "problems": [{"name", "detail"}]}`.
+It runs this repository's own tests itself: every `[gate.suites]` suite the unit's changed files
+fall under, plus the default `test_command` for any changed file no suite covers (and when nothing
+changed), and the pack check when a pack is declared. It checks that the tree is still on `<branch>`
+and holds a `writer: <unit_id>` commit since the launch. It reads nothing the agents wrote. It prints
+one JSON object:
+`{"clean", "unit_id", "branch", "tests": [{"suite", "command", "exit_code"}], "packs", "problems": [{"name", "detail"}]}`.
+`tests` holds one entry per command it ran, in the config's order with the default last as
+`suite: null`, and is `[]` when a git check failed.
 
-- **Exit 0** — clean. Say so.
+- **Exit 0** — clean. Say so, naming the suites that ran.
 - **Exit 1** — not clean. Lead the report with this and list every problem by name and detail:
-  `wrong-branch`, `no-writer-commit` (a `writer(stuck):` commit does not count), `tests-failed`,
-  `packs-failed`. The record stays, stamped with what was found; running `--check` again after a
+  `wrong-branch`, `no-writer-commit` (a `writer(stuck):` commit does not count), `tests-failed`
+  (one per red suite, naming it or "the default test command"), `packs-failed`, and
+  `gate-config-changed`. The record stays, stamped with what was found; running `--check` again after a
   fix checks again. Tell the user the branch should not be pushed until they have seen this.
-- **Exit 2** — nothing was checked (no record, one it cannot read, or a run, a launch or another
-  check holding the lock). Print the message and say the unit's tests were not re-run.
+- **`gate-config-changed`** — the unit edited the gate config the launch read, so the next launch on
+  this branch would be gated by a config the unit wrote. The tests still ran. Checking again cannot
+  clear it: tell the user to read that change, and that once they have, the fix line names the
+  record file to delete (or they relaunch). Do not delete it yourself.
+- **Exit 2** — nothing was checked (no record, one it cannot read, a git listing that failed, or a
+  run, a launch or another check holding the lock). Print the message and say the unit's tests were
+  not re-run.
 
 The native Workflow returns a candidate with `delivered: false`. If it carries
 `pendingCommentCheck: true`, pass the unmodified JSON on stdin to the Studio checker.

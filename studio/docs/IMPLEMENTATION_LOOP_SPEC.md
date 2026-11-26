@@ -444,10 +444,12 @@ exists for.
 tells a session running an older `forge.md` to restart. When every other check passes, the launch
 writes `studio-forge.json` into the tree's git directory (`git rev-parse --absolute-git-dir`: `.git/`
 for the main checkout, `.git/worktrees/<name>/` for a linked one), so `git add -A` and
-`git reset --hard` never touch it. It holds nine fields: `unit_id`, `branch`, `tree`, `base_sha`,
+`git reset --hard` never touch it. It holds eleven fields: `unit_id`, `branch`, `tree`, `base_sha`,
 `test_command` (the repository's `[gate] test_command`), `pack_check` (the `check-packs` command added
-to the static checks, or `null` with no pack), `started_at`, `checked_at` (`null` until a check finds
-problems) and `problems`. The launch prints `launched_at` with the knobs, and
+to the static checks, or `null` with no pack), `suites` (the `[gate.suites]` tables as loaded at
+launch), `gate_config` (the config file the launch read, relative to its repository's top level, or
+`null` outside a repository), `started_at`, `checked_at` (`null` until a check finds problems) and
+`problems`. A record written before `suites` and `gate_config` existed reads as `{}` and `null`. The launch prints `launched_at` with the knobs, and
 `implementation-loop.js` returns `{ delivered: false, reason: 'not_launched' }` before spawning any
 agent when its args carry none. A launch over a record nobody checked refuses with `unchecked-loop`
 and prints the exact `--check` command for that tree; over a record it cannot read it refuses with
@@ -466,17 +468,57 @@ the refusal names it to remove.
 Two git checks run first: `wrong-branch` (the tree is not on the record's branch) and
 `no-writer-commit` (no commit between `base_sha` and `HEAD` has a subject starting
 `writer: <unit_id>`; a `writer(stuck):` commit does not count). Only when both pass does it run the
-recorded test command through the shell from the tree's root, then the recorded pack check when there
-is one, each with its output on stderr; both run even if the first fails, giving `tests-failed` and
-`packs-failed` (whose detail carries the first line `check-packs` printed). A per-unit `--test` never
-reaches the check. It prints one JSON object, `{"clean", "unit_id", "branch", "tests": {"command",
-"exit_code"}, "packs": {"command", "exit_code"} | null, "problems": [{"name", "detail"}]}`. Exit 0:
+routed gate: it lists every file changed since `base_sha` (`git diff --name-only --no-renames -z
+<base_sha>` plus untracked files that are not ignored, leaving out `.studio/output/impl_loop/` and
+`reviewer-concerns/`), runs each recorded suite that covers one of them in the order the config lists
+them, and runs the recorded `test_command` last when a changed file falls under no suite or nothing
+changed. A rename counts as both its old and its new path. Each runs through the shell from the
+tree's root with its output on stderr, and every one runs even after another fails; each red one is
+its own `tests-failed`, naming the suite or "the default test command". Then the recorded pack check
+runs when there is one, giving `packs-failed` (whose detail carries the first line `check-packs`
+printed). When the record's `gate_config` is among the changed files it adds `gate-config-changed`
+and still runs the tests: the next launch on this branch would be gated by a config the unit wrote,
+so a person should read that change. Checking again cannot clear it, because `base_sha` is fixed; the
+fix line names the record file to delete once someone has read it, or relaunch. A per-unit `--test`
+never reaches the check. It prints one JSON object, `{"clean", "unit_id", "branch", "tests":
+[{"suite", "command", "exit_code"}], "packs": {"command", "exit_code"} | null, "problems": [{"name",
+"detail"}]}`, where the default's `suite` is `null` and `tests` is `[]` when a git check failed. Exit 0:
 clean, record removed. Exit 1: not clean, record stamped with `checked_at` and `problems`, each problem
 printed as a sentence on stderr; checking a stamped record checks again. The check holds the same
 lock from reading the record to removing or stamping it, so a launch during a recheck refuses with
 `launch-in-progress` instead of having its new record deleted or overwritten. Exit 2: nothing was
 checked (no record, an unreadable one, the lock held by a run, a launch or another check, not a git tree,
-bad arguments), and no test ran.
+a git listing that failed, bad arguments), and no test ran.
+
+**Declaring suites, for a repository with more than one stack.** One `test_command` tests every unit
+the same way, so a unit that only touched a web build would be checked with the Unity tests. Name each
+stack's suite under `[gate]` in `.studio/implementation_loop.toml`:
+
+```toml
+[gate]
+test_command = "./scripts/run-all-tests.sh"
+
+[gate.suites.web]
+command = "npm --prefix web run check"
+paths = ["web/", "shared/schema.json"]
+
+[gate.suites.unity]
+command = "./scripts/run-editmode-tests.sh"
+paths = ["unity/"]
+```
+
+A suite takes exactly `command` and `paths`. A path ending in `/` covers every file under that folder;
+any other path covers one exact file. Paths are repository-relative, literal and case-sensitive: no
+globs, no leading `/` or `./`, no `..`, and each one must exist as written, so a typo such as `wbe/`
+is refused instead of sending every web change to the default. A file shared by two stacks goes under
+both suites. `test_command` stays the backstop for any changed file no suite covers; prefer one that
+covers every stack where that is affordable, because a new top-level folder lands there. A malformed
+suite makes every `impl_loop.py` call exit 1 with a `bad-suite:` message naming the file and the suite.
+Suites are frozen into the launch record, so a unit that edits the config cannot change what checks
+it; `--check` flags the edit instead. Two limits: an older Studio install ignores `[gate.suites]` and
+runs only `test_command`, and a gitignored config cannot raise `gate-config-changed`. For now only the
+native `--check` routes; the portable host's verdict and the writer's and editor's own runs still use
+one test command (design: `specs/gate-suites.md`).
 
 **What it does not do.** It reduces the blast radius of a run pointed at the wrong directory; it
 cannot make that impossible. Every one of these instructions is prompt text an agent may ignore, and

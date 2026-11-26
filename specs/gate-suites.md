@@ -3,7 +3,7 @@ feature: Gate suites, so /forge tests what a unit changed in a repository with m
 slug: gate-suites
 ticket: https://github.com/eladrianovalle/TheStudio/issues/299
 # status: draft → approved (a human approved it) → shipped (built AND verified)
-status: draft
+status: approved
 studio_run: studio/output/tech/run_tech_20261126_200510
 # verification_due: the date the evidence is due (YYYY-MM-DD). Required once this spec is
 # `approved`, and only if it carries a `## Verification` section — no section, no deadline.
@@ -108,7 +108,7 @@ Nothing outside `[gate.suites]` gains a refusal.
 | `has unknown key "<k>"; a suite takes only command and paths` | `path = [...]` |
 | `has no command, or it is blank or not text` | missing, `""`, `5` |
 | `has no paths, or it is empty or not a list of text` | missing, `[]`, `"web/"` |
-| `path "<p>" must be repo-relative` | leading `/`, a `\`, a `..` segment, leading `./`, blank |
+| `path "<p>" must be repo-relative` | leading `/`, a `\`, a `..` or `.` segment, an empty segment (`web//`), leading `./`, blank |
 | `path "<p>" has a glob character` | `*`, `?` or `[` |
 | `path "<p>" does not exist as written` | at launch: an entry ending in `/` that is not a directory, or another entry that is not a file. When a bare entry is a directory, the message adds `write "<p>/"`. |
 
