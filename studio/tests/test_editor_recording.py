@@ -374,6 +374,14 @@ def with_spaced_forbidden_path(manifest_path):
     ([tool_use({"file_path": "/srv/My Studio/studio/evals/forge_editor/results.json"})], "a tool input names /srv/My Studio"),
     ([tool_use({"command": "cat '/srv/My Studio/studio/README.md'"})], "a tool input names /srv/My Studio"),
     ([tool_use({"file_path": "~/My Studio/notes.md"})], "a tool input names ~/My Studio"),
+    ([tool_use({"file_path": "/srv/other/../My Studio/studio/evals/forge_editor/results.json"})],
+     "a tool input names /srv/other/../My Studio/studio/evals/forge_editor/results.json"),
+    ([tool_use({"command": "cat \"/srv/other/../My Studio/studio/README.md\"|head"})],
+     "a tool input names /srv/other/../My Studio/studio/README.md"),
+    ([tool_use({"command": "ls 'srv' && cat '/srv/other/../My Studio'/notes.md"})],
+     "a tool input names /srv/other/../My Studio/notes.md"),
+    ([tool_use({"command": "cat /srv/other/../My\\ Studio/notes.md"})],
+     "a tool input names /srv/other/../My Studio/notes.md"),
 ])
 def test_a_forbidden_path_with_a_space_is_void(recording, rows, seen, capsys):
     cli, path, manifest_path, workflow = recording

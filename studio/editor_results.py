@@ -4,6 +4,7 @@ import json
 import os
 import posixpath
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -186,10 +187,23 @@ def decoded_strings(value):
             yield from decoded_strings(item)
 
 
+def whole_paths(value):
+    for text in decoded_strings(value):
+        words = [text]
+        lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        try:
+            words += list(lexer)
+        except ValueError:
+            pass
+        yield from (word for word in words if word.startswith(("/", "~/")))
+
+
 def transcript_parts(rows):
     first_assistant = next((i for i, row in enumerate(rows) if row.get("type") == "assistant"), len(rows))
     context = "\n".join(text for row in rows[:first_assistant] for text in decoded_strings(row))
     actions = []
+    action_paths = []
     results = []
     for row in rows:
         message = row.get("message")
@@ -201,9 +215,10 @@ def transcript_parts(rows):
                 continue
             if block.get("type") == "tool_use" and row.get("type") == "assistant":
                 actions.append(json.dumps(block.get("input"), ensure_ascii=False))
+                action_paths.extend(whole_paths(block.get("input")))
             elif block.get("type") == "tool_result":
                 results.extend(decoded_strings(block.get("content")))
-    return context, "\n".join(actions), "\n".join(results)
+    return context, "\n".join(actions), action_paths, "\n".join(results)
 
 
 def with_home_forms(paths):
@@ -224,9 +239,9 @@ def is_inside(path, folder):
     return path == folder or path.startswith(folder + "/")
 
 
-def path_into_measurement(text, forbidden_paths, exempt_folder):
+def path_into_measurement(text, paths, forbidden_paths, exempt_folder):
     exempt_forms = with_home_forms([str(exempt_folder)])
-    for seen in PATH_IN_TEXT.findall(text):
+    for seen in PATH_IN_TEXT.findall(text) + paths:
         normalized = posixpath.normpath(seen)
         if any(is_inside(normalized, exempt) for exempt in exempt_forms):
             continue
@@ -245,7 +260,7 @@ def path_into_measurement(text, forbidden_paths, exempt_folder):
 
 
 def launch_problem(rows, manifest, exempt_folder):
-    context, actions, results = transcript_parts(rows)
+    context, actions, action_paths, results = transcript_parts(rows)
     launch_folder = manifest["launch_folder"]
     lines = context.split("\n")
     if not any(line.endswith(STARTING_FOLDER_LINE + launch_folder) for line in lines):
@@ -277,8 +292,8 @@ def launch_problem(rows, manifest, exempt_folder):
     if GIT_STATUS_LINE in context:
         return f"the editor was shown a git status (its context holds '{GIT_STATUS_LINE}')"
 
-    for where, text in (("the editor's context", context), ("a tool input", actions)):
-        found = path_into_measurement(text, manifest["forbidden_paths"], exempt_folder)
+    for where, text, paths in (("the editor's context", context, []), ("a tool input", actions, action_paths)):
+        found = path_into_measurement(text, paths, manifest["forbidden_paths"], exempt_folder)
         if found:
             seen, forbidden = found
             return f"{where} names {seen}, and editors must not touch {forbidden}"
