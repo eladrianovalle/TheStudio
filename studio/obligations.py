@@ -67,6 +67,7 @@ class Obligation:
     detail: str  # one plain sentence: what is owed, and why it is owed now
     command: str
     silence: str
+    units_off_default_branch: Optional[Tuple[str, ...]] = None
 
 
 class Evidence(Enum):
@@ -116,6 +117,7 @@ def derive(
     ledger: "UnitLedger",
     *,
     today: date,
+    merged_ids: Optional[set] = None,
 ) -> List[Obligation]:
     """Every obligation these inputs imply, sorted by RANK, then spec_file, then subject.
 
@@ -139,7 +141,7 @@ def derive(
     for spec in specs:
         if spec.status != "approved":
             continue
-        follow_up = _completed_spec(spec, still_owed, dropped)
+        follow_up = _completed_spec(spec, still_owed, dropped, merged_ids)
         if follow_up is not None:
             obligations.append(follow_up)
         overdue = _evidence_overdue(spec, today)
@@ -202,6 +204,7 @@ def _completed_spec(
     spec: SpecView,
     still_owed: set,
     dropped: set,
+    merged_ids: Optional[set],
 ) -> Optional[Obligation]:
     """A completed spec owes the action its promised verification supports.
 
@@ -227,6 +230,12 @@ def _completed_spec(
                 command="",
                 silence="",
             )
+    units_off_default_branch = None
+    if merged_ids is not None:
+        units_off_default_branch = tuple(
+            unit.unit_id for unit in spec.units
+            if _key(unit) not in dropped and unit.unit_id not in merged_ids
+        )
     return Obligation(
         kind=STALE_STATUS,
         subject=spec.slug,
@@ -239,6 +248,7 @@ def _completed_spec(
         ),
         command="",
         silence="",
+        units_off_default_branch=units_off_default_branch,
     )
 
 

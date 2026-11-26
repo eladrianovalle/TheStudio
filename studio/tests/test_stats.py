@@ -8,6 +8,7 @@ actually sees.
 """
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -17,6 +18,7 @@ import pytest
 
 import run_phase
 from obligations import STALE_STATUS, UNBUILT_UNIT, Obligation
+from test_update_check import _git, _make_source
 from stats import (
     PlannedUnit,
     UnitLedger,
@@ -1046,3 +1048,203 @@ def test_both_commands_share_the_four_kind_queue(tmp_path):
     assert sorted(ordered, key=dashboard.index) == ordered
     assert "4 obligations" in brief and ordered[0] in brief
     assert all(item not in brief for item in ordered[1:])
+
+
+def _stats_json(target: Path) -> dict:
+    result = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "studio/run_phase.py"), "stats", "--json",
+         "--artifact-root", str(target)],
+        cwd=target, capture_output=True, check=True, text=True,
+    )
+    return json.loads(result.stdout)
+
+
+def _installed_spec(target: Path, build_plan: str, slug: str = "a-feature") -> None:
+    specs = target / ".studio" / "specs"
+    specs.mkdir(parents=True, exist_ok=True)
+    (specs / f"{slug}.md").write_text(_spec(build_plan, slug=slug), encoding="utf-8")
+
+
+_SQUASHED_UNMERGED_AND_DROPPED = (
+    "## Build Plan\n\n"
+    "### 1. `squashed_unit` — merged by a squash\n\n"
+    "### 2. `unmerged_unit` — built on a branch nobody merged\n\n"
+    "### 3. `closed_unit` — closed on purpose\n"
+    "- **Dropped:** 2026-09-16 — superseded.\n"
+)
+
+
+def _repo_with_a_squash_and_an_unmerged_branch(tmp_path: Path) -> Path:
+    repo, _ = _make_source(tmp_path)
+    _git(repo, "commit", "-q", "--allow-empty", "-m",
+         "Ship a feature (#12)\n\n* writer: squashed_unit\n* editor: squashed_unit\n")
+    _git(repo, "push", "-q", "origin", "main")
+    _git(repo, "switch", "-q", "-c", "side")
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "writer: unmerged_unit")
+    _git(repo, "push", "-q", "origin", "side")
+    _git(repo, "switch", "-q", "main")
+    return repo
+
+
+def test_the_default_branch_follows_origin_head_to_a_branch_named_trunk(tmp_path):
+    repo, _ = _make_source(tmp_path)
+    _git(repo, "push", "-q", "origin", "main:trunk")
+    _git(repo, "fetch", "-q", "origin")
+    _git(repo, "remote", "set-head", "origin", "trunk")
+
+    assert run_phase._default_branch(repo) == "trunk"
+    assert _stats_json(repo)["default_branch"] == "trunk"
+
+
+def test_the_default_branch_falls_back_to_origin_master_once_origin_head_is_removed(tmp_path):
+    repo, _ = _make_source(tmp_path)
+    _git(repo, "push", "-q", "origin", "main:master")
+    _git(repo, "fetch", "-q", "origin")
+    _git(repo, "remote", "set-head", "origin", "master")
+    _git(repo, "remote", "set-head", "origin", "--delete")
+    _git(repo, "update-ref", "-d", "refs/remotes/origin/main")
+
+    assert run_phase._default_branch(repo) == "master"
+
+
+def test_the_default_branch_prefers_origin_main_over_origin_master(tmp_path):
+    repo, _ = _make_source(tmp_path)
+    _git(repo, "push", "-q", "origin", "main:master")
+    _git(repo, "fetch", "-q", "origin")
+    _git(repo, "update-ref", "--no-deref", "-d", "refs/remotes/origin/HEAD")
+
+    assert run_phase._default_branch(repo) == "main"
+
+
+def test_a_repository_with_no_remote_has_no_default_branch_even_with_a_local_main(tmp_path):
+    repo = _repo_with_commits(tmp_path / "local", "init", "writer: built_unit")
+    subprocess.run(["git", "-C", str(repo), "branch", "-M", "main"], check=True)
+    _installed_spec(repo, "## Build Plan\n\n### 1. `built_unit` — done\n")
+
+    assert run_phase._default_branch(repo) is None
+    feed = _stats_json(repo)
+    assert feed["default_branch"] is None
+    assert [(owed["kind"], owed["units_off_default_branch"]) for owed in feed["obligations"]] == [
+        (STALE_STATUS, None),
+    ]
+
+
+def test_a_directory_git_cannot_read_has_no_default_branch(tmp_path, monkeypatch):
+    outside = tmp_path / "not-a-repo"
+    outside.mkdir()
+    assert run_phase._default_branch(outside) is None
+
+    def no_git(*args, **kwargs):
+        raise FileNotFoundError("git")
+
+    monkeypatch.setattr(run_phase.subprocess, "run", no_git)
+    assert run_phase._default_branch(outside) is None
+
+
+def test_merged_units_are_read_from_the_default_branch_only(tmp_path):
+    repo = _repo_with_a_squash_and_an_unmerged_branch(tmp_path)
+
+    assert run_phase._merged_unit_ids(repo, "main") == {"squashed_unit"}
+    assert run_phase._merged_unit_ids(repo, "side") == {"squashed_unit", "unmerged_unit"}
+    assert run_phase._merged_unit_ids(repo, "no-such-branch") is None
+    built, _ = run_phase._built_unit_ids(repo)
+    assert built == {"squashed_unit", "unmerged_unit"}
+
+
+def test_the_feed_names_the_unit_whose_only_writer_commit_never_merged(tmp_path):
+    repo = _repo_with_a_squash_and_an_unmerged_branch(tmp_path)
+    _installed_spec(repo, _SQUASHED_UNMERGED_AND_DROPPED)
+
+    feed = _stats_json(repo)
+
+    assert feed["default_branch"] == "main"
+    assert len(feed["obligations"]) == 1
+    owed = feed["obligations"][0]
+    assert set(owed) == {
+        "kind", "subject", "spec_file", "detail", "command", "silence",
+        "units_off_default_branch",
+    }
+    assert owed["kind"] == "stale_status"
+    assert owed["subject"] == "a-feature"
+    assert owed["spec_file"] == ".studio/specs/a-feature.md"
+    assert owed["units_off_default_branch"] == ["unmerged_unit"]
+
+
+def test_the_feed_has_nothing_off_the_default_branch_once_every_unit_merged(tmp_path):
+    repo, _ = _make_source(tmp_path)
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "Ship it (#3)\n\n* writer: squashed_unit\n")
+    _git(repo, "push", "-q", "origin", "main")
+    _installed_spec(repo, "## Build Plan\n\n### 1. `squashed_unit` — merged by a squash\n")
+
+    owed = _stats_json(repo)["obligations"]
+
+    assert [(entry["kind"], entry["units_off_default_branch"]) for entry in owed] == [
+        (STALE_STATUS, []),
+    ]
+
+
+def test_the_feed_carries_every_obligation_kind_with_its_command(tmp_path):
+    repo, _ = _make_source(tmp_path)
+    _installed_spec(repo, "## Build Plan\n\n### 1. `owed_unit` — nobody built it\n")
+
+    owed = _stats_json(repo)["obligations"]
+
+    assert owed == [{
+        "kind": "unbuilt_unit",
+        "subject": "owed_unit",
+        "spec_file": ".studio/specs/a-feature.md",
+        "detail": (
+            "`owed_unit`, planned by `a-feature` in .studio/specs/a-feature.md, is not in any "
+            'commit — "nobody built it"'
+        ),
+        "command": "/forge --spec .studio/specs/a-feature.md --unit owed_unit",
+        "silence": (
+            "open a PR adding `- **Dropped:** YYYY-MM-DD — <reason>` under that unit's "
+            "heading in .studio/specs/a-feature.md"
+        ),
+        "units_off_default_branch": None,
+    }]
+
+
+def test_the_feed_says_nothing_is_owed_with_an_empty_list(tmp_path):
+    repo, _ = _make_source(tmp_path)
+
+    assert _stats_json(repo)["obligations"] == []
+
+
+def test_a_shallow_clone_cannot_say_what_is_owed_or_what_merged(tmp_path):
+    source, remote = _make_source(tmp_path)
+    _git(source, "commit", "-q", "--allow-empty", "-m", "writer: built_unit")
+    _git(source, "commit", "-q", "--allow-empty", "-m", "a later commit")
+    _git(source, "push", "-q", "origin", "main")
+    shallow = tmp_path / "shallow"
+    subprocess.run(
+        ["git", "clone", "-q", "--depth", "1", f"file://{remote}", str(shallow)], check=True
+    )
+    _installed_spec(shallow, "## Build Plan\n\n### 1. `built_unit` — done\n")
+
+    assert run_phase._merged_unit_ids(shallow, "main") is None
+    feed = _stats_json(shallow)
+    assert feed["obligations"] is None
+    assert feed["default_branch"] == "main"
+
+
+def test_both_unit_readers_search_the_log_through_one_function(tmp_path, monkeypatch):
+    revisions = []
+
+    def recording_search(target, revision):
+        revisions.append(revision)
+        return ({"a_built_unit"}, {"a_stuck_unit"})
+
+    monkeypatch.setattr(run_phase, "_unit_ids_in_log", recording_search)
+
+    assert run_phase._built_unit_ids(tmp_path) == ({"a_built_unit"}, {"a_stuck_unit"})
+    assert run_phase._merged_unit_ids(tmp_path, "trunk") == {"a_built_unit"}
+    assert revisions == ["--all", "refs/remotes/origin/trunk"]
+
+
+def test_the_commit_search_pattern_is_written_once():
+    source = Path(run_phase.__file__).read_text(encoding="utf-8")
+
+    assert source.count('"--grep"') == 1
+    assert source.count("(writer|editor)") == 1
