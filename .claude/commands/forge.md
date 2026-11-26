@@ -268,6 +268,9 @@ wrong and what to do; print it as-is and let the user fix it. It is one of:
   and relaunch, because the user may want to look at that run's work first.
 - **`unreadable-record`** — the launch record in this tree's git directory cannot be read. The
   message names the file.
+- **`launch-in-progress`** — another `/forge` launch in this tree is writing its launch record at
+  this moment. Nothing was launched. Tell the user; do not retry in a loop, because once that launch
+  finishes its record will refuse this one with `unchecked-loop`.
 - **`--branch needs a unit id`** — the command was called without `--unit`. If you passed it, the
   session is running an older copy of this command: tell the user to restart the session.
 

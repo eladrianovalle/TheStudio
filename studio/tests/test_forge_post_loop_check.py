@@ -260,6 +260,24 @@ def test_launching_over_an_unreadable_record_refuses_and_names_the_file(workspac
     assert path.read_text() == "{ this is not a record"
 
 
+def test_launching_while_another_launch_holds_the_tree_refuses_and_writes_no_record(workspace):
+    fcntl = pytest.importorskip("fcntl")
+    repo = workspace["repo"]
+    lock_path = record_path(repo).with_name("studio-forge.lock")
+
+    with lock_path.open("a+b") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        held = launch(workspace, "--unit", "demo")
+    released = launch(workspace, "--unit", "demo")
+
+    assert held.returncode == 1
+    assert held.stdout == ""
+    assert "launch-in-progress" in held.stderr
+    assert str(lock_path) in held.stderr
+    assert released.returncode == 0, released.stderr
+    assert read_record(repo)["started_at"] == json.loads(released.stdout)["launched_at"]
+
+
 def test_launching_over_a_stamped_record_replaces_it(workspace):
     repo = workspace["repo"]
     write_record(

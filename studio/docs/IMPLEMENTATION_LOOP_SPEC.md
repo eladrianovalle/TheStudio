@@ -452,6 +452,9 @@ problems) and `problems`. The launch prints `launched_at` with the knobs, and
 agent when its args carry none. A launch over a record nobody checked refuses with `unchecked-loop`
 and prints the exact `--check` command for that tree; over a record it cannot read it refuses with
 `unreadable-record`, naming the file; a record that was checked and kept its problems is replaced.
+A launch holds an exclusive lock on `studio-forge.lock` beside the record from reading the record to
+writing the new one, so two launches at once cannot both pass: the second refuses with
+`launch-in-progress` instead of overwriting the first run's record.
 
 **After the loop, `impl_loop.py --check [--work-dir <tree>]` says whether the unit is clean.**
 `/forge` runs it first in its report step. It reads git and the record, never the agents' handoffs.

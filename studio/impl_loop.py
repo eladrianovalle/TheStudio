@@ -26,6 +26,7 @@ import string
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1029,9 +1030,11 @@ def load_knobs(path: Path | None = None, test_command_override: str | None = Non
 
 
 LOOP_RECORD_NAME = "studio-forge.json"
+LOOP_LOCK_NAME = "studio-forge.lock"
 
 RECORD_UNCHECKED = "unchecked-loop"
 RECORD_UNREADABLE = "unreadable-record"
+RECORD_LAUNCHING = "launch-in-progress"
 
 CHECK_WRONG_BRANCH = "wrong-branch"
 CHECK_NO_WRITER_COMMIT = "no-writer-commit"
@@ -1102,6 +1105,27 @@ def _read_record(path: Path) -> dict:
     return record
 
 
+@contextmanager
+def _launch_lock(git_dir: Path):
+    lock_path = git_dir / LOOP_LOCK_NAME
+    with lock_path.open("a+b") as lock:
+        try:
+            if os.name == "nt":
+                import msvcrt
+                lock.seek(0)
+                msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as error:
+            raise RecordError(_with_fix(
+                f"{RECORD_LAUNCHING}: another /forge launch holds {lock_path} and is opening a loop record "
+                "for this tree right now, so nothing was launched.",
+                "let that launch finish, check its loop when it is done, then run /forge again.",
+            )) from error
+        yield
+
+
 def open_loop_record(
     tree: Path,
     unit_id: str,
@@ -1112,35 +1136,36 @@ def open_loop_record(
 ) -> str:
     root = _tree_root(tree)
     path = _git_dir(root) / LOOP_RECORD_NAME
-    if path.exists():
-        try:
-            existing = _read_record(path)
-        except ValueError as why:
-            raise RecordError(_with_fix(
-                f"{RECORD_UNREADABLE}: {path} is there but cannot be read as a /forge loop record ({why}). "
-                "A /forge run may still be holding this tree, so nothing was launched.",
-                f"look at {path}; once no /forge run is using this tree, remove it and run /forge again.",
-            )) from why
-        if existing["checked_at"] is None:
-            raise RecordError(_with_fix(
-                f"{RECORD_UNCHECKED}: the /forge run of {existing['unit_id']} on {existing['branch']}, "
-                f"started {existing['started_at']}, was never checked. Check it before launching another:\n\n"
-                f"    {check_command(root)}",
-                "run that command, read what it reports, then run /forge again.",
-            ))
-    launched_at = _utc_now()
-    _write_record(path, {
-        "unit_id": unit_id,
-        "branch": branch,
-        "tree": str(root),
-        "base_sha": base_sha,
-        "test_command": test_command,
-        "pack_check": pack_check,
-        "started_at": launched_at,
-        "checked_at": None,
-        "problems": [],
-    })
-    return launched_at
+    with _launch_lock(path.parent):
+        if path.exists():
+            try:
+                existing = _read_record(path)
+            except ValueError as why:
+                raise RecordError(_with_fix(
+                    f"{RECORD_UNREADABLE}: {path} is there but cannot be read as a /forge loop record ({why}). "
+                    "A /forge run may still be holding this tree, so nothing was launched.",
+                    f"look at {path}; once no /forge run is using this tree, remove it and run /forge again.",
+                )) from why
+            if existing["checked_at"] is None:
+                raise RecordError(_with_fix(
+                    f"{RECORD_UNCHECKED}: the /forge run of {existing['unit_id']} on {existing['branch']}, "
+                    f"started {existing['started_at']}, was never checked. Check it before launching another:\n\n"
+                    f"    {check_command(root)}",
+                    "run that command, read what it reports, then run /forge again.",
+                ))
+        launched_at = _utc_now()
+        _write_record(path, {
+            "unit_id": unit_id,
+            "branch": branch,
+            "tree": str(root),
+            "base_sha": base_sha,
+            "test_command": test_command,
+            "pack_check": pack_check,
+            "started_at": launched_at,
+            "checked_at": None,
+            "problems": [],
+        })
+        return launched_at
 
 
 def _is_writer_commit(subject: str, unit_id: str) -> bool:
