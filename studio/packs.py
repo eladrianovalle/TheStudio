@@ -25,6 +25,10 @@ class PackConfigError(ValueError):
     pass
 
 
+class ConfigSyntaxError(PackConfigError):
+    pass
+
+
 @dataclass(frozen=True)
 class Department:
     pack: dict
@@ -113,7 +117,7 @@ def load_declaration(config_path: Path) -> list[Department]:
         with open(config_path, "rb") as handle:
             data = tomllib.load(handle)
     except tomllib.TOMLDecodeError as error:
-        raise PackConfigError(f"{config_path}: not valid TOML: {error}") from error
+        raise ConfigSyntaxError(f"{config_path}: not valid TOML: {error}") from error
     return declared_departments(data, config_path)
 
 
@@ -405,6 +409,8 @@ def session_note(target: Path) -> str:
         return ""
     try:
         departments = load_declaration(config_path)
+    except ConfigSyntaxError as error:
+        return f"Config problem: {str(error).rstrip('.')}."
     except PackConfigError as error:
         return _problem_sentence([str(error)])
     if not departments:

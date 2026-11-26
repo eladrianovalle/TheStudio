@@ -252,6 +252,8 @@ unfinished-work block. It reads `[packs]` and the saved results, finds the git d
 - A saved result whose `problems` is not empty, or a malformed `[packs]` table, adds
   `N pack problem(s); first: <msg>.` The count is the saved `problems` list, so a command that
   exited non-zero, changed the tree or left a tracked binary is reported too, not only a bad report.
+- A `.studio/implementation_loop.toml` that is not valid TOML adds `Config problem: <msg>.` instead,
+  whether or not it declares a pack. It names the file, not a pack, since nobody can tell what it declares.
 - Any exception is swallowed. The session always continues, and the update notice and the
   unfinished-work sentence are never lost.
 

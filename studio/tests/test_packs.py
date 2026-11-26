@@ -717,10 +717,12 @@ def test_a_malformed_packs_table_adds_its_count_and_its_problem(repo, capsys, ta
     assert context == f"1 pack problem; first: {config}: {complaint.rstrip('.')}."
 
 
-def test_a_packs_table_that_is_not_toml_adds_its_count_and_its_problem(repo, capsys):
-    config = declare(repo, "[packs.game.art\n")
+@pytest.mark.parametrize("text", ["[packs.game.art\n", "[gate\n"])
+def test_a_config_that_is_not_toml_is_reported_as_a_config_problem(repo, capsys, text):
+    config = declare(repo, text)
     context = brief(repo, capsys)
-    assert context.startswith(f"1 pack problem; first: {config}: not valid TOML: ")
+    assert context.startswith(f"Config problem: {config}: not valid TOML: ")
+    assert "pack problem" not in context
 
 
 def test_a_malformed_packs_table_keeps_the_update_notice_and_the_unfinished_work(repo, monkeypatch, capsys):
@@ -741,7 +743,7 @@ def test_check_updates_exits_zero_with_a_malformed_packs_table(repo):
     assert result.returncode == 0, result.stderr
     blocks = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"].split("\n\n")
     assert blocks[0].startswith("Unfinished work:")
-    assert blocks[1].startswith("1 pack problem; first: ")
+    assert blocks[1].startswith("Config problem: ")
 
 
 @pytest.mark.parametrize(
