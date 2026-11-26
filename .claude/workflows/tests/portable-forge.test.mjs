@@ -5,7 +5,7 @@ import {mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync} from 'n
 import {tmpdir} from 'node:os'
 import {delimiter, join} from 'node:path'
 import {randomUUID} from 'node:crypto'
-import {forge} from '../../../studio/forge_host.mjs'
+import {forge, claudeCommands} from '../../../studio/forge_host.mjs'
 import {runLoop} from '../../../studio/forge_loop.mjs'
 
 const native = readFileSync(new URL('../implementation-loop.js', import.meta.url), 'utf8')
@@ -255,3 +255,17 @@ for (const offender of ['writer', 'editor']) {
     if (offender === 'writer') assert.equal(state.roles.editor.status, 'skipped')
   })
 }
+
+test('a Claude role may run the observe command with the arguments its prompt asks for', () => {
+  const unit = {work_dir: '/repo', test_command: 'pytest -q', observe_command: 'node tools/capture.mjs',
+    static_checks: [], require_mutation_check: false}
+  for (const stage of ['writer', 'editor']) {
+    const commands = claudeCommands(unit, stage, {base_sha: 'a', writer_sha: 'b'})
+    assert.ok(commands.includes('node tools/capture.mjs'))
+    assert.ok(commands.includes('node tools/capture.mjs *'))
+    assert.ok(commands.includes('pytest -q'))
+    assert.ok(!commands.includes('pytest -q *'))
+  }
+  const plain = claudeCommands({...unit, observe_command: ''}, 'editor', {base_sha: 'a', writer_sha: 'b'})
+  assert.deepEqual(plain.filter(command => command.endsWith(' *') && !command.startsWith('git ')), [])
+})
