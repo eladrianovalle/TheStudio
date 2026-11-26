@@ -93,6 +93,8 @@ def test_a_suites_value_that_is_not_a_table_is_refused():
         ({"command": "c", "paths": ["../web/"]}, 'path "../web/" must be repo-relative'),
         ({"command": "c", "paths": ["./web/"]}, 'path "./web/" must be repo-relative'),
         ({"command": "c", "paths": [" "]}, 'path " " must be repo-relative'),
+        ({"command": "c", "paths": ["web//"]}, 'path "web//" must be repo-relative'),
+        ({"command": "c", "paths": ["web/./"]}, 'path "web/./" must be repo-relative'),
         ({"command": "c", "paths": ["web/*.js"]}, 'path "web/*.js" has a glob character'),
         ({"command": "c", "paths": ["web/app?.js"]}, 'path "web/app?.js" has a glob character'),
         ({"command": "c", "paths": ["web/[ab].js"]}, 'path "web/[ab].js" has a glob character'),
@@ -100,7 +102,8 @@ def test_a_suites_value_that_is_not_a_table_is_refused():
     ids=[
         "not-a-table", "unknown-key", "no-command", "blank-command", "command-not-text",
         "no-paths", "empty-paths", "paths-not-a-list", "path-not-text", "leading-slash", "backslash",
-        "dot-dot-inside", "dot-dot-leading", "leading-dot-slash", "blank-path", "star", "question-mark",
+        "dot-dot-inside", "dot-dot-leading", "leading-dot-slash", "blank-path", "empty-segment", "dot-segment",
+        "star", "question-mark",
         "bracket",
     ],
 )

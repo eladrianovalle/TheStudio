@@ -31,6 +31,8 @@ def _path_shape_reason(path: str) -> str | None:
         or path.startswith("./")
         or "\\" in path
         or ".." in segments
+        or "." in segments
+        or "" in segments[:-1]
     ):
         return f'path "{path}" must be repo-relative'
     if any(character in path for character in GLOB_CHARACTERS):
