@@ -84,10 +84,9 @@ it as an untracked file.
 
 ## At the `/forge` gate
 
-Declaring the pack is enough to turn the check on. Every `/forge` unit runs `check-packs` as one more
-static check, with no line in `static_checks`, and a failure fails the unit the way a failing linter
-does. Deleting a line from the config cannot switch it off; only removing the `[packs.game]` table
-does. The check runs while the writer's change is still uncommitted, which is why the asset command
+Declaring the pack is enough to turn the check on: every `/forge` unit runs `check-packs` as one more
+static check, and a failure fails the unit the way a failing linter does. Nothing in `static_checks`
+switches it off; only removing the `[packs.game]` table does. The check runs while the writer's change is still uncommitted, which is why the asset command
 must leave the working tree unchanged.
 
 Who decides the verdict:

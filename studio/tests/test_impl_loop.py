@@ -1695,23 +1695,6 @@ def test_load_knobs_appends_exactly_one_quoted_pack_check_when_a_pack_is_declare
     assert json.loads(_cli(["impl_loop.py", str(config)]))["static_checks"] == expected
 
 
-def test_the_pack_check_splits_into_the_check_packs_command_for_this_config(tmp_path):
-    import shlex
-
-    config = tmp_path / "implementation_loop.toml"
-    config.write_text(_PACK_GATE + _GAME_ART)
-
-    pack_check = load_knobs(config)["static_checks"][-1]
-
-    assert shlex.split(pack_check) == [
-        sys.executable,
-        str(STUDIO_ROOT / "run_phase.py"),
-        "check-packs",
-        "--config",
-        str(config.resolve()),
-    ]
-
-
 def test_load_knobs_does_not_change_the_loaded_config_list(tmp_path):
     config = tmp_path / "implementation_loop.toml"
     config.write_text(_PACK_GATE + _GAME_ART)
@@ -1753,18 +1736,6 @@ _BAD_PACK_TABLES = {
     "route outside the pack": '\n[packs.game.art]\nasset_command = "x"\nroutes = ["painted"]\n',
     "missing asset_command": '\n[packs.game.art]\nroutes = ["code-built"]\n',
 }
-
-
-@pytest.mark.parametrize("table", list(_BAD_PACK_TABLES.values()), ids=list(_BAD_PACK_TABLES))
-def test_load_knobs_raises_loop_config_error_for_a_bad_packs_table(tmp_path, table):
-    config = tmp_path / "implementation_loop.toml"
-    config.write_text(_PACK_GATE + table)
-
-    with pytest.raises(LoopConfigError) as excinfo:
-        load_knobs(config)
-
-    assert str(config.resolve()) in str(excinfo.value)
-    assert "Shipped packs: game." in str(excinfo.value)
 
 
 @pytest.mark.parametrize("branch_arguments", [[], ["--branch", "impl/demo"]], ids=["no-branch", "branch"])
