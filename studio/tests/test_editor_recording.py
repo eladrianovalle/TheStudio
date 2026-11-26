@@ -395,17 +395,51 @@ def test_a_forbidden_path_with_a_space_is_void(recording, rows, seen, capsys):
     assert not path.exists()
 
 
-def test_a_forbidden_path_with_a_space_in_the_context_is_void(recording, capsys):
+@pytest.mark.parametrize(("listed", "seen"), [
+    ("/srv/My Studio", "/srv/My Studio"),
+    ("/srv/other/../My Studio", "/srv/other/../My Studio"),
+    ("/srv/other/../My Studio/studio/README.md", "/srv/other/../My Studio"),
+    ("~/elsewhere/../My Studio and more", "~/elsewhere/../My Studio"),
+])
+def test_a_forbidden_path_with_a_space_in_the_context_is_void(recording, capsys, listed, seen):
     cli, path, manifest_path, workflow = recording
     with_spaced_forbidden_path(manifest_path)
     scene = launch_scene(manifest_path, workflow)
     transcript = workflow / "agent-0.jsonl"
-    change = with_context_line(" - Additional working directories: /srv/My Studio")
+    change = with_context_line(f" - Additional working directories: {listed}")
     jsonl(transcript, change(measurement.json_lines(transcript), scene))
 
     assert cli("record") == 1
-    assert "the editor's context names /srv/My Studio" in capsys.readouterr().err
+    assert f"the editor's context names {seen}," in capsys.readouterr().err
     assert not path.exists()
+
+
+def test_a_spaced_forbidden_path_after_the_sessions_own_tool_results_is_void(recording, capsys):
+    cli, path, manifest_path, workflow = recording
+    with_spaced_forbidden_path(manifest_path)
+    scene = launch_scene(manifest_path, workflow)
+    transcript = workflow / "agent-0.jsonl"
+    own_output = f"{scene['session']}/tool-results/toolu_9.txt"
+    rows = measurement.json_lines(transcript) + [
+        tool_use({"command": f"diff {own_output} /srv/other/../My Studio/notes.md"}),
+    ]
+    jsonl(transcript, rows)
+
+    assert cli("record") == 1
+    assert "/My Studio" in capsys.readouterr().err
+    assert not path.exists()
+
+
+@pytest.mark.parametrize("listed", ["/srv/other/../My Studio-old", "/srv/other/../My Studios/notes.md"])
+def test_a_context_path_that_only_resolves_beside_a_spaced_forbidden_path_records(recording, listed):
+    cli, path, manifest_path, workflow = recording
+    with_spaced_forbidden_path(manifest_path)
+    scene = launch_scene(manifest_path, workflow)
+    transcript = workflow / "agent-0.jsonl"
+    change = with_context_line(f" - Additional working directories: {listed}")
+    jsonl(transcript, change(measurement.json_lines(transcript), scene))
+
+    assert cli("record") == 0
 
 
 def test_a_path_that_only_begins_with_a_spaced_forbidden_path_records(recording):

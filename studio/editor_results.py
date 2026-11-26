@@ -174,6 +174,8 @@ STARTING_FOLDER_LINE = "Primary working directory: "
 INSTRUCTION_FILE_LINE = re.compile(r"Contents of (.+?) \(")
 GIT_STATUS_LINE = "Current branch:"
 PATH_IN_TEXT = re.compile(r"(?:~/|/)[^\s\"'`\\;|&()<>,:*?\[\]{}$=]*")
+PATH_START = re.compile(r"(?<![\w.~/-])(?=~/|/)")
+SPACED_PATH_IN_TEXT = re.compile(r"(?:~/|/)[^\n\"'`\\;|&()<>,:*?\[\]{}$=]*")
 
 
 def decoded_strings(value):
@@ -248,15 +250,30 @@ def path_into_measurement(text, paths, forbidden_paths, exempt_folder):
         for forbidden in forbidden_paths:
             if is_inside(normalized, forbidden):
                 return seen, forbidden
-    for forbidden in forbidden_paths:
-        folder = posixpath.normpath(forbidden)
-        if not any(character.isspace() for character in folder):
+    spaced_folders = [
+        (posixpath.normpath(forbidden), forbidden)
+        for forbidden in forbidden_paths
+        if any(character.isspace() for character in forbidden)
+    ]
+    if not spaced_folders:
+        return None
+    for start in PATH_START.finditer(text):
+        written = SPACED_PATH_IN_TEXT.match(text, start.start()).group(0).rstrip()
+        if any(is_inside(posixpath.normpath(written), exempt) for exempt in exempt_forms):
             continue
-        for match in re.finditer(re.escape(folder) + r"(?=/|[^\w.\-]|$)", text):
-            if any(text.startswith(exempt, match.start()) for exempt in exempt_forms):
-                continue
-            return folder, forbidden
+        for end in component_ends(written):
+            candidate = written[:end]
+            for folder, forbidden in spaced_folders:
+                if posixpath.normpath(candidate) == folder:
+                    return candidate, forbidden
     return None
+
+
+def component_ends(written):
+    for index, character in enumerate(written):
+        if character == "/" or character.isspace():
+            yield index
+    yield len(written)
 
 
 def launch_problem(rows, manifest, exempt_folder):
