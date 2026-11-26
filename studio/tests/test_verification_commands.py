@@ -85,26 +85,6 @@ class TestEveryVerificationCommandIsFound(unittest.TestCase):
 
 
 class TestTheMitNoticeTravelsWithTheFile(unittest.TestCase):
-    def test_every_verification_command_carries_lauren_tans_copyright(self):
-        for path in verification_command_files():
-            with self.subTest(command=path.name):
-                self.assertIn(
-                    "Copyright (c) 2026 Lauren Tan",
-                    read_text(path),
-                    f"{path.name} adapts pstack, whose MIT licence requires the copyright "
-                    f"notice in every copy. The command file is what installs into each "
-                    f"consuming repo, so the notice has to be inside it.",
-                )
-
-    def test_every_verification_command_carries_the_mit_permission_sentence(self):
-        for path in verification_command_files():
-            with self.subTest(command=path.name):
-                self.assertIn(
-                    MIT_PERMISSION_SENTENCE,
-                    collapse_whitespace(read_text(path)),
-                    f"{path.name} is missing the MIT permission sentence from pstack's LICENSE.",
-                )
-
     def test_every_verification_command_ends_with_attribution_and_the_full_notice(self):
         for path in verification_command_files():
             text = collapse_whitespace(read_text(path))
@@ -112,7 +92,9 @@ class TestTheMitNoticeTravelsWithTheFile(unittest.TestCase):
             with self.subTest(command=path.name):
                 self.assertTrue(
                     text.endswith(collapse_whitespace(PSTACK_MIT_NOTICE)),
-                    f"{path.name} must end with pstack's full MIT notice, word for word.",
+                    f"{path.name} adapts pstack, whose MIT licence requires its copyright and "
+                    f"permission notice in every copy. The command file is what installs into "
+                    f"each consuming repo, so it must end with that notice, word for word.",
                 )
                 notice_start = text.rfind("MIT License")
                 attribution = text[:notice_start].rstrip()[-400:]
