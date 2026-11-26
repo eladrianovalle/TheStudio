@@ -118,7 +118,7 @@ Under the queue the block keeps the states that are not obligations: a unit whos
 With `--json`, the emitted dict gains two keys for the same queue:
 
 - `obligations`: one entry per obligation, in queue order, each with `kind` (`stale_status`, `evidence_follow_up`, `evidence_overdue` or `unbuilt_unit`), `subject`, `spec_file`, `detail`, `command`, `silence` and `units_off_default_branch`. It is `null` when git cannot be read (the case where the text block is left out), which is a different answer from `[]`: that one means git was read and nothing is owed.
-- `default_branch`: the branch `origin/HEAD` points at, else `main` if `origin/main` exists, else `master` if `origin/master` exists, else `null`. Local branches are never read, because the question is what has merged, not what a local copy happens to hold.
+- `default_branch`: the branch `origin/HEAD` points at; without it, whichever one of `origin/main` and `origin/master` exists, and `null` when both or neither do. Local branches are never read, because the question is what has merged, not what a local copy happens to hold.
 
 `units_off_default_branch` is set only on a `stale_status` entry: `[]` means every unit the spec still plans has a `writer:` or `editor:` commit on `origin/<default_branch>`, a list names the units that do not (a unit built only on an unmerged branch), and `null` means it cannot tell because `default_branch` is `null` or that branch's history cannot be read. The search is the same one the built set uses, so a squash merge whose body keeps `* writer: <unit_id>` counts as merged. Units closed on purpose are never listed. Every other kind carries `null`.
 

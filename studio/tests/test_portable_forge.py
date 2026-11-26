@@ -63,6 +63,43 @@ def test_plan_uses_target_layout_and_preserves_tree(project, installed):
     assert command(project, 'git', 'branch', '--show-current').stdout.strip() == 'main'
 
 
+def install_source(project):
+    import shutil
+    source = project / '.studio/source'
+    for name in SOURCE_FILES:
+        dest = source / name
+        dest.parent.mkdir(exist_ok=True, parents=True)
+        shutil.copyfile(STUDIO / name, dest)
+    return source / 'run_phase.py'
+
+
+@pytest.mark.parametrize('layout', ['installed with top-level specs', 'tracked specs without the snapshot'])
+def test_a_slug_resolves_from_whichever_specs_folder_holds_it(project, layout):
+    entry = STUDIO / 'run_phase.py'
+    if layout == 'installed with top-level specs':
+        entry = install_source(project)
+        (project / '.studio/specs').rename(project / 'specs')
+    r = cli(project, '--spec', 'demo', '--plan', entry=entry)
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout)['acceptance_criteria'] == ['Prints **demo**.']
+
+
+def test_a_slug_found_in_both_specs_folders_is_refused(project):
+    (project / 'specs').mkdir()
+    (project / 'specs/demo.md').write_text((project / '.studio/specs/demo.md').read_text())
+    r = cli(project, '--spec', 'demo', '--plan')
+    assert r.returncode
+    assert 'ambiguous spec' in r.stderr
+    assert '.studio/specs/demo.md' in r.stderr and ' specs/demo.md' in r.stderr
+
+
+def test_the_test_override_supplies_a_test_command_the_config_leaves_out(project):
+    (project / '.studio/implementation_loop.toml').write_text('[gate]\nrequire_mutation_check = false\n')
+    r = cli(project, '--spec', 'demo', '--test', 'true', '--plan')
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout)['test_command'] == 'true'
+
+
 @pytest.mark.parametrize(('spec', 'expected'), [(None, 'missing file'), ('', 'no Build Plan'),
     ('## Build Plan\n### 1. `foo` X\n### 2. `bar` Y', 'ambiguous unit'),
     ('## Build Plan\n### 1. `foo` X\n', 'empty criteria list')])
@@ -168,7 +205,6 @@ prompt = turn["message"]["content"]
 pin = args[args.index("--model") + 1] if "--model" in args else None
 stage = "writer" if "You are the WRITER" in prompt else "editor"
 assert "--no-session-persistence" in args and sid == args[args.index("--session-id") + 1]
-assert "Bash(true)" in args
 secret = "PRIVATE-CREDENTIAL-TRANSCRIPT"
 print(secret, file=sys.stderr)
 
@@ -184,6 +220,7 @@ def assistant(model, **fields):
     }, **fields)
 
 mode = os.environ.get("CLAUDE_FORGE_FIXTURE_MODE")
+assert "Bash(true)" in args or mode == "breaks"
 if stage == "editor" and mode == "denied":
     assistant("<synthetic>", error="authentication_failed")
     send("result", subtype="error", is_error=True, result=secret)
@@ -216,7 +253,7 @@ else:
     assert git("log", "-1", "--format=%s") == "writer: demo_unit"
     assert "Writer handoff:" in prompt and "Prints **demo**." in prompt
     assert any(re.fullmatch(r"Bash\(git -C .+ diff [0-9a-f]+\.\.[0-9a-f]+\)", a) for a in args)
-    if mode in {"conflict", "reroute"}:
+    if mode in {"conflict", "reroute", "breaks"}:
         pathlib.Path("hello.txt").write_text("editor edit")
         changes = [{"path": "hello.txt", "blob": git("hash-object", "--", "hello.txt")}]
         handoff["files_touched"] = ["hello.txt"]
@@ -309,6 +346,24 @@ def test_unity_metadata_and_binary_assets_pass_the_writer_comment_gate(project, 
     committed = command(project, 'git', 'ls-files', check=True).stdout.split()
     assert {'Player.cs.meta', 'sound.wav'} <= set(committed)
     assert state['result']['criteriaVerdicts'][0]['verdict'] == 'pass'
+
+
+def test_a_reverted_editor_edit_ships_the_green_writer_version_unflagged(project, claude_only, monkeypatch):
+    (project / '.studio/implementation_loop.toml').write_text(
+        '[gate]\ntest_command = "IFS= read -r line < hello.txt; [ \\"$line\\" = demo ]"\n'
+        'require_mutation_check = false\n')
+    command(project, 'git', 'commit', '-qam', 'gate reads hello.txt', check=True)
+    monkeypatch.setenv('CLAUDE_FORGE_FIXTURE_MODE', 'breaks')
+    run = cli(project, '--spec', '.studio/specs/demo.md', '--runtime', 'claude')
+    assert run.returncode == 0, run.stdout + run.stderr
+    state = read_attempt(project, run)
+    editor = state['result']['editor']
+    assert editor['reverted'] is True
+    assert editor['tests']['passed'] is True
+    assert editor['reverted_edit_tests']['passed'] is False
+    assert state['result']['flagged'] is False
+    assert (project / 'hello.txt').read_text() == 'demo'
+    assert command(project, 'git', 'log', '-1', '--format=%s').stdout.strip() == 'writer: demo_unit'
 
 
 @pytest.mark.parametrize(('mode', 'error'), [

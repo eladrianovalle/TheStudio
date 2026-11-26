@@ -29,6 +29,17 @@ def add_parser(subparsers):
     parser.add_argument("--plan", action="store_true")
 
 
+def spec_for_slug(cwd, filename):
+    found = [cwd / folder / filename for folder in (".studio/specs", "specs") if (cwd / folder / filename).is_file()]
+    if len(found) > 1:
+        raise ValueError(f"ambiguous spec: both {found[0].relative_to(cwd)} and {found[1].relative_to(cwd)} exist. "
+                         "Pass the path you mean to --spec.")
+    if found:
+        return found[0]
+    folder = ".studio/specs" if (cwd / ".studio").is_dir() else "specs"
+    return cwd / folder / filename
+
+
 def resolve_unit(args, cwd):
     title = " ".join(args.title)
     if not args.spec:
@@ -41,8 +52,7 @@ def resolve_unit(args, cwd):
     if not path.is_file() and not args.spec.endswith(".md"):
         path = cwd / (args.spec + ".md")
         if not path.is_file() and "/" not in args.spec:
-            specs = ".studio/specs" if (cwd / ".studio/source").is_dir() else "specs"
-            path = cwd / specs / path.name
+            path = spec_for_slug(cwd, path.name)
     units = []
 
     def refusal(reason):
@@ -99,9 +109,7 @@ def run(args):
     if not re.fullmatch(r"[a-z0-9][a-z0-9_]*", unit["unit_id"]):
         raise ValueError("Expected an alphanumeric snake_case unit id")
     config = project_config_root(cwd) / ".studio/implementation_loop.toml"
-    knobs = runtime_knobs(load_loop_config(config))
-    if args.test:
-        knobs["test_command"] = args.test
+    knobs = runtime_knobs(load_loop_config(config, test_command_override=args.test))
     # The portable CLI has no predicted paths. Apply tokenized checks after files are known.
     branch = subprocess.check_output(["git", "-C", cwd, "branch", "--show-current"], text=True).strip()
     if not branch:

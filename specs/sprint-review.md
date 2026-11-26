@@ -95,8 +95,10 @@ The text dashboard prints `Run: /sprint-review` through `format_queue` for the s
 
 ### Default branch and merged units
 
-`_default_branch` tries `git symbolic-ref refs/remotes/origin/HEAD`, then `origin/main`, then
-`origin/master`, and returns `None` otherwise (or on any git error). It never reads local branches: a
+`_default_branch` tries `git symbolic-ref refs/remotes/origin/HEAD`; without it, it uses `origin/main`
+or `origin/master` only when exactly one of them exists, and returns `None` otherwise (both exist and
+nothing says which is the default, neither exists, or any git error). Guessing between two real branches
+would open the batch against the wrong one; `None` shows the repair command instead. It never reads local branches: a
 local `main` is however far behind its owner left it, and the question is what has merged.
 `install._default_branch_ref` is not reused, because it prefers local branches and never reads
 `origin/HEAD`.
@@ -386,7 +388,7 @@ What gets built: `_unit_ids_in_log`, `_default_branch`, `_merged_unit_ids` in `r
 
 **Acceptance criteria:**
 - [ ] `stats --json` has an `obligations` key whose entries carry `kind`, `subject`, `spec_file`, `detail`, `command`, `silence` and `units_off_default_branch`; it is `null` when the built set cannot be read and `[]` when nothing is owed.
-- [ ] `stats --json` has a `default_branch` key resolved from `origin/HEAD`, then `origin/main`, then `origin/master`, else `null` — tested against a real repository with a bare remote, including an `origin/HEAD` pointing at a branch named `trunk`.
+- [ ] `stats --json` has a `default_branch` key resolved from `origin/HEAD`, else from whichever one of `origin/main` and `origin/master` exists, else `null` (including when both exist) — tested against a real repository with a bare remote, including an `origin/HEAD` pointing at a branch named `trunk`.
 - [ ] A finished spec's `units_off_default_branch` lists a unit whose only `writer:` commit is on an unmerged branch, does not list a unit whose `* writer: <id>` line sits in a squash commit body on the default branch, never lists a dropped unit, and is `null` when `default_branch` is `null`.
 - [ ] `_built_unit_ids` and `_merged_unit_ids` both read through `_unit_ids_in_log`, and the `--grep` pattern appears once in `run_phase.py`.
 - [ ] The text dashboard and the session brief print exactly what they printed before this unit; their existing tests pass unmodified.

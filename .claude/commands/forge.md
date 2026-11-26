@@ -54,12 +54,13 @@ If no `--spec` was given, skip this whole step and go to Step 2 — behavior is 
 always been, with one addition to the plan echo (Step 4).
 
 **Find the spec file.** If `--spec` names a file that exists, use it (try appending `.md` if the bare
-path doesn't). Otherwise treat it as a slug and resolve it with the **same repo-shape signal this
-command already uses** to locate `impl_loop.py` in Step 5 — one detection rule in this file, not two:
+path doesn't). Otherwise treat it as a slug and look for `<slug>.md` in both places a repository keeps
+specs: `.studio/specs/` and top-level `specs/`. Don't decide from whether Studio is installed: some
+installed repos keep their specs in `specs/`.
 
-- Studio installed under `.studio/source` (you are in a consuming repo): `.studio/specs/<slug>.md`.
-- No such install but a root `studio/` dir is present (you are in the Studio source repo):
-  `specs/<slug>.md`.
+- Found in exactly one of them: use it.
+- Found in both: stop and name both paths (**ambiguous spec**), so the user passes the one they mean.
+- Found in neither: the reason is **missing file**, below.
 
 **Find the unit's criteria.** Read the spec's `## Build Plan` section, whose entry shape is the one
 the `/spec` Build Plan template writes — `.claude/commands/spec.md` is where that shape is defined,
@@ -78,7 +79,8 @@ defaults. A run that looks graded and isn't is worse than one that never claimed
 three of these:
 
 1. **Which reason it was**, by name:
-   - **missing file** — nothing at the resolved path (say which path you tried);
+   - **missing file** — nothing at the resolved path (say which paths you tried);
+   - **ambiguous spec** — the slug names a file in both `.studio/specs/` and `specs/` (say both paths);
    - **no Build Plan** — the file exists but has no `## Build Plan` section;
    - **unknown unit** — no Build Plan entry's `unit_id` matches `--unit`;
    - **ambiguous unit** — more than one entry matches, or the Build Plan has several units and no

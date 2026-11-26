@@ -1,5 +1,5 @@
 ---
-description: "Use to keep a repo's verification skill and feature map honest as the product changes, by hand or on a daily schedule. Reads every feature from source, drives every feature live from a fresh worktree of origin/main, and opens at most one PR of proven corrections to the skill's own directory. Triggers include 'audit the verify skill', 'is the feature map still right', and a scheduled daily maintenance run."
+description: "Use to keep a repo's verification skill and feature map honest as the product changes, by hand or on a daily schedule. Reads every feature from source, drives every feature live from a fresh worktree of the default branch, and opens at most one PR of proven corrections to the skill's own directory. Triggers include 'audit the verify skill', 'is the feature map still right', and a scheduled daily maintenance run."
 disable-model-invocation: true
 ---
 
@@ -25,11 +25,11 @@ Only edit the verification skill's own directory (its SKILL.md, features/, and a
 
 0. **Locate the target.** Find the verification skill to maintain: the project-local skill whose body has launch/drive sections and a feature map (usually `.claude/skills/verify-*/`). Several candidates → ask which one; none → stop and point at `/create-verification-skill` instead of inventing a target.
 
-   **[Studio] Work in a fresh worktree off `origin/main`, never in the person's checkout.** Their checkout may sit on another branch with uncommitted files, and the map has to match what `main` ships. With `<scratch>` a directory outside the checkout and `<date>` today's date as `YYYY-MM-DD`, run:
+   **[Studio] Work in a fresh worktree off the default branch, never in the person's checkout.** Their checkout may sit on another branch with uncommitted files, and the map has to match what the default branch ships. Never assume it is `main`: many repositories default to `master`. `<default>` is the branch `git symbolic-ref --short refs/remotes/origin/HEAD` names, without its `origin/` prefix. If that prints nothing, run `git remote set-head origin --auto` once and ask again; if it still names nothing, the outcome is `blocked: cannot tell this repository's default branch`. With `<scratch>` a directory outside the checkout and `<date>` today's date as `YYYY-MM-DD`, run:
 
    ```
    git fetch origin
-   git worktree add --detach <scratch>/verify-maintain-<date> origin/main
+   git worktree add --detach <scratch>/verify-maintain-<date> origin/<default>
    ```
 
    Look for the candidates in that worktree and run every later step from it. When the run ends, whatever the outcome, remove it with `git worktree remove --force <scratch>/verify-maintain-<date>`. Evidence and run notes live in `<scratch>`, outside the worktree, so the removal keeps them.
@@ -55,15 +55,15 @@ Only edit the verification skill's own directory (its SKILL.md, features/, and a
    **[Studio]** For changed, in the worktree, in this order:
 
    1. Run `git add -A`, so a new untracked file is staged and checked like any other.
-   2. Run `git diff --cached --name-only origin/main`. Every path it prints must sit inside the skill's directory. If one does not, the outcome is `blocked: <path> is outside edit scope`. Never unstage the path to get past this check.
-   3. Run `gh pr list --state open --json number,headRefName`. If an open PR's head branch starts with `verify/maintain-`, the outcome is `blocked: earlier maintenance PR #N is still open`. If `gh` itself fails, for example on an origin that is not on GitHub, the outcome is `blocked: gh pr list failed — <error line>`. Either way the reply still carries the full coverage and the product-gap report; only the second PR is withheld.
-   4. Re-read every changed file, then push one branch and open one PR into `main`, ready for review, never as a draft:
+   2. Run `git diff --cached --name-only origin/<default>`. Every path it prints must sit inside the skill's directory. If one does not, the outcome is `blocked: <path> is outside edit scope`. Never unstage the path to get past this check.
+   3. Run `gh pr list --state open --limit 1000 --json number,headRefName`. Without `--limit` it returns only the first 30 open PRs, and an older maintenance PR could hide past them. If an open PR's head branch starts with `verify/maintain-`, the outcome is `blocked: earlier maintenance PR #N is still open`. If `gh` itself fails, for example on an origin that is not on GitHub, the outcome is `blocked: gh pr list failed — <error line>`. Either way the reply still carries the full coverage and the product-gap report; only the second PR is withheld.
+   4. Re-read every changed file, then push one branch and open one PR into `<default>`, ready for review, never as a draft:
 
       ```
       git switch -c verify/maintain-<YYYY-MM-DD>
       git commit -m "Correct the verification skill: <what changed>"
       git push -u origin verify/maintain-<YYYY-MM-DD>
-      gh pr create --base main --head verify/maintain-<YYYY-MM-DD> --title "<title>" --body-file <scratch>/pr-body.md
+      gh pr create --base <default> --head verify/maintain-<YYYY-MM-DD> --title "<title>" --body-file <scratch>/pr-body.md
       ```
 
       The body lists the features covered, each correction beside the drive that proved it, and any product gaps (reported, not fixed).
