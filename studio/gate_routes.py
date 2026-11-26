@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import argparse
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -159,3 +161,54 @@ def run(root: Path, routes: list[dict]) -> list[dict]:
         )
         results.append({"suite": gate["suite"], "command": gate["command"], "exit_code": completed.returncode})
     return results
+
+
+GATE_KEYS = {"test_command", "suites", "gate_config"}
+
+
+def _read_gate(text: str) -> dict:
+    try:
+        gate = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise RoutesError(f"the --gate input is not JSON: {error}") from error
+    if not isinstance(gate, dict) or set(gate) != GATE_KEYS:
+        raise RoutesError("the --gate input must be an object holding exactly test_command, suites and gate_config")
+    test_command = gate["test_command"]
+    if not isinstance(test_command, str) or not test_command.strip():
+        raise RoutesError("the --gate input's test_command is blank or not text")
+    gate_config = gate["gate_config"]
+    if not (gate_config is None or isinstance(gate_config, str)):
+        raise RoutesError("the --gate input's gate_config is neither text nor null")
+    try:
+        suites = check_suites(gate["suites"], None, "the --gate input")
+    except SuiteError as error:
+        raise RoutesError(str(error)) from error
+    return {"test_command": test_command, "suites": suites, "gate_config": gate_config}
+
+
+def main(arguments: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="gate_routes.py",
+        description="Run the gate suites that cover the files changed since a base commit.",
+    )
+    parser.add_argument("--base", required=True, help="the commit the unit started from")
+    parser.add_argument("--gate", required=True, choices=["-"], help="read the gate as JSON on stdin")
+    options = parser.parse_args(arguments)
+    root = Path.cwd()
+    try:
+        gate = _read_gate(sys.stdin.read())
+        changed = changed_files(root, options.base)
+        edited = config_changed(root, options.base, gate["gate_config"])
+    except RoutesError as error:
+        print(f"gate_routes: {error}", file=sys.stderr)
+        return 2
+    routes, unclaimed = route(gate["suites"], gate["test_command"], changed)
+    runs = run(root, routes)
+    print(json.dumps({"runs": runs, "unclaimed": unclaimed, "config_changed": edited}))
+    if all(entry["exit_code"] == 0 for entry in runs):
+        return 0
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

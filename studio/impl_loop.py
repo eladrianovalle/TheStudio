@@ -690,7 +690,7 @@ def _gate_config_path(path: Path | None, repo_root: Path) -> Path:
 def load_loop_config(
     path: Path | None = None,
     studio_root: Path | None = None,
-    test_command_override: str | None = None,
+    test_command_fallback: str | None = None,
 ) -> LoopConfig:
     """
     Load loop configuration from TOML, mirroring load_scopes_config().
@@ -753,9 +753,12 @@ def load_loop_config(
     # An empty gate, kept only so the [loop] and [editor] fallbacks below read out of the
     # dataclass rather than being written a second time here, where they could drift.
     defaults = LoopConfig(test_command="")
+    test_command = gate.get("test_command", defaults.test_command)
+    if test_command_fallback and isinstance(test_command, str) and not test_command.strip():
+        test_command = test_command_fallback
     resolved = LoopConfig(
         deliver_on_gate_fail=loop.get("deliver_on_gate_fail", defaults.deliver_on_gate_fail),
-        test_command=test_command_override or gate.get("test_command", defaults.test_command),
+        test_command=test_command,
         static_checks=gate.get("static_checks", list(defaults.static_checks)),
         require_mutation_check=gate.get("require_mutation_check", defaults.require_mutation_check),
         mutation_command=gate.get("mutation_command", defaults.mutation_command),
@@ -1041,8 +1044,8 @@ def _gate_suites(config_path: Path) -> tuple[dict, str | None]:
     return suites, gate_config
 
 
-def load_knobs(path: Path | None = None, test_command_override: str | None = None) -> dict:
-    knobs = runtime_knobs(load_loop_config(path, test_command_override=test_command_override))
+def load_knobs(path: Path | None = None, test_command_fallback: str | None = None) -> dict:
+    knobs = runtime_knobs(load_loop_config(path, test_command_fallback=test_command_fallback))
     pack_check = pack_check_command(path)
     if pack_check is not None:
         knobs["static_checks"] = [*knobs["static_checks"], pack_check]

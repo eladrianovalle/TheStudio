@@ -110,7 +110,9 @@ def run(args):
     if not re.fullmatch(r"[a-z0-9][a-z0-9_]*", unit["unit_id"]):
         raise ValueError("Expected an alphanumeric snake_case unit id")
     config = project_config_root(cwd) / ".studio/implementation_loop.toml"
-    knobs = load_knobs(config, test_command_override=args.test)
+    knobs = load_knobs(config, test_command_fallback=args.test)
+    gate = {"test_command": knobs["test_command"], "suites": knobs.pop("suites"),
+            "gate_config": knobs.pop("gate_config")}
     # The portable CLI has no predicted paths. Apply tokenized checks after files are known.
     branch = subprocess.check_output(["git", "-C", cwd, "branch", "--show-current"], text=True).strip()
     if not branch:
@@ -119,7 +121,8 @@ def run(args):
     if target in ("main", "master") or subprocess.run(
             ["git", "check-ref-format", "--branch", target], capture_output=True).returncode:
         raise ValueError(f"Invalid or protected branch: {target}")
-    plan = {**knobs, **unit, "branch": target, "starting_branch": branch, "work_dir": str(cwd),
+    plan = {**knobs, **unit, "test_command": args.test or knobs["test_command"], "gate": gate,
+            "branch": target, "starting_branch": branch, "work_dir": str(cwd),
             "base_sha": subprocess.check_output(["git", "-C", cwd, "rev-parse", "HEAD"], text=True).strip(),
             "launched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "check_command": check_command(cwd),
