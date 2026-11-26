@@ -236,8 +236,8 @@ every static check, so the writer runs `check-packs` too and sees the doc path i
 that host the asset command therefore runs twice per writer pass; accept it.
 
 Enforcement-layer unit 6 (`forge_post_loop_check`) runs on the final tree after the editor. Adding a
-`packs-failed` problem to its `--check` closes both gaps above. That is filed as an issue when this
-spec is approved, not built here.
+`packs-failed` problem to its `--check` closes both gaps above. Issue
+[#292](https://github.com/eladrianovalle/TheStudio/issues/292) adds it to that unit; it is not built here.
 
 ### At session start
 

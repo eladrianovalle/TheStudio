@@ -264,6 +264,7 @@ and goes away with the worktree.
 | `tree` | Absolute path of the working tree, for messages |
 | `base_sha` | `HEAD` at launch |
 | `test_command` | This repository's `[gate] test_command`, as loaded at launch |
+| `pack_check` | The `check-packs` command `impl_loop.load_knobs()` added to the static checks at launch, or `null` when the repository declares no pack (see `specs/pack-mechanism.md`) |
 | `started_at` | UTC ISO timestamp |
 | `checked_at` | `null` until a check runs and finds problems |
 | `problems` | What that check found, as plain sentences |
@@ -311,15 +312,20 @@ report step. It does not read anything the agents wrote.
 | `wrong-branch` | the tree is not on the record's `branch` |
 | `no-writer-commit` | no commit whose subject starts with `writer: <unit_id>` lies between the record's `base_sha` and `HEAD` |
 | `tests-failed` | the record's `test_command` exits non-zero when the check runs it |
+| `packs-failed` | the record's `pack_check` is set and exits non-zero when the check runs it |
 
-The two git checks run first, and the test command runs only when both pass, so a launch whose loop
-never ran closes without a suite run. The test command is the repository's configured gate command,
+The two git checks run first. The test command and the pack check run only when both pass, so a
+launch whose loop never ran closes without a suite run. Once they start, both run even if the other
+fails, so one check reports every problem. The pack check is the only static check `--check` runs:
+it is the one whose failure the native workflow takes on the writer's word, and the editor branch
+never re-runs it. Its output goes to stderr like the tests', and a `packs-failed` detail carries the
+first line `check-packs` printed. The test command is the repository's configured gate command,
 run through the shell from the tree's root with its output sent to stderr. A per-unit `--test`
 still shapes what the writer runs but never reaches the check. A stuck writer's `writer(stuck):`
 commit does not satisfy `no-writer-commit`, so partial work needs a person's yes before it is pushed.
 
 It prints one JSON object on stdout: `{"clean": true|false, "unit_id", "branch", "tests":
-{"command", "exit_code"}, "problems": [{"name", "detail"}]}`. Exit 0: clean, record removed. Exit 1:
+{"command", "exit_code"}, "packs": {"command", "exit_code"} | null, "problems": [{"name", "detail"}]}`. Exit 0: clean, record removed. Exit 1:
 not clean, record stamped, each problem printed as a sentence on stderr. Exit 2: could not check (no
 record, unreadable record, not a git tree, bad arguments); no test is run.
 
@@ -520,6 +526,7 @@ They say why; the guard is the step.
 | Record | Launch succeeded, the loop never ran | The check reports `no-writer-commit` without running the tests; pushes of that branch ask |
 | Record | Worktree removed with an open record | The record goes with it; a push from another tree is not held |
 | Check | Test command red for reasons older than the unit | `tests-failed`; pushes ask the user, who can approve |
+| Check | An asset report already failing before the unit started | `packs-failed`; pushes ask the user, who can approve |
 | Check | The suite outlasts the Bash tool's limit | The agent runs it in the background; nothing here imposes a timeout |
 | `--spec` resolver | A spec has plain bullets instead of `- [ ]` | `no-criteria` and the ids found. The command stopped on this before too |
 | `check-specs` and the brief | Many old specs break the shape rule | One sentence per session with a count, until they are fixed |
@@ -536,7 +543,9 @@ guard in a worktree, never in the main checkout.
 Python 3.10+ and the standard library only, plus `tomli` on Python 3.10, the same allowance the
 rest of Studio has. Claude Code's hook contract: the `PreToolUse` event,
 the `if` field, `permissionDecision`, `permission_mode` on stdin, and `onFailure` (Claude Code
-2.1.295 and later). `git` on the path. Pull request #249 (`impl_loop.py --branch`) is assumed merged.
+2.1.295 and later). `git` on the path. Pull request #249 (`impl_loop.py --branch`) is assumed merged. Unit 6's pack
+check needs pack-mechanism unit 2 (`forge_gate_runs_pack_check`), which adds `load_knobs`; build that
+first ([#292](https://github.com/eladrianovalle/TheStudio/issues/292)).
 
 ## Key Decisions
 
@@ -747,15 +756,15 @@ the refusal in `implementation-loop.js`, `--check`, the `forge.md` Step 5 and 6 
 loop-spec and usage docs.
 
 **Acceptance criteria:**
-- [ ] `impl_loop.py --branch <b> --unit <id>` writes the record, with the eight fields listed under "The loop record", into the tree's git directory and prints `launched_at` with the knobs; `--branch` without a unit id exits non-zero; no other invocation writes a record.
+- [ ] `impl_loop.py --branch <b> --unit <id>` writes the record, with the nine fields listed under "The loop record", into the tree's git directory and prints `launched_at` with the knobs; `--branch` without a unit id exits non-zero; no other invocation writes a record.
 - [ ] Launching in a tree whose record was never checked exits 1 with `unchecked-loop` and prints the exact `--check` command for that tree; over a record that cannot be read it exits 1 with `unreadable-record`, naming the file; over a record that was checked and kept its problems, the launch replaces it.
-- [ ] `--check` exits 0 and removes the record only when the tree is on the recorded branch, a commit whose subject starts with `writer: <unit_id>` lies between the recorded base and `HEAD`, and the recorded test command passes when `--check` runs it.
-- [ ] Each failure exits 1 under its own name (`wrong-branch`, `no-writer-commit`, `tests-failed`) and leaves the record stamped; the test command is not run when either git check fails; `--check` on a stamped record checks again.
+- [ ] `--check` exits 0 and removes the record only when the tree is on the recorded branch, a commit whose subject starts with `writer: <unit_id>` lies between the recorded base and `HEAD`, the recorded test command passes when `--check` runs it, and the recorded `pack_check`, when it is not `null`, passes too; a record whose `pack_check` is `null` runs no pack check and prints `"packs": null`.
+- [ ] Each failure exits 1 under its own name (`wrong-branch`, `no-writer-commit`, `tests-failed`, `packs-failed`) and leaves the record stamped; neither the test command nor the pack check is run when either git check fails; a red test command and a red pack check are both reported by one `--check`; `--check` on a stamped record checks again.
 - [ ] `--check` exits 2 without running the tests when there is no record or it cannot be read.
 - [ ] `implementation-loop.js` spawns no agent and returns `delivered: false` with reason `not_launched` when its args carry no `launched_at`, and the workflow shell tests cover both branches.
 
 **Out of scope:** anything that forces the check to run (unit 8); a way to close a record without
-checking; running the mutation or static checks again; reading the agents' handoff files.
+checking; running the mutation check or the repository's own static checks again (the pack check is the one static check it runs); reading the agents' handoff files.
 
 ### 7. `guard_stops_worktree_artifact_loss` — an agent cannot remove a worktree that holds run artifacts that exist nowhere else
 

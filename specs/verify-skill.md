@@ -61,7 +61,7 @@ flowchart LR
   Seeds[".studio/smoke.toml<br/>observe_command --help<br/>the repo's driver scripts"] -->|read only| C1
   C1 -->|writes, uncommitted| S & F & P
   C1 -->|"proof run in a fresh worktree"| E[("evidence, outside the checkout")]
-  C2 -->|"source wave + live pass,<br/>worktree off origin/main"| F
+  C2 -->|"source wave + live pass,<br/>worktree off the default branch"| F
   C2 -->|"at most one PR,<br/>skill directory only"| S
   Editor["/forge editor"] -->|reads the paths it names| P
   P --> F
@@ -73,7 +73,7 @@ consuming repo. `/create-verification-skill` reads what the repo already has (it
 observe command, its own driver scripts) and changes none of it. It writes the skill, the feature
 map and the pointer line, proves them in a fresh worktree, and leaves the files uncommitted for a
 person to review. Evidence always lands outside the checkout, so removing a worktree can't eat it.
-`/maintain-verification-skill` works from a fresh worktree of `origin/main`. It reads every feature
+`/maintain-verification-skill` works from a fresh worktree of the repository's default branch, read from `origin/HEAD` and never assumed to be `main`. It reads every feature
 from source, drives every feature live, and ships corrections to the skill directory as at most one
 PR. A `/forge` editor reaches the map through the pointer line, and drives features through the
 observe command the editor prompt already names.
@@ -157,8 +157,8 @@ never product code) are kept word for word.
 
 0. **Locate** (pstack step 0). Candidates are `.claude/skills/verify-*/`. Several: ask, or end
    `blocked` when headless. None: stop and point at `/create-verification-skill`. **[S]** Run in
-   `git worktree add --detach <scratch>/verify-maintain-<date> origin/main` after `git fetch
-   origin`, never in the person's checkout, and remove that worktree at the end. Step 0 makes no
+   `git worktree add --detach <scratch>/verify-maintain-<date> origin/<default>` after `git fetch
+   origin`, where `<default>` is the branch `origin/HEAD` names (ending `blocked` if nothing names one), never in the person's checkout, and remove that worktree at the end. Step 0 makes no
    `gh` call.
 1. **Index hygiene** (pstack).
 2. **Source wave** (pstack). **[S]** One `Agent` per feature file with `subagent_type: "Explore"`
@@ -172,13 +172,13 @@ never product code) are kept word for word.
    of the PR.
 6. **Ship or stop.**
    - **changed:** **[S]** stage everything with `git add -A`, then every path in `git diff
-     --cached --name-only origin/main` must sit inside the skill's directory, untracked files
+     --cached --name-only origin/<default>` must sit inside the skill's directory, untracked files
      included, or the outcome is `blocked: <path> is outside edit scope`. **[S]** If an
-     open PR's head branch starts with `verify/maintain-` (`gh pr list --state open --json
-     number,headRefName`), the outcome is `blocked: earlier maintenance PR #N is still open`. The
+     open PR's head branch starts with `verify/maintain-` (`gh pr list --state open --search "head:verify/maintain-"
+     --limit 1000 --json number,headRefName`, searched by prefix so no page cap hides one), the outcome is `blocked: earlier maintenance PR #N is still open`. The
      full coverage and the product-gap report are still in the reply; only the second PR is
      withheld. Otherwise: re-read every changed file, push one branch `verify/maintain-<YYYY-MM-DD>`
-     and open one PR into `main`, ready for review. Its body lists the features covered, each
+     and open one PR into `<default>`, ready for review. Its body lists the features covered, each
      correction beside the drive that proved it, and any product gaps (reported, not fixed).
    - **clean:** no branch, no PR.
    - **blocked:** no PR, and the reply says exactly what blocked it.
@@ -238,7 +238,7 @@ interactive sessions.
 The owner chose a three.js browser game (decision 2). Its name, unit ids, commits and criterion
 text stay in its own repository; this spec and the results file paraphrase them, because Studio is
 public. Its checkout sits on a demo branch with uncommitted files, so this work happens in a
-worktree off its `origin/main`.
+worktree off its default branch.
 
 **Adoption depends on #280's fix.** The headless runtime allows `observe_command` only as an exact
 rule (`studio/forge_host.mjs`, turned into `Bash(<command>)` by `studio/forge_claude.mjs`), while
@@ -293,11 +293,11 @@ Studio issue #280 for the first adopter.
   | Find the skill through a `CLAUDE.md` pointer naming paths, not by invoking `/verify-<app>` | Its guide says to use `/verify-<app>` | **Evidence it fails here:** forge's headless flags hide every project skill (probed, table above) |
   | Evidence outside the checkout, as absolute paths | "in a location the skill names" | The observe contract requires it, and a worktree removal eats anything inside |
   | Launch and the proof run from a fresh worktree | Launch from an empty data dir; list a stand-in's extra steps | Her rules applied to `/forge --work-dir`; the worktree is the real target, not a stand-in |
-  | Maintain runs in a worktree off `origin/main` | Silent on where it runs | The adopter's checkout is on a demo branch with uncommitted files |
+  | Maintain runs in a worktree off the default branch | Silent on where it runs | The adopter's checkout is on a demo branch with uncommitted files |
   | The hand-off points at a schedule | "Suggest a cadence only if they ask" | Owner's decision 1; her guide says run it at least daily |
   | Refuse when a `verify-*` skill exists; headless with several candidates ends `blocked` | Silent; "ask" | Additions. A second run would overwrite a maintained map; a headless run can't ask |
   | `git diff --cached --name-only` scope gate; `OUTCOME:` line | Edit scope as a rule; outcome stated | Enforce her rules in a form a scheduled log can check |
-  | No commit from the generator; the maintenance PR opens ready for review into `main` | Silent | Studio's git rules |
+  | No commit from the generator; the maintenance PR opens ready for review into the default branch | Silent | Studio's git rules |
 
 - **The open-PR check sits in step 6, not step 0.** The advocate's first draft blocked at step 0,
   which skipped pstack's required live pass and with it the product-regression report. pstack's own
@@ -441,8 +441,8 @@ Depends on unit 1's test file and doc rows.
 **Acceptance criteria:**
 - [ ] `.claude/commands/maintain-verification-skill.md` exists, is listed in `SLASH_COMMANDS`, has `disable-model-invocation: true`, passes `test_command_descriptions.py`, and is covered by every test in `test_verification_commands.py`.
 - [ ] Its body keeps pstack's outcomes `clean`, `changed` and `blocked` with their definitions word for word, the edit scope, and steps 0-6, including the live pass "Required even when source looks clean", the three invariants and the `verified-unreachable` rule.
-- [ ] Step 0 locates `.claude/skills/verify-*/`, ends `blocked` with several candidates when headless, runs the pass in a fresh worktree off `origin/main` after `git fetch origin`, removes it at the end, and makes no `gh` call. The source wave uses `Explore` agents told "do not edit files" and requires an empty `git status --porcelain` afterwards.
-- [ ] Step 6 stages everything with `git add -A` and ends `blocked` when `git diff --cached --name-only origin/main` names a path outside the skill directory, so a new untracked file counts, and ends `blocked` after full coverage and the product-gap report while a PR whose head branch starts with `verify/maintain-` is open. Otherwise it pushes one `verify/maintain-<YYYY-MM-DD>` branch and opens one ready-for-review PR into `main`. Every run's last line is `OUTCOME: clean|changed|blocked — <one line>`.
+- [ ] Step 0 locates `.claude/skills/verify-*/`, ends `blocked` with several candidates when headless, runs the pass in a fresh worktree off the default branch `origin/HEAD` names (never assumed to be `main`) after `git fetch origin`, removes it at the end, and makes no `gh` call. The source wave uses `Explore` agents told "do not edit files" and requires an empty `git status --porcelain` afterwards.
+- [ ] Step 6 stages everything with `git add -A` and ends `blocked` when `git diff --cached --name-only origin/<default>` names a path outside the skill directory, so a new untracked file counts, and ends `blocked` after full coverage and the product-gap report while a PR whose head branch starts with `verify/maintain-` is open. Otherwise it pushes one `verify/maintain-<YYYY-MM-DD>` branch and opens one ready-for-review PR into the default branch. Every run's last line is `OUTCOME: clean|changed|blocked — <one line>`.
 - [ ] `CLAUDE_CODE_USAGE.md` documents the hand-run and the local daily recipe: a per-user LaunchAgent in `~/Library/LaunchAgents/` with `StartCalendarInterval`, `WorkingDirectory` at the repo root, `PATH` including `/opt/homebrew/bin`, the `claude -p` line, logs outside the checkout, `--setting-sources project` with `--settings` naming a dedicated file outside the checkout that holds the scheduler's `git push` and `gh pr` allow rules (never `.claude/settings.local.json`, which every session in the repo loads), and the run-time note on wake. It has no cloud `/schedule` recipe, and `README.md` has a row for the command.
 
 **Out of scope:** a scheduler inside Studio, the cloud `/schedule` path, R, F and M (the owner runs those in the adopter), and the adopter's observe entry.

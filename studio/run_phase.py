@@ -2663,16 +2663,18 @@ def _unit_ids_in_log(target: Path, revision: str) -> Optional[Tuple[set, set]]:
 def _default_branch(target: Path) -> Optional[str]:
     remote_prefix = "refs/remotes/origin/"
     try:
-        candidates = ["main", "master"]
         origin_head = _git(target, "symbolic-ref", "--quiet", remote_prefix + "HEAD")
         if origin_head is not None and origin_head.startswith(remote_prefix):
-            candidates.insert(0, origin_head[len(remote_prefix):])
-        for branch in candidates:
-            if _git(target, "rev-parse", "--verify", "--quiet", remote_prefix + branch) is not None:
-                return branch
+            named = origin_head[len(remote_prefix):]
+            if _git(target, "rev-parse", "--verify", "--quiet", remote_prefix + named) is not None:
+                return named
+        present = [
+            branch for branch in ("main", "master")
+            if _git(target, "rev-parse", "--verify", "--quiet", remote_prefix + branch) is not None
+        ]
     except (OSError, subprocess.SubprocessError):
         return None
-    return None
+    return present[0] if len(present) == 1 else None
 
 
 def _merged_unit_ids(target: Path, branch: str) -> Optional[set]:
