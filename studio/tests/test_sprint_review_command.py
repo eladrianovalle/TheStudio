@@ -97,6 +97,13 @@ def test_each_stop_message_is_the_specs_wording_inside_its_step(step_number, mes
     assert message in collapse_whitespace(sections[step_number])
 
 
+def test_the_open_batch_check_reads_every_page_of_open_prs():
+    _, sections = step_sections()
+    preflight = collapse_whitespace(sections[1])
+    assert '`gh api --paginate "repos/{owner}/{repo}/pulls?state=open&per_page=100"' in preflight
+    assert "gh pr list --state open" not in preflight
+
+
 def test_only_a_merged_row_matching_the_default_branch_takes_an_answer():
     _, sections = step_sections()
     meeting = collapse_whitespace(sections[4])

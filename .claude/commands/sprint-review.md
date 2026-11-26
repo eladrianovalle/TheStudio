@@ -24,8 +24,9 @@ Use `.studio/source/run_phase.py`. If that file does not exist but `studio/run_p
 ### Step 1: Preflight
 
 1. Run `gh auth status`. If it fails, stop: "Opening the batch needs the GitHub CLI signed in. Run `gh auth login` and try again."
-2. Run `gh pr list --state open --json number,url,headRefName`. If any PR's `headRefName` starts
-   with `sprint-review/`, stop, with its number and URL in place of `#N` and `<url>`: "Batch #N (<url>) is still open. Merge or close it, then run /sprint-review again — a second batch now would flip the same specs twice."
+2. Run `gh api --paginate "repos/{owner}/{repo}/pulls?state=open&per_page=100" --jq '.[] | {number, url: .html_url, headRefName: .head.ref}'`.
+   It reads every page; `gh pr list` stops at 30. If any PR's `headRefName` starts with
+   `sprint-review/`, stop, with its number and URL in place of `#N` and `<url>`: "Batch #N (<url>) is still open. Merge or close it, then run /sprint-review again — a second batch now would flip the same specs twice."
 3. Run `git fetch origin`. If it fails, stop: "I can't reach `origin`, so I can't see what has merged or branch from an up-to-date default branch."
 
 ### Step 2: Read the feed
