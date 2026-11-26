@@ -5,6 +5,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 COMMANDS_DIR = REPO_ROOT / ".claude" / "commands"
 CREATE_COMMAND = COMMANDS_DIR / "create-verification-skill.md"
+MAINTAIN_COMMAND = COMMANDS_DIR / "maintain-verification-skill.md"
+USAGE_DOC = REPO_ROOT / "studio" / "docs" / "CLAUDE_CODE_USAGE.md"
 
 MIT_PERMISSION_SENTENCE = (
     "Permission is hereby granted, free of charge, to any person obtaining a copy "
@@ -75,13 +77,15 @@ def verification_command_files() -> list[Path]:
 
 
 class TestEveryVerificationCommandIsFound(unittest.TestCase):
-    def test_the_create_command_is_among_the_files_checked(self):
-        self.assertIn(
-            CREATE_COMMAND,
-            verification_command_files(),
-            "The licence and Cursor-name checks below iterate every *-verification-skill.md "
-            "command. If the create command is not found, they pass without checking anything.",
-        )
+    def test_both_commands_are_among_the_files_checked(self):
+        for command in (CREATE_COMMAND, MAINTAIN_COMMAND):
+            with self.subTest(command=command.name):
+                self.assertIn(
+                    command,
+                    verification_command_files(),
+                    "The licence and Cursor-name checks below iterate every "
+                    "*-verification-skill.md command. A command they do not find goes unchecked.",
+                )
 
 
 class TestTheMitNoticeTravelsWithTheFile(unittest.TestCase):
@@ -229,6 +233,255 @@ class TestTheDocsSayWhenToUseIt(unittest.TestCase):
         usage = read_text(REPO_ROOT / "studio" / "docs" / "CLAUDE_CODE_USAGE.md")
         table = usage.split("## Utility Slash Commands", 1)[1].split("\n## ", 1)[0]
         self.assertRegex(table, r"(?m)^\| `/create-verification-skill` \| .{40,}\|$")
+
+
+PSTACK_OUTCOMES = (
+    "- **clean** — every feature got source and live coverage; nothing worth shipping. "
+    "No branch, no PR.",
+    "- **changed** — one PR ships proven doc, harness, or map corrections.",
+    "- **blocked** — coverage could not finish or a proven fix could not ship safely. "
+    "Say exactly what blocked it.",
+)
+
+PSTACK_EDIT_SCOPE = (
+    "Only edit the verification skill's own directory (its SKILL.md, features/, and any "
+    "harness scripts it owns). Never edit product code during a run: a behavior the map "
+    "describes that the app no longer does is either doc drift (fix the map) or a product "
+    "regression (report it, don't paper over it in docs)."
+)
+
+PSTACK_STEP_TITLES = (
+    "0. **Locate the target.**",
+    "1. **Index hygiene.**",
+    "2. **Source wave.**",
+    "3. **Reconcile.**",
+    "4. **Live pass.**",
+    "5. **Triage.**",
+    "6. **Ship or stop.**",
+)
+
+OUTCOME_LINE = "OUTCOME: clean|changed|blocked — <one line>"
+
+
+def maintain_step(body: str, number: int) -> str:
+    start = body.index(PSTACK_STEP_TITLES[number])
+    if number + 1 < len(PSTACK_STEP_TITLES):
+        return body[start: body.index(PSTACK_STEP_TITLES[number + 1])]
+    end = body.find(" ## ", start)
+    return body[start:] if end == -1 else body[start:end]
+
+
+class TestTheMaintainCommandKeepsPstacksPass(unittest.TestCase):
+    def setUp(self):
+        self.body = collapse_whitespace(body_of(read_text(MAINTAIN_COMMAND)))
+
+    def test_it_keeps_the_three_outcomes_word_for_word(self):
+        for outcome in PSTACK_OUTCOMES:
+            with self.subTest(outcome=outcome.split("**")[1]):
+                self.assertIn(outcome, self.body)
+
+    def test_it_keeps_the_edit_scope_word_for_word(self):
+        self.assertIn(PSTACK_EDIT_SCOPE, self.body)
+
+    def test_it_keeps_steps_zero_to_six_in_order(self):
+        positions = [self.body.find(title) for title in PSTACK_STEP_TITLES]
+        self.assertNotIn(-1, positions, "every pstack step must keep its number and title")
+        self.assertEqual(positions, sorted(positions))
+
+    def test_the_live_pass_runs_even_when_source_looks_clean(self):
+        live_pass = maintain_step(self.body, 4)
+        self.assertIn("Required even when source looks clean.", live_pass)
+        self.assertIn("the skill's Launch section decides, not this one", live_pass)
+
+    def test_the_live_pass_holds_the_three_invariants(self):
+        live_pass = maintain_step(self.body, 4)
+        for invariant in (
+            "(1) never drive an instance you haven't health-checked since it last did "
+            "something surprising",
+            "(2) evidence captured so far survives every cleanup, checked at its named "
+            "location, not assumed",
+            "(3) nothing a drive started outlives that drive's usefulness",
+        ):
+            with self.subTest(invariant=invariant[:3]):
+                self.assertIn(invariant, live_pass)
+
+    def test_unreachable_needs_a_named_prerequisite(self):
+        live_pass = maintain_step(self.body, 4)
+        self.assertIn(
+            "A feature that can't be reached is `verified-unreachable` only with the concrete "
+            "prerequisite (auth, entitlement, OS, external state) and the route attempted",
+            live_pass,
+        )
+        self.assertIn("Any harness fix from triage gets re-driven live before it ships.", live_pass)
+        self.assertIn("Final teardown happens after the last drive of the run", live_pass)
+
+    def test_reconcile_and_triage_keep_their_rules(self):
+        self.assertIn(
+            "require a concrete source path before calling one missing", maintain_step(self.body, 3)
+        )
+        triage = maintain_step(self.body, 5)
+        self.assertIn("product gap; record it for the user, keep it out of this PR", triage)
+
+
+class TestTheMaintainCommandCarriesTheStudioSteps(unittest.TestCase):
+    def setUp(self):
+        self.body = collapse_whitespace(body_of(read_text(MAINTAIN_COMMAND)))
+
+    def test_step_zero_looks_under_claude_skills(self):
+        locate = maintain_step(self.body, 0)
+        self.assertIn("`.claude/skills/verify-*/`", locate)
+        self.assertIn("/create-verification-skill", locate)
+
+    def test_several_candidates_end_blocked_when_headless(self):
+        locate = maintain_step(self.body, 0)
+        self.assertRegex(locate, r"-p.{0,200}`blocked`|`blocked`.{0,200}-p")
+
+    def test_step_zero_works_in_a_fresh_worktree_off_origin_main_after_a_fetch(self):
+        locate = maintain_step(self.body, 0)
+        fetch = locate.find("git fetch origin")
+        worktree_add = locate.find("git worktree add --detach")
+        self.assertNotEqual(fetch, -1)
+        self.assertNotEqual(worktree_add, -1)
+        self.assertLess(fetch, worktree_add, "the worktree must be cut after the fetch")
+        self.assertRegex(locate, r"git worktree add --detach \S+ origin/main")
+        self.assertIn("git worktree remove", locate)
+
+    def test_step_zero_makes_no_gh_call(self):
+        locate = maintain_step(self.body, 0)
+        self.assertNotRegex(locate, r"`gh |\bgh pr\b|\bgh api\b")
+
+    def test_the_source_wave_is_read_only_and_checked(self):
+        wave = maintain_step(self.body, 2)
+        self.assertIn('subagent_type: "Explore"', wave)
+        self.assertIn('"do not edit files"', wave)
+        self.assertIn("git status --porcelain", wave)
+        self.assertIn("empty", wave)
+
+    def test_step_six_stages_everything_before_the_scope_gate(self):
+        ship = maintain_step(self.body, 6)
+        stage = ship.find("git add -A")
+        scope_gate = ship.find("git diff --cached --name-only origin/main")
+        self.assertNotEqual(stage, -1)
+        self.assertNotEqual(scope_gate, -1)
+        self.assertLess(stage, scope_gate, "untracked files only show in the gate once staged")
+        self.assertIn("is outside edit scope", ship)
+
+    def test_an_open_maintenance_pr_blocks_after_the_coverage_report(self):
+        ship = maintain_step(self.body, 6)
+        open_pr_check = ship.find("gh pr list --state open --json number,headRefName")
+        self.assertNotEqual(open_pr_check, -1)
+        self.assertIn("`verify/maintain-`", ship)
+        self.assertIn("earlier maintenance PR #N is still open", ship)
+        self.assertLess(ship.find("is outside edit scope"), open_pr_check)
+        self.assertRegex(ship, r"coverage and the product-gap report")
+
+    def test_otherwise_it_pushes_one_branch_and_opens_one_ready_pr_into_main(self):
+        ship = maintain_step(self.body, 6)
+        open_pr_check = ship.find("gh pr list --state open")
+        push = ship.find("git push")
+        create = ship.find("gh pr create")
+        self.assertLess(open_pr_check, push)
+        self.assertLess(push, create)
+        self.assertIn("verify/maintain-<YYYY-MM-DD>", ship)
+        self.assertRegex(ship, r"gh pr create[^`]*--base main")
+        self.assertNotIn("--draft", ship)
+        self.assertIn("ready for review", ship)
+
+    def test_every_run_ends_with_the_outcome_line(self):
+        self.assertIn(f"`{OUTCOME_LINE}`", self.body)
+        self.assertRegex(self.body, r"last line[^.]*`OUTCOME: ")
+
+
+def scheduling_section() -> str:
+    usage = read_text(USAGE_DOC)
+    heading = "## Keeping a verification skill current"
+    start = usage.index(heading)
+    end = usage.find("\n## ", start + len(heading))
+    return usage[start:] if end == -1 else usage[start:end]
+
+
+class TestTheScheduleRecipe(unittest.TestCase):
+    def setUp(self):
+        self.section = scheduling_section()
+
+    def test_it_documents_the_hand_run(self):
+        self.assertIn("/maintain-verification-skill", self.section)
+        self.assertIn("by hand", self.section.lower())
+
+    def test_it_is_a_per_user_launch_agent(self):
+        self.assertIn("~/Library/LaunchAgents/", self.section)
+        self.assertIn("LaunchDaemon", self.section)
+        self.assertRegex(self.section, r"never a LaunchDaemon")
+
+    def test_the_plist_sets_the_keys_launchd_needs(self):
+        for key in (
+            "StartCalendarInterval",
+            "WorkingDirectory",
+            "EnvironmentVariables",
+            "ProgramArguments",
+            "StandardOutPath",
+            "StandardErrorPath",
+        ):
+            with self.subTest(key=key):
+                self.assertIn(f"<key>{key}</key>", self.section)
+        self.assertRegex(self.section, r"<key>PATH</key>\s*<string>[^<]*/opt/homebrew/bin")
+
+    def test_it_gives_the_claude_line_with_project_settings_only(self):
+        line = re.search(r'claude -p "/maintain-verification-skill"[^\n`]*', self.section)
+        self.assertIsNotNone(line, "the recipe must show the claude -p command it schedules")
+        self.assertIn("--setting-sources project ", line.group(0) + " ")
+        self.assertRegex(line.group(0), r"--settings \S+")
+
+    def plist_string(self, key: str) -> str:
+        value = re.search(rf"<key>{key}</key>\s*<string>(.*)</string>", self.section)
+        self.assertIsNotNone(value, f"the plist must set {key}")
+        return value.group(1)
+
+    def test_logs_and_settings_live_outside_the_checkout(self):
+        self.assertIn("outside the checkout", self.section)
+        repo_root = self.plist_string("WorkingDirectory")
+        settings = re.search(r"--settings (\S+)", self.section).group(1)
+        for name, path in (
+            ("StandardOutPath", self.plist_string("StandardOutPath")),
+            ("StandardErrorPath", self.plist_string("StandardErrorPath")),
+            ("--settings", settings),
+        ):
+            with self.subTest(path=name):
+                self.assertTrue(path.startswith("/"), f"{name} must be absolute: launchd expands nothing")
+                self.assertFalse(path.startswith(repo_root), f"{name} must sit outside the checkout")
+                self.assertNotIn(".claude/settings.local.json", path)
+
+    def test_the_settings_file_holds_the_push_and_pr_rules(self):
+        for rule in ("git push", "gh pr list", "gh pr create"):
+            with self.subTest(rule=rule):
+                self.assertIn(f'"Bash({rule} *)"', self.section)
+
+    def test_it_never_puts_the_rules_in_settings_local(self):
+        mentions = [
+            line for line in self.section.splitlines() if ".claude/settings.local.json" in line
+        ]
+        self.assertTrue(mentions, "the recipe must warn away from .claude/settings.local.json")
+        for line in mentions:
+            with self.subTest(line=line[:60]):
+                self.assertRegex(line, r"\b(Not|not|never|Never)\b")
+
+    def test_it_warns_that_launchd_runs_a_missed_job_on_wake(self):
+        self.assertIn("wakes", self.section)
+        self.assertIn("pmset repeat wake", self.section)
+
+    def test_there_is_no_cloud_schedule_recipe(self):
+        self.assertNotIn("/schedule", read_text(USAGE_DOC))
+
+
+class TestTheMaintainCommandIsListed(unittest.TestCase):
+    def test_readme_has_a_row(self):
+        readme = read_text(REPO_ROOT / "README.md")
+        self.assertRegex(readme, r"(?m)^\| `/maintain-verification-skill` \| .{40,}\|$")
+
+    def test_the_utility_slash_commands_table_has_a_row(self):
+        usage = read_text(USAGE_DOC)
+        table = usage.split("## Utility Slash Commands", 1)[1].split("\n## ", 1)[0]
+        self.assertRegex(table, r"(?m)^\| `/maintain-verification-skill` \| .{40,}\|$")
 
 
 if __name__ == "__main__":

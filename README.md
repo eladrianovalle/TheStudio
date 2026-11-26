@@ -60,6 +60,7 @@ Slash commands are the main way you use Studio day to day. `init` installs them 
 |---------|--------------|
 | `/detest` | Audit your test suite against AI-TDD methodology and fix the violations |
 | `/unstale` | Find and fix stale docs, wrong counts, and dead links (stack-agnostic) |
+| `/maintain-verification-skill` | Keep a verification skill and feature map honest as the product changes: reads every feature from source, drives every feature live from a fresh worktree of `origin/main`, and opens at most one PR of proven corrections. Run it by hand or daily ([schedule](./studio/docs/CLAUDE_CODE_USAGE.md#keeping-a-verification-skill-current)). Adapted from Lauren Tan's pstack (MIT) |
 | `/offload` | Slim a bloated CLAUDE.md by moving reference content into companion docs |
 | `/handoff` | Save the in-flight thread to a durable note so you can `/clear` safely — or resume one |
 | `/message-draft` | Draft a message you'll paste and send (Slack, Discord, GitHub, email): point and ask first, linted, saved to a file so the copy keeps its line breaks |
