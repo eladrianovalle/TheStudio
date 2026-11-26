@@ -147,6 +147,36 @@ def test_missing_selected_editor_is_reported_before_writer(project, tmp_path_fac
     assert not sentinel.exists()
 
 
+@pytest.mark.parametrize('record', ['unchecked', 'unreadable'])
+def test_an_unchecked_native_launch_refuses_the_portable_run(project, tmp_path_factory, monkeypatch, record):
+    import shutil
+    from impl_loop import open_loop_record
+    record_file = project / '.git' / 'studio-forge.json'
+    if record == 'unchecked':
+        base = command(project, 'git', 'rev-parse', 'HEAD').stdout.strip()
+        open_loop_record(project, unit_id='native_unit', branch='impl/native_unit', base_sha=base,
+                         test_command='true', pack_check=None)
+    else:
+        record_file.write_text('not json')
+    binaries = tmp_path_factory.mktemp('bin')
+    for name in ('git', 'node'):
+        (binaries / name).symlink_to(shutil.which(name))
+    sentinel = binaries / 'role-called'
+    codex = binaries / 'codex'
+    codex.write_text(f'#!/bin/sh\ntouch "{sentinel}"\n')
+    codex.chmod(0o755)
+    monkeypatch.setenv('PATH', str(binaries))
+    r = cli(project, 'Build a demo', '--runtime', 'codex')
+    state = json.loads(r.stdout)
+    assert r.returncode and state['failed_stage'] == 'preflight'
+    assert state['error'].startswith('unchecked-loop' if record == 'unchecked' else 'unreadable-record')
+    if record == 'unchecked':
+        assert '--check --work-dir' in state['error']
+    assert not sentinel.exists()
+    assert command(project, 'git', 'branch', '--show-current').stdout.strip() == 'main'
+    assert record_file.exists()
+
+
 def test_missing_writer_is_stage_scoped(project, tmp_path_factory, monkeypatch):
     import shutil
     binaries = tmp_path_factory.mktemp('bin')

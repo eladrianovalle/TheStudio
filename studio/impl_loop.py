@@ -1288,11 +1288,12 @@ def _check_record(tree: Path, path: Path) -> int:
 
 
 def _spec_file(spec: str) -> Path | None:
+    file_name = spec if spec.endswith(".md") else f"{spec}.md"
     candidates = (
         Path(spec),
-        Path(f"{spec}.md"),
-        Path("specs") / f"{spec}.md",
-        Path(".studio") / "specs" / f"{spec}.md",
+        Path(file_name),
+        Path("specs") / file_name,
+        Path(".studio") / "specs" / file_name,
     )
     for candidate in candidates:
         if candidate.is_file():

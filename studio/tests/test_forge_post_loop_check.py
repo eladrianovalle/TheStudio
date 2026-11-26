@@ -130,6 +130,21 @@ def test_a_launch_writes_the_record_with_its_nine_fields_into_the_tree_git_direc
     assert git(repo, "status", "--porcelain") == ""
 
 
+@pytest.mark.parametrize("spelling", ["only", "only.md"])
+def test_a_launch_infers_the_unit_from_a_one_unit_spec_spelled_either_way(workspace, spelling):
+    repo = workspace["repo"]
+    specs = repo / ".studio" / "specs"
+    specs.mkdir(parents=True)
+    (specs / "only.md").write_text("## Build Plan\n### 1. `solo_unit` \u2014 Does one thing\n- [ ] It works.\n")
+    git(repo, "add", ".studio")
+    git(repo, "commit", "-q", "-m", "spec")
+
+    completed = launch(workspace, "--spec", spelling)
+
+    assert completed.returncode == 0, completed.stderr
+    assert read_record(repo)["unit_id"] == "solo_unit"
+
+
 def test_a_launch_in_a_linked_worktree_writes_into_that_worktree_git_directory(workspace):
     repo = workspace["repo"]
     linked = workspace["tmp"] / "linked"
