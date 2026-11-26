@@ -34,7 +34,7 @@ Only edit the verification skill's own directory (its SKILL.md, features/, and a
 
    Look for the candidates in that worktree and run every later step from it. When the run ends, whatever the outcome, remove it with `git worktree remove --force <scratch>/verify-maintain-<date>`. Evidence and run notes live in `<scratch>`, outside the worktree, so the removal keeps them.
 
-   **[Studio]** In a `-p` run nobody can answer a question, so several candidates end the run `blocked`, naming every candidate path. Step 0 makes no `gh` call: the only one is in step 6.
+   **[Studio]** In a `-p` run nobody can answer a question, so several candidates end the run `blocked`, naming every candidate path. Step 0 makes no `gh` call; `gh` runs only in step 6.
 
 1. **Index hygiene.** Read the feature map README and glob its sibling files. Fix missing, extra, duplicate, or dead entries. Lightweight; no generated inventory.
 
@@ -50,26 +50,23 @@ Only edit the verification skill's own directory (its SKILL.md, features/, and a
 
 6. **Ship or stop.** For changed: one PR of proven corrections, re-read every changed file first. For clean or blocked: no PR, report the outcome and the coverage honestly.
 
-   **[Studio]** In the worktree, in this order:
+   **[Studio]** For changed, in the worktree, in this order:
 
-   - **changed:**
-     1. Run `git add -A`, so a new untracked file is staged and checked like any other.
-     2. Run `git diff --cached --name-only origin/main`. Every path it prints must sit inside the skill's directory. If one does not, the outcome is `blocked: <path> is outside edit scope`. Never unstage the path to get past this check.
-     3. Run `gh pr list --state open --json number,headRefName`. If an open PR's head branch starts with `verify/maintain-`, the outcome is `blocked: earlier maintenance PR #N is still open`. If `gh` itself fails, for example on an origin that is not on GitHub, the outcome is `blocked: gh pr list failed — <error line>`. Either way the reply still carries the full coverage and the product-gap report; only the second PR is withheld.
-     4. Re-read every changed file, then push one branch and open one PR into `main`, ready for review, never as a draft:
+   1. Run `git add -A`, so a new untracked file is staged and checked like any other.
+   2. Run `git diff --cached --name-only origin/main`. Every path it prints must sit inside the skill's directory. If one does not, the outcome is `blocked: <path> is outside edit scope`. Never unstage the path to get past this check.
+   3. Run `gh pr list --state open --json number,headRefName`. If an open PR's head branch starts with `verify/maintain-`, the outcome is `blocked: earlier maintenance PR #N is still open`. If `gh` itself fails, for example on an origin that is not on GitHub, the outcome is `blocked: gh pr list failed — <error line>`. Either way the reply still carries the full coverage and the product-gap report; only the second PR is withheld.
+   4. Re-read every changed file, then push one branch and open one PR into `main`, ready for review, never as a draft:
 
-        ```
-        git switch -c verify/maintain-<YYYY-MM-DD>
-        git commit -m "Correct the verification skill: <what changed>"
-        git push -u origin verify/maintain-<YYYY-MM-DD>
-        gh pr create --base main --head verify/maintain-<YYYY-MM-DD> --title "<title>" --body-file <scratch>/pr-body.md
-        ```
+      ```
+      git switch -c verify/maintain-<YYYY-MM-DD>
+      git commit -m "Correct the verification skill: <what changed>"
+      git push -u origin verify/maintain-<YYYY-MM-DD>
+      gh pr create --base main --head verify/maintain-<YYYY-MM-DD> --title "<title>" --body-file <scratch>/pr-body.md
+      ```
 
-        The body lists the features covered, each correction beside the drive that proved it, and any product gaps (reported, not fixed).
-   - **clean:** no branch, no PR.
-   - **blocked:** no PR, and the reply says exactly what blocked it.
+      The body lists the features covered, each correction beside the drive that proved it, and any product gaps (reported, not fixed).
 
-Keep concise run notes (features covered, unreachable prerequisites, confirmed drift, outcome) in a scratch location; don't commit them. **[Studio]** That location is `<scratch>`, outside the worktree.
+Keep concise run notes (features covered, unreachable prerequisites, confirmed drift, outcome) in a scratch location; don't commit them.
 
 ## Reply [Studio]
 
