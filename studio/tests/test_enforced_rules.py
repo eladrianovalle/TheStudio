@@ -271,6 +271,13 @@ ENFORCED: list[EnforcedRule] = [
         enforcer="studio/packs.py::report_problems",
         proof="studio/tests/test_packs.py::test_metric_above_its_max_fails",
     ),
+    EnforcedRule(
+        rule="A unit is called clean only if Studio ran the tests itself.",
+        stated_in=".claude/commands/forge.md",
+        enforcer="studio/impl_loop.py::check_loop",
+        proof="studio/tests/test_forge_post_loop_check.py::test_a_red_test_command_is_tests_failed_and_tells_the_user_what_to_do",
+        retired_prose="final test status (`editor.tests` / `writer.tests`)",
+    ),
 ]
 
 
@@ -290,7 +297,6 @@ NOT_YET_ENFORCED: list[str] = [
     "A unit's criteria come from its spec, or the run stops.",
     "Criteria with the editor switched off stop the run.",
     "The finalize verdict is the debate's own.",
-    "A unit is called clean only if Studio ran the tests itself.",
     "`/forge`'s commits land on its branch.",
     "No worktree removal deletes run artifacts that exist nowhere else.",
     "An agent asks before merging.",
@@ -334,7 +340,7 @@ NOT_YET_ENFORCED: list[str] = [
 
 # Rose once, on purpose, from 20 to 52 when specs/judged-rules.md sorted the rules an audit found
 # unchecked. This number only goes down from here.
-NOT_YET_ENFORCED_COUNT = 54
+NOT_YET_ENFORCED_COUNT = 53
 
 
 class JudgedRule(NamedTuple):

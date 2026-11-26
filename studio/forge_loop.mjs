@@ -459,6 +459,10 @@ function editorPrompt(u, writer) {
   ].join('\n')
 }
 
+function wasLaunched(overrides) {
+  return typeof overrides.launched_at === 'string' && overrides.launched_at.trim() !== ''
+}
+
 // ---------------------------------------------------------------------------
 // Orchestration: writer -> entry gate -> editor -> exit gate (revert) -> deliver
 // ---------------------------------------------------------------------------
@@ -473,6 +477,10 @@ export async function runLoop(args, {agent, phase, log}) {
     try { parsedArgs = JSON.parse(parsedArgs) } catch { parsedArgs = {} }
   }
   const overrides = (parsedArgs && typeof parsedArgs === 'object' && !Array.isArray(parsedArgs)) ? parsedArgs : {}
+  if (!wasLaunched(overrides)) {
+    log('No launched_at in args: /forge launches this loop with impl_loop.py --branch, which prints it. Starting no agent.')
+    return { delivered: false, reason: 'not_launched' }
+  }
   const unit = { ...DEFAULT_UNIT, ...overrides }
   log(`Unit: ${unit.unit_id} — ${unit.title}`)
 

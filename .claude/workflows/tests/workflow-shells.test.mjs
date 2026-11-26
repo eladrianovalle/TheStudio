@@ -696,3 +696,39 @@ test('the editor runs on EDITOR_MODEL, a one-line opus constant, and the writer 
   const writerCall = agentCallLine('writerPrompt')
   assert.match(writerCall, /[{,] model: unit\.model \}\)$/)
 })
+
+const LoopFunction = Object.getPrototypeOf(async () => {}).constructor
+const runLoopScript = new LoopFunction('args', 'agent', 'phase', 'log', LOOP_SOURCE.replace('export const meta', 'const meta'))
+
+const runWithRecordingAgent = async (args) => {
+  const spawned = []
+  const agent = async (prompt, options) => {
+    spawned.push(options.label)
+    return null
+  }
+  const result = await runLoopScript(args, agent, () => {}, () => {})
+  return { result, spawned }
+}
+
+test('the loop spawns no agent and returns not_launched when its args carry no launched_at', async () => {
+  for (const args of [
+    { ...UNIT },
+    JSON.stringify(UNIT),
+    { ...UNIT, launched_at: '' },
+    { ...UNIT, launched_at: null },
+    undefined,
+  ]) {
+    const { result, spawned } = await runWithRecordingAgent(args)
+    assert.deepEqual(result, { delivered: false, reason: 'not_launched' })
+    assert.deepEqual(spawned, [])
+  }
+})
+
+test('the loop starts its writer when its args carry the launch stamp, as an object or a JSON string', async () => {
+  const launched = { ...UNIT, launched_at: '2026-11-26T12:00:00+00:00' }
+  for (const args of [launched, JSON.stringify(launched)]) {
+    const { result, spawned } = await runWithRecordingAgent(args)
+    assert.deepEqual(spawned, ['writer:unit_demo'])
+    assert.deepEqual(result, { delivered: false, reason: 'writer_failed' })
+  }
+})

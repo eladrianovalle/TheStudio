@@ -20,10 +20,15 @@ import argparse
 import configparser
 import json
 import os
+import re
+import shlex
 import string
 import subprocess
 import sys
+import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
 
@@ -996,17 +1001,16 @@ def runtime_knobs(config: LoopConfig) -> dict:
     }
 
 
-def load_knobs(path: Path | None = None, test_command_override: str | None = None) -> dict:
+def pack_check_command(path: Path | None = None) -> str | None:
     import packs
 
-    knobs = runtime_knobs(load_loop_config(path, test_command_override=test_command_override))
     config_path = _resolve_config_path(path, STUDIO_ROOT).resolve()
     try:
         departments = packs.load_declaration(config_path)
     except packs.PackConfigError as error:
         raise LoopConfigError(str(error)) from error
     if not departments:
-        return knobs
+        return None
     run_phase = STUDIO_ROOT / "run_phase.py"
     for quoted_path in (sys.executable, str(run_phase), str(config_path)):
         refusal = explain_unquotable_path(quoted_path)
@@ -1014,9 +1018,370 @@ def load_knobs(path: Path | None = None, test_command_override: str | None = Non
             raise LoopConfigError(
                 f"{config_path} declares a pack, but its check cannot be quoted into static_checks.\n{refusal}"
             )
-    pack_check = f'"{sys.executable}" "{run_phase}" check-packs --config "{config_path}"'
-    knobs["static_checks"] = [*knobs["static_checks"], pack_check]
+    return f'"{sys.executable}" "{run_phase}" check-packs --config "{config_path}"'
+
+
+def load_knobs(path: Path | None = None, test_command_override: str | None = None) -> dict:
+    knobs = runtime_knobs(load_loop_config(path, test_command_override=test_command_override))
+    pack_check = pack_check_command(path)
+    if pack_check is not None:
+        knobs["static_checks"] = [*knobs["static_checks"], pack_check]
     return knobs
+
+
+LOOP_RECORD_NAME = "studio-forge.json"
+LOOP_LOCK_NAME = "studio-forge.lock"
+
+RECORD_UNCHECKED = "unchecked-loop"
+RECORD_UNREADABLE = "unreadable-record"
+RECORD_LAUNCHING = "launch-in-progress"
+
+CHECK_WRONG_BRANCH = "wrong-branch"
+CHECK_NO_WRITER_COMMIT = "no-writer-commit"
+CHECK_TESTS_FAILED = "tests-failed"
+CHECK_PACKS_FAILED = "packs-failed"
+
+_RECORD_TEXT_FIELDS = ("unit_id", "branch", "tree", "base_sha", "test_command", "started_at")
+_RECORD_OPTIONAL_TEXT_FIELDS = ("pack_check", "checked_at")
+
+_MISSING_UNIT_ID_MESSAGE = (
+    "--branch needs a unit id: pass --unit <id>, or a --spec whose Build Plan has exactly one unit. "
+    "If /forge sent this, the session is running an older copy of the command: restart it."
+)
+
+
+class RecordError(ValueError):
+    pass
+
+
+class CheckError(ValueError):
+    pass
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _git_dir(tree: Path) -> Path | None:
+    output = _git_output(tree, "rev-parse", "--absolute-git-dir")
+    if output is None:
+        return None
+    return Path(output.strip())
+
+
+def _tree_root(tree: Path) -> Path:
+    output = _git_output(tree, "rev-parse", "--show-toplevel")
+    if output is None:
+        return tree.resolve()
+    return Path(output.strip())
+
+
+def check_command(tree: Path) -> str:
+    return shlex.join([sys.executable, str(STUDIO_ROOT / "impl_loop.py"), "--check", "--work-dir", str(tree)])
+
+
+def _write_record(path: Path, record: dict) -> None:
+    descriptor, temporary_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        json.dump(record, handle, indent=2)
+    os.replace(temporary_name, path)
+
+
+def _read_record(path: Path) -> dict:
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise ValueError(f"it is not readable JSON: {error}") from error
+    if not isinstance(record, dict):
+        raise ValueError("it does not hold a JSON object")
+    for name in _RECORD_TEXT_FIELDS:
+        if not isinstance(record.get(name), str):
+            raise ValueError(f"its {name} is missing or is not text")
+    for name in _RECORD_OPTIONAL_TEXT_FIELDS:
+        if name not in record or not (record[name] is None or isinstance(record[name], str)):
+            raise ValueError(f"its {name} is missing or is neither text nor null")
+    if not isinstance(record.get("problems"), list):
+        raise ValueError("its problems is missing or is not a list")
+    return record
+
+
+@contextmanager
+def _record_lock(lock_path: Path, refusal: Exception):
+    # The same protocol as the portable host (forge_host.mjs): the lock is held while the file exists.
+    try:
+        descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError as error:
+        raise refusal from error
+    try:
+        yield
+    finally:
+        os.close(descriptor)
+        lock_path.unlink()
+
+
+def open_loop_record(
+    tree: Path,
+    unit_id: str,
+    branch: str,
+    base_sha: str,
+    test_command: str,
+    pack_check: str | None,
+) -> str:
+    root = _tree_root(tree)
+    path = _git_dir(root) / LOOP_RECORD_NAME
+    lock_path = path.with_name(LOOP_LOCK_NAME)
+    refusal = RecordError(_with_fix(
+        f"{RECORD_LAUNCHING}: another /forge run, launch or check holds {lock_path} and is using this tree "
+        "right now, so nothing was launched.",
+        f"let it finish, then run /forge again; if nothing is running, remove {lock_path}.",
+    ))
+    with _record_lock(lock_path, refusal):
+        if path.exists():
+            try:
+                existing = _read_record(path)
+            except ValueError as why:
+                raise RecordError(_with_fix(
+                    f"{RECORD_UNREADABLE}: {path} is there but cannot be read as a /forge loop record ({why}). "
+                    "A /forge run may still be holding this tree, so nothing was launched.",
+                    f"look at {path}; once no /forge run is using this tree, remove it and run /forge again.",
+                )) from why
+            if existing["checked_at"] is None:
+                raise RecordError(_with_fix(
+                    f"{RECORD_UNCHECKED}: the /forge run of {existing['unit_id']} on {existing['branch']}, "
+                    f"started {existing['started_at']}, was never checked. Check it before launching another:\n\n"
+                    f"    {check_command(root)}",
+                    "run that command, read what it reports, then run /forge again.",
+                ))
+        launched_at = _utc_now()
+        _write_record(path, {
+            "unit_id": unit_id,
+            "branch": branch,
+            "tree": str(root),
+            "base_sha": base_sha,
+            "test_command": test_command,
+            "pack_check": pack_check,
+            "started_at": launched_at,
+            "checked_at": None,
+            "problems": [],
+        })
+        return launched_at
+
+
+def _is_writer_commit(subject: str, unit_id: str) -> bool:
+    return re.match(rf"writer: {re.escape(unit_id)}(?![A-Za-z0-9_])", subject) is not None
+
+
+def _git_problems(root: Path, record: dict) -> list[dict]:
+    problems = []
+    current_branch = (_git_output(root, "branch", "--show-current") or "").strip()
+    if current_branch != record["branch"]:
+        found = f"on {current_branch}" if current_branch else "on no branch"
+        problems.append({
+            "name": CHECK_WRONG_BRANCH,
+            "detail": f"{root} is {found}, not on {record['branch']}, the branch the loop was launched on.",
+        })
+    subjects = _git_output(root, "log", "--format=%s", f"{record['base_sha']}..HEAD")
+    if subjects is None:
+        problems.append({
+            "name": CHECK_NO_WRITER_COMMIT,
+            "detail": f"git cannot list the commits from {record['base_sha']} to HEAD, so no "
+                      f"`writer: {record['unit_id']}` commit can be found.",
+        })
+    elif not any(_is_writer_commit(subject, record["unit_id"]) for subject in subjects.splitlines()):
+        problems.append({
+            "name": CHECK_NO_WRITER_COMMIT,
+            "detail": f"no commit from {record['base_sha']} to HEAD has a subject starting "
+                      f"`writer: {record['unit_id']}`.",
+        })
+    return problems
+
+
+def _run_test_command(command: str, root: Path) -> int:
+    return subprocess.run(command, shell=True, cwd=str(root), stdout=sys.stderr, stderr=sys.stderr).returncode
+
+
+def _run_pack_check(command: str, root: Path) -> tuple[int, str]:
+    result = subprocess.run(
+        command, shell=True, cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+    )
+    sys.stderr.write(result.stdout)
+    printed_lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    first_line = printed_lines[0] if printed_lines else "it printed nothing"
+    return result.returncode, first_line
+
+
+def check_loop(tree: Path) -> int:
+    if not tree.is_dir():
+        raise CheckError(f"Could not check: there is no directory at {tree}.")
+    git_dir = _git_dir(tree)
+    if git_dir is None:
+        raise CheckError(f"Could not check: {tree} is not inside a git worktree, so it has no /forge loop record.")
+    path = git_dir / LOOP_RECORD_NAME
+    lock_path = git_dir / LOOP_LOCK_NAME
+    refusal = CheckError(
+        f"Could not check: another /forge run, launch or check holds {lock_path} and is using this tree "
+        f"right now. No test was run. If nothing is running, remove {lock_path}."
+    )
+    with _record_lock(lock_path, refusal):
+        return _check_record(tree, path)
+
+
+def _check_record(tree: Path, path: Path) -> int:
+    if not path.exists():
+        raise CheckError(f"Nothing to check: there is no /forge loop record at {path}.")
+    try:
+        record = _read_record(path)
+    except ValueError as why:
+        raise CheckError(
+            f"Could not check: {path} cannot be read as a /forge loop record ({why}). No test was run."
+        ) from why
+
+    root = _tree_root(tree)
+    problems = _git_problems(root, record)
+    tests = {"command": record["test_command"], "exit_code": None}
+    packs = None
+    if record["pack_check"] is not None:
+        packs = {"command": record["pack_check"], "exit_code": None}
+
+    if not problems:
+        tests["exit_code"] = _run_test_command(record["test_command"], root)
+        if tests["exit_code"] != 0:
+            problems.append({
+                "name": CHECK_TESTS_FAILED,
+                "detail": f"the test command `{record['test_command']}` exited {tests['exit_code']}.",
+            })
+        if packs is not None:
+            packs["exit_code"], first_line = _run_pack_check(record["pack_check"], root)
+            if packs["exit_code"] != 0:
+                problems.append({
+                    "name": CHECK_PACKS_FAILED,
+                    "detail": f"the pack check exited {packs['exit_code']}: {first_line}",
+                })
+
+    clean = not problems
+    if clean:
+        path.unlink()
+    else:
+        _write_record(path, {
+            **record,
+            "checked_at": _utc_now(),
+            "problems": [f"{problem['name']}: {problem['detail']}" for problem in problems],
+        })
+
+    print(json.dumps({
+        "clean": clean,
+        "unit_id": record["unit_id"],
+        "branch": record["branch"],
+        "tests": tests,
+        "packs": packs,
+        "problems": problems,
+    }))
+    if not clean:
+        sentences = "\n".join(f"{problem['name']}: {problem['detail']}" for problem in problems)
+        print(_with_fix(
+            f"The /forge unit {record['unit_id']} is not clean.\n{sentences}",
+            "fix what each problem names and run the check again; until it passes, tell the user before "
+            "the branch is pushed.",
+        ), file=sys.stderr)
+        return 1
+    return 0
+
+
+def _spec_file(spec: str) -> Path | None:
+    candidates = (
+        Path(spec),
+        Path(f"{spec}.md"),
+        Path("specs") / f"{spec}.md",
+        Path(".studio") / "specs" / f"{spec}.md",
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _launch_unit_id(unit: str | None, spec: str | None) -> str | None:
+    if unit:
+        return unit
+    if not spec:
+        return None
+    from stats import parse_build_plan
+
+    spec_path = _spec_file(spec)
+    if spec_path is None:
+        return None
+    units = parse_build_plan(spec_path.read_text(encoding="utf-8"), spec_path.stem, str(spec_path))
+    if len(units) != 1:
+        return None
+    return units[0].unit_id
+
+
+def _parse_arguments(argv: List[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="impl_loop.py",
+        description="Print the implementation loop's runtime knobs as JSON.",
+    )
+    parser.add_argument(
+        "config_path",
+        nargs="?",
+        help="Explicit path to a loop config .toml (default: the resolution chain).",
+    )
+    parser.add_argument(
+        "--work-dir",
+        help="Directory the loop's agents must work in; must be a git worktree of this repo.",
+    )
+    parser.add_argument(
+        "--branch",
+        help="Branch the loop is about to commit to; the tree must be clean and on it.",
+    )
+    parser.add_argument(
+        "--unit",
+        help="The unit this launch builds; --branch needs it, or a --spec planning exactly one unit.",
+    )
+    parser.add_argument(
+        "--spec",
+        help="The spec the unit comes from; with no --unit, its Build Plan must hold exactly one unit.",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="After a /forge run: re-run the recorded test command and say whether the unit is clean.",
+    )
+    args = parser.parse_args(argv[1:])
+    if args.check:
+        if args.config_path or args.branch or args.unit or args.spec:
+            parser.error("--check takes only --work-dir.")
+        return args
+    if args.branch:
+        args.unit_id = _launch_unit_id(args.unit, args.spec)
+        if args.unit_id is None:
+            parser.error(_MISSING_UNIT_ID_MESSAGE)
+    return args
+
+
+def _launch(args: argparse.Namespace) -> str:
+    path = Path(args.config_path) if args.config_path else None
+    knobs = load_knobs(path)
+
+    if args.work_dir:
+        knobs["work_dir"] = str(validate_work_dir(args.work_dir))
+
+    if args.branch:
+        tree_being_built = Path(knobs["work_dir"]) if args.work_dir else Path.cwd()
+        knobs["branch"] = validate_branch(tree_being_built, args.branch)
+        knobs["base_sha"] = subprocess.check_output(
+            ["git", "-C", tree_being_built, "rev-parse", "HEAD"], text=True,
+        ).strip()
+        knobs["launched_at"] = open_loop_record(
+            tree_being_built,
+            unit_id=args.unit_id,
+            branch=knobs["branch"],
+            base_sha=knobs["base_sha"],
+            test_command=knobs["test_command"],
+            pack_check=pack_check_command(path),
+        )
+
+    return json.dumps(knobs)
 
 
 def _cli(argv: List[str]) -> str:
@@ -1044,46 +1409,24 @@ def _cli(argv: List[str]) -> str:
         BranchError: If ``--branch`` is given and the tree is not a clean checkout of it.
         LoopConfigError: If this repository's gate has no test command to run.
     """
-    parser = argparse.ArgumentParser(
-        prog="impl_loop.py",
-        description="Print the implementation loop's runtime knobs as JSON.",
-    )
-    parser.add_argument(
-        "config_path",
-        nargs="?",
-        help="Explicit path to a loop config .toml (default: the resolution chain).",
-    )
-    parser.add_argument(
-        "--work-dir",
-        help="Directory the loop's agents must work in; must be a git worktree of this repo.",
-    )
-    parser.add_argument(
-        "--branch",
-        help="Branch the loop is about to commit to; the tree must be clean and on it.",
-    )
-    args = parser.parse_args(argv[1:])
+    return _launch(_parse_arguments(argv))
 
-    path = Path(args.config_path) if args.config_path else None
-    knobs = load_knobs(path)
 
-    if args.work_dir:
-        knobs["work_dir"] = str(validate_work_dir(args.work_dir))
-
-    if args.branch:
-        tree_being_built = Path(knobs["work_dir"]) if args.work_dir else Path.cwd()
-        knobs["branch"] = validate_branch(tree_being_built, args.branch)
-        knobs["base_sha"] = subprocess.check_output(
-            ["git", "-C", tree_being_built, "rev-parse", "HEAD"], text=True,
-        ).strip()
-
-    return json.dumps(knobs)
+def main(argv: List[str]) -> int:
+    args = _parse_arguments(argv)
+    if args.check:
+        try:
+            return check_loop(Path(args.work_dir).expanduser().resolve() if args.work_dir else Path.cwd())
+        except CheckError as error:
+            print(error, file=sys.stderr)
+            return 2
+    try:
+        print(_launch(args))
+    except (WorkDirError, BranchError, LoopConfigError, RecordError) as e:
+        print(e, file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    try:
-        print(_cli(sys.argv))
-    except (WorkDirError, BranchError, LoopConfigError) as e:
-        # All three are refusals with an explanation already written for a person: print the
-        # message alone, with no traceback in front of it, and stop the run.
-        print(e, file=sys.stderr)
-        sys.exit(1)
+    sys.exit(main(sys.argv))

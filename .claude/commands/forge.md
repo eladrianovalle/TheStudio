@@ -232,13 +232,16 @@ path argument is needed. That file is the only thing that says how this repo is 
 key it leaves out is empty, and nothing is detected here:
 
 ```bash
-python .studio/source/impl_loop.py --branch "<branch>"
-# prints knobs JSON, e.g. {"editor_enabled": true, "read_scope": "touched+importers", "output_budget": 400, ..., "branch": "<branch>"}
+python .studio/source/impl_loop.py --branch "<branch>" --unit "<unit_id>"
+# prints knobs JSON, e.g. {"editor_enabled": true, ..., "branch": "<branch>", "base_sha": "...", "launched_at": "2026-11-26T12:00:00+00:00"}
 ```
 
-If `--work-dir` was given, pass it here too (`--work-dir "<work_dir>" --branch "<branch>"`), so the
-branch is checked in the work directory. Run this even though Step 3 already printed the knobs: it
-is the check of the tree as it stands now, so it must be the last command before the Workflow call.
+Pass the `unit_id` from Step 2, and with `--spec` pass `--spec "<spec file>"` too. If `--work-dir`
+was given, pass it here too (`--work-dir "<work_dir>" --branch "<branch>" --unit "<unit_id>"`), so
+the branch is checked in the work directory. Run this even though Step 3 already printed the knobs:
+it is the check of the tree as it stands now, so it must be the last command before the Workflow
+call. When every check passes it leaves a small record of the launch in the tree's git directory
+(never in the working tree) and prints `launched_at`; Step 6 checks the unit against that record.
 
 **If this command exits non-zero, STOP — do not run the loop.** Its message already says what is
 wrong and what to do; print it as-is and let the user fix it. It is one of:
@@ -259,6 +262,19 @@ wrong and what to do; print it as-is and let the user fix it. It is one of:
 - **`dirty-tree`** — something is uncommitted, and the message lists it. The writer's `git add -A`
   would sweep it into the unit's commit, and the loop's `git reset --hard` would delete it. A
   concerns file an earlier unit left behind counts.
+- **`unchecked-loop`** — an earlier `/forge` run in this tree was launched and never checked (it
+  crashed, or its report step never ran). The message names that run's unit, branch and start time
+  and prints the exact `--check` command for this tree. Show it to the user; do not run it yourself
+  and relaunch, because the user may want to look at that run's work first.
+- **`unreadable-record`** — the launch record in this tree's git directory cannot be read. The
+  message names the file.
+- **`launch-in-progress`** — another `/forge` run, launch or `--check` in this tree holds its
+  `studio-forge.lock` at this moment. Nothing was launched. Tell the user; do not retry in a loop,
+  because once a launch finishes its record will refuse this one with `unchecked-loop`. If the user
+  says nothing is running, the lock was left by a killed process and the message names the file to
+  remove.
+- **`--branch needs a unit id`** — the command was called without `--unit`. If you passed it, the
+  session is running an older copy of this command: tell the user to restart the session.
 
 **If you resolved criteria in Step 1 and `editor_enabled` is `false`, STOP here — do not run the
 loop.** The editor is the only thing that grades criteria, so this pair asks for a graded run and
@@ -284,6 +300,7 @@ workflow copy that belongs to the tree being built, and merging the config knobs
 
 ```
 Workflow({ scriptPath: "<work_dir or repo>/.claude/workflows/implementation-loop.js", args: {
+  launched_at,             // from impl_loop.py --branch, unchanged; the loop starts no agent without it
   unit_id, title, instructions,
   acceptance_criteria,     // verbatim from the spec (Step 1); omit or [] without --spec
   work_dir,                // the resolved path from Step 3; omit entirely without --work-dir
@@ -335,8 +352,32 @@ one-agent run reports a review that never happened.
   Pass args as a normal object here; just don't be surprised the workflow normalizes a string.
 - If `editor_enabled` is false (config `mandate = "off"`), the loop skips the editor pass and
   delivers the writer's version (`editorRan: false`).
+- **The loop starts no agent without `launched_at`.** It returns
+  `{ delivered: false, reason: 'not_launched' }` instead. Pass the value the `--branch` call printed;
+  never make one up, because the check in Step 6 reads the record that call wrote.
 
 ### Step 6: Verify the native commits and report the result
+
+**Run the post-loop check first**, before anything else in this step, in the tree the unit was
+built in (the same Studio path as Step 5):
+
+```bash
+python .studio/source/impl_loop.py --check
+# with --work-dir: python .studio/source/impl_loop.py --check --work-dir "<work_dir>"
+```
+
+It re-runs this repository's own test command itself (and the pack check, when a pack is
+declared), and checks that the tree is still on `<branch>` and holds a `writer: <unit_id>` commit
+since the launch. It reads nothing the agents wrote. It prints one JSON object:
+`{"clean", "unit_id", "branch", "tests": {"command", "exit_code"}, "packs", "problems": [{"name", "detail"}]}`.
+
+- **Exit 0** — clean. Say so.
+- **Exit 1** — not clean. Lead the report with this and list every problem by name and detail:
+  `wrong-branch`, `no-writer-commit` (a `writer(stuck):` commit does not count), `tests-failed`,
+  `packs-failed`. The record stays, stamped with what was found; running `--check` again after a
+  fix checks again. Tell the user the branch should not be pushed until they have seen this.
+- **Exit 2** — nothing was checked (no record, one it cannot read, or a run, a launch or another
+  check holding the lock). Print the message and say the unit's tests were not re-run.
 
 The native Workflow returns a candidate with `delivered: false`. If it carries
 `pendingCommentCheck: true`, pass the unmodified JSON on stdin to the Studio checker.
@@ -362,7 +403,8 @@ Summarize for the user:
 - **Writer escalated?** (`writer.stuck`): if present, lead with this — the writer stopped on purpose
   rather than fake a finish. Quote the blocker as written, and point at the `writer(stuck): <unit_id>`
   commit (`writer.writer_sha`) as the partial work to read, keep, or throw away.
-- **What was built** + final test status (`editor.tests` / `writer.tests`).
+- **The check**: lead with `--check`'s `clean` and its problems, from the top of this step.
+- **What was built**.
 - **What the editor changed** (`editor.edits`): the cuts/merges/restructures, or "nothing to cut".
 - **MVI verdict** (`editor.mvi_verdict`): call out explicitly if the editor *overturned* the
   writer's `mvi_claimed` (unit not actually usable → it's flagged, not silently shipped). With
