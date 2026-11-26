@@ -52,8 +52,8 @@ def resolve_unit(args, cwd):
     path = cwd / args.spec
     if not path.is_file() and not args.spec.endswith(".md"):
         path = cwd / (args.spec + ".md")
-        if not path.is_file() and "/" not in args.spec:
-            path = spec_for_slug(cwd, path.name)
+    if not path.is_file() and "/" not in args.spec:
+        path = spec_for_slug(cwd, path.name)
     units = []
 
     def refusal(reason):
