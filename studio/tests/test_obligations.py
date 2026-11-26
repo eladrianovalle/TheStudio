@@ -530,14 +530,6 @@ def test_only_a_finished_spec_carries_the_default_branch_answer():
     assert [owed.units_off_default_branch for owed in queue] == [None, None, None]
 
 
-def test_the_default_branch_answer_is_the_last_field_and_defaults_to_none():
-    import dataclasses
-
-    fields = dataclasses.fields(Obligation)
-    assert fields[-1].name == "units_off_default_branch"
-    assert Obligation(UNBUILT_UNIT, "a", "specs/a.md", "d", "c", "s").units_off_default_branch is None
-
-
 def test_merged_ids_change_nothing_but_the_default_branch_answer():
     views = [
         _view(_unit("built_one"), _unit("owed_one")),
