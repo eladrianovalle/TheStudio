@@ -539,6 +539,8 @@ In addition to phase runners, these slash commands are available:
 |---------|---------|
 | `/spec` | Maps a feature's architecture into an approved, source-of-truth spec before you build it. Runs a discovery-forward, single advocate/contrarian `tech`-phase pass — scope-paced as an alignment scope (Open-Questions Pre-Flight surfaces and answers the architectural unknowns) then a depth scope (pressure-tests and finalizes the design) — then synthesizes one document that explains the feature in plain language *and* build-ready technical detail with a Mermaid diagram. The run **ends by pushing the spec as a pull request** at `status: draft` — that PR is the review, merging it is the approval, and the status flip is a follow-up commit so a document never claims approval in the change that requests it. The PR body carries what the debate *rejected* and why, which is the part that keeps a settled question from reopening later. Once merged it lives (tracked) under `specs/` (or `.studio/specs/` in a consuming repo), linked to its ticket. Its **Build Plan is a contract, not a summary**: every unit gets a snake_case `unit_id` and three-to-six checkable acceptance criteria, which is what `/forge --spec <slug> --unit <id>` reads and grades the built unit against. If the feature is **prompt-shaped** — its behavior lives in an agent's prompt, where no failing test can tell you it broke — the spec also carries a `## Verification` section naming the pass criterion up front, and approval creates a `<slug>-eval-results.md` sibling for the evidence. Until that file is filled in, the spec stays `approved` and nobody may call the feature working; flipping it to `shipped` with placeholders left in — or with one of that file's headings dropped or left unanswered — fails CI. Approval also writes a `verification_due` date 30 days out, and once that date passes with the evidence still blank CI fails too — until you record what you found or move the date. Args: feature text, `--ticket`, `--id`, `--max-iterations` (default 2), `--plan`. |
 | `/smoke` | Stands up a live, running version of whatever the repo builds so you can hand-test it (web app on a URL, game in Play mode, service on a port, CLI). Stack-agnostic: self-detects how to run the project, or reads `.studio/smoke.toml` to pin the exact setup/build/launch, readiness check, and golden path. |
+| `/create-verification-skill` | Run once in a repo whose running product agents can't yet drive, typically when `/forge` editors grade player-visible criteria `unverifiable`. It studies the repo, seeding read-only from `.studio/smoke.toml` and `[gate] observe_command --help`, and writes a verification skill (Launch, Doctor, Drive, Evidence, Cleanup, Helpers) plus a feature map of 3-5 features into `.claude/skills/verify-<app>/`. It adds one line to your `CLAUDE.md`, outside Studio's block, naming the files agents should Read before verifying anything a user sees, hears or runs. It proves the skill once in a fresh `git worktree`, with evidence kept outside the checkout, and replies with a fixed hand-off saying what it proved. Nothing is committed: you review the files and land them as one PR. It refuses when a `verify-*` skill already exists. Only you can start it (`disable-model-invocation: true`). Adapted from Lauren Tan's pstack (MIT); the notice travels inside the command file. |
+| `/maintain-verification-skill` | Keeps a verification skill and its feature map honest as the product changes. From a fresh worktree of `origin/main`, it reads every feature from source with read-only agents, drives every feature live, and fixes doc drift and harness gaps inside the skill's own directory, never product code. Broken product behavior is reported, not fixed. It ends `clean` (nothing to ship), `changed` (one ready-for-review PR on a `verify/maintain-<date>` branch) or `blocked` (it says why, including when an earlier maintenance PR is still open), and its last line is always `OUTCOME: clean|changed|blocked — <one line>`. Run it by hand or daily; see [Keeping a verification skill current](#keeping-a-verification-skill-current). Only you can start it (`disable-model-invocation: true`). Adapted from Lauren Tan's pstack (MIT); the notice travels inside the command file. |
 | `/unstale` | Comprehensive staleness audit: aligns all docs, code comments, memory, and project tracking to current reality. Stack-agnostic: self-detects Rust/Unity/Node/Python/Go from marker files, or reads `.studio/unstale.toml` to pin exact snapshot commands and audit globs. |
 | `/detest` | Audits the repo's test suite against AI-TDD methodology; finds anti-patterns, fixes them. |
 | `/offload` | Analyzes CLAUDE.md for content safe to move to companion docs, with canary token verification. |
@@ -546,6 +548,85 @@ In addition to phase runners, these slash commands are available:
 | `/message-draft` | Drafts a message you will paste and send yourself: a chat reply, a channel update, a PR comment, an email. Bottom line up front: two header lines, `Point:` (one sentence) and `Ask:` (one action, or `none`), then a lead carrying both, at most three bullets of evidence and a link, in 150 words or fewer. `--to slack\|discord\|github\|plain` sets the paste-safe formatting; every platform is held under 2,000 characters, the most one Discord message holds on a standard account. The draft is saved to `~/.studio/drafts/`, outside every repository, and checked by `message_lint.py`, which flags a missing header, length, formatting the paste would break, filler phrases and em-dash habits. It hands over the file's path, so copying never picks up the terminal's line breaks. It never sends anything. |
 | `/studio-update` | One-step update of installed Studio source and slash commands. |
 | `/studio-setup` | Configure project's Studio installation: role packs, role/phase-persona customization (`.studio/personas.toml`), unstale audit config (`.studio/unstale.toml`), smoke test config (`.studio/smoke.toml`), the `/forge` gate commands (`.studio/implementation_loop.toml`), cleanup settings. |
+
+## Keeping a verification skill current
+
+A feature map goes stale as the product changes. `/maintain-verification-skill` checks every feature against the source and the running product, and ships at most one pull request of proven fixes to the skill's own directory. pstack's guide says to run it at least once a day. There are two ways.
+
+**By hand.** Type `/maintain-verification-skill` in a session at the repo root. It works in its own worktree off `origin/main`, so your checkout's branch and uncommitted files don't matter.
+
+**Daily on macOS, for a product that needs the local GPU or display.** Use a per-user LaunchAgent in `~/Library/LaunchAgents/`, never a LaunchDaemon. A daemon runs outside your login session, with no WindowServer, no Metal and no login keychain, so the product can't render and `claude` and `gh` can't authenticate.
+
+The job runs this line from the repo root:
+
+```
+claude -p "/maintain-verification-skill" --setting-sources project --settings /Users/<you>/.studio/verify-maintain/<repo>/settings.json --permission-mode auto
+```
+
+`--setting-sources project` keeps your own local and user permission rules out of the scheduled run. `--settings` then adds the rules the scheduler needs, from a dedicated file outside the checkout, beside the log. Only this job passes that file:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(<the skill's Launch command> *)",
+      "Bash(<the skill's Drive commands> *)",
+      "Bash(git push *)",
+      "Bash(gh pr list *)",
+      "Bash(gh pr create *)"
+    ]
+  }
+}
+```
+
+Never put these rules in `.claude/settings.local.json`. Every session in the repo loads that file, and `--setting-sources` only picks which sources load, so it would hand push and PR rights to all of them.
+
+Save the job as `~/Library/LaunchAgents/com.<you>.verify-maintain.<repo>.plist`, with real absolute paths in place of the `<...>` parts (launchd does not expand `~`):
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.<you>.verify-maintain.<repo></string>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>13</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>WorkingDirectory</key>
+  <string>/Users/<you>/<path to the repo root></string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>ProgramArguments</key>
+  <array>
+    <string><absolute path that `which claude` prints></string>
+    <string>-p</string>
+    <string>/maintain-verification-skill</string>
+    <string>--setting-sources</string>
+    <string>project</string>
+    <string>--settings</string>
+    <string>/Users/<you>/.studio/verify-maintain/<repo>/settings.json</string>
+    <string>--permission-mode</string>
+    <string>auto</string>
+  </array>
+  <key>StandardOutPath</key>
+  <string>/Users/<you>/.studio/verify-maintain/<repo>/out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/<you>/.studio/verify-maintain/<repo>/err.log</string>
+</dict>
+</plist>
+```
+
+`PATH` names `/opt/homebrew/bin` because launchd starts jobs with `/usr/bin:/bin:/usr/sbin:/sbin`, and `node` and `gh` live in Homebrew's prefix. The first `ProgramArguments` entry is `claude`'s absolute path, from `which claude`, so the job does not depend on how launchd looks the program up; the native installer puts `claude` in `~/.local/bin`, which that `PATH` does not include. Before relying on the schedule, run it once with `launchctl kickstart gui/$(id -u)/com.<you>.verify-maintain.<repo>` and check that `out.log` ends with an `OUTCOME:` line. The logs sit outside the checkout so the pass never sees or stages them. Load the job with `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.<you>.verify-maintain.<repo>.plist`. Each run's last log line is `OUTCOME: clean|changed|blocked — <one line>`, so `tail -1` on `out.log` tells you how the last run went.
+
+**When it runs.** launchd runs a missed job when the machine wakes, folding several missed runs into one. On a Mac that sleeps overnight, a job set for the small hours would start as you sit down to work, and the pass is heavy: a worktree, a dependency install, a dev server, a headless browser on the GPU. Pick a time the machine is awake and idle, or wake it a few minutes earlier with `pmset repeat wake`.
 
 ## Measuring the forge editor
 

@@ -1340,11 +1340,17 @@ class TestRetiredCommandRemoval:
     ):
         """A run that only deletes must not print 'already up to date'."""
         import argparse
+        import contextlib
         import run_phase
 
         install_studio(target_dir, studio_dir)
         self._retire_smoke(monkeypatch)
         monkeypatch.setattr(install, "_get_studio_root", lambda: studio_dir)
+        monkeypatch.setattr(
+            install,
+            "_source_at_default_branch",
+            lambda source_dir, enabled, override_ref=None: contextlib.nullcontext((source_dir, None)),
+        )
 
         args = argparse.Namespace(
             target=target_dir, force=False, no_fetch=True, no_hook=True, pull_source=False
