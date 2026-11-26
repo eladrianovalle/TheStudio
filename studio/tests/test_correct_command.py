@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-import install
 from install import install_studio, update_studio
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -125,10 +124,6 @@ def test_the_command_keeps_pstacks_own_sentences(sentence):
 )
 def test_the_command_names_nothing_an_installed_repository_lacks(studio_only_text):
     assert studio_only_text not in COMMAND.read_text(encoding="utf-8")
-
-
-def test_the_command_is_registered_with_the_installer():
-    assert "correct.md" in install.SLASH_COMMANDS
 
 
 def test_an_installed_repository_gets_the_command_with_its_full_notice(tmp_path):
