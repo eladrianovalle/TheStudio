@@ -223,7 +223,11 @@ def _fingerprint(path: Path) -> str:
     if stat.S_ISLNK(info.st_mode):
         return "120000 " + hashlib.sha256(os.fsencode(os.readlink(path))).hexdigest()
     if stat.S_ISDIR(info.st_mode):
-        return "directory"
+        if not (path / ".git").exists():
+            return "directory"
+        head = subprocess.run(["git", "rev-parse", "-q", "--verify", "HEAD"], cwd=path, capture_output=True).stdout
+        contents = repr((head, sorted(tree_snapshot(path).items())))
+        return "repository " + hashlib.sha256(contents.encode()).hexdigest()
     mode = "100755" if info.st_mode & stat.S_IXUSR else "100644"
     return mode + " " + hashlib.sha256(path.read_bytes()).hexdigest()
 

@@ -360,6 +360,57 @@ def test_a_command_that_only_sets_the_executable_bit_on_a_modified_file_fails_na
     assert "game.art: the asset command changed tool.sh; it must leave the working tree unchanged" in result.stdout
 
 
+def add_dirty_submodule(repo: Path, tmp_path: Path) -> Path:
+    library = tmp_path / "library"
+    library.mkdir()
+    git(library, "init", "-q")
+    git(library, "config", "user.email", "test@example.org")
+    git(library, "config", "user.name", "Test")
+    (library / "mesh.txt").write_text("first\n")
+    git(library, "add", "-A")
+    git(library, "commit", "-qm", "init")
+    git(repo, "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(library), "vendor/library")
+    git(repo, "commit", "-qm", "add submodule")
+    submodule = repo / "vendor" / "library"
+    git(submodule, "config", "user.email", "test@example.org")
+    git(submodule, "config", "user.name", "Test")
+    (submodule / "mesh.txt").write_text("the writer's change\n")
+    return submodule
+
+
+def test_a_command_that_leaves_a_dirty_submodule_alone_passes(repo, tmp_path):
+    add_dirty_submodule(repo, tmp_path)
+    result = run_declared(repo, tmp_path, report_command(tmp_path, CLEAN_REPORT))
+    assert result.returncode == 0, result.stdout
+
+
+def test_a_command_that_rewrites_a_file_inside_a_dirty_submodule_fails_naming_the_submodule(repo, tmp_path):
+    add_dirty_submodule(repo, tmp_path)
+    command = report_command(tmp_path, CLEAN_REPORT, before="echo more >> vendor/library/mesh.txt")
+    result = run_declared(repo, tmp_path, command)
+    assert result.returncode == 1
+    assert (
+        "game.art: the asset command changed vendor/library; it must leave the working tree unchanged"
+        in result.stdout
+    )
+
+
+def test_a_command_that_commits_inside_a_dirty_submodule_fails_naming_the_submodule(repo, tmp_path):
+    add_dirty_submodule(repo, tmp_path)
+    command = report_command(
+        tmp_path,
+        CLEAN_REPORT,
+        before="echo cache > vendor/library/cache.txt && git -C vendor/library add cache.txt"
+        " && git -C vendor/library commit -qm cache",
+    )
+    result = run_declared(repo, tmp_path, command)
+    assert result.returncode == 1
+    assert (
+        "game.art: the asset command changed vendor/library; it must leave the working tree unchanged"
+        in result.stdout
+    )
+
+
 def test_a_command_that_writes_only_under_an_ignored_path_passes(repo, tmp_path):
     commit(repo, {".gitignore": "build/\n", "notes.txt": "first\n"})
     (repo / "notes.txt").write_text("the writer's change\n")

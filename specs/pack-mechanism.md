@@ -183,6 +183,9 @@ untracked file instead of collapsing a new directory to one line. The tree chang
 appears, disappears or changes status, or if a path's fingerprint differs; the message names the
 first such path. A clean tracked file the command edits shows up as a new entry, so only dirty paths
 are ever hashed.
+A dirty submodule is listed as one directory, so its fingerprint is its `HEAD` plus its own snapshot,
+taken the same way. Otherwise a file rewritten or committed inside an already-dirty submodule would
+leave its line in the parent's status unchanged and pass.
 Ignored paths are never listed, so writing under them passes.
 
 Exit **0** when clean (`game.art: 12 assets within budget`, or `game.art: 0 assets`), **1** on any
