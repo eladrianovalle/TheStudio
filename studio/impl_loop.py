@@ -1111,13 +1111,7 @@ def open_loop_record(
     pack_check: str | None,
 ) -> str:
     root = _tree_root(tree)
-    git_dir = _git_dir(root)
-    if git_dir is None:
-        raise RecordError(_with_fix(
-            f"{RECORD_UNREADABLE}: git cannot name the git directory of {root}, so the loop record cannot be written.",
-            "run `git rev-parse --absolute-git-dir` there and fix what it reports.",
-        ))
-    path = git_dir / LOOP_RECORD_NAME
+    path = _git_dir(root) / LOOP_RECORD_NAME
     if path.exists():
         try:
             existing = _read_record(path)
