@@ -61,11 +61,11 @@ def _view(
     )
 
 
-def _queue(views, *, built=(), escalated=(), today=TODAY):
+def _queue(views, *, built=(), escalated=(), today=TODAY, merged_ids=None):
     """`derive` over the real reconciliation, so the two cannot drift apart in a fixture."""
     planned = [unit for view in views for unit in view.units]
     ledger = reconcile_units(planned, set(built), set(escalated), set())
-    return derive(views, ledger, today=today)
+    return derive(views, ledger, today=today, merged_ids=merged_ids)
 
 
 # --- criterion 1: a unit nobody built, with the command that builds it ---------
@@ -122,7 +122,7 @@ def test_an_escalated_unit_is_not_reported_as_unbuilt():
 # --- criterion 2: finished work whose frontmatter has not caught up ------------
 
 
-def test_a_spec_with_every_unit_built_owes_the_flip_to_shipped():
+def test_a_spec_with_every_unit_built_is_sent_to_sprint_review():
     """The three-times-in-one-week case: a feature that landed and is missing from `stats`."""
     queue = _queue(
         [_view(_unit("built_one"), _unit("built_two"))],
@@ -134,11 +134,13 @@ def test_a_spec_with_every_unit_built_owes_the_flip_to_shipped():
     assert owed.spec_file == "specs/a-feature.md"
     assert owed.detail == (
         "every unit `a-feature` plans in specs/a-feature.md is built or dropped and nothing "
-        "is waiting on evidence, but its frontmatter still says `status: approved` — edit it "
-        "to `status: shipped` and fill in `shipped_impact` and `shipped_changed`"
+        "is waiting on evidence, but its frontmatter still says `status: approved`. Leave the "
+        "frontmatter alone: finished specs are reviewed with the human and flipped together "
+        "in one pull request"
     )
-    # An edit, not a command — and there is no honest way to close it without making the edit.
-    assert owed.command == ""
+    assert "status: shipped" not in owed.detail
+    assert "shipped_impact" not in owed.detail
+    assert owed.command == "/sprint-review"
     assert owed.silence == ""
 
 
@@ -459,3 +461,89 @@ def test_filled_follow_up_has_one_action_and_path(result, instruction):
 def test_published_results_record(slug, result):
     path = Path(__file__).resolve().parents[2] / "specs" / f"{slug}-eval-results.md"
     assert parse_evidence(path.read_text()) is result
+
+
+def test_a_finished_spec_cannot_say_what_merged_when_nobody_asked():
+    queue = _queue([_view(_unit("built_one"))], built=["built_one"])
+
+    assert [owed.kind for owed in queue] == [STALE_STATUS]
+    assert queue[0].units_off_default_branch is None
+
+
+def test_a_finished_spec_whose_every_unit_merged_has_nothing_off_the_default_branch():
+    queue = _queue(
+        [_view(_unit("built_one"), _unit("built_two"))],
+        built=["built_one", "built_two"],
+        merged_ids={"built_one", "built_two"},
+    )
+
+    assert [owed.kind for owed in queue] == [STALE_STATUS]
+    assert queue[0].units_off_default_branch == ()
+
+
+def test_a_finished_spec_names_each_unit_the_default_branch_has_not_got_in_plan_order():
+    queue = _queue(
+        [_view(_unit("zeta_unit"), _unit("merged_unit"), _unit("alpha_unit"))],
+        built=["zeta_unit", "merged_unit", "alpha_unit"],
+        merged_ids={"merged_unit"},
+    )
+
+    assert queue[0].kind == STALE_STATUS
+    assert queue[0].units_off_default_branch == ("zeta_unit", "alpha_unit")
+
+
+def test_a_dropped_unit_is_never_named_as_off_the_default_branch():
+    queue = _queue(
+        [_view(_unit("built_one"), _unit("closed_one", dropped=True))],
+        built=["built_one"],
+        merged_ids=set(),
+    )
+
+    assert queue[0].kind == STALE_STATUS
+    assert queue[0].units_off_default_branch == ("built_one",)
+
+
+def test_each_finished_spec_gets_its_own_default_branch_answer():
+    queue = _queue(
+        [_view(_unit("shared_id")), _view(_unit("other_unit", slug="b-feature"), slug="b-feature")],
+        built=["shared_id", "other_unit"],
+        merged_ids={"shared_id"},
+    )
+
+    assert [(owed.subject, owed.units_off_default_branch) for owed in queue] == [
+        ("a-feature", ()),
+        ("b-feature", ("other_unit",)),
+    ]
+
+
+def test_only_a_finished_spec_carries_the_default_branch_answer():
+    views = [
+        _view(_unit("owed_unit")),
+        _view(_unit("measured_unit", slug="b-feature"), slug="b-feature",
+              promises_evidence=True, evidence=Evidence.FAILED),
+        _view(_unit("waiting_unit", slug="c-feature"), slug="c-feature",
+              promises_evidence=True, verification_due="2000-01-01"),
+    ]
+    queue = _queue(views, built=["measured_unit", "waiting_unit"], merged_ids=set())
+
+    assert sorted(owed.kind for owed in queue) == sorted(
+        [UNBUILT_UNIT, EVIDENCE_FOLLOW_UP, EVIDENCE_OVERDUE]
+    )
+    assert [owed.units_off_default_branch for owed in queue] == [None, None, None]
+
+
+def test_merged_ids_change_nothing_but_the_default_branch_answer():
+    views = [
+        _view(_unit("built_one"), _unit("owed_one")),
+        _view(_unit("done", slug="b-feature"), slug="b-feature"),
+    ]
+    without = _queue(views, built=["built_one", "done"])
+    with_merged = _queue(views, built=["built_one", "done"], merged_ids={"done"})
+
+    assert [_without_default_branch_answer(owed) for owed in with_merged] == without
+
+
+def _without_default_branch_answer(obligation):
+    import dataclasses
+
+    return dataclasses.replace(obligation, units_off_default_branch=None)
