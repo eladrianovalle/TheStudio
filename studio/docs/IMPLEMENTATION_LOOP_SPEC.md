@@ -467,8 +467,11 @@ is one, each with its output on stderr; both run even if the first fails, giving
 reaches the check. It prints one JSON object, `{"clean", "unit_id", "branch", "tests": {"command",
 "exit_code"}, "packs": {"command", "exit_code"} | null, "problems": [{"name", "detail"}]}`. Exit 0:
 clean, record removed. Exit 1: not clean, record stamped with `checked_at` and `problems`, each problem
-printed as a sentence on stderr; checking a stamped record checks again. Exit 2: nothing was checked
-(no record, an unreadable one, not a git tree, bad arguments), and no test ran.
+printed as a sentence on stderr; checking a stamped record checks again. The check holds the same
+lock from reading the record to removing or stamping it, so a launch during a recheck refuses with
+`launch-in-progress` instead of having its new record deleted or overwritten. Exit 2: nothing was
+checked (no record, an unreadable one, the lock held by a launch or another check, not a git tree,
+bad arguments), and no test ran.
 
 **What it does not do.** It reduces the blast radius of a run pointed at the wrong directory; it
 cannot make that impossible. Every one of these instructions is prompt text an agent may ignore, and

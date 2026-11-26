@@ -461,6 +461,45 @@ def test_a_stamped_record_is_checked_again_and_passing_removes_it(workspace):
     assert not record_path(repo).exists()
 
 
+def test_a_launch_while_a_stamped_record_is_checked_again_refuses_instead_of_replacing_it(workspace):
+    repo = workspace["repo"]
+    launch_log = workspace["tmp"] / "inner-launch.log"
+    inner_launch = shlex.join([
+        sys.executable, str(IMPL_LOOP), str(workspace["config"]), "--branch", "impl/demo", "--unit", "other",
+    ])
+    write_record(
+        workspace,
+        test_command=f"{inner_launch} > {shlex.quote(str(launch_log))} 2>&1; true",
+        checked_at="2026-11-26T11:00:00+00:00",
+        problems=["tests-failed: the test command exited 1."],
+    )
+    commit_writer(repo)
+
+    completed = check(repo)
+
+    assert completed.returncode == 0, completed.stderr
+    assert "launch-in-progress" in launch_log.read_text()
+    assert not record_path(repo).exists()
+
+
+def test_check_while_another_launch_or_check_holds_the_tree_exits_2_and_runs_no_test(workspace):
+    fcntl = pytest.importorskip("fcntl")
+    repo = workspace["repo"]
+    commit_writer(repo)
+    path = write_record(workspace)
+    lock_path = path.with_name("studio-forge.lock")
+
+    with lock_path.open("a+b") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        held = check(repo)
+
+    assert held.returncode == 2
+    assert held.stdout == ""
+    assert str(lock_path) in held.stderr
+    assert not workspace["test_log"].exists()
+    assert read_record(repo)["checked_at"] is None
+
+
 def test_check_without_a_record_exits_2_and_runs_nothing(workspace):
     completed = check(workspace["repo"])
 

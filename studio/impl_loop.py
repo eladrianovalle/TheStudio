@@ -1106,8 +1106,7 @@ def _read_record(path: Path) -> dict:
 
 
 @contextmanager
-def _launch_lock(git_dir: Path):
-    lock_path = git_dir / LOOP_LOCK_NAME
+def _record_lock(lock_path: Path, refusal: Exception):
     with lock_path.open("a+b") as lock:
         try:
             if os.name == "nt":
@@ -1118,11 +1117,7 @@ def _launch_lock(git_dir: Path):
                 import fcntl
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as error:
-            raise RecordError(_with_fix(
-                f"{RECORD_LAUNCHING}: another /forge launch holds {lock_path} and is opening a loop record "
-                "for this tree right now, so nothing was launched.",
-                "let that launch finish, check its loop when it is done, then run /forge again.",
-            )) from error
+            raise refusal from error
         yield
 
 
@@ -1136,7 +1131,13 @@ def open_loop_record(
 ) -> str:
     root = _tree_root(tree)
     path = _git_dir(root) / LOOP_RECORD_NAME
-    with _launch_lock(path.parent):
+    lock_path = path.with_name(LOOP_LOCK_NAME)
+    refusal = RecordError(_with_fix(
+        f"{RECORD_LAUNCHING}: another /forge launch or check holds {lock_path} and is using the loop record "
+        "for this tree right now, so nothing was launched.",
+        "let it finish, then run /forge again.",
+    ))
+    with _record_lock(lock_path, refusal):
         if path.exists():
             try:
                 existing = _read_record(path)
@@ -1218,6 +1219,16 @@ def check_loop(tree: Path) -> int:
     if git_dir is None:
         raise CheckError(f"Could not check: {tree} is not inside a git worktree, so it has no /forge loop record.")
     path = git_dir / LOOP_RECORD_NAME
+    lock_path = git_dir / LOOP_LOCK_NAME
+    refusal = CheckError(
+        f"Could not check: another /forge launch or check holds {lock_path} and is using the loop record "
+        "for this tree right now. No test was run."
+    )
+    with _record_lock(lock_path, refusal):
+        return _check_record(tree, path)
+
+
+def _check_record(tree: Path, path: Path) -> int:
     if not path.exists():
         raise CheckError(f"Nothing to check: there is no /forge loop record at {path}.")
     try:
