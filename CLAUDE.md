@@ -73,7 +73,7 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
-When the same correction comes up twice, encode it as a check (a test, a lint rule, a hook), not a memory note or another written rule. A check catches the next slip by itself; a note only works if someone reads it at the right moment.
+When you are corrected, fix the mistake and write its rule in a tracked file. If the rule was already written there and nothing enforces it, the correction is a repeat: encode it as a check (a test, a lint rule, a hook) in the same change, not a memory note or another written rule. A check catches the next slip by itself; a note only works if someone reads it at the right moment.
 
 ### 5. Git & PR Etiquette
 
@@ -194,6 +194,7 @@ override behavior breaks consuming repos.
 - **No heavy dependencies**: stdlib only (plus `tomli` on Python 3.10). `run_phase.py` has grown large; a decomposition is planned in `studio/docs/RUN_PHASE_SPLIT_PLAN.md`.
 - **MVI (Minimum Viable Interaction)**: every task, sprint, and milestone must end in something usable. "Build a skateboard, not a wheel." Product, Engineering, and Design contrarians enforce this. See `studio/docs/MVI_METHODOLOGY.md`.
 - **AI-TDD discipline** is mandatory for tech phase implementations. AI writes scenarios and boilerplate; humans own assertions. See `studio/docs/AI_TDD_METHODOLOGY.md` for the full methodology (scenario-first, stack boundary, mutation verification, anti-pattern detection).
+- `/correct`'s rule table is `studio/tests/test_enforced_rules.py` (`ENFORCED`, `NOT_YET_ENFORCED`, `JUDGED`); judgment calls are in Appendix A of `specs/judged-rules.md` and `specs/correct-rules.md`.
 - **Documentation contract**: changes to workflow must update README, CLAUDE_CODE_USAGE.md, and affected bridge docs simultaneously.
 - **Working directories**: `.scratch/` for temp files, `.private/` for sensitive data (both gitignored). Never commit `studio/output/` or `studio/knowledge/`.
 - Where artifacts land: runs from this repo go to `studio/output/`; runs from a repo that installed Studio go to that repo's `.studio/output/`, and its first run auto-scaffolds `.studio/` and a bridge doc there. Override with `--artifact-root` flag or `STUDIO_ARTIFACT_ROOT` env var. Priority: flag > env > cwd detection. Full resolution chain: `studio/docs/ARCHITECTURE.md`.

@@ -271,6 +271,9 @@ Write `{run_dir}/summary.md` covering:
 python ".studio/source/run_phase.py" finalize --phase studio --run-id {run_id} --status completed --verdict {APPROVED|REJECTED}
 ```
 
+`finalize` refuses a studio run with no `integrator.md`, and one in which no role completed both
+stances (an advocate file and a contrarian file).
+
 ---
 
 ## Flat Mode (--no-scopes)

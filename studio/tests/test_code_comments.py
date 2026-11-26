@@ -31,8 +31,13 @@ def test_new_comment_blocks_delivery(repo):
     root, commit = repo
     base = commit({"example.py": "url = 'https://example.org/#value'\n"})
     target = commit({"example.py": "url = 'https://example.org/#value'  # reason\n"})
-    with pytest.raises(ValueError, match="example.py:1: agent-added"):
+    with pytest.raises(ValueError) as failure:
         check_trees(root, base, target)
+    assert str(failure.value).splitlines() == [
+        "example.py:1: agent-added code comment",
+        "  Fix: delete the comments listed above, and put any reasoning worth keeping in the project documentation.",
+        "  See CLAUDE.md",
+    ]
 
 
 @pytest.mark.parametrize(("language", "source", "lines"), [
@@ -166,7 +171,9 @@ def test_forge_html_comments_in_git_changes(repo, html, expected_lines):
         with pytest.raises(ValueError) as failure:
             check_trees(root, base, target)
         assert str(failure.value).splitlines() == [
-            f"index.html:{line}: agent-added code comment" for line in expected_lines
+            *(f"index.html:{line}: agent-added code comment" for line in expected_lines),
+            "  Fix: delete the comments listed above, and put any reasoning worth keeping in the project documentation.",
+            "  See CLAUDE.md",
         ]
     else:
         check_trees(root, base, target)

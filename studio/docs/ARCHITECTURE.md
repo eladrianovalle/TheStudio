@@ -234,3 +234,7 @@ Whenever the workflow changes, update all of the above in one commit. Studio del
 ## Editor measurements
 
 `studio/editor_measure.py` builds the isolated repositories and the launch folder, and exposes the build, fingerprint, record and rule commands. `studio/editor_results.py` renders the live workflow, matches its journal and transcripts to a build, and scores its results. `build` writes the runner into the launch folder `<root>/harbor-notes/`, the manifest under `studio/output/editor_measure/`, and prints the one line the owner pastes: it launches the runner headless from the launch folder, then records the run and lists rulings from the worktree.
+
+## Rule table and `/correct`
+
+`studio/tests/test_enforced_rules.py` is Studio's rule table: `ENFORCED` pairs each rule with the code that refuses it and the test that proves it, `NOT_YET_ENFORCED` and `JUDGED` hold the rest, and down-only counts keep each list honest. Run `/correct` right after you correct an agent; it is the command that adds to this table, and it ships to installed repositories, where it uses whatever table that repository's instruction file names. `studio/tests/test_exception_expiry.py` fails the suite on any tracked non-document line whose `until=YYYY-MM-DD` date has passed, is not a real date, or has no reason after it, so an exception a person adds cannot outlive its date unnoticed. Those checks run only in Studio's own suite.

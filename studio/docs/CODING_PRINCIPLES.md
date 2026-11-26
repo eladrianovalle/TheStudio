@@ -60,7 +60,7 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
-When the same correction comes up twice, encode it as a check (a test, a lint rule, a hook), not a memory note or another written rule. A check catches the next slip by itself; a note only works if someone reads it at the right moment.
+When you are corrected, fix the mistake and write its rule in a tracked file. If the rule was already written there and nothing enforces it, the correction is a repeat: encode it as a check (a test, a lint rule, a hook) in the same change, not a memory note or another written rule. A check catches the next slip by itself; a note only works if someone reads it at the right moment.
 
 ## 5. Git & PR Etiquette
 

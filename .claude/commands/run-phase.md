@@ -140,6 +140,9 @@ Write a summary of the entire run (inputs, iterations, verdict, key recommendati
 python ".studio/source/run_phase.py" finalize --phase {phase} --run-id {run_id} --status completed --verdict {APPROVED|REJECTED}
 ```
 
+`finalize` refuses a run with no advocate file or no contrarian file, and any run with no
+`summary.md`.
+
 ## Key Rules
 
 - **Advocate and Contrarian MUST be separate Agent invocations**: this prevents the contrarian from being influenced by having generated the advocate's arguments.

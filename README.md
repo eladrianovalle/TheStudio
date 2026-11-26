@@ -64,6 +64,7 @@ Slash commands are the main way you use Studio day to day. `init` installs them 
 | `/offload` | Slim a bloated CLAUDE.md by moving reference content into companion docs |
 | `/handoff` | Save the in-flight thread to a durable note so you can `/clear` safely — or resume one |
 | `/message-draft` | Draft a message you'll paste and send (Slack, Discord, GitHub, email): point and ask first, linted, saved to a file so the copy keeps its line breaks |
+| `/correct` | Run `/correct` right after you correct an agent. It names the mistake as one rule, checks whether the rule was already written down, fixes it at the strongest level that works (a design that rules it out, then a refusal in code, then a test, prose last), shows the new check failing on the real past mistake, and records the rule in the repository's rule table. With no argument it sweeps recent history for mistakes that happened twice. Only you can start it; agents can't |
 | `/sprint-review` | Review every finished spec that still says `approved` with you, one row each; answer yes, edit or hold, and the answers land in one ready-for-review pull request |
 
 **Maintain the install**
