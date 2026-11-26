@@ -53,6 +53,7 @@ Slash commands are the main way you use Studio day to day. `init` installs them 
 |---------|--------------|
 | `/forge` | Build one MVI unit through the writer/editor loop, gated on tests-green; when the unit carries acceptance criteria, the editor grades them one at a time; set `[gate] observe_command` and both agents also capture and look at the running product |
 | `/smoke` | Stand up a live, running version so you can hand-test it (stack-agnostic) |
+| `/create-verification-skill` | Run once when agents can't launch, drive or capture your running product: writes a verification skill and feature map into `.claude/skills/verify-<app>/`, proves it end to end, and leaves it uncommitted for you to review. Adapted from Lauren Tan's pstack (MIT) |
 
 **Keep the project honest**
 | Command | What it does |
