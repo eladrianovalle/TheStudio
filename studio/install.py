@@ -110,6 +110,7 @@ SLASH_COMMANDS = [
     "spec.md",
     "handoff.md",
     "message-draft.md",
+    "sprint-review.md",
 ]
 
 # Claude Code Workflows to copy to {target}/.claude/workflows/ (verbatim, like commands)

@@ -1345,6 +1345,7 @@ class TestRetiredCommandRemoval:
         install_studio(target_dir, studio_dir)
         self._retire_smoke(monkeypatch)
         monkeypatch.setattr(install, "_get_studio_root", lambda: studio_dir)
+        monkeypatch.setattr(install, "_default_branch_ref", lambda repo: None)
 
         args = argparse.Namespace(
             target=target_dir, force=False, no_fetch=True, no_hook=True, pull_source=False

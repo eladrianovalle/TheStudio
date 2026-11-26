@@ -62,6 +62,7 @@ Slash commands are the main way you use Studio day to day. `init` installs them 
 | `/offload` | Slim a bloated CLAUDE.md by moving reference content into companion docs |
 | `/handoff` | Save the in-flight thread to a durable note so you can `/clear` safely — or resume one |
 | `/message-draft` | Draft a message you'll paste and send (Slack, Discord, GitHub, email): point and ask first, linted, saved to a file so the copy keeps its line breaks |
+| `/sprint-review` | Review every finished spec that still says `approved` with you, one row each; answer yes, edit or hold, and the answers land in one ready-for-review pull request |
 
 **Maintain the install**
 | Command | What it does |
