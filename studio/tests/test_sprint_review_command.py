@@ -163,14 +163,12 @@ def test_a_hold_sets_verification_due_thirty_days_out():
 def test_a_hold_points_at_the_spec_command_skeleton_instead_of_copying_it():
     hold = collapse_whitespace(hold_writes())
     assert "the evidence skeleton in `.claude/commands/spec.md`" in hold
-    skeleton_title = next(
-        line.strip()
-        for line in SPEC_COMMAND_FILE.read_text(encoding="utf-8").splitlines()
-        if line.strip().startswith("# ") and "Verification Results" in line
+    spec_command_lines = SPEC_COMMAND_FILE.read_text(encoding="utf-8").splitlines()
+    assert any(
+        line.strip().startswith("# ") and "Verification Results" in line
+        for line in spec_command_lines
     )
-    text = command_text()
-    assert skeleton_title not in text
-    assert "Verification Results" not in text
+    assert "Verification Results" not in command_text()
 
 
 @pytest.mark.parametrize("doc", ["README.md", "studio/docs/CLAUDE_CODE_USAGE.md"])
