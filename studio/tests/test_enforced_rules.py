@@ -259,6 +259,12 @@ ENFORCED: list[EnforcedRule] = [
         enforcer="studio/tests/test_spec_verification.py::_duplicate_unit_ids",
         proof="studio/tests/test_spec_verification.py::test_two_specs_planning_the_same_id_is_caught",
     ),
+    EnforcedRule(
+        rule="An exception past its `until=` date fails the suite.",
+        stated_in=".claude/commands/correct.md",
+        enforcer="studio/tests/test_exception_expiry.py::expired_exceptions",
+        proof="studio/tests/test_exception_expiry.py::test_a_planted_exception_past_its_date_fails_with_fix_and_see",
+    ),
 ]
 
 
