@@ -147,7 +147,7 @@ def test_missing_selected_editor_is_reported_before_writer(project, tmp_path_fac
     assert not sentinel.exists()
 
 
-@pytest.mark.parametrize('record', ['unchecked', 'unreadable'])
+@pytest.mark.parametrize('record', ['unchecked', 'not json', 'missing fields'])
 def test_an_unchecked_native_launch_refuses_the_portable_run(project, tmp_path_factory, monkeypatch, record):
     import shutil
     from impl_loop import open_loop_record
@@ -156,8 +156,10 @@ def test_an_unchecked_native_launch_refuses_the_portable_run(project, tmp_path_f
         base = command(project, 'git', 'rev-parse', 'HEAD').stdout.strip()
         open_loop_record(project, unit_id='native_unit', branch='impl/native_unit', base_sha=base,
                          test_command='true', pack_check=None)
-    else:
+    elif record == 'not json':
         record_file.write_text('not json')
+    else:
+        record_file.write_text(json.dumps({'checked_at': ''}))
     binaries = tmp_path_factory.mktemp('bin')
     for name in ('git', 'node'):
         (binaries / name).symlink_to(shutil.which(name))

@@ -237,7 +237,14 @@ export async function forge(unit, runtimes = adapters) {
     let record
     try { record = JSON.parse(readFileSync(loopRecord, 'utf8')) }
     catch { record = null }
-    if (!record || typeof record !== 'object' || !(record.checked_at === null || typeof record.checked_at === 'string')) {
+    const isObject = record !== null && typeof record === 'object' && !Array.isArray(record)
+    const textFields = ['unit_id', 'branch', 'tree', 'base_sha', 'test_command', 'started_at']
+    const optionalTextFields = ['pack_check', 'checked_at']
+    const readable = isObject &&
+      textFields.every(name => typeof record[name] === 'string') &&
+      optionalTextFields.every(name => name in record && (record[name] === null || typeof record[name] === 'string')) &&
+      Array.isArray(record.problems)
+    if (!readable) {
       throw Error('unreadable-record: ' + loopRecord + ' is there but cannot be read as a /forge loop record. ' +
         'A /forge run may still be holding this tree, so nothing was launched. Once no /forge run is using it, remove it and run Forge again.')
     }
