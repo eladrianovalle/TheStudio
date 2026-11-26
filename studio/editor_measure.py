@@ -62,6 +62,7 @@ TELLTALE_WORDS = (
 
 LAUNCH_FOLDER_NAME = "harbor-notes"
 LAUNCH_SETTINGS = {"autoMemoryEnabled": False}
+LAUNCH_RUNNER = re.compile(r"\.claude/[0-9a-f]{16}\.js")
 HEADLESS_CLAUDE = (
     "claude", "-p", "--setting-sources", "project,local", "--strict-mcp-config",
     "--permission-mode", "auto", "--allowedTools", "Workflow", "--",
@@ -188,6 +189,38 @@ def launch_fingerprint(launch_folder: Path, fingerprinted: list[Path]) -> str:
     for path in fingerprinted:
         digest.update(str(path).encode() + b"\0" + path.read_bytes() + b"\0")
     return digest.hexdigest()
+
+
+def explain_unowned_launch_folder(launch_folder: Path) -> str | None:
+    """Say why build may not delete ``launch_folder``, or None if it is absent or build's own.
+
+    Build's own holds nothing but the files prepare_launch_folder writes, with settings that
+    turn auto memory off. Anything else may be someone's work, so build leaves it alone.
+    """
+    if not launch_folder.exists() and not launch_folder.is_symlink():
+        return None
+    refusal = f"launch folder {launch_folder} already exists and build did not make it"
+    advice = "; move it aside or pass another --root"
+    if launch_folder.is_symlink() or not launch_folder.is_dir():
+        return refusal + advice
+    entries = sorted(launch_folder.rglob("*"))
+    for path in entries:
+        name = path.relative_to(launch_folder).as_posix()
+        written_by_build = not path.is_symlink() and (
+            (path.is_dir() and name == ".claude")
+            or (path.is_file() and (name in ("CLAUDE.md", ".claude/settings.json") or LAUNCH_RUNNER.fullmatch(name)))
+        )
+        if not written_by_build:
+            return f"{refusal}: it holds {name}{advice}"
+    if not entries:
+        return None
+    try:
+        settings = json.loads((launch_folder / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        settings = None
+    if not isinstance(settings, dict) or settings.get("autoMemoryEnabled") is not False:
+        return f"{refusal}: its .claude/settings.json does not turn auto memory off{advice}"
+    return None
 
 
 def prepare_launch_folder(root: Path, source_repo: Path) -> dict:
@@ -719,6 +752,10 @@ def build(root: Path, cases_dir: Path, patches_dir: Path, source_repo: Path, who
             "so a session launched there would be shown its branch, status and commits",
             file=sys.stderr,
         )
+        return 2
+    problem = explain_unowned_launch_folder(root / LAUNCH_FOLDER_NAME)
+    if problem is not None:
+        print(f"editor_measure build: {problem}", file=sys.stderr)
         return 2
 
     case_paths = sorted(cases_dir.glob("*.json"))

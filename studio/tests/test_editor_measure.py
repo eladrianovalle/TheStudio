@@ -747,9 +747,10 @@ def files_under(folder: Path) -> list[str]:
 
 def test_a_build_leaves_a_launch_folder_holding_only_the_rules_copy_the_settings_and_the_runner(history, checkout_root, case_dirs, capsys):
     write_case(case_dirs[0], "greeter_one", defect_case(history))
-    stale = checkout_root / LAUNCH_FOLDER / "left_by_an_earlier_run.txt"
-    stale.parent.mkdir(parents=True)
-    stale.write_text("from before\n")
+    earlier = checkout_root / LAUNCH_FOLDER / ".claude"
+    earlier.mkdir(parents=True)
+    (earlier / "settings.json").write_text('{"autoMemoryEnabled": false}\n')
+    (earlier / "0123456789abcdef.js").write_text("// left by an earlier build\n")
 
     code, output = run_build(history, checkout_root, case_dirs, capsys)
 
@@ -762,6 +763,27 @@ def test_a_build_leaves_a_launch_folder_holding_only_the_rules_copy_the_settings
     first_line = runner_file(checkout_root, token).read_text().splitlines()[0]
     assert re.search(r"\bname: '([^']*)'", first_line)[1] == token
     assert not list((history["repo"] / "studio/output").rglob("*.js"))
+
+
+@pytest.mark.parametrize("left_there", [
+    {"notes.md": "my notes\n"},
+    {".git/HEAD": "ref: refs/heads/main\n", "CLAUDE.md": "# Mine\n", ".claude/settings.json": '{"autoMemoryEnabled": false}\n'},
+    {"CLAUDE.md": "# Mine\n"},
+    {"CLAUDE.md": "# Mine\n", ".claude/settings.json": '{"model": "opus"}\n'},
+], ids=["other file", "repository", "no settings", "other settings"])
+def test_build_refuses_a_launch_folder_it_did_not_make_and_leaves_it_untouched(left_there, history, checkout_root, case_dirs, capsys):
+    write_case(case_dirs[0], "greeter_one", defect_case(history))
+    folder = checkout_root / LAUNCH_FOLDER
+    for name, text in left_there.items():
+        write(folder, name, text)
+
+    code, output = run_build(history, checkout_root, case_dirs, capsys)
+
+    assert code == 2
+    assert f"launch folder {folder} already exists and build did not make it" in output
+    assert files_under(folder) == sorted(left_there)
+    assert all((folder / name).read_text() == text for name, text in left_there.items())
+    assert not (checkout_root / "greeter_one").exists()
 
 
 @pytest.mark.parametrize("global_rules", [True, False])
