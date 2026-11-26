@@ -357,6 +357,15 @@ class TestTheMaintainCommandCarriesTheStudioSteps(unittest.TestCase):
         self.assertIn("git status --porcelain", wave)
         self.assertIn("empty", wave)
 
+    def test_index_fixes_wait_until_the_source_wave_check_passes(self):
+        self.assertIn("don't make them yet", maintain_step(self.body, 1))
+        wave = maintain_step(self.body, 2)
+        self.assertLess(
+            wave.find("git status --porcelain"),
+            wave.find("make the index fixes noted in step 1"),
+            "a coordinator index edit before the check would read as a child's edit",
+        )
+
     def test_step_six_stages_everything_before_the_scope_gate(self):
         ship = maintain_step(self.body, 6)
         stage = ship.find("git add -A")

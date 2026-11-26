@@ -38,9 +38,11 @@ Only edit the verification skill's own directory (its SKILL.md, features/, and a
 
 1. **Index hygiene.** Read the feature map README and glob its sibling files. Fix missing, extra, duplicate, or dead entries. Lightweight; no generated inventory.
 
+   **[Studio]** Note the fixes here but don't make them yet. Step 2's check needs a worktree with no edits in it, so make the noted index fixes right after that check passes.
+
 2. **Source wave.** One read-only subagent per feature file, launched concurrently. Each explains "how does this user-facing feature work?" from source, flags likely doc drift with citations, and returns one concise live-verification recipe. Children never drive the app and never edit files. Return shape: feature summary / source entry points / likely drift or none / one recipe.
 
-   **[Studio]** Each child is an `Agent` call with `subagent_type: "Explore"`, all sent in one message so they run concurrently. Its brief names the feature file and the worktree path, asks for the return shape above, and says "do not edit files". `Explore` keeps `Bash`, so when the wave is done run `git status --porcelain` in the worktree. It must be empty. If it is not, a child edited something, and the outcome is `blocked`, naming the paths.
+   **[Studio]** Each child is an `Agent` call with `subagent_type: "Explore"`, all sent in one message so they run concurrently. Its brief names the feature file and the worktree path, asks for the return shape above, and says "do not edit files". `Explore` keeps `Bash`, so when the wave is done run `git status --porcelain` in the worktree. It must be empty. If it is not, a child edited something, and the outcome is `blocked`, naming the paths. Once it is empty, make the index fixes noted in step 1.
 
 3. **Reconcile.** Every feature file has a returned summary. Merge overlapping recipes into as few app states as practical. Spot-check cited drift; don't re-prove clean claims. Sweep recent churn for user-facing surfaces missing from the map — require a concrete source path before calling one missing.
 
