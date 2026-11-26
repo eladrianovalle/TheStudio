@@ -46,23 +46,23 @@ class DepartmentResult(NamedTuple):
     asset_count: int
 
 
-def shipped_pack_names(packs_dir: Path = PACKS_DIR) -> list[str]:
-    return sorted(path.parent.name for path in packs_dir.glob("*/pack.json"))
+def shipped_pack_names() -> list[str]:
+    return sorted(path.parent.name for path in PACKS_DIR.glob("*/pack.json"))
 
 
-def load_pack(name: str, packs_dir: Path = PACKS_DIR) -> dict:
-    return json.loads((packs_dir / name / "pack.json").read_text(encoding="utf-8"))
+def load_pack(name: str) -> dict:
+    return json.loads((PACKS_DIR / name / "pack.json").read_text(encoding="utf-8"))
 
 
-def pack_doc_path(pack: dict, packs_dir: Path = PACKS_DIR) -> Path:
-    return packs_dir / pack["name"] / pack["doc"]
+def pack_doc_path(pack: dict) -> Path:
+    return PACKS_DIR / pack["name"] / pack["doc"]
 
 
-def declared_departments(data: dict, config_path: Path, packs_dir: Path = PACKS_DIR) -> list[Department]:
+def declared_departments(data: dict, config_path: Path) -> list[Department]:
     packs_table = data.get("packs")
     if packs_table is None:
         return []
-    shipped = shipped_pack_names(packs_dir)
+    shipped = shipped_pack_names()
 
     def refusal(problem: str) -> PackConfigError:
         return PackConfigError(f"{config_path}: {problem} Shipped packs: {', '.join(shipped)}.")
@@ -75,7 +75,7 @@ def declared_departments(data: dict, config_path: Path, packs_dir: Path = PACKS_
             raise refusal(f"[packs.{pack_name}] names a pack Studio does not ship.")
         if not isinstance(pack_table, dict):
             raise refusal(f"[packs.{pack_name}] must be a table.")
-        pack = load_pack(pack_name, packs_dir)
+        pack = load_pack(pack_name)
         known_departments = pack["departments"]
         for department_name in pack_table:
             if department_name not in known_departments:
@@ -107,13 +107,13 @@ def declared_departments(data: dict, config_path: Path, packs_dir: Path = PACKS_
     return departments
 
 
-def load_declaration(config_path: Path, packs_dir: Path = PACKS_DIR) -> list[Department]:
+def load_declaration(config_path: Path) -> list[Department]:
     try:
         with open(config_path, "rb") as handle:
             data = tomllib.load(handle)
     except tomllib.TOMLDecodeError as error:
         raise PackConfigError(f"{config_path}: not valid TOML: {error}") from error
-    return declared_departments(data, config_path, packs_dir)
+    return declared_departments(data, config_path)
 
 
 def _is_number(value: object) -> bool:
