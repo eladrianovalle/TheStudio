@@ -127,6 +127,25 @@ def test_the_game_pack_declares_mesh_and_animation_only():
     assert kinds["animation"] == ["foot_slide", "loop_seam", "below_floor", "stretch"]
 
 
+SPEC = STUDIO_DIR.parent / "specs" / "pack-mechanism.md"
+
+
+def quoted_lines(text: str) -> str:
+    return " ".join(line[2:].strip() for line in text.splitlines() if line.startswith("> "))
+
+
+def test_the_game_doc_states_the_verdict_limit_word_for_word_from_the_spec():
+    spec_limit = quoted_lines(SPEC.read_text(encoding="utf-8"))
+    assert spec_limit.startswith("Studio code runs `check-packs` only on the portable host")
+    assert spec_limit.endswith("changes the editor makes are not re-checked.")
+    assert quoted_lines(GAME_DOC.read_text(encoding="utf-8")) == spec_limit
+
+
+def test_the_game_doc_says_the_asset_command_must_leave_the_working_tree_unchanged():
+    doc = " ".join(GAME_DOC.read_text(encoding="utf-8").split())
+    assert "The asset command must leave the working tree unchanged" in doc
+
+
 def test_studio_ships_the_game_pack():
     assert "game" in shipped_pack_names()
 

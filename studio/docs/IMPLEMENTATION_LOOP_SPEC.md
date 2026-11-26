@@ -173,7 +173,7 @@ the existing rule that a self-reported problem is not a delivery blocker.
 | Component | Criterion | Source |
 | --- | --- | --- |
 | Tests green | `tests.command` (unit-scoped) exits 0, run by the agent and recorded in the handoff. | `TEST_DRIVEN_GUIDE.md` |
-| Static checks | Every command in the repo's configured `static_checks` runs clean, and `static_ok` is the AND across them — `ruff check {paths}` in a Python repo, `npm run lint` in a Node one that declares a lint script, `[]` skips the check entirely. `/forge` replaces `{paths}` with the paths the unit is scoped to; a command without the token runs as written. (mypy is **out** of the gate: `mypy . --strict` blocks virtually any real repo; opt-in only.) | `impl_loop.py`, `forge.md` |
+| Static checks | Every command in the repo's configured `static_checks` runs clean, and `static_ok` is the AND across them — `ruff check {paths}` in a Python repo, `npm run lint` in a Node one that declares a lint script, `[]` skips the check entirely. `/forge` replaces `{paths}` with the paths the unit is scoped to; a command without the token runs as written. A repo that declares a pack also runs `check-packs`, which the loader adds (see §4). (mypy is **out** of the gate: `mypy . --strict` blocks virtually any real repo; opt-in only.) | `impl_loop.py`, `forge.md` |
 | Full suite at delivery | The complete test suite runs once before the unit is delivered, not on every gate check (keeps the inner loop fast). | n/a |
 
 **Agent-attested (recorded signals, not enforcement; judged by the *editor*, the fresh agent,
@@ -313,6 +313,18 @@ mandate = "contrarian"        # reuse CONTRARIAN_MANDATE; "off" disables the edi
 read_scope = "touched+importers"  # bound the editor's reads: diff + files_touched + direct importers
 output_budget = 400           # word cap on the editor's rationale (matches scope output budgets)
 ```
+
+**Declaring a pack adds a static check.** `/forge` reads the knobs through `impl_loop.load_knobs()`,
+both from `python studio/impl_loop.py` and in the portable `forge.py`. When the config file has a
+`[packs.<name>.<department>]` table, `load_knobs` appends one command to `static_checks`:
+`"<python>" "<studio>/run_phase.py" check-packs --config "<the config file>"`, each path
+double-quoted and refused if it holds a character that cannot be quoted safely. The file's own
+`static_checks` is passed through as written, so deleting a line cannot turn the pack check off. A
+`[packs]` table naming a pack Studio does not ship, a route the pack does not offer, or no
+`asset_command` raises `LoopConfigError`, and `impl_loop.py` exits 1 naming the file and the shipped
+packs before any agent starts. `[packs]` never becomes a `LoopConfig` field. What the check judges,
+and who decides its verdict on each host, is in `packs/game/ASSET_PIPELINE.md` and
+`specs/pack-mechanism.md`.
 
 **The observe command contract.** `observe_command` is optional: empty or absent means off, and an
 empty value never makes `/forge` refuse. Studio stores the string and places it in both prompts; it

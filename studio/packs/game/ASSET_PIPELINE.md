@@ -82,6 +82,20 @@ Every run saves the command's output and every problem it printed to
 `<git-dir>/studio/pack-reports/game-art.json`. The git directory is per-worktree and git never shows
 it as an untracked file.
 
+## At the `/forge` gate
+
+Declaring the pack is enough to turn the check on. Every `/forge` unit runs `check-packs` as one more
+static check, with no line in `static_checks`, and a failure fails the unit the way a failing linter
+does. Deleting a line from the config cannot switch it off; only removing the `[packs.game]` table
+does. The check runs while the writer's change is still uncommitted, which is why the asset command
+must leave the working tree unchanged.
+
+Who decides the verdict:
+
+> Studio code runs `check-packs` only on the portable host, and only on the writer's change. On the
+> native workflow the verdict is the writer's own report, and a missing report passes. On both
+> paths, changes the editor makes are not re-checked.
+
 ## The look pass
 
 Numbers catch a model over budget. They do not catch a model that looks wrong. In the look pass a
