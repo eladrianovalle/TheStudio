@@ -249,39 +249,34 @@ def tool_result(text):
         {"type": "tool_result", "tool_use_id": "toolu_1", "content": [{"type": "text", "text": text}]}]}}
 
 
-def environment_row(rows):
-    row, = [r for r in rows if r.get("attachment", {}).get("type") == "environment"]
-    return row
-
-
-def instructions_row(rows):
-    row, = [r for r in rows if r.get("attachment", {}).get("type") == "instructions"]
+def context_row(rows, kind):
+    row, = [r for r in rows if r.get("attachment", {}).get("type") == kind]
     return row
 
 
 def started_in(folder):
     def change(rows, scene):
-        environment = environment_row(rows)
+        environment = context_row(rows, "environment")
         environment["rendered"] = filled(environment["rendered"], {scene["launch"]: folder.format(**scene)})
         return rows
     return change
 
 
 def without_starting_folder_line(rows, scene):
-    environment = environment_row(rows)
+    environment = context_row(rows, "environment")
     rendered = environment["rendered"][0]
     rendered["content"] = rendered["content"].replace(f" - Primary working directory: {scene['launch']}\n", "")
     return rows
 
 
 def with_extra_instruction_file(rows, scene):
-    rendered = instructions_row(rows)["rendered"][0]
+    rendered = context_row(rows, "instructions")["rendered"][0]
     rendered["content"] += "\n\nContents of /srv/notes/CLAUDE.md (project instructions, checked into the codebase):\n\nNotes."
     return rows
 
 
 def without_the_copied_instruction_file(rows, scene):
-    rendered = instructions_row(rows)["rendered"][0]
+    rendered = context_row(rows, "instructions")["rendered"][0]
     header = f"Contents of {scene['launch']}/CLAUDE.md (project instructions, checked into the codebase):"
     assert header in rendered["content"]
     rendered["content"] = rendered["content"].replace(header, "")
@@ -289,7 +284,7 @@ def without_the_copied_instruction_file(rows, scene):
 
 
 def without_instruction_lines(rows, scene):
-    return [row for row in rows if row is not instructions_row(rows)]
+    return [row for row in rows if row is not context_row(rows, "instructions")]
 
 
 def with_git_status(rows, scene):
@@ -299,7 +294,7 @@ def with_git_status(rows, scene):
 
 def with_context_line(line):
     def change(rows, scene):
-        rendered = environment_row(rows)["rendered"][0]
+        rendered = context_row(rows, "environment")["rendered"][0]
         rendered["content"] = rendered["content"].replace(" - Is a git repository", line.format(**scene) + "\n - Is a git repository")
         return rows
     return change
@@ -373,7 +368,7 @@ def test_a_replayed_blind_run_records_its_launch_and_claude_code_version(recordi
     starting_line = f" - Primary working directory: {scene['launch']}"
     for transcript in workflow.glob("agent-*.jsonl"):
         rows = measurement.json_lines(transcript)
-        environment = environment_row(rows)
+        environment = context_row(rows, "environment")
         content = environment["rendered"][0]["content"]
         assert starting_line + "\n - Is a git repository" in content
         if line_ends == "at the end of a text value":

@@ -206,12 +206,17 @@ def transcript_parts(rows):
     return context, "\n".join(actions), "\n".join(results)
 
 
-def home_forms(path):
+def with_home_forms(paths):
     home = str(Path.home())
-    forms = [path]
-    if path.startswith(home + "/"):
-        forms.append("~" + path[len(home):])
-    return forms
+    listed = []
+    for path in paths:
+        forms = [path]
+        if path.startswith(home + "/"):
+            forms.append("~" + path[len(home):])
+        for form in forms:
+            if form not in listed:
+                listed.append(form)
+    return listed
 
 
 def is_inside(path, folder):
@@ -222,7 +227,7 @@ def is_inside(path, folder):
 def path_into_measurement(text, forbidden_paths, exempt_folder):
     for seen in PATH_IN_TEXT.findall(text):
         normalized = posixpath.normpath(seen)
-        if any(is_inside(normalized, exempt) for exempt in home_forms(str(exempt_folder))):
+        if any(is_inside(normalized, exempt) for exempt in with_home_forms([str(exempt_folder)])):
             continue
         for forbidden in forbidden_paths:
             if is_inside(normalized, forbidden):

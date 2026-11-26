@@ -182,19 +182,6 @@ def worktree_paths(source_repo: Path) -> list[str]:
     return [line[len("worktree "):] for line in listing.splitlines() if line.startswith("worktree ")]
 
 
-def with_home_forms(paths: list[str]) -> list[str]:
-    home = str(Path.home())
-    listed = []
-    for path in paths:
-        forms = [path]
-        if path.startswith(home + "/"):
-            forms.append("~" + path[len(home):])
-        for form in forms:
-            if form not in listed:
-                listed.append(form)
-    return listed
-
-
 def launch_fingerprint(launch_folder: Path, fingerprinted: list[Path]) -> str:
     digest = hashlib.sha256()
     digest.update(str(launch_folder).encode() + b"\0")
@@ -222,7 +209,7 @@ def prepare_launch_folder(root: Path, source_repo: Path) -> dict:
         "launch_folder": str(launch_folder),
         "runner_token": secrets.token_hex(8),
         "instruction_files": [str(path) for path in [*global_files, rules_copy]],
-        "forbidden_paths": with_home_forms(forbidden),
+        "forbidden_paths": measurement.with_home_forms(forbidden),
         "launch_fingerprint": launch_fingerprint(launch_folder, [rules_copy, settings_path, *global_files]),
     }
 
