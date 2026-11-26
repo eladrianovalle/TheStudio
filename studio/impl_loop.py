@@ -1044,6 +1044,12 @@ def _gate_suites(config_path: Path) -> tuple[dict, str | None]:
     return suites, gate_config
 
 
+def _gate_config_digest(tree: Path, gate_config: str | None) -> str | None:
+    if gate_config is None:
+        return None
+    return gate_routes.file_digest(_tree_root(tree) / gate_config)
+
+
 def load_knobs(path: Path | None = None, test_command_fallback: str | None = None) -> dict:
     knobs = runtime_knobs(load_loop_config(path, test_command_fallback=test_command_fallback))
     pack_check = pack_check_command(path)
@@ -1135,7 +1141,10 @@ def _read_record(path: Path) -> dict:
     gate_config = record.get("gate_config")
     if not (gate_config is None or isinstance(gate_config, str)):
         raise ValueError("its gate_config is neither text nor null")
-    return {**record, "suites": suites, "gate_config": gate_config}
+    gate_config_sha256 = record.get("gate_config_sha256")
+    if not (gate_config_sha256 is None or isinstance(gate_config_sha256, str)):
+        raise ValueError("its gate_config_sha256 is neither text nor null")
+    return {**record, "suites": suites, "gate_config": gate_config, "gate_config_sha256": gate_config_sha256}
 
 
 @contextmanager
@@ -1161,6 +1170,7 @@ def open_loop_record(
     pack_check: str | None,
     suites: dict,
     gate_config: str | None,
+    gate_config_sha256: str | None = None,
 ) -> str:
     root = _tree_root(tree)
     path = _git_dir(root) / LOOP_RECORD_NAME
@@ -1197,6 +1207,7 @@ def open_loop_record(
             "pack_check": pack_check,
             "suites": suites,
             "gate_config": gate_config,
+            "gate_config_sha256": gate_config_sha256,
             "started_at": launched_at,
             "checked_at": None,
             "problems": [],
@@ -1279,7 +1290,9 @@ def _check_record(tree: Path, path: Path) -> int:
     if not problems:
         try:
             changed = gate_routes.changed_files(root, record["base_sha"])
-            gate_config_changed = gate_routes.config_changed(root, record["base_sha"], record["gate_config"])
+            gate_config_changed = gate_routes.config_changed(
+                root, record["base_sha"], record["gate_config"], record["gate_config_sha256"],
+            )
         except gate_routes.RoutesError as error:
             raise CheckError(f"Could not check: {error}. No test was run.") from error
         if gate_config_changed:
@@ -1445,6 +1458,7 @@ def _launch(args: argparse.Namespace) -> str:
             pack_check=pack_check_command(path),
             suites=knobs["suites"],
             gate_config=knobs["gate_config"],
+            gate_config_sha256=_gate_config_digest(tree_being_built, knobs["gate_config"]),
         )
 
     return json.dumps(knobs)

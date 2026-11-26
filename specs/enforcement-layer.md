@@ -267,6 +267,7 @@ and goes away with the worktree.
 | `pack_check` | The `check-packs` command `impl_loop.load_knobs()` added to the static checks at launch, or `null` when the repository declares no pack (see `specs/pack-mechanism.md`) |
 | `suites` | The `[gate.suites]` tables as loaded at launch, `{name: {"command", "paths"}}`; an older record without it reads as `{}` (see `specs/gate-suites.md`) |
 | `gate_config` | The config file the launch read, relative to its repository's top level, or `null` when that file is outside any repository; an older record without it reads as `null` |
+| `gate_config_sha256` | SHA-256 of the tree's copy of that config at launch, or `null` when `gate_config` is; `--check` flags `gate-config-changed` when the file's hash differs or it is gone, so an ignored config is covered too; an older record reads as `null` |
 | `started_at` | UTC ISO timestamp |
 | `checked_at` | `null` until a check runs and finds problems |
 | `problems` | What that check found, as plain sentences |
@@ -769,7 +770,7 @@ the refusal in `implementation-loop.js`, `--check`, the `forge.md` Step 5 and 6 
 loop-spec and usage docs.
 
 **Acceptance criteria:**
-- [ ] `impl_loop.py --branch <b> --unit <id>` writes the record, with the eleven fields listed under "The loop record", into the tree's git directory and prints `launched_at` with the knobs; `--branch` without a unit id exits non-zero; no other invocation writes a record.
+- [ ] `impl_loop.py --branch <b> --unit <id>` writes the record, with the twelve fields listed under "The loop record", into the tree's git directory and prints `launched_at` with the knobs; `--branch` without a unit id exits non-zero; no other invocation writes a record.
 - [ ] Launching in a tree whose record was never checked exits 1 with `unchecked-loop` and prints the exact `--check` command for that tree; over a record that cannot be read it exits 1 with `unreadable-record`, naming the file; over a record that was checked and kept its problems, the launch replaces it.
 - [ ] `--check` exits 0 and removes the record only when the tree is on the recorded branch, a commit whose subject starts with `writer: <unit_id>` lies between the recorded base and `HEAD`, the recorded test command passes when `--check` runs it, and the recorded `pack_check`, when it is not `null`, passes too; a record whose `pack_check` is `null` runs no pack check and prints `"packs": null`.
 - [ ] Each failure exits 1 under its own name (`wrong-branch`, `no-writer-commit`, `tests-failed`, `packs-failed`) and leaves the record stamped; neither the test command nor the pack check is run when either git check fails; a red test command and a red pack check are both reported by one `--check`; `--check` on a stamped record checks again.

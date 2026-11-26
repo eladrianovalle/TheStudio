@@ -133,8 +133,10 @@ through `install.SOURCE_FILES`.
 - **`route(suites, default, changed) -> (routes, unclaimed)`.** A suite routes when any changed file
   matches any of its paths. The default (name `None`) routes when `unclaimed` is non-empty or when
   `changed` is empty.
-- **The config-edit flag.** `config_changed` is `gate_config in changed`, worked out before the two
-  prefixes above are dropped.
+- **The config-edit flag.** `config_changed` is true when `gate_config` is in the changed files,
+  worked out before the two prefixes above are dropped, or when the tree's copy of the config no
+  longer matches `gate_config_sha256`: edited, or deleted. The hash covers a gitignored config, which
+  git cannot list.
 - **`run(root, routes) -> [{"suite", "command", "exit_code"}]`.** Each command runs through the
   shell from the tree's root, with its output on stderr. Every route runs, even after an earlier one
   fails.
@@ -153,12 +155,13 @@ through `install.SOURCE_FILES`.
 
 ### Data model
 
-**The loop record** (`<git-dir>/studio-forge.json`) grows from nine fields to eleven:
+**The loop record** (`<git-dir>/studio-forge.json`) grows from nine fields to twelve:
 
 | Field | Type | Meaning | Old record without it |
 |---|---|---|---|
 | `suites` | `{name: {"command": str, "paths": [str]}}` | the suites as loaded at launch | read as `{}` |
 | `gate_config` | `str \| null` | the config file the launch read, relative to its repository's top level; `null` when that file is outside any repository | read as `null`, which skips the config-edit check |
+| `gate_config_sha256` | `str \| null` | SHA-256 of the tree's copy of that config at launch; `null` when `gate_config` is | read as `null`, so only the git listing decides |
 
 `test_command` keeps its meaning: it is always the configured default and never `--test`, because
 the native launch never passes one. `_read_record` treats both new fields as optional. If a field is
@@ -288,8 +291,7 @@ the single `_run_test_command(record["test_command"])` is replaced by `changed_f
   stack, so the fallback over-tests.
 - **A file shared across stacks but listed under one suite** never runs the other stack's tests.
   That is a documented rule, not a check.
-- **A gitignored config** cannot raise `gate-config-changed`, because git cannot see edits to it.
-  Named in the doc.
+- **A config outside any repository** (`gate_config: null`) cannot raise `gate-config-changed`.
 - **A writer that edits `gate_routes.py` itself** changes what `--check` runs. It could already do
   the same to `impl_loop.py`, so the trust is unchanged. The portable host is closed against it.
 - **Case-insensitive filesystems.** A path whose case differs falls to the default, which fails

@@ -190,3 +190,19 @@ def test_claude_md_names_the_rule_table_outside_the_principles():
 def test_the_docs_say_when_to_run_the_command(relative_path):
     flattened = " ".join((REPO_ROOT / relative_path).read_text(encoding="utf-8").split())
     assert RUN_IT_LINE in flattened
+
+
+def test_no_shipped_command_starts_a_branch_only_from_main():
+    import re
+    from install import SLASH_COMMANDS
+
+    only_main = re.compile(r"on `main`(?!/`master`)")
+    offenders = [
+        f"{name}:{number}"
+        for name in SLASH_COMMANDS
+        for number, line in enumerate((REPO_ROOT / ".claude" / "commands" / name).read_text().splitlines(), 1)
+        if only_main.search(line)
+    ]
+
+    assert offenders == []
+

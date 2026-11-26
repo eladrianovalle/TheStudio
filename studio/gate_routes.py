@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -127,10 +128,20 @@ def changed_files(root: Path, base_sha: str) -> list[str]:
     return [path for path in every if not path.startswith(RUN_RECORD_PREFIXES)]
 
 
-def config_changed(root: Path, base_sha: str, gate_config: str | None) -> bool:
+def file_digest(path: Path) -> str | None:
+    if not path.is_file():
+        return None
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def config_changed(root: Path, base_sha: str, gate_config: str | None, gate_config_sha256: str | None = None) -> bool:
     if gate_config is None:
         return False
-    return gate_config in _every_changed_file(root, base_sha)
+    if gate_config in _every_changed_file(root, base_sha):
+        return True
+    if gate_config_sha256 is None:
+        return False
+    return file_digest(root / gate_config) != gate_config_sha256
 
 
 def _covers(suite_path: str, changed_path: str) -> bool:
