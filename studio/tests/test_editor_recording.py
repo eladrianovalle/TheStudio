@@ -430,6 +430,30 @@ def test_a_spaced_forbidden_path_after_the_sessions_own_tool_results_is_void(rec
     assert not path.exists()
 
 
+@pytest.mark.parametrize(("listed", "seen"), [
+    ("/srv/Other Folder/../Studio", "/srv/Other Folder/../Studio"),
+    ("/srv/Other Folder/../Studio/studio/README.md", "/srv/Other Folder/../Studio"),
+    ("/srv/A B/C D/../../Studio and more", "/srv/A B/C D/../../Studio"),
+    ("(/srv/Other Folder/../Studio)", "/srv/Other Folder/../Studio"),
+    ("/srv/a:b/../Studio", "/srv/a:b/../Studio"),
+])
+def test_a_context_path_with_a_space_before_its_dots_is_void_for_any_forbidden_folder(
+    recording, capsys, listed, seen
+):
+    cli, path, manifest_path, workflow = recording
+    manifest = measurement.read(manifest_path)
+    manifest["forbidden_paths"] += ["/srv/Studio"]
+    measurement.write(manifest_path, manifest)
+    scene = launch_scene(manifest_path, workflow)
+    transcript = workflow / "agent-0.jsonl"
+    change = with_context_line(f" - Additional working directories: {listed}")
+    jsonl(transcript, change(measurement.json_lines(transcript), scene))
+
+    assert cli("record") == 1
+    assert f"the editor's context names {seen}," in capsys.readouterr().err
+    assert not path.exists()
+
+
 @pytest.mark.parametrize("listed", ["/srv/other/../My Studio-old", "/srv/other/../My Studios/notes.md"])
 def test_a_context_path_that_only_resolves_beside_a_spaced_forbidden_path_records(recording, listed):
     cli, path, manifest_path, workflow = recording

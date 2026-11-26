@@ -175,7 +175,8 @@ INSTRUCTION_FILE_LINE = re.compile(r"Contents of (.+?) \(")
 GIT_STATUS_LINE = "Current branch:"
 PATH_IN_TEXT = re.compile(r"(?:~/|/)[^\s\"'`\\;|&()<>,:*?\[\]{}$=]*")
 PATH_START = re.compile(r"(?<![\w.~/-])(?=~/|/)")
-SPACED_PATH_IN_TEXT = re.compile(r"(?:~/|/)[^\n\"'`\\;|&()<>,:*?\[\]{}$=]*")
+SPACED_PATH_IN_TEXT = re.compile(r"(?:~/|/)[^\n]{0,1024}")
+RESOLVING = re.compile(r"/\.|//")
 
 
 def decoded_strings(value):
@@ -250,28 +251,35 @@ def path_into_measurement(text, paths, forbidden_paths, exempt_folder):
         for forbidden in forbidden_paths:
             if is_inside(normalized, forbidden):
                 return seen, forbidden
-    spaced_folders = [
-        (posixpath.normpath(forbidden), forbidden)
-        for forbidden in forbidden_paths
-        if any(character.isspace() for character in forbidden)
-    ]
-    if not spaced_folders:
-        return None
+    for forbidden in forbidden_paths:
+        folder = posixpath.normpath(forbidden)
+        if not any(character.isspace() for character in folder):
+            continue
+        for match in re.finditer(re.escape(folder) + r"(?=/|[^\w.\-]|$)", text):
+            if any(text.startswith(exempt, match.start()) for exempt in exempt_forms):
+                continue
+            return folder, forbidden
+    folders = {posixpath.normpath(forbidden): forbidden for forbidden in forbidden_paths}
     for start in PATH_START.finditer(text):
         written = SPACED_PATH_IN_TEXT.match(text, start.start()).group(0).rstrip()
+        resolving = RESOLVING.search(written)
+        if resolving is None:
+            continue
         if any(is_inside(posixpath.normpath(written), exempt) for exempt in exempt_forms):
             continue
         for end in component_ends(written):
+            if end <= resolving.start():
+                continue
             candidate = written[:end]
-            for folder, forbidden in spaced_folders:
-                if posixpath.normpath(candidate) == folder:
-                    return candidate, forbidden
+            forbidden = folders.get(posixpath.normpath(candidate))
+            if forbidden is not None:
+                return candidate, forbidden
     return None
 
 
 def component_ends(written):
     for index, character in enumerate(written):
-        if character == "/" or character.isspace():
+        if not (character.isalnum() or character in "._-~"):
             yield index
     yield len(written)
 
