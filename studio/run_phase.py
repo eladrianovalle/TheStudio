@@ -2192,6 +2192,15 @@ def build_parser() -> argparse.ArgumentParser:
     offload_parser.add_argument("--rollback", action="store_true", help="Restore from most recent backup.")
     offload_parser.add_argument("--verify", action="store_true", help="Run canary verification.")
 
+    check_packs_parser = subparsers.add_parser(
+        "check-packs",
+        help="Run each declared pack's asset command and judge its report against the pack's contract.",
+    )
+    check_packs_parser.add_argument(
+        "--config", type=Path, default=None,
+        help="The config that declares the packs. Defaults to the repository's .studio/implementation_loop.toml.",
+    )
+
     # --- Setup wizard ---
     setup_parser = subparsers.add_parser(
         "setup", help="Configure Studio for a project (roles, personas, scopes, cleanup, unstale)."
@@ -3617,6 +3626,9 @@ def _dispatch(args: argparse.Namespace) -> None:
         do_offload(args)
     elif args.command == "setup":
         _do_setup(args)
+    elif args.command == "check-packs":
+        import packs
+        sys.exit(packs.check_packs(args.config))
     else:
         raise ValueError("Unknown command")
 

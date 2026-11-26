@@ -43,7 +43,7 @@ from typing import NamedTuple
 
 import pytest
 
-from install import SLASH_COMMANDS, SOURCE_FILES
+from install import PACK_DOC_GLOB, SLASH_COMMANDS, SOURCE_FILES
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -265,6 +265,12 @@ ENFORCED: list[EnforcedRule] = [
         enforcer="studio/tests/test_exception_expiry.py::expired_exceptions",
         proof="studio/tests/test_exception_expiry.py::test_a_planted_exception_past_its_date_fails_with_fix_and_see",
     ),
+    EnforcedRule(
+        rule="An asset report that breaks its pack's contract fails `check-packs`.",
+        stated_in="studio/packs/game/ASSET_PIPELINE.md",
+        enforcer="studio/packs.py::report_problems",
+        proof="studio/tests/test_packs.py::test_metric_above_its_max_fails",
+    ),
 ]
 
 
@@ -386,7 +392,7 @@ JUDGED: list[JudgedRule] = [
 
 JUDGED_WITHOUT_MEASUREMENT_COUNT = 6  # this number only goes down
 
-REFUSALS_WITHOUT_FIX_COUNT = 19
+REFUSALS_WITHOUT_FIX_COUNT = 20
 
 
 # ---------------------------------------------------------------------------
@@ -464,7 +470,15 @@ def count_problem(
 
 
 def unshipped_stated_in_problems(rows: list[EnforcedRule]) -> list[str]:
-    shipped_rule_files = {"CLAUDE.md", *(f".claude/commands/{name}" for name in SLASH_COMMANDS)}
+    studio_dir = REPO_ROOT / "studio"
+    shipped_pack_docs = {
+        f"studio/{path.relative_to(studio_dir).as_posix()}" for path in studio_dir.glob(PACK_DOC_GLOB)
+    }
+    shipped_rule_files = {
+        "CLAUDE.md",
+        *(f".claude/commands/{name}" for name in SLASH_COMMANDS),
+        *shipped_pack_docs,
+    }
     problems: list[str] = []
     for row in rows:
         enforcer_file = row.enforcer.partition("::")[0]
@@ -473,8 +487,8 @@ def unshipped_stated_in_problems(rows: list[EnforcedRule]) -> list[str]:
         if row.stated_in not in shipped_rule_files:
             problems.append(
                 f"{row.rule!r}: {row.enforcer} runs in installed repositories, which have no "
-                f"{row.stated_in}. Cite CLAUDE.md or a command file in SLASH_COMMANDS that "
-                f"states the rule."
+                f"{row.stated_in}. Cite CLAUDE.md, a shipped pack doc, or a command file in "
+                f"SLASH_COMMANDS that states the rule."
             )
     return problems
 
@@ -867,7 +881,9 @@ def test_a_shipped_refusal_citing_a_doc_installed_repositories_lack_is_reported(
     )
 
 
-@pytest.mark.parametrize("stated_in", ["CLAUDE.md", ".claude/commands/run-phase.md"])
+@pytest.mark.parametrize(
+    "stated_in", ["CLAUDE.md", ".claude/commands/run-phase.md", "studio/packs/game/ASSET_PIPELINE.md"]
+)
 def test_a_shipped_refusal_citing_claude_md_or_a_shipped_command_reports_nothing(stated_in):
     assert unshipped_stated_in_problems([_shipped_module_row(stated_in)]) == []
 
