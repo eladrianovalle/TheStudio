@@ -73,21 +73,23 @@ def install_source(project):
     return source / 'run_phase.py'
 
 
+@pytest.mark.parametrize('spelling', ['demo', 'demo.md'])
 @pytest.mark.parametrize('layout', ['installed with top-level specs', 'tracked specs without the snapshot'])
-def test_a_slug_resolves_from_whichever_specs_folder_holds_it(project, layout):
+def test_a_slug_resolves_from_whichever_specs_folder_holds_it(project, layout, spelling):
     entry = STUDIO / 'run_phase.py'
     if layout == 'installed with top-level specs':
         entry = install_source(project)
         (project / '.studio/specs').rename(project / 'specs')
-    r = cli(project, '--spec', 'demo', '--plan', entry=entry)
+    r = cli(project, '--spec', spelling, '--plan', entry=entry)
     assert r.returncode == 0, r.stderr
     assert json.loads(r.stdout)['acceptance_criteria'] == ['Prints **demo**.']
 
 
-def test_a_slug_found_in_both_specs_folders_is_refused(project):
+@pytest.mark.parametrize('spelling', ['demo', 'demo.md'])
+def test_a_slug_found_in_both_specs_folders_is_refused(project, spelling):
     (project / 'specs').mkdir()
     (project / 'specs/demo.md').write_text((project / '.studio/specs/demo.md').read_text())
-    r = cli(project, '--spec', 'demo', '--plan')
+    r = cli(project, '--spec', spelling, '--plan')
     assert r.returncode
     assert 'ambiguous spec' in r.stderr
     assert '.studio/specs/demo.md' in r.stderr and ' specs/demo.md' in r.stderr
