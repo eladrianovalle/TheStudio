@@ -18,6 +18,8 @@ RECORD_FIELDS = {
     "base_sha",
     "test_command",
     "pack_check",
+    "suites",
+    "gate_config",
     "started_at",
     "checked_at",
     "problems",
@@ -103,7 +105,7 @@ def check(directory: Path, *extra: str) -> subprocess.CompletedProcess:
     return run_impl_loop(directory, "--check", *extra)
 
 
-def test_a_launch_writes_the_record_with_its_nine_fields_into_the_tree_git_directory(workspace):
+def test_a_launch_writes_the_record_with_its_eleven_fields_into_the_tree_git_directory(workspace):
     repo = workspace["repo"]
     head = git(repo, "rev-parse", "HEAD")
 
@@ -123,6 +125,8 @@ def test_a_launch_writes_the_record_with_its_nine_fields_into_the_tree_git_direc
         "base_sha": head,
         "test_command": workspace["test_command"],
         "pack_check": None,
+        "suites": {},
+        "gate_config": None,
         "started_at": knobs["launched_at"],
         "checked_at": None,
         "problems": [],
@@ -326,7 +330,7 @@ def test_check_is_clean_and_removes_the_record_when_every_check_passes(workspace
         "clean": True,
         "unit_id": "demo",
         "branch": "impl/demo",
-        "tests": {"command": workspace["test_command"], "exit_code": 0},
+        "tests": [{"suite": None, "command": workspace["test_command"], "exit_code": 0}],
         "packs": None,
         "problems": [],
     }
@@ -386,7 +390,7 @@ def test_wrong_branch_is_reported_stamped_and_runs_neither_tests_nor_packs(works
     report = json.loads(completed.stdout)
     assert report["clean"] is False
     assert [problem["name"] for problem in report["problems"]] == ["wrong-branch"]
-    assert report["tests"]["exit_code"] is None
+    assert report["tests"] == []
     assert report["packs"]["exit_code"] is None
     assert not workspace["test_log"].exists()
     assert not pack_log.exists()
@@ -433,8 +437,10 @@ def test_a_red_test_command_is_tests_failed_and_tells_the_user_what_to_do(worksp
 
     assert completed.returncode == 1
     report = json.loads(completed.stdout)
-    assert report["tests"]["exit_code"] != 0
+    assert [test_run["suite"] for test_run in report["tests"]] == [None]
+    assert report["tests"][0]["exit_code"] != 0
     assert [problem["name"] for problem in report["problems"]] == ["tests-failed"]
+    assert report["problems"][0]["detail"].startswith("the default test command ")
     assert "tests-failed: " in completed.stderr
     assert "Fix:" in completed.stderr
     assert "See .claude/commands/forge.md" in completed.stderr
@@ -575,3 +581,346 @@ def test_check_outside_a_git_tree_or_with_a_bad_work_dir_exits_2(workspace, tmp_
     assert bad_work_dir.returncode == 2
     assert mixed_arguments.returncode == 2
     assert "Traceback" not in not_a_tree.stderr + bad_work_dir.stderr
+
+
+def logged_command(name: str, log: Path, red_flag: Path) -> str:
+    return f"echo {name} >> {shlex.quote(str(log))}; test ! -e {shlex.quote(str(red_flag))}"
+
+
+@pytest.fixture
+def suited(tmp_path):
+    repo = tmp_path / "repo"
+    for folder in ("web", "unity", "shared", ".studio"):
+        (repo / folder).mkdir(parents=True)
+    (repo / "web" / "app.js").write_text("app\n")
+    (repo / "unity" / "Game.cs").write_text("game\n")
+    (repo / "shared" / "schema.json").write_text("{}\n")
+    (repo / "README.md").write_text("readme\n")
+    log = tmp_path / "suites-ran.log"
+    commands = {name: logged_command(name, log, tmp_path / f"{name}.red") for name in ("web", "unity", "default")}
+    config = repo / ".studio" / "implementation_loop.toml"
+    config.write_text(
+        f"[gate]\ntest_command = {json.dumps(commands['default'])}\n\n"
+        f"[gate.suites.web]\ncommand = {json.dumps(commands['web'])}\n"
+        'paths = ["web/", "shared/schema.json"]\n\n'
+        f"[gate.suites.unity]\ncommand = {json.dumps(commands['unity'])}\n"
+        'paths = ["unity/", "shared/schema.json"]\n'
+    )
+    git(repo, "init", "-q")
+    git(repo, "config", "user.email", "test@example.com")
+    git(repo, "config", "user.name", "Test")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "initial")
+    git(repo, "checkout", "-q", "-B", "impl/demo")
+    return {"repo": repo, "config": config, "log": log, "commands": commands, "tmp": tmp_path}
+
+
+def launch_suited(suited) -> subprocess.CompletedProcess:
+    completed = run_impl_loop(suited["repo"], str(suited["config"]), "--branch", "impl/demo", "--unit", "demo")
+    assert completed.returncode == 0, completed.stderr
+    return completed
+
+
+def commit_everything(repo: Path, subject: str = "writer: demo") -> None:
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "--allow-empty", "-m", subject)
+
+
+def suites_ran(suited) -> list[str]:
+    if not suited["log"].exists():
+        return []
+    return suited["log"].read_text().split()
+
+
+def change_web(repo: Path) -> None:
+    (repo / "web" / "app.js").write_text("changed\n")
+    commit_everything(repo)
+
+
+def rename_web_to_unity(repo: Path) -> None:
+    git(repo, "mv", "web/app.js", "unity/app.js")
+    commit_everything(repo)
+
+
+def delete_under_unity(repo: Path) -> None:
+    git(repo, "rm", "-q", "unity/Game.cs")
+    commit_everything(repo)
+
+
+def add_untracked_outside_every_suite(repo: Path) -> None:
+    commit_everything(repo)
+    (repo / "notes.txt").write_text("untracked\n")
+
+
+def change_only_a_concerns_file(repo: Path) -> None:
+    (repo / "reviewer-concerns").mkdir()
+    (repo / "reviewer-concerns" / "demo.md").write_text("concern\n")
+    commit_everything(repo)
+    handoffs = repo / ".studio" / "output" / "impl_loop" / "demo"
+    handoffs.mkdir(parents=True)
+    (handoffs / "impl--demo--writer.json").write_text("{}\n")
+
+
+def change_a_file_under_two_suites(repo: Path) -> None:
+    (repo / "shared" / "schema.json").write_text('{"changed": true}\n')
+    commit_everything(repo)
+
+
+def change_nothing(repo: Path) -> None:
+    commit_everything(repo)
+
+
+def change_web_and_the_readme(repo: Path) -> None:
+    (repo / "web" / "app.js").write_text("changed\n")
+    (repo / "README.md").write_text("changed\n")
+    commit_everything(repo)
+
+
+@pytest.mark.parametrize(
+    ("make_change", "expected"),
+    [
+        (change_web, ["web"]),
+        (rename_web_to_unity, ["web", "unity"]),
+        (delete_under_unity, ["unity"]),
+        (add_untracked_outside_every_suite, ["default"]),
+        (change_only_a_concerns_file, ["default"]),
+        (change_a_file_under_two_suites, ["web", "unity"]),
+        (change_nothing, ["default"]),
+        (change_web_and_the_readme, ["web", "default"]),
+    ],
+    ids=[
+        "web-only", "rename-web-to-unity", "deletion-under-unity", "untracked-outside-every-suite",
+        "only-a-concerns-file", "file-under-two-suites", "empty-diff", "web-and-unclaimed",
+    ],
+)
+def test_check_runs_exactly_the_suites_the_changes_fall_under_plus_the_default(suited, make_change, expected):
+    launch_suited(suited)
+    make_change(suited["repo"])
+
+    completed = check(suited["repo"])
+
+    assert completed.returncode == 0, completed.stderr
+    report = json.loads(completed.stdout)
+    assert [test_run["suite"] or "default" for test_run in report["tests"]] == expected
+    assert suites_ran(suited) == expected
+    assert report["problems"] == []
+    assert not record_path(suited["repo"]).exists()
+
+
+def test_tests_lists_each_run_in_file_order_with_the_default_last(suited):
+    launch_suited(suited)
+    (suited["repo"] / "unity" / "Game.cs").write_text("changed\n")
+    (suited["repo"] / "web" / "app.js").write_text("changed\n")
+    (suited["repo"] / "README.md").write_text("changed\n")
+    commit_everything(suited["repo"])
+
+    completed = check(suited["repo"])
+
+    commands = suited["commands"]
+    assert json.loads(completed.stdout)["tests"] == [
+        {"suite": "web", "command": commands["web"], "exit_code": 0},
+        {"suite": "unity", "command": commands["unity"], "exit_code": 0},
+        {"suite": None, "command": commands["default"], "exit_code": 0},
+    ]
+
+
+def test_every_routed_command_runs_and_each_red_one_is_its_own_tests_failed_problem(suited):
+    launch_suited(suited)
+    change_web_and_the_readme(suited["repo"])
+    (suited["tmp"] / "web.red").write_text("red\n")
+    (suited["tmp"] / "default.red").write_text("red\n")
+
+    completed = check(suited["repo"])
+
+    assert completed.returncode == 1
+    report = json.loads(completed.stdout)
+    assert suites_ran(suited) == ["web", "default"]
+    assert [(test_run["suite"], test_run["exit_code"]) for test_run in report["tests"]] == [("web", 1), (None, 1)]
+    assert [problem["name"] for problem in report["problems"]] == ["tests-failed", "tests-failed"]
+    assert report["problems"][0]["detail"] == f"the web suite's command `{suited['commands']['web']}` exited 1."
+    assert report["problems"][1]["detail"] == (
+        f"the default test command `{suited['commands']['default']}` exited 1."
+    )
+    assert len(read_record(suited["repo"])["problems"]) == 2
+
+
+def test_a_red_suite_fails_the_check_while_the_default_is_green(suited):
+    launch_suited(suited)
+    change_web(suited["repo"])
+    (suited["tmp"] / "web.red").write_text("red\n")
+
+    completed = check(suited["repo"])
+
+    assert completed.returncode == 1
+    report = json.loads(completed.stdout)
+    assert [problem["name"] for problem in report["problems"]] == ["tests-failed"]
+    assert "the web suite's command" in report["problems"][0]["detail"]
+
+
+def test_an_edit_to_the_gate_config_is_flagged_the_tests_still_run_and_rechecking_keeps_it(suited):
+    launch_suited(suited)
+    config = suited["config"]
+    config.write_text(config.read_text().replace('paths = ["web/", "shared/schema.json"]', 'paths = ["shared/schema.json"]'))
+    (suited["repo"] / "web" / "app.js").write_text("changed\n")
+    commit_everything(suited["repo"])
+    path = record_path(suited["repo"])
+
+    first = check(suited["repo"])
+    second = check(suited["repo"])
+
+    assert first.returncode == 1
+    report = json.loads(first.stdout)
+    assert [problem["name"] for problem in report["problems"]] == ["gate-config-changed"]
+    base_sha = read_record(suited["repo"])["base_sha"]
+    assert report["problems"][0]["detail"] == (
+        f".studio/implementation_loop.toml changed since {base_sha}, so the next launch on this branch would be "
+        "gated by a config this unit wrote; a person should read that change."
+    )
+    assert [test_run["suite"] or "default" for test_run in report["tests"]] == ["web", "default"]
+    fix_line = next(line for line in first.stderr.splitlines() if line.strip().startswith("Fix:"))
+    assert str(path) in fix_line
+    assert "delete" in fix_line
+    assert second.returncode == 1
+    assert [problem["name"] for problem in json.loads(second.stdout)["problems"]] == ["gate-config-changed"]
+    assert path.exists()
+
+
+def test_the_pack_check_still_runs_and_reports_beside_the_routed_suites(suited):
+    launch_suited(suited)
+    record = json.loads(record_path(suited["repo"]).read_text())
+    record["pack_check"] = "echo 'art.png is over budget'; exit 3"
+    record_path(suited["repo"]).write_text(json.dumps(record))
+    change_web(suited["repo"])
+
+    completed = check(suited["repo"])
+
+    assert completed.returncode == 1
+    report = json.loads(completed.stdout)
+    assert report["packs"] == {"command": "echo 'art.png is over budget'; exit 3", "exit_code": 3}
+    assert [problem["name"] for problem in report["problems"]] == ["packs-failed"]
+    assert suites_ran(suited) == ["web"]
+
+
+def test_a_launch_writes_the_loaded_suites_and_the_gate_config_into_the_record_and_knobs(suited):
+    completed = launch_suited(suited)
+
+    commands = suited["commands"]
+    expected_suites = {
+        "web": {"command": commands["web"], "paths": ["web/", "shared/schema.json"]},
+        "unity": {"command": commands["unity"], "paths": ["unity/", "shared/schema.json"]},
+    }
+    knobs = json.loads(completed.stdout)
+    record = read_record(suited["repo"])
+    assert set(record) == RECORD_FIELDS
+    assert record["suites"] == expected_suites
+    assert record["gate_config"] == ".studio/implementation_loop.toml"
+    assert knobs["suites"] == expected_suites
+    assert knobs["gate_config"] == ".studio/implementation_loop.toml"
+    assert record["test_command"] == commands["default"]
+
+
+def test_a_record_without_suites_or_gate_config_runs_only_its_test_command(suited):
+    repo = suited["repo"]
+    write_record({"repo": repo, "test_command": suited["commands"]["default"]})
+    change_web(repo)
+    suited["config"].write_text("[gate]\ntest_command = \"true\"\n")
+    commit_everything(repo, "writer: demo again")
+
+    completed = check(repo)
+
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(completed.stdout)["tests"] == [
+        {"suite": None, "command": suited["commands"]["default"], "exit_code": 0},
+    ]
+    assert suites_ran(suited) == ["default"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("suites", {"web": {"command": "true"}}), ("suites", []), ("gate_config", 5)],
+    ids=["suite-without-paths", "suites-not-a-table", "gate-config-not-text"],
+)
+def test_a_record_with_a_malformed_new_field_is_unreadable_and_runs_no_test(suited, field, value):
+    repo = suited["repo"]
+    path = write_record({"repo": repo, "test_command": suited["commands"]["default"]}, **{field: value})
+    change_web(repo)
+
+    completed = check(repo)
+
+    assert completed.returncode == 2
+    assert completed.stdout == ""
+    assert str(path) in completed.stderr
+    assert field in completed.stderr
+    assert suites_ran(suited) == []
+
+
+@pytest.mark.parametrize(
+    ("suite_table", "reason"),
+    [
+        ('suites = "web"\n', "gate.suites is not a table"),
+        ('[gate.suites]\nweb = "x"\n', "is not a table"),
+        ('[gate.suites.web]\ncommand = "c"\npaths = ["web/"]\npath = ["web/"]\n', 'has unknown key "path"'),
+        ('[gate.suites.web]\ncommand = ""\npaths = ["web/"]\n', "has no command"),
+        ('[gate.suites.web]\ncommand = "c"\npaths = []\n', "has no paths"),
+        ('[gate.suites.web]\ncommand = "c"\npaths = ["/web/"]\n', "must be repo-relative"),
+        ('[gate.suites.web]\ncommand = "c"\npaths = ["web/*.js"]\n', "has a glob character"),
+        ('[gate.suites.web]\ncommand = "c"\npaths = ["wbe/"]\n', "does not exist as written"),
+        ('[gate.suites.web]\ncommand = "c"\npaths = ["web"]\n', 'does not exist as written, write "web/"'),
+    ],
+    ids=[
+        "suites-not-a-table", "suite-not-a-table", "unknown-key", "blank-command", "empty-paths",
+        "not-repo-relative", "glob", "missing-path", "folder-without-slash",
+    ],
+)
+def test_each_bad_suite_makes_impl_loop_exit_1_naming_the_file_and_the_suite(suited, suite_table, reason):
+    config = suited["config"]
+    config.write_text('[gate]\ntest_command = "true"\n' + suite_table)
+
+    knobs_only = run_impl_loop(suited["repo"], str(config))
+    launched = run_impl_loop(suited["repo"], str(config), "--branch", "impl/demo", "--unit", "demo")
+
+    for completed in (knobs_only, launched):
+        assert completed.returncode == 1
+        assert completed.stdout == ""
+        assert completed.stderr.startswith("bad-suite: [gate.suites")
+        assert str(config.resolve()) in completed.stderr
+        assert reason in completed.stderr
+        assert "Fix:" in completed.stderr
+    if reason != "gate.suites is not a table":
+        assert "[gate.suites.web]" in knobs_only.stderr
+    assert not record_path(suited["repo"]).exists()
+
+
+def test_a_config_without_suites_gives_the_same_knobs_plus_empty_suites_and_its_gate_config(workspace, suited):
+    from impl_loop import load_knobs, load_loop_config, runtime_knobs
+
+    outside = workspace["config"]
+    inside = suited["repo"] / ".studio" / "plain.toml"
+    inside.write_text(outside.read_text())
+
+    assert load_knobs(outside) == {**runtime_knobs(load_loop_config(outside)), "suites": {}, "gate_config": None}
+    assert load_knobs(inside) == {
+        **runtime_knobs(load_loop_config(inside)), "suites": {}, "gate_config": ".studio/plain.toml",
+    }
+
+
+def test_a_failed_git_listing_is_a_could_not_check_that_runs_no_test(suited, monkeypatch, capsys):
+    import gate_routes
+    from impl_loop import CheckError, check_loop
+
+    launch_suited(suited)
+    change_web(suited["repo"])
+    before = record_path(suited["repo"]).read_text()
+
+    def refuse(root, base_sha):
+        raise gate_routes.RoutesError("`git diff` failed")
+
+    monkeypatch.setattr(gate_routes, "changed_files", refuse)
+
+    with pytest.raises(CheckError) as raised:
+        check_loop(suited["repo"])
+
+    assert "No test was run" in str(raised.value)
+    assert suites_ran(suited) == []
+    assert record_path(suited["repo"]).read_text() == before
+    assert not record_path(suited["repo"]).with_name("studio-forge.lock").exists()
