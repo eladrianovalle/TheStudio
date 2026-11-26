@@ -199,8 +199,9 @@ instrument is a person reading the output, keep it and fill it in.
 - **Where the evidence goes.** `specs/<slug>-eval-results.md` (`.studio/specs/` in a consuming repo),
   created from the skeleton when this spec is approved.
 - **Stop condition.** While that file still says `FILL_ME`, nobody may call this feature working and
-  this spec stays `status: approved`. You set it to `shipped` when you fill the file in — that flip is
-  the claim, and the spec-verification test is what makes the claim cost evidence.
+  this spec stays `status: approved`. Once the file is filled in, `/sprint-review` flips it to
+  `shipped` with the human — that flip is the claim, and the spec-verification test is what makes the
+  claim cost evidence.
 
 ## Build Plan
 How this maps to buildable units — a short list of MVI units (each a complete, usable interaction;

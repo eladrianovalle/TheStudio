@@ -12,6 +12,7 @@ does the mechanics around them.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import os
 import subprocess
@@ -2630,13 +2631,17 @@ def _built_unit_ids(target: Path) -> Optional[Tuple[set, set]]:
     built no matter what the Python pattern accepts. Hence the leading bullet — GitHub's default
     squash body writes each subject as ``* writer: <unit_id>``.
     """
+    return _unit_ids_in_log(target, "--all")
+
+
+def _unit_ids_in_log(target: Path, revision: str) -> Optional[Tuple[set, set]]:
     try:
         if _git(target, "rev-parse", "--is-inside-work-tree") != "true":
             return None
         if _git(target, "rev-parse", "--is-shallow-repository") != "false":
             return None
         log = _git(
-            target, "log", "--all", "--no-merges", "-E",
+            target, "log", revision, "--no-merges", "-E",
             "--grep", r"^[[:space:]*+-]*(writer|editor)", "--format=%s%n%b%n%x1e",
         )
     except (OSError, subprocess.SubprocessError):
@@ -2644,6 +2649,29 @@ def _built_unit_ids(target: Path) -> Optional[Tuple[set, set]]:
     if log is None:
         return None
     return built_unit_ids(log)
+
+
+def _default_branch(target: Path) -> Optional[str]:
+    remote_prefix = "refs/remotes/origin/"
+    try:
+        candidates = ["main", "master"]
+        origin_head = _git(target, "symbolic-ref", "--quiet", remote_prefix + "HEAD")
+        if origin_head is not None and origin_head.startswith(remote_prefix):
+            candidates.insert(0, origin_head[len(remote_prefix):])
+        for branch in candidates:
+            if _git(target, "rev-parse", "--verify", "--quiet", remote_prefix + branch) is not None:
+                return branch
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return None
+
+
+def _merged_unit_ids(target: Path, branch: str) -> Optional[set]:
+    unit_ids = _unit_ids_in_log(target, f"refs/remotes/origin/{branch}")
+    if unit_ids is None:
+        return None
+    merged, _ = unit_ids
+    return merged
 
 
 def _git(target: Path, *arguments: str) -> Optional[str]:
@@ -2692,8 +2720,24 @@ def show_stats(args: argparse.Namespace) -> None:
     shipped_specs = summarize_shipped_specs(_shipped_spec_records())
 
     if getattr(args, "json", False):
+        default_branch = _default_branch(root)
+        merged_ids = None
+        if default_branch is not None:
+            merged_ids = _merged_unit_ids(root, default_branch)
+        queue, ledger = _obligations_and_ledger(
+            root, today=date.today(), specs_dir=get_specs_dir(), merged_ids=merged_ids,
+        )
+        obligations = None
+        if ledger.built_known:
+            obligations = [dataclasses.asdict(obligation) for obligation in queue]
         print(json.dumps(
-            {**agg, "shipped_specs": shipped_specs, "session_health": session_health},
+            {
+                **agg,
+                "shipped_specs": shipped_specs,
+                "session_health": session_health,
+                "default_branch": default_branch,
+                "obligations": obligations,
+            },
             indent=2,
         ))
         return
@@ -3169,6 +3213,7 @@ def _obligations_and_ledger(
     today: date,
     specs_dir: Optional[Path] = None,
     mentioned_ids: Optional[set] = None,
+    merged_ids: Optional[set] = None,
 ) -> Tuple[List[Obligation], UnitLedger]:
     """Everything *target* owes, and the ledger it was worked out from.
 
@@ -3230,7 +3275,7 @@ def _obligations_and_ledger(
     built_ids = _built_unit_ids(target)
     built, escalated = built_ids if built_ids is not None else (None, set())
     ledger = reconcile_units(planned, built, escalated, mentioned_ids or set())
-    return derive(views, ledger, today=today), ledger
+    return derive(views, ledger, today=today, merged_ids=merged_ids), ledger
 
 
 def _collect_obligations(

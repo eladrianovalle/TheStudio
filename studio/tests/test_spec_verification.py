@@ -669,11 +669,11 @@ def _violations(
             problems.append(
                 f"specs/{spec_name} is marked `status: approved` with "
                 f"`{_DUE_FIELD}: {due.isoformat()}`, and that date has passed. Two honest "
-                f"ways out: fill in {results_name} with what you actually observed and flip "
-                "this spec to `status: shipped`, or move the date to when you now expect the "
-                "evidence. Moving the date is allowed and sometimes correct — the point is "
-                "that it becomes a visible edit somebody can question, rather than silence "
-                "nobody notices."
+                f"ways out: fill in {results_name} with what you actually observed and run "
+                "/sprint-review, which flips finished specs with the human, or move the date to "
+                "when you now expect the evidence. Moving the date is allowed and sometimes "
+                "correct — the point is that it becomes a visible edit somebody can question, "
+                "rather than silence nobody notices."
             )
 
     # Rule 7: an approved spec's Build Plan has one shape. Approval is the moment a plan stops
@@ -1451,6 +1451,8 @@ class TestSyntheticSpecs:
         # Two honest exits, so nobody is cornered into deleting this test to get green.
         assert "fill in synthetic-eval-results.md" in problems[0]
         assert "move the date" in problems[0]
+        assert "/sprint-review" in problems[0]
+        assert "status: shipped" not in problems[0]
 
     def test_the_deadline_fires_even_when_the_evidence_is_filled_in(self):
         """No `FILL_ME` clause on 6b, on purpose. A past-due spec whose results file is

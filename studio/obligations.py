@@ -43,7 +43,7 @@ EVIDENCE_PLACEHOLDER = "FILL_ME"
 # The heading under each group of obligations in the dashboard. The list is sorted by RANK,
 # so a group is however many obligations of one kind sit together in it.
 _KIND_HEADINGS = {
-    STALE_STATUS: "Finished but still `approved` — the frontmatter owes a flip",
+    STALE_STATUS: "Finished but still `approved` — waiting for /sprint-review",
     EVIDENCE_FOLLOW_UP: "Evidence needs follow-up",
     EVIDENCE_OVERDUE: "Evidence overdue — the results file is still blank",
     UNBUILT_UNIT: "Planned and never built",
@@ -67,6 +67,7 @@ class Obligation:
     detail: str  # one plain sentence: what is owed, and why it is owed now
     command: str
     silence: str
+    units_off_default_branch: Optional[Tuple[str, ...]] = None
 
 
 class Evidence(Enum):
@@ -116,6 +117,7 @@ def derive(
     ledger: "UnitLedger",
     *,
     today: date,
+    merged_ids: Optional[set] = None,
 ) -> List[Obligation]:
     """Every obligation these inputs imply, sorted by RANK, then spec_file, then subject.
 
@@ -139,7 +141,7 @@ def derive(
     for spec in specs:
         if spec.status != "approved":
             continue
-        follow_up = _completed_spec(spec, still_owed, dropped)
+        follow_up = _completed_spec(spec, still_owed, dropped, merged_ids)
         if follow_up is not None:
             obligations.append(follow_up)
         overdue = _evidence_overdue(spec, today)
@@ -202,6 +204,7 @@ def _completed_spec(
     spec: SpecView,
     still_owed: set,
     dropped: set,
+    merged_ids: Optional[set],
 ) -> Optional[Obligation]:
     """A completed spec owes the action its promised verification supports.
 
@@ -227,6 +230,12 @@ def _completed_spec(
                 command="",
                 silence="",
             )
+    units_off_default_branch = None
+    if merged_ids is not None:
+        units_off_default_branch = tuple(
+            unit.unit_id for unit in spec.units
+            if _key(unit) not in dropped and unit.unit_id not in merged_ids
+        )
     return Obligation(
         kind=STALE_STATUS,
         subject=spec.slug,
@@ -234,11 +243,12 @@ def _completed_spec(
         detail=(
             f"every unit `{spec.slug}` plans in {spec.spec_file} is built or dropped and "
             f"nothing is waiting on evidence, but its frontmatter still says "
-            f"`status: approved` — edit it to `status: shipped` and fill in "
-            f"`shipped_impact` and `shipped_changed`"
+            f"`status: approved`. Leave the frontmatter alone: finished specs are reviewed "
+            f"with the human and flipped together in one pull request"
         ),
-        command="",
+        command="/sprint-review",
         silence="",
+        units_off_default_branch=units_off_default_branch,
     )
 
 

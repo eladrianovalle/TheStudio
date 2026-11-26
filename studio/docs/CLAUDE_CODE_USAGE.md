@@ -197,7 +197,7 @@ python studio/run_phase.py recompute-clarity --phase studio --run-id run_studio_
 
 The agent **verdict** (APPROVED/REJECTED) tells you what the debate concluded. It doesn't tell you whether the run led anywhere. Studio used to ask you to type that in — a 1-5 rating, a "did it ship" flag — and in five months across ten repos nobody ever did, so all of that is gone. Nothing on the dashboard is a number a person has to remember to supply.
 
-**What replaced it:** the one question worth answering — *did this feature ship, and what did it change?* — is answered in the feature's own spec, at the moment you know it. When you flip a spec to `status: shipped`, you fill in two more lines of its frontmatter:
+**What replaced it:** the one question worth answering — *did this feature ship, and what did it change?* — is answered in the feature's own spec, at the moment you know it. When a spec's work is finished, `/sprint-review` goes through it with you and flips it to `status: shipped` along with two more lines of its frontmatter:
 
 ```yaml
 status: shipped
@@ -304,7 +304,7 @@ you installed from? If so, you get a single line telling you to run `/studio-upd
 **2. Something this repository owes.** It works out everything unfinished — a unit an `approved`
 spec planned that nothing built, a spec whose work is all done while its frontmatter still says
 `approved`, a spec whose promised evidence is past its date — and names **one**: the most important,
-with the command that discharges it or, when it is a frontmatter edit, what to change. It says how
+with the command that discharges it or, when it is an edit, what to change. It says how
 many there are in total and never prints the list. Nothing is stored: it re-derives the answer from
 your specs and your git log every time, so it can never hold a stale "done" nobody can see is wrong.
 For an unbuilt unit the two ways to make it stop are to build it, or to open a PR adding a line under
@@ -315,8 +315,9 @@ that unit in the spec:
 ```
 
 Both the date and the reason are required — a bare "dropped" is a way to silence the nudge without
-deciding anything. A spec left at `approved` with all its work done is silenced by the edit it is
-asking for: `status: shipped`, plus the `shipped_impact` and `shipped_changed` lines. Built work is
+deciding anything. A spec left at `approved` with all its work done points at `/sprint-review`, which
+reviews every finished spec with you and flips the ones you approve in one pull request; leave its
+frontmatter alone until then. Built work is
 read from **all** branches, unmerged ones included, so a teammate who hasn't fetched can see a
 different count. For the whole list, including work that was built without any spec planning it, run
 `python studio/run_phase.py stats`.
@@ -547,6 +548,7 @@ In addition to phase runners, these slash commands are available:
 | `/handoff` | Writes the *state* of the work in flight to a small note in the repo, so a thread survives a `/clear` and can be resumed from something precise instead of an auto-summary. Two modes: `/handoff [note]` saves (or overwrites) the note, tells you it's safe to clear, and ends with the exact `/handoff resume <slug>` line to run later; `/handoff resume <slug>` resumes that thread. A save **verifies reality first** — `git status`, branches, open PRs, the files it claims changed — because a note recording what was merely believed sends the next session confidently in the wrong direction. The note lands in the repo's own home for durable notes if `CLAUDE.md` names one, else `.studio/threads/<slug>.md` in a consuming repo, else `threads/<slug>.md` in the Studio source repo. |
 | `/message-draft` | Drafts a message you will paste and send yourself: a chat reply, a channel update, a PR comment, an email. Bottom line up front: two header lines, `Point:` (one sentence) and `Ask:` (one action, or `none`), then a lead carrying both, at most three bullets of evidence and a link, in 150 words or fewer. `--to slack\|discord\|github\|plain` sets the paste-safe formatting; every platform is held under 2,000 characters, the most one Discord message holds on a standard account. The draft is saved to `~/.studio/drafts/`, outside every repository, and checked by `message_lint.py`, which flags a missing header, length, formatting the paste would break, filler phrases and em-dash habits. It hands over the file's path, so copying never picks up the terminal's line breaks. It never sends anything. |
 | `/correct` | Run `/correct` right after you correct an agent, with the correction in your words, or with no argument to sweep recent commits, reverts and REJECTED review comments for mistakes that happened twice. It names each mistake as one rule, looks it up in the rule table your instruction file names (Studio's is `studio/tests/test_enforced_rules.py`; a repo that names none gets a table kept in its instruction file), fixes it at the strongest level that works (a design that rules it out, a refusal in code ending with `Fix:` and `See <file>`, a test, prose last), shows the new check red on the real past mistake and green on the fix, and moves the rule in the table in the same commit, on a branch. It never adds an exception itself: it lists the lines a person should mark with the tool's own marker followed by `until=YYYY-MM-DD <reason>`. It does not push or open a pull request unless you ask. Agents cannot invoke it (`disable-model-invocation`). Adapted from pstack's `correct` skill (MIT); the notice ships inside the command. |
+| `/sprint-review` | The end-of-sprint meeting for finished specs. It reads `stats --json` and shows one row per spec whose units are all built but which still says `status: approved`: whether its work has merged to the default branch, its PRs, its verification verdict, anything still open, and a drafted `shipped_impact` and `shipped_changed`. Only a row fully merged and identical to the default branch takes an answer: **yes** (flip it with the drafts), **edit** (flip it with your own words) or **hold** (say what would make it a yes; that becomes the spec's `## Verification` criterion with a `verification_due` 30 days out and a fresh results file). Every answer is written in a temporary worktree branched from `origin/<default>`, so your checkout is never touched, and lands in one commit on one pull request, opened ready for review. It needs `gh` signed in and refuses while an earlier `sprint-review/*` pull request is still open. |
 | `/studio-update` | One-step update of installed Studio source and slash commands. |
 | `/studio-setup` | Configure project's Studio installation: role packs, role/phase-persona customization (`.studio/personas.toml`), unstale audit config (`.studio/unstale.toml`), smoke test config (`.studio/smoke.toml`), the `/forge` gate commands (`.studio/implementation_loop.toml`), cleanup settings. |
 

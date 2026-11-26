@@ -111,6 +111,7 @@ SLASH_COMMANDS = [
     "handoff.md",
     "message-draft.md",
     "correct.md",
+    "sprint-review.md",
     "create-verification-skill.md",
     "maintain-verification-skill.md",
 ]
