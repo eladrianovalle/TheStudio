@@ -648,6 +648,10 @@ def test_validate_work_dir_rejects_a_path_that_would_break_the_quoting(tmp_path)
     # Explains the character it knows about, so the reader knows what to rename.
     reason = _KNOWN_BAD['"']
     assert "'\"' " + reason in message
+    assert message.splitlines()[-2:] == [
+        "  Fix: rename the directory so its path holds only the accepted characters, and pass the new path.",
+        "  See .claude/commands/forge.md",
+    ]
 
 
 def test_validate_work_dir_rejects_a_trailing_backslash(tmp_path):
@@ -743,6 +747,10 @@ def test_validate_work_dir_rejects_a_path_that_does_not_exist(tmp_path):
         validate_work_dir(absent, main_repo=tmp_path)
     assert WORK_DIR_MISSING in str(refused.value)
     assert str(absent.resolve()) in str(refused.value)
+    assert str(refused.value).splitlines()[-2:] == [
+        "  Fix: pass --work-dir the path of an existing worktree of this repository; `git worktree list` shows them.",
+        "  See .claude/commands/forge.md",
+    ]
 
 
 def test_validate_work_dir_rejects_a_directory_that_is_not_a_worktree(tmp_path):
@@ -754,6 +762,10 @@ def test_validate_work_dir_rejects_a_directory_that_is_not_a_worktree(tmp_path):
         validate_work_dir(plain, main_repo=repo)
     assert WORK_DIR_NOT_A_WORKTREE in str(refused.value)
     assert str(plain.resolve()) in str(refused.value)
+    assert str(refused.value).splitlines()[-2:] == [
+        "  Fix: make one with `git worktree add <path> <branch>` and pass that path, or drop --work-dir.",
+        "  See .claude/commands/forge.md",
+    ]
 
 
 def test_validate_work_dir_rejects_a_worktree_of_another_repository(tmp_path):
@@ -769,6 +781,10 @@ def test_validate_work_dir_rejects_a_worktree_of_another_repository(tmp_path):
         validate_work_dir(stranger, main_repo=ours)
     assert WORK_DIR_DIFFERENT_REPO in str(refused.value)
     assert str(stranger.resolve()) in str(refused.value)
+    assert str(refused.value).splitlines()[-2:] == [
+        "  Fix: pass a worktree of this repository, or run /forge from the repository that path belongs to.",
+        "  See .claude/commands/forge.md",
+    ]
 
 
 def test_git_common_dir_uses_the_absolute_path_format(tmp_path):
@@ -861,6 +877,10 @@ def test_validate_branch_rejects_a_tree_that_moved_to_another_branch(tmp_path):
     assert BRANCH_WRONG in message
     assert "impl/some_unit" in message
     assert "someone-elses-work" in message
+    assert message.splitlines()[-2:] == [
+        "  Fix: check out the planned branch again, or give the run its own worktree with --work-dir.",
+        "  See .claude/commands/forge.md",
+    ]
 
 
 def test_validate_branch_rejects_a_detached_head(tmp_path):
@@ -884,8 +904,15 @@ def test_validate_branch_rejects_the_main_branch_even_when_the_tree_is_on_it(tmp
     """A unit's commits never go straight onto main, whoever asked for it."""
     repo = _repo_on_branch(tmp_path / "repo", protected)
 
-    with pytest.raises(BranchError, match=BRANCH_PROTECTED):
+    with pytest.raises(BranchError) as refused:
         validate_branch(repo, protected)
+
+    message = str(refused.value)
+    assert BRANCH_PROTECTED in message
+    assert message.splitlines()[-2:] == [
+        "  Fix: create a feature branch such as impl/<unit_id>, switch the tree to it, and run /forge again.",
+        "  See .claude/commands/forge.md",
+    ]
 
 
 def test_validate_branch_rejects_an_uncommitted_edit_and_names_the_file(tmp_path):
@@ -899,6 +926,10 @@ def test_validate_branch_rejects_an_uncommitted_edit_and_names_the_file(tmp_path
     message = str(refused.value)
     assert BRANCH_DIRTY_TREE in message
     assert "kept.txt" in message
+    assert message.splitlines()[-2:] == [
+        "  Fix: commit or stash those paths, then run /forge again.",
+        "  See .claude/commands/forge.md",
+    ]
 
 
 def test_validate_branch_rejects_an_untracked_file(tmp_path):
@@ -1274,6 +1305,11 @@ def test_a_leftover_tool_name_is_refused_and_the_message_says_what_to_write(tmp_
     assert str(root / ".studio" / "implementation_loop.toml") in message  # the file to edit
     assert f'"{name}"' in message                                        # the entry that is wrong
     assert f'static_checks = ["{replacement}"]' in message               # the line that replaces it
+    config_file = root / ".studio" / "implementation_loop.toml"
+    assert message.splitlines()[-2:] == [
+        f'  Fix: replace "{name}" with "{replacement}" in {config_file}.',
+        "  See .claude/commands/forge.md",
+    ]
 
 
 def test_a_one_word_command_studio_never_shipped_is_taken_as_written(tmp_path):
@@ -1471,6 +1507,10 @@ def test_cli_exits_with_the_refusal_and_no_traceback(tmp_path):
     assert result.stdout == ""
     assert result.stderr.startswith("gate.test_command is not set")
     assert "Traceback" not in result.stderr
+    fix_line, see_line = result.stderr.splitlines()[-2:]
+    assert fix_line.startswith("  Fix: write ")
+    assert fix_line.endswith(" with a [gate] test_command, or run /studio-setup, which writes it.")
+    assert see_line == "  See .claude/commands/forge.md"
 
 
 def test_refusal_on_three_stacks_lists_all_of_them(tmp_path):
@@ -1559,10 +1599,18 @@ def test_the_refusal_wording_turns_on_whether_the_file_is_there(tmp_path):
     # The wizard writes a file on every path now, so pointing at /studio-setup here is a
     # round trip back to the file the reader already has open.
     assert "/studio-setup" not in there
+    assert there.splitlines()[-2] == (
+        f"  Fix: fill in gate.test_command in {blank} with the command that runs this repo's tests."
+    )
 
-    missing = _no_test_command_message(tmp_path / ".studio" / "implementation_loop.toml")
+    missing_file = tmp_path / ".studio" / "implementation_loop.toml"
+    missing = _no_test_command_message(missing_file)
     assert "there is no file at that path." in missing
     assert "/studio-setup" in missing
+    assert missing.splitlines()[-2:] == [
+        f"  Fix: write {missing_file} with a [gate] test_command, or run /studio-setup, which writes it.",
+        "  See .claude/commands/forge.md",
+    ]
 
 
 def test_neither_refusal_wording_mentions_what_was_detected(tmp_path):

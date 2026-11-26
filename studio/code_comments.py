@@ -279,7 +279,11 @@ def check_trees(repo, base, target):
         except (ValueError, SyntaxError, tokenize.TokenError, subprocess.CalledProcessError) as exc:
             raise ValueError(f"{path}: comment check failed: {exc}") from exc
     if findings:
-        raise ValueError("\n".join(findings))
+        raise ValueError("\n".join([
+            *findings,
+            "  Fix: delete the comments listed above, and put any reasoning worth keeping in the project documentation.",
+            "  See CLAUDE.md",
+        ]))
 
 
 def finalize(repo, base, branch, candidate):

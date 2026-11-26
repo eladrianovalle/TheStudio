@@ -245,6 +245,10 @@ wrong and what to do; print it as-is and let the user fix it. It is one of:
   The message names the file and gives the exact lines to write (running `/studio-setup` writes the
   file when there is none). Do not invent a test command and carry on: the writer would run it, and
   the gate would believe whatever came back.
+- **A bare legacy static-check name.** `static_checks` holds a tool name Studio used to write, such
+  as `"ruff"`, instead of a command. A bare name runs nothing and would still report a clean check,
+  so it is refused; the message gives the command to write in its place, such as
+  `"ruff check {paths}"`.
 - **`protected-branch`** — `<branch>` is `main` or `master`. The loop commits as it goes, and a
   unit's commits never go straight onto the main branch.
 - **`wrong-branch`** — the tree is no longer on `<branch>`. Another session moved the checkout after

@@ -415,6 +415,13 @@ def _detected_line(profile: StackProfile, root: Path) -> str:
     return f"{named[0]}. Studio ships no test command for {stack.capitalize()}."
 
 
+FORGE_RULES_FILE = ".claude/commands/forge.md"
+
+
+def _with_fix(message: str, fix: str) -> str:
+    return f"{message}\n  Fix: {fix}\n  See {FORGE_RULES_FILE}"
+
+
 def _no_test_command_message(config_path: Path) -> str:
     """Why the loop is refusing to start, and the exact lines that fix it.
 
@@ -439,6 +446,7 @@ def _no_test_command_message(config_path: Path) -> str:
             "    [gate]",
             '    test_command = "<the command that runs this repo\'s tests>"',
         ]
+        fix_line = f"fill in gate.test_command in {config_path} with the command that runs this repo's tests."
     else:
         found = "there is no file at that path."
         fix = [
@@ -449,7 +457,8 @@ def _no_test_command_message(config_path: Path) -> str:
             "",
             "Or run /studio-setup, which writes that file for you.",
         ]
-    return "\n".join([
+        fix_line = f"write {config_path} with a [gate] test_command, or run /studio-setup, which writes it."
+    return _with_fix("\n".join([
         "gate.test_command is not set, and Studio has no default for this repository.",
         "",
         f"  Looked in:  {config_path}",
@@ -463,7 +472,7 @@ def _no_test_command_message(config_path: Path) -> str:
         "If this repository has no tests at all, that is the real answer and there is",
         "nothing to set: /forge is for code you can prove still works. Use /spec to",
         "settle the design and build it the ordinary way.",
-    ])
+    ]), fix_line)
 
 
 def _no_mutation_command_message(config_path: Path) -> str:
@@ -493,7 +502,7 @@ def _bare_static_check_name_message(entry: str, config_path: Path) -> str:
     an auto-upgrade leaves the file saying one thing while the loop runs another.
     """
     replacement = LEGACY_STATIC_CHECK_COMMANDS[entry.strip()]
-    return "\n".join([
+    return _with_fix("\n".join([
         f'gate.static_checks holds "{entry}", which is a tool name and not a command to run.',
         "",
         f"  Looked in:  {config_path}",
@@ -508,7 +517,7 @@ def _bare_static_check_name_message(entry: str, config_path: Path) -> str:
         "",
         "{paths} is replaced with the paths the unit is scoped to. A command without it runs as",
         'written, which is what you want for a wrapper like "make lint" or "npm run lint".',
-    ])
+    ]), f'replace "{entry}" with "{replacement}" in {config_path}.')
 
 
 def _require_gate_commands(config: LoopConfig, config_path: Path) -> None:
@@ -845,22 +854,31 @@ def validate_work_dir(work_dir: str | Path, main_repo: Path | None = None) -> Pa
     # exist, and the point is to refuse it rather than confirm it is there.
     unquotable = explain_unquotable_path(str(path))
     if unquotable is not None:
-        raise WorkDirError(unquotable)
+        raise WorkDirError(_with_fix(
+            unquotable,
+            "rename the directory so its path holds only the accepted characters, and pass the new path.",
+        ))
     if not path.is_dir():
-        raise WorkDirError(f"work-dir {WORK_DIR_MISSING}: no directory at {path}")
+        raise WorkDirError(_with_fix(
+            f"work-dir {WORK_DIR_MISSING}: no directory at {path}",
+            "pass --work-dir the path of an existing worktree of this repository; "
+            "`git worktree list` shows them.",
+        ))
 
     work_dir_git = _git_common_dir(path)
     if work_dir_git is None:
-        raise WorkDirError(
-            f"work-dir {WORK_DIR_NOT_A_WORKTREE}: {path} is not inside a git worktree"
-        )
+        raise WorkDirError(_with_fix(
+            f"work-dir {WORK_DIR_NOT_A_WORKTREE}: {path} is not inside a git worktree",
+            "make one with `git worktree add <path> <branch>` and pass that path, or drop --work-dir.",
+        ))
 
     main_repo_git = _git_common_dir(main_repo if main_repo is not None else STUDIO_ROOT)
     if work_dir_git != main_repo_git:
-        raise WorkDirError(
+        raise WorkDirError(_with_fix(
             f"work-dir {WORK_DIR_DIFFERENT_REPO}: {path} belongs to the repository at "
-            f"{work_dir_git}, not to this one ({main_repo_git})"
-        )
+            f"{work_dir_git}, not to this one ({main_repo_git})",
+            "pass a worktree of this repository, or run /forge from the repository that path belongs to.",
+        ))
     return path
 
 
@@ -898,11 +916,12 @@ def validate_branch(directory: str | Path, expected_branch: str) -> str:
     """
     path = Path(directory)
     if expected_branch in _PROTECTED_BRANCHES:
-        raise BranchError(
+        raise BranchError(_with_fix(
             f"branch {BRANCH_PROTECTED}: the loop commits as it goes and never commits "
             f"straight to {expected_branch}. Switch {path} to a feature branch, such as "
-            "impl/<unit_id>, and run /forge again."
-        )
+            "impl/<unit_id>, and run /forge again.",
+            "create a feature branch such as impl/<unit_id>, switch the tree to it, and run /forge again.",
+        ))
 
     current_branch = (_git_output(path, "branch", "--show-current") or "").strip()
     if current_branch != expected_branch:
@@ -911,22 +930,24 @@ def validate_branch(directory: str | Path, expected_branch: str) -> str:
             if current_branch
             else "is not on any branch (a detached HEAD, or not a git repository)"
         )
-        raise BranchError(
+        raise BranchError(_with_fix(
             f"branch {BRANCH_WRONG}: the plan commits to {expected_branch}, but {path} "
             f"{found}. Something moved the checkout after the plan was made. Check it out "
             "again, or give the run a worktree of its own with --work-dir, and run /forge "
-            "again."
-        )
+            "again.",
+            "check out the planned branch again, or give the run its own worktree with --work-dir.",
+        ))
 
     status = _git_output(path, "status", "--porcelain")
     if status is None:
         # Git found the branch but can't say what is uncommitted (a corrupt index, a
         # permissions problem). A tree nobody can vouch for is refused, not assumed clean.
-        raise BranchError(
+        raise BranchError(_with_fix(
             f"branch {BRANCH_DIRTY_TREE}: `git status` failed in {path}, so there is no "
             "telling whether anything is uncommitted. Run `git status` there, fix what it "
-            "reports, then run /forge again."
-        )
+            "reports, then run /forge again.",
+            "run `git status` in that directory, fix what it reports, then run /forge again.",
+        ))
 
     uncommitted = status.splitlines()
     if uncommitted:
@@ -944,7 +965,7 @@ def validate_branch(directory: str | Path, expected_branch: str) -> str:
             "commit, and the loop undoes a bad edit with `git reset --hard`, which would "
             "delete the uncommitted ones. Commit or stash them there, then run /forge again.",
         ]
-        raise BranchError("\n".join(lines))
+        raise BranchError(_with_fix("\n".join(lines), "commit or stash those paths, then run /forge again."))
 
     return expected_branch
 
