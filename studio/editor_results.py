@@ -225,13 +225,22 @@ def is_inside(path, folder):
 
 
 def path_into_measurement(text, forbidden_paths, exempt_folder):
+    exempt_forms = with_home_forms([str(exempt_folder)])
     for seen in PATH_IN_TEXT.findall(text):
         normalized = posixpath.normpath(seen)
-        if any(is_inside(normalized, exempt) for exempt in with_home_forms([str(exempt_folder)])):
+        if any(is_inside(normalized, exempt) for exempt in exempt_forms):
             continue
         for forbidden in forbidden_paths:
             if is_inside(normalized, forbidden):
                 return seen, forbidden
+    for forbidden in forbidden_paths:
+        folder = posixpath.normpath(forbidden)
+        if not any(character.isspace() for character in folder):
+            continue
+        for match in re.finditer(re.escape(folder) + r"(?=/|[^\w.\-]|$)", text):
+            if any(text.startswith(exempt, match.start()) for exempt in exempt_forms):
+                continue
+            return folder, forbidden
     return None
 
 

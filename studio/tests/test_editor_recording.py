@@ -361,6 +361,54 @@ def test_a_case_whose_editor_could_see_the_measurement_is_void_and_named(recordi
     assert not path.exists()
 
 
+SPACED_FORBIDDEN = "/srv/My Studio"
+
+
+def with_spaced_forbidden_path(manifest_path):
+    manifest = measurement.read(manifest_path)
+    manifest["forbidden_paths"] += [SPACED_FORBIDDEN, "~/My Studio"]
+    measurement.write(manifest_path, manifest)
+
+
+@pytest.mark.parametrize("rows, seen", [
+    ([tool_use({"file_path": "/srv/My Studio/studio/evals/forge_editor/results.json"})], "a tool input names /srv/My Studio"),
+    ([tool_use({"command": "cat '/srv/My Studio/studio/README.md'"})], "a tool input names /srv/My Studio"),
+    ([tool_use({"file_path": "~/My Studio/notes.md"})], "a tool input names ~/My Studio"),
+])
+def test_a_forbidden_path_with_a_space_is_void(recording, rows, seen, capsys):
+    cli, path, manifest_path, workflow = recording
+    with_spaced_forbidden_path(manifest_path)
+    transcript = workflow / "agent-0.jsonl"
+    jsonl(transcript, measurement.json_lines(transcript) + rows)
+
+    assert cli("record") == 1
+    error = capsys.readouterr().err
+    assert re.search(r"\bcaught: [^;]*" + re.escape(seen), error), error
+    assert not path.exists()
+
+
+def test_a_forbidden_path_with_a_space_in_the_context_is_void(recording, capsys):
+    cli, path, manifest_path, workflow = recording
+    with_spaced_forbidden_path(manifest_path)
+    scene = launch_scene(manifest_path, workflow)
+    transcript = workflow / "agent-0.jsonl"
+    change = with_context_line(" - Additional working directories: /srv/My Studio")
+    jsonl(transcript, change(measurement.json_lines(transcript), scene))
+
+    assert cli("record") == 1
+    assert "the editor's context names /srv/My Studio" in capsys.readouterr().err
+    assert not path.exists()
+
+
+def test_a_path_that_only_begins_with_a_spaced_forbidden_path_records(recording):
+    cli, path, manifest_path, workflow = recording
+    with_spaced_forbidden_path(manifest_path)
+    transcript = workflow / "agent-0.jsonl"
+    jsonl(transcript, measurement.json_lines(transcript) + [tool_use({"file_path": "/srv/My Studio-old/notes.md"})])
+
+    assert cli("record") == 0
+
+
 @pytest.mark.parametrize("line_ends", ["followed by further lines", "at the end of a text value"])
 def test_a_replayed_blind_run_records_its_launch_and_claude_code_version(recording, line_ends):
     cli, path, manifest_path, workflow = recording
