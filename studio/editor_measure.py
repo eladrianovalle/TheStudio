@@ -228,7 +228,7 @@ def prepare_launch_folder(root: Path, source_repo: Path) -> dict:
 
 
 def launch_line(launch: dict, source_repo: Path) -> str:
-    runner = Path(launch["launch_folder"]) / ".claude" / f"{launch['runner_token']}.js"
+    runner = measurement.runner_path(launch)
     prompt = f"Run the Workflow tool with scriptPath {runner} and no args, and wait for it to finish."
     steps = [
         ["cd", launch["launch_folder"]],

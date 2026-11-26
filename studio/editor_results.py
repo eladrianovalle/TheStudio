@@ -81,6 +81,10 @@ def clear_builds(output):
         shutil.rmtree(manifest.parent)
 
 
+def runner_path(launch):
+    return Path(launch["launch_folder"]) / ".claude" / f"{launch['runner_token']}.js"
+
+
 def publish_build(rows, cases, patches, output, knobs, launch):
     units = []
     for row in rows:
@@ -97,8 +101,7 @@ def publish_build(rows, cases, patches, output, knobs, launch):
     stamp = datetime.now(timezone.utc)
     destination = output / stamp.strftime("%Y%m%dT%H%M%S%fZ")
     manifest = {**fingerprints(cases, patches, knobs), "model": built["model"], **launch, "cases": rows}
-    runner = Path(launch["launch_folder"]) / ".claude" / f"{launch['runner_token']}.js"
-    runner.write_text(
+    runner_path(launch).write_text(
         source.replace("name: 'unbuilt'", f"name: '{launch['runner_token']}'")
         .replace("const BUILT = null", "const BUILT = " + json.dumps(built)),
         encoding="utf-8")
