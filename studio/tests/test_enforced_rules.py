@@ -609,7 +609,7 @@ def memory_sort_row_problem(row: MemorySortRow, lists: dict[str, list[str]]) -> 
         return f"{row.rule!r} is labelled listed, but {row.goes_to} is not one of the lists."
     if row.label == "person" and row.goes_to in lists:
         return f"{row.rule!r} is for a person, so it stays out of {row.goes_to}."
-    if required_list is not None and row.rule not in lists[required_list]:
+    if required_list is not None and row.rule not in lists[required_list] + lists["ENFORCED"]:
         return f"{row.rule!r} goes to {required_list}, but {required_list} does not hold that sentence."
     return None
 
@@ -1134,6 +1134,16 @@ def test_a_checkable_row_its_list_does_not_hold_is_reported():
     assert problems == [
         "'A rule nobody listed.' goes to NOT_YET_ENFORCED, but NOT_YET_ENFORCED does not hold that sentence."
     ]
+
+
+def test_a_checkable_row_whose_rule_was_promoted_to_enforced_reports_nothing():
+    promoted = {
+        "ENFORCED": _PLANTED_LISTS["ENFORCED"] + ["Something nothing refuses yet."],
+        "NOT_YET_ENFORCED": [],
+        "JUDGED": _PLANTED_LISTS["JUDGED"],
+    }
+
+    assert memory_sort_problems(_memory_sort_spec(), promoted) == []
 
 
 def test_a_judge_row_sent_anywhere_but_judged_is_reported():
