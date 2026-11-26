@@ -170,7 +170,7 @@ def transcript_model(rows, case, manifest):
 
 
 STARTING_FOLDER_LINE = "Primary working directory: "
-INSTRUCTION_FILE_LINE = re.compile(r"Contents of (\S+) \(")
+INSTRUCTION_FILE_LINE = re.compile(r"Contents of (.+?) \(")
 GIT_STATUS_LINE = "Current branch:"
 PATH_IN_TEXT = re.compile(r"(?:~/|/)[^\s\"'`\\;|&()<>,:*?\[\]{}$=]*")
 

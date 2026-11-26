@@ -47,7 +47,7 @@ def editor_turns(manifest, content):
 
 
 @pytest.fixture
-def recording(tmp_path, monkeypatch):
+def recording(request, tmp_path, monkeypatch):
     output = tmp_path / "studio/output/editor_measure/current"
     output.mkdir(parents=True)
     cases = tmp_path / "cases"
@@ -56,7 +56,7 @@ def recording(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(config))
     workflow = config / "projects/project/session/subagents/workflows/wf-one"
     workflow.mkdir(parents=True)
-    launch_folder = tmp_path / "checkouts/harbor-notes"
+    launch_folder = tmp_path / getattr(request, "param", "checkouts") / "harbor-notes"
     tree = tmp_path / "checkout"
     tree.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=tree, check=True)
@@ -380,6 +380,16 @@ def test_a_replayed_blind_run_records_its_launch_and_claude_code_version(recordi
     run, = measurement.read(path)["runs"]
     assert run["launch_fingerprint"] == "launch-print"
     assert run["claude_code_version"] == "2.1.332"
+
+
+@pytest.mark.parametrize("recording", ["harbor notes"], indirect=True)
+def test_a_launch_root_with_a_space_records(recording):
+    cli, path, manifest_path, workflow = recording
+    assert " " in measurement.read(manifest_path)["launch_folder"]
+
+    assert cli("record") == 0
+    run, = measurement.read(path)["runs"]
+    assert run["launch_fingerprint"] == "launch-print"
 
 
 def test_claude_code_version_lists_each_distinct_version_and_is_null_when_no_row_has_one(recording):
