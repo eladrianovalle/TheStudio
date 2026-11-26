@@ -317,6 +317,28 @@ def gate_input(**overrides) -> dict:
     return {**gate, **overrides}
 
 
+@pytest.mark.parametrize("edit", ["weakened", "deleted", "untouched"])
+def test_the_command_line_flags_an_edit_to_an_ignored_gate_config_against_its_launch_digest(repo, edit):
+    import hashlib
+
+    config = repo / "local-gate.toml"
+    config.write_text("[gate]\ntest_command = \"true\"\n")
+    (repo / ".gitignore").write_text("local-gate.toml\n")
+    git(repo, "add", ".gitignore")
+    git(repo, "commit", "-q", "-m", "ignore the local gate")
+    base = git(repo, "rev-parse", "HEAD")
+    digest = hashlib.sha256(config.read_bytes()).hexdigest()
+    if edit == "weakened":
+        config.write_text("[gate]\ntest_command = \"true\"\n[gate.suites.web]\n")
+    elif edit == "deleted":
+        config.unlink()
+
+    completed = gate_command_line(repo, gate_input(gate_config="local-gate.toml", gate_config_sha256=digest), base)
+
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(completed.stdout)["config_changed"] is (edit != "untouched")
+
+
 def test_the_command_line_runs_the_routed_suites_and_prints_the_runs_on_stdout(repo):
     base = git(repo, "rev-parse", "HEAD")
     (repo / "web" / "app.js").write_text("changed\n")

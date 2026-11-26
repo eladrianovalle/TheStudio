@@ -175,6 +175,7 @@ def run(root: Path, routes: list[dict]) -> list[dict]:
 
 
 GATE_KEYS = {"test_command", "suites", "gate_config"}
+OPTIONAL_GATE_KEYS = {"gate_config_sha256"}
 
 
 def _read_gate(text: str) -> dict:
@@ -182,19 +183,30 @@ def _read_gate(text: str) -> dict:
         gate = json.loads(text)
     except json.JSONDecodeError as error:
         raise RoutesError(f"the --gate input is not JSON: {error}") from error
-    if not isinstance(gate, dict) or set(gate) != GATE_KEYS:
-        raise RoutesError("the --gate input must be an object holding exactly test_command, suites and gate_config")
+    if not isinstance(gate, dict) or not GATE_KEYS <= set(gate) <= GATE_KEYS | OPTIONAL_GATE_KEYS:
+        raise RoutesError(
+            "the --gate input must be an object holding test_command, suites and gate_config, "
+            "and optionally gate_config_sha256"
+        )
     test_command = gate["test_command"]
     if not isinstance(test_command, str) or not test_command.strip():
         raise RoutesError("the --gate input's test_command is blank or not text")
     gate_config = gate["gate_config"]
     if not (gate_config is None or isinstance(gate_config, str)):
         raise RoutesError("the --gate input's gate_config is neither text nor null")
+    gate_config_sha256 = gate.get("gate_config_sha256")
+    if not (gate_config_sha256 is None or isinstance(gate_config_sha256, str)):
+        raise RoutesError("the --gate input's gate_config_sha256 is neither text nor null")
     try:
         suites = check_suites(gate["suites"], None, "the --gate input")
     except SuiteError as error:
         raise RoutesError(str(error)) from error
-    return {"test_command": test_command, "suites": suites, "gate_config": gate_config}
+    return {
+        "test_command": test_command,
+        "suites": suites,
+        "gate_config": gate_config,
+        "gate_config_sha256": gate_config_sha256,
+    }
 
 
 def main(arguments: list[str] | None = None) -> int:
@@ -209,7 +221,7 @@ def main(arguments: list[str] | None = None) -> int:
     try:
         gate = _read_gate(sys.stdin.read())
         changed = changed_files(root, options.base)
-        edited = config_changed(root, options.base, gate["gate_config"])
+        edited = config_changed(root, options.base, gate["gate_config"], gate["gate_config_sha256"])
     except RoutesError as error:
         print(f"gate_routes: {error}", file=sys.stderr)
         return 2

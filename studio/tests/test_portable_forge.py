@@ -95,6 +95,11 @@ def test_a_slug_found_in_both_specs_folders_is_refused(project, spelling):
     assert '.studio/specs/demo.md' in r.stderr and ' specs/demo.md' in r.stderr
 
 
+def config_digest(project):
+    import hashlib
+    return hashlib.sha256((project / '.studio/implementation_loop.toml').read_bytes()).hexdigest()
+
+
 @pytest.mark.parametrize('configured', ['', 'test_command = ""\n', 'test_command = "  "\n'])
 def test_the_test_fallback_supplies_a_test_command_the_config_leaves_blank(project, configured):
     (project / '.studio/implementation_loop.toml').write_text(f'[gate]\n{configured}require_mutation_check = false\n')
@@ -103,7 +108,8 @@ def test_the_test_fallback_supplies_a_test_command_the_config_leaves_blank(proje
     plan = json.loads(r.stdout)
     assert plan['test_command'] == 'make quick'
     assert plan['gate'] == {'test_command': 'make quick', 'suites': {},
-                            'gate_config': '.studio/implementation_loop.toml'}
+                            'gate_config': '.studio/implementation_loop.toml',
+                            'gate_config_sha256': config_digest(project)}
 
 
 def test_the_configured_test_command_freezes_into_the_gate_and_test_only_shapes_the_in_loop_run(project):
@@ -116,6 +122,7 @@ def test_the_configured_test_command_freezes_into_the_gate_and_test_only_shapes_
         'test_command': 'true',
         'suites': {'web': {'command': 'npm --prefix web run check', 'paths': ['web/']}},
         'gate_config': '.studio/implementation_loop.toml',
+        'gate_config_sha256': config_digest(project),
     }
 
 

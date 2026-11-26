@@ -521,7 +521,8 @@ ignored config is covered: the launch records its hash and `--check` compares it
 editor's own runs still use one test command (design: `specs/gate-suites.md`).
 
 **The portable host routes its verdict the same way.** `forge --plan` freezes `gate: {test_command,
-suites, gate_config}` when it builds the plan. `gate.test_command` is the configured command; `--test`
+suites, gate_config, gate_config_sha256}` when it builds the plan, the last being the hash of the tree's
+config, so an edit to an ignored config is flagged here too. `gate.test_command` is the configured command; `--test`
 fills it in only when the config names none, and otherwise only sets the top-level `test_command` the
 agents run. `forge_host.mjs` reads `gate_routes.py` into memory when it loads, before any agent starts,
 and every verdict (the writer's, the editor's and the recovery test after a reverted edit) writes that

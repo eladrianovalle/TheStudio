@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 
+from gate_routes import file_digest
 from impl_loop import check_command, load_knobs, project_config_root, validate_work_dir
 from stats import build_plan_section, parse_build_plan, parse_frontmatter, UNIT_OPENER
 
@@ -111,8 +112,9 @@ def run(args):
         raise ValueError("Expected an alphanumeric snake_case unit id")
     config = project_config_root(cwd) / ".studio/implementation_loop.toml"
     knobs = load_knobs(config, test_command_fallback=args.test)
-    gate = {"test_command": knobs["test_command"], "suites": knobs.pop("suites"),
-            "gate_config": knobs.pop("gate_config")}
+    gate_config = knobs.pop("gate_config")
+    gate = {"test_command": knobs["test_command"], "suites": knobs.pop("suites"), "gate_config": gate_config,
+            "gate_config_sha256": file_digest(cwd / gate_config) if gate_config is not None else None}
     # The portable CLI has no predicted paths. Apply tokenized checks after files are known.
     branch = subprocess.check_output(["git", "-C", cwd, "branch", "--show-current"], text=True).strip()
     if not branch:
