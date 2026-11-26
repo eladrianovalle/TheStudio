@@ -335,6 +335,7 @@ JUDGED: list[JudgedRule] = [
         rule="A unit passes only when every acceptance criterion of its spec holds in the code.",
         stated_in=".claude/commands/forge.md",
         judge=".claude/workflows/implementation-loop.js::editorPrompt",
+        results="studio/evals/forge_editor/results.json",
     ),
     JudgedRule(
         rule="Every unit ends in something usable.",
@@ -372,7 +373,7 @@ JUDGED: list[JudgedRule] = [
     ),
 ]
 
-JUDGED_WITHOUT_MEASUREMENT_COUNT = 7  # this number only goes down
+JUDGED_WITHOUT_MEASUREMENT_COUNT = 6  # this number only goes down
 
 
 # ---------------------------------------------------------------------------
