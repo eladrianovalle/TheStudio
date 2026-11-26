@@ -322,11 +322,13 @@ NOT_YET_ENFORCED: list[str] = [
     "An `/unstale` run creates no new document and only adds to the changelog.",
     "The counts the docs state match the code.",
     "An approved spec is a tracked file under the specs directory.",
+    "The suite runs in CI on Python 3.10, the oldest version Studio supports.",
+    "A pull request that changes a command file or a CLI subcommand also changes the usage docs.",
 ]
 
 # Rose once, on purpose, from 20 to 52 when specs/judged-rules.md sorted the rules an audit found
 # unchecked. This number only goes down from here.
-NOT_YET_ENFORCED_COUNT = 52
+NOT_YET_ENFORCED_COUNT = 54
 
 
 class JudgedRule(NamedTuple):
@@ -557,6 +559,95 @@ def rules_in_more_than_one_list(lists: dict[str, list[str]]) -> list[str]:
     ]
 
 
+MEMORY_SORT_SPEC = REPO_ROOT / "specs" / "correct-rules.md"
+MEMORY_SORT_HEADING = "## Appendix A: the memory sort"
+MEMORY_SORT_RULE_LABELS = ("listed", "by design", "proxy", "judge", "person")
+MEMORY_SORT_TOTAL_LABELS = (*MEMORY_SORT_RULE_LABELS, "fact", "personal")
+MEMORY_SORT_LIST_BY_LABEL = {
+    "by design": "NOT_YET_ENFORCED",
+    "proxy": "NOT_YET_ENFORCED",
+    "judge": "JUDGED",
+}
+
+
+class MemorySortRow(NamedTuple):
+    rule: str
+    label: str
+    memories: int
+    goes_to: str
+
+
+def memory_sort_rows(appendix: str) -> list[MemorySortRow]:
+    rows: list[MemorySortRow] = []
+    for line in appendix.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) == 4 and cells[2].isdigit():
+            rows.append(MemorySortRow(cells[0], cells[1], int(cells[2]), cells[3]))
+    return rows
+
+
+def memory_sort_totals(appendix: str) -> tuple[dict[str, int], int] | None:
+    match = re.search(r"^Totals: (.+); (\d+) in all\.$", appendix, re.MULTILINE)
+    if match is None:
+        return None
+    counts: dict[str, int] = {}
+    for part in match.group(1).split(", "):
+        number, _, label = part.partition(" ")
+        counts[label] = int(number)
+    return counts, int(match.group(2))
+
+
+def memory_sort_row_problem(row: MemorySortRow, lists: dict[str, list[str]]) -> str | None:
+    if row.label not in MEMORY_SORT_RULE_LABELS:
+        return f"{row.rule!r}: {row.label!r} is not one of {', '.join(MEMORY_SORT_RULE_LABELS)}."
+    required_list = MEMORY_SORT_LIST_BY_LABEL.get(row.label)
+    if required_list is not None and row.goes_to != required_list:
+        return f"{row.rule!r} is labelled {row.label}, so it goes to {required_list}, not {row.goes_to}."
+    if row.label == "listed" and row.goes_to not in lists:
+        return f"{row.rule!r} is labelled listed, but {row.goes_to} is not one of the lists."
+    if row.label == "person" and row.goes_to in lists:
+        return f"{row.rule!r} is for a person, so it stays out of {row.goes_to}."
+    if required_list is not None and row.rule not in lists[required_list]:
+        return f"{row.rule!r} goes to {required_list}, but {required_list} does not hold that sentence."
+    return None
+
+
+def memory_sort_problems(spec_text: str, lists: dict[str, list[str]]) -> list[str]:
+    appendix = spec_text.partition(MEMORY_SORT_HEADING)[2]
+    if not appendix:
+        return [f"The spec has no {MEMORY_SORT_HEADING!r} section."]
+    problems: list[str] = []
+    if "feedback_" in appendix:
+        problems.append("The memory sort names a memory file. State the rule, not where it came from.")
+    rows = memory_sort_rows(appendix)
+    for row in rows:
+        problem = memory_sort_row_problem(row, lists)
+        if problem:
+            problems.append(problem)
+    totals = memory_sort_totals(appendix)
+    if totals is None:
+        problems.append("The memory sort has no line reading 'Totals: <n> <label>, ...; <n> in all.'")
+        return problems
+    counts, stated_total = totals
+    if tuple(counts) != MEMORY_SORT_TOTAL_LABELS:
+        problems.append(
+            f"The totals name {', '.join(counts)}; they should name "
+            f"{', '.join(MEMORY_SORT_TOTAL_LABELS)}, in that order."
+        )
+    if sum(counts.values()) != stated_total:
+        problems.append(f"The totals add up to {sum(counts.values())}, not the {stated_total} they state.")
+    for label in MEMORY_SORT_RULE_LABELS:
+        memories_in_rows = sum(row.memories for row in rows if row.label == label)
+        if memories_in_rows != counts.get(label, 0):
+            problems.append(
+                f"The {label} rows stand for {memories_in_rows} memories, but the totals say "
+                f"{counts.get(label, 0)}."
+            )
+    return problems
+
+
 # ---------------------------------------------------------------------------
 # The real table.
 # ---------------------------------------------------------------------------
@@ -617,6 +708,18 @@ def test_no_rule_sentence_is_in_more_than_one_list():
             "NOT_YET_ENFORCED": NOT_YET_ENFORCED,
             "JUDGED": [row.rule for row in JUDGED],
         }
+    )
+    assert not problems, "\n".join(problems)
+
+
+def test_the_memory_sort_lands_every_checkable_rule_in_its_list_and_its_totals_add_up():
+    problems = memory_sort_problems(
+        MEMORY_SORT_SPEC.read_text(encoding="utf-8"),
+        {
+            "ENFORCED": [row.rule for row in ENFORCED],
+            "NOT_YET_ENFORCED": NOT_YET_ENFORCED,
+            "JUDGED": [row.rule for row in JUDGED],
+        },
     )
     assert not problems, "\n".join(problems)
 
@@ -989,3 +1092,127 @@ def test_lists_that_share_no_sentence_report_nothing():
     )
 
     assert problems == []
+
+
+_PLANTED_LISTS = {
+    "ENFORCED": ["Bad input is refused."],
+    "NOT_YET_ENFORCED": ["Something nothing refuses yet."],
+    "JUDGED": ["The work is judged."],
+}
+
+_SOUND_MEMORY_SORT_ROWS = (
+    "| Bad input is refused. | listed | 1 | ENFORCED |\n"
+    "| Something nothing refuses yet. | proxy | 2 | NOT_YET_ENFORCED |\n"
+    "| The work is judged. | judge | 1 | JUDGED |\n"
+    "| Only a person can tell. | person | 1 | this appendix |\n"
+)
+
+_SOUND_MEMORY_SORT_TOTALS = (
+    "Totals: 1 listed, 0 by design, 2 proxy, 1 judge, 1 person, 1 fact, 1 personal; 7 in all."
+)
+
+
+def _memory_sort_spec(rows: str = _SOUND_MEMORY_SORT_ROWS, totals: str = _SOUND_MEMORY_SORT_TOTALS) -> str:
+    return (
+        "# A spec\n\n## Build Plan\n\nUnits.\n\n"
+        f"{MEMORY_SORT_HEADING}\n\n{totals}\n\n"
+        "| Rule | Label | Memories | Goes to |\n|---|---|---|---|\n"
+        f"{rows}"
+    )
+
+
+def test_a_sound_memory_sort_reports_nothing():
+    assert memory_sort_problems(_memory_sort_spec(), _PLANTED_LISTS) == []
+
+
+def test_a_checkable_row_its_list_does_not_hold_is_reported():
+    rows = _SOUND_MEMORY_SORT_ROWS + "| A rule nobody listed. | by design | 1 | NOT_YET_ENFORCED |\n"
+    totals = _SOUND_MEMORY_SORT_TOTALS.replace("0 by design", "1 by design").replace("7 in all", "8 in all")
+
+    problems = memory_sort_problems(_memory_sort_spec(rows, totals), _PLANTED_LISTS)
+
+    assert problems == [
+        "'A rule nobody listed.' goes to NOT_YET_ENFORCED, but NOT_YET_ENFORCED does not hold that sentence."
+    ]
+
+
+def test_a_judge_row_sent_anywhere_but_judged_is_reported():
+    rows = _SOUND_MEMORY_SORT_ROWS.replace("| judge | 1 | JUDGED |", "| judge | 1 | this appendix |")
+
+    problems = memory_sort_problems(_memory_sort_spec(rows), _PLANTED_LISTS)
+
+    assert problems == ["'The work is judged.' is labelled judge, so it goes to JUDGED, not this appendix."]
+
+
+def test_a_person_row_put_in_a_list_is_reported():
+    rows = _SOUND_MEMORY_SORT_ROWS.replace(
+        "| Only a person can tell. | person | 1 | this appendix |",
+        "| Something nothing refuses yet. | person | 1 | NOT_YET_ENFORCED |",
+    )
+
+    problems = memory_sort_problems(_memory_sort_spec(rows), _PLANTED_LISTS)
+
+    assert problems == ["'Something nothing refuses yet.' is for a person, so it stays out of NOT_YET_ENFORCED."]
+
+
+def test_a_listed_row_that_names_no_list_is_reported():
+    rows = _SOUND_MEMORY_SORT_ROWS.replace("| listed | 1 | ENFORCED |", "| listed | 1 | this appendix |")
+
+    problems = memory_sort_problems(_memory_sort_spec(rows), _PLANTED_LISTS)
+
+    assert problems == ["'Bad input is refused.' is labelled listed, but this appendix is not one of the lists."]
+
+
+def test_a_label_outside_the_five_is_reported():
+    rows = _SOUND_MEMORY_SORT_ROWS.replace("| person | 1 | this appendix |", "| personal | 1 | this appendix |")
+
+    problems = memory_sort_problems(_memory_sort_spec(rows), _PLANTED_LISTS)
+
+    assert problems[0] == "'Only a person can tell.': 'personal' is not one of listed, by design, proxy, judge, person."
+
+
+def test_totals_that_do_not_add_up_to_the_stated_total_are_reported():
+    totals = _SOUND_MEMORY_SORT_TOTALS.replace("7 in all", "36 in all")
+
+    problems = memory_sort_problems(_memory_sort_spec(totals=totals), _PLANTED_LISTS)
+
+    assert problems == ["The totals add up to 7, not the 36 they state."]
+
+
+def test_rows_standing_for_more_memories_than_their_label_total_are_reported():
+    totals = _SOUND_MEMORY_SORT_TOTALS.replace("2 proxy", "1 proxy").replace("1 fact", "2 fact")
+
+    problems = memory_sort_problems(_memory_sort_spec(totals=totals), _PLANTED_LISTS)
+
+    assert problems == ["The proxy rows stand for 2 memories, but the totals say 1."]
+
+
+def test_totals_missing_a_category_are_reported():
+    totals = "Totals: 1 listed, 0 by design, 2 proxy, 1 judge, 1 person, 2 fact; 7 in all."
+
+    problems = memory_sort_problems(_memory_sort_spec(totals=totals), _PLANTED_LISTS)
+
+    assert problems == [
+        "The totals name listed, by design, proxy, judge, person, fact; they should name "
+        "listed, by design, proxy, judge, person, fact, personal, in that order."
+    ]
+
+
+def test_a_memory_sort_with_no_totals_line_is_reported():
+    problems = memory_sort_problems(_memory_sort_spec(totals="Seven memories in all."), _PLANTED_LISTS)
+
+    assert problems == ["The memory sort has no line reading 'Totals: <n> <label>, ...; <n> in all.'"]
+
+
+def test_a_memory_file_named_in_the_sort_is_reported():
+    rows = _SOUND_MEMORY_SORT_ROWS.replace("this appendix", "feedback_example.md")
+
+    problems = memory_sort_problems(_memory_sort_spec(rows), _PLANTED_LISTS)
+
+    assert problems == ["The memory sort names a memory file. State the rule, not where it came from."]
+
+
+def test_a_spec_without_the_memory_sort_is_reported():
+    problems = memory_sort_problems("# A spec\n\n## Build Plan\n", _PLANTED_LISTS)
+
+    assert problems == ["The spec has no '## Appendix A: the memory sort' section."]

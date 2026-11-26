@@ -522,3 +522,63 @@ memories.
 - [ ] *Attestation only:* the PR body records the privacy check run over the diff, every commit message and the PR body under the four rules above, with empty output.
 
 **Out of scope:** memories from other projects, deleting memories (the owner's step after merge), and enforcing any newly listed rule.
+
+## Appendix A: the memory sort
+
+The memory pass ran on 2026-11-25 and read every feedback memory in the owner's Studio project
+memory folder in full: 36 files. Each rule-shaped one is restated below in Studio's terms, after
+the lookup `/correct` step 2 describes (the three lists, both appendices, `CLAUDE.md`, the command
+files and the docs), and labelled with the five labels from `specs/judged-rules.md`. Here `listed`
+also covers `JUDGED`, which did not exist when those labels were defined. Memories that reduce to
+one sentence share a row, and the Memories column says how many each row stands for. A `listed`
+row's Goes to names the list that already holds its rule. A fact, a piece of history, or a rule
+that only makes sense for the owner gets no row and is counted only in the totals. A person
+approves these labels by merging this unit.
+
+Totals: 9 listed, 1 by design, 1 proxy, 0 judge, 18 person, 3 fact, 4 personal; 36 in all.
+
+| Rule | Label | Memories | Goes to |
+|---|---|---|---|
+| A run is not finalized, and a scoped run does not brief its next agent, while a raised decision is unanswered. | listed | 2 | NOT_YET_ENFORCED |
+| A push to a branch whose pull request already merged. | listed | 1 | NOT_YET_ENFORCED |
+| `/forge`'s commits land on its branch. | listed | 1 | NOT_YET_ENFORCED |
+| The loop script `/forge` launches is the work tree's own copy or a byte-identical one. | listed | 1 | NOT_YET_ENFORCED |
+| No worktree removal deletes run artifacts that exist nowhere else. | listed | 1 | NOT_YET_ENFORCED |
+| Pull requests target the main branch. | listed | 1 | NOT_YET_ENFORCED |
+| After a spec ships, every heading its evidence file started with stays, and each one holds the author's own report. | listed | 1 | ENFORCED |
+| Code is written for humans. | listed | 1 | JUDGED |
+| The suite runs in CI on Python 3.10, the oldest version Studio supports. | by design | 1 | NOT_YET_ENFORCED |
+| A pull request that changes a command file or a CLI subcommand also changes the usage docs. | proxy | 1 | NOT_YET_ENFORCED |
+| A count or fact a decision rests on is checked at its source, over a stated time window and without the checker's own runs, before the decision is made or put to the user. | person | 3 | `specs/judged-rules.md` Appendix A |
+| A reviewer concern recovered from an old `/forge` record is re-checked against the current tree before anyone acts on it, and one that would overturn a recorded human decision goes to a person first. | person | 1 | this appendix |
+| Before `/forge` builds a spec that has waited, the names, numbers and premises in its technical section are checked against the tree and corrected in the spec. | person | 1 | this appendix |
+| A unit that reads as unbuilt but plainly is built gets its spec's status checked and corrected before any new code. | person | 1 | this appendix |
+| A test of a shared helper is joined by one that drives the callers meant to use it, and a fix's test is seen failing with the fix reverted. | person | 1 | this appendix |
+| An evaluation of a prompt-shaped feature names every channel that could carry the behaviour, and confirms the baseline arm cannot reach it and the treatment arm loads it. | person | 1 | this appendix |
+| A stale sentence in a doc is rewritten where it stands, never left beside a newer one that contradicts it. | person | 1 | this appendix |
+| Docs, commit messages, pull request bodies and updates to a person are in plain words, with no handle left unexplained. | person | 2 | this appendix |
+| A task's closing report fixes the fallout of its own change, drops observations that need no action, and keeps the user's own decisions apart. | person | 1 | this appendix |
+| Nothing Studio publishes, in tracked files, commit messages or pull request bodies, names another of the owner's repositories; a count and a plain description stand in for names. | person | 1 | this appendix |
+| A build from a design board waits for a written readback of the whole design that the designer has corrected, and builds only what the board states. | person | 1 | this appendix |
+| When a spec adapts outside work, dropping a part of the original in debate needs evidence, checked against the original, that the part fails in Studio. | person | 1 | this appendix |
+| A pull request is a draft only while more pushes are coming. | person | 1 | `specs/judged-rules.md` Appendix A |
+| A rejection, read from the review comment rather than the GitHub review state, is answered on the same pull request. | person | 1 | `specs/judged-rules.md` Appendix A |
+| A non-trivial feature has an approved spec before it is built. | person | 1 | `specs/judged-rules.md` Appendix A |
+
+The two new `NOT_YET_ENFORCED` entries raise `NOT_YET_ENFORCED_COUNT` once, from 52 to 54. No
+memory rule has a real judge: neither the `/forge` editor's prompt nor the debate contrarian's
+carries any of them. So `JUDGED` and `JUDGED_WITHOUT_MEASUREMENT_COUNT` are unchanged. The three
+facts are a past product decision, a working setup, and a tool behaviour that `init` already prints.
+The four personal rules are a model choice, the owner's local checkout layout, what a question means
+to the owner, and a boundary inside another repository; they belong in the owner's user-level
+settings.
+
+**`CLAUDE.md` since 2026-11-21.** `git log --since=2026-11-21 -- CLAUDE.md`, run on 2026-11-25 on
+this unit's branch, lists two commits:
+
+| Commit | What changed in `CLAUDE.md` | Held in |
+|---|---|---|
+| `e866c26` | Added "Agents write zero comments in code, including tests." | ENFORCED |
+| `e866c26` | Removed the line on numbers in comments, which the rule above makes moot | no list; the rule is gone |
+| `1d6acfb` | The §4 sentence: a correction writes its rule in a tracked file, and a repeat gets its check in the same change | `specs/judged-rules.md` Appendix A, as "A repeated correction becomes a check" (person) |
+| `1d6acfb` | Added the line naming `/correct`'s rule table | no list; it points at the lists and states no rule |
