@@ -467,7 +467,8 @@ run picked the right level or really ran the red proof.
 
 - **Pass criterion.** `/correct` works if and only if, across its first five runs in Studio's
   repository, every class a run calls a repeat ends in one branch commit that moves its rule into
-  `ENFORCED` or `JUDGED`; every new check any run adds is shown red on a cited real mistake and
+  `ENFORCED` or `JUDGED`, or, when the fix is architectural (step 3's level 1), drops its row and
+  shows in the reply the old way failing or gone; every new check any run adds is shown red on a cited real mistake and
   green after, in the reply; and no run leaves as prose a rule it called checkable.
 - **Baseline.** From Studio's session transcripts under `~/.claude/projects`, the five most recent
   corrections before ship that restated a rule already written in a tracked file, and how many got

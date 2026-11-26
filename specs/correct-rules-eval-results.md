@@ -11,7 +11,8 @@ suite once this spec says `status: shipped` — every heading here needs an answ
 ## Pass criterion (written before the build)
 > `/correct` works if and only if, across its first five runs in Studio's
 > repository, every class a run calls a repeat ends in one branch commit that moves its rule into
-> `ENFORCED` or `JUDGED`; every new check any run adds is shown red on a cited real mistake and
+> `ENFORCED` or `JUDGED`, or, when the fix is architectural (step 3's level 1), drops its row and
+> shows in the reply the old way failing or gone; every new check any run adds is shown red on a cited real mistake and
 > green after, in the reply; and no run leaves as prose a rule it called checkable.
 
 ## What happened
