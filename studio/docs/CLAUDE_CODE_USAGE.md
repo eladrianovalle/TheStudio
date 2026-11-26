@@ -606,7 +606,7 @@ Save the job as `~/Library/LaunchAgents/com.<you>.verify-maintain.<repo>.plist`,
   </dict>
   <key>ProgramArguments</key>
   <array>
-    <string>claude</string>
+    <string><absolute path that `which claude` prints></string>
     <string>-p</string>
     <string>/maintain-verification-skill</string>
     <string>--setting-sources</string>
@@ -624,7 +624,7 @@ Save the job as `~/Library/LaunchAgents/com.<you>.verify-maintain.<repo>.plist`,
 </plist>
 ```
 
-`PATH` names `/opt/homebrew/bin` because launchd starts jobs with `/usr/bin:/bin:/usr/sbin:/sbin`, and `claude`, `node` and `gh` live in Homebrew's prefix. The logs sit outside the checkout so the pass never sees or stages them. Load the job with `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.<you>.verify-maintain.<repo>.plist`. Each run's last log line is `OUTCOME: clean|changed|blocked — <one line>`, so `tail -1` on `out.log` tells you how the last run went.
+`PATH` names `/opt/homebrew/bin` because launchd starts jobs with `/usr/bin:/bin:/usr/sbin:/sbin`, and `node` and `gh` live in Homebrew's prefix. The first `ProgramArguments` entry is `claude`'s absolute path, from `which claude`, so the job does not depend on how launchd looks the program up; the native installer puts `claude` in `~/.local/bin`, which that `PATH` does not include. Before relying on the schedule, run it once with `launchctl kickstart gui/$(id -u)/com.<you>.verify-maintain.<repo>` and check that `out.log` ends with an `OUTCOME:` line. The logs sit outside the checkout so the pass never sees or stages them. Load the job with `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.<you>.verify-maintain.<repo>.plist`. Each run's last log line is `OUTCOME: clean|changed|blocked — <one line>`, so `tail -1` on `out.log` tells you how the last run went.
 
 **When it runs.** launchd runs a missed job when the machine wakes, folding several missed runs into one. On a Mac that sleeps overnight, a job set for the small hours would start as you sit down to work, and the pass is heavy: a worktree, a dependency install, a dev server, a headless browser on the GPU. Pick a time the machine is awake and idle, or wake it a few minutes earlier with `pmset repeat wake`.
 
