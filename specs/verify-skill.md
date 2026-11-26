@@ -174,8 +174,8 @@ never product code) are kept word for word.
    - **changed:** **[S]** stage everything with `git add -A`, then every path in `git diff
      --cached --name-only origin/<default>` must sit inside the skill's directory, untracked files
      included, or the outcome is `blocked: <path> is outside edit scope`. **[S]** If an
-     open PR's head branch starts with `verify/maintain-` (`gh pr list --state open --limit 1000 --json
-     number,headRefName`, every page), the outcome is `blocked: earlier maintenance PR #N is still open`. The
+     open PR's head branch starts with `verify/maintain-` (`gh pr list --state open --search "head:verify/maintain-"
+     --limit 1000 --json number,headRefName`, searched by prefix so no page cap hides one), the outcome is `blocked: earlier maintenance PR #N is still open`. The
      full coverage and the product-gap report are still in the reply; only the second PR is
      withheld. Otherwise: re-read every changed file, push one branch `verify/maintain-<YYYY-MM-DD>`
      and open one PR into `<default>`, ready for review. Its body lists the features covered, each

@@ -56,7 +56,7 @@ Only edit the verification skill's own directory (its SKILL.md, features/, and a
 
    1. Run `git add -A`, so a new untracked file is staged and checked like any other.
    2. Run `git diff --cached --name-only origin/<default>`. Every path it prints must sit inside the skill's directory. If one does not, the outcome is `blocked: <path> is outside edit scope`. Never unstage the path to get past this check.
-   3. Run `gh pr list --state open --limit 1000 --json number,headRefName`. Without `--limit` it returns only the first 30 open PRs, and an older maintenance PR could hide past them. If an open PR's head branch starts with `verify/maintain-`, the outcome is `blocked: earlier maintenance PR #N is still open`. If `gh` itself fails, for example on an origin that is not on GitHub, the outcome is `blocked: gh pr list failed — <error line>`. Either way the reply still carries the full coverage and the product-gap report; only the second PR is withheld.
+   3. Run `gh pr list --state open --search "head:verify/maintain-" --limit 1000 --json number,headRefName`. The search asks GitHub only for PRs whose head branch starts with `verify/maintain-`, so an older maintenance PR can't hide behind a page of unrelated ones, however many are open. If an open PR's head branch starts with `verify/maintain-`, the outcome is `blocked: earlier maintenance PR #N is still open`. If `gh` itself fails, for example on an origin that is not on GitHub, the outcome is `blocked: gh pr list failed — <error line>`. Either way the reply still carries the full coverage and the product-gap report; only the second PR is withheld.
    4. Re-read every changed file, then push one branch and open one PR into `<default>`, ready for review, never as a draft:
 
       ```

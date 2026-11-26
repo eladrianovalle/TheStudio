@@ -385,7 +385,9 @@ class TestTheMaintainCommandCarriesTheStudioSteps(unittest.TestCase):
 
     def test_an_open_maintenance_pr_blocks_after_the_coverage_report(self):
         ship = maintain_step(self.body, 6)
-        open_pr_check = ship.find("gh pr list --state open --limit 1000 --json number,headRefName")
+        open_pr_check = ship.find(
+            'gh pr list --state open --search "head:verify/maintain-" --limit 1000 --json number,headRefName'
+        )
         self.assertNotEqual(open_pr_check, -1)
         self.assertIn("`verify/maintain-`", ship)
         self.assertIn("earlier maintenance PR #N is still open", ship)
