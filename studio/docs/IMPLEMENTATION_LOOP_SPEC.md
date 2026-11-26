@@ -444,12 +444,12 @@ exists for.
 tells a session running an older `forge.md` to restart. When every other check passes, the launch
 writes `studio-forge.json` into the tree's git directory (`git rev-parse --absolute-git-dir`: `.git/`
 for the main checkout, `.git/worktrees/<name>/` for a linked one), so `git add -A` and
-`git reset --hard` never touch it. It holds eleven fields: `unit_id`, `branch`, `tree`, `base_sha`,
+`git reset --hard` never touch it. It holds twelve fields: `unit_id`, `branch`, `tree`, `base_sha`,
 `test_command` (the repository's `[gate] test_command`), `pack_check` (the `check-packs` command added
 to the static checks, or `null` with no pack), `suites` (the `[gate.suites]` tables as loaded at
 launch), `gate_config` (the config file the launch read, relative to its repository's top level, or
-`null` outside a repository), `started_at`, `checked_at` (`null` until a check finds problems) and
-`problems`. A record written before `suites` and `gate_config` existed reads as `{}` and `null`. The launch prints `launched_at` with the knobs, and
+`null` outside a repository), `gate_config_sha256` (that file's hash at launch), `started_at`, `checked_at` (`null` until a check finds problems) and
+`problems`. A record written before `suites`, `gate_config` and `gate_config_sha256` existed reads as `{}`, `null` and `null`. The launch prints `launched_at` with the knobs, and
 `implementation-loop.js` returns `{ delivered: false, reason: 'not_launched' }` before spawning any
 agent when its args carry none. A launch over a record nobody checked refuses with `unchecked-loop`
 and prints the exact `--check` command for that tree; over a record it cannot read it refuses with
@@ -516,7 +516,8 @@ covers every stack where that is affordable, because a new top-level folder land
 suite makes every `impl_loop.py` call exit 1 with a `bad-suite:` message naming the file and the suite.
 Suites are frozen into the launch record, so a unit that edits the config cannot change what checks
 it; `--check` flags the edit instead. Two limits: an older Studio install ignores `[gate.suites]` and
-runs only `test_command`, and a gitignored config cannot raise `gate-config-changed`. For now only the
+runs only `test_command`, and a config outside any repository cannot raise `gate-config-changed`. An
+ignored config is covered: the launch records its hash and `--check` compares it. For now only the
 native `--check` routes; the portable host's verdict and the writer's and editor's own runs still use
 one test command (design: `specs/gate-suites.md`).
 

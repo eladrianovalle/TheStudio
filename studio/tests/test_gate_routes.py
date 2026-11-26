@@ -287,7 +287,7 @@ def test_gate_routes_imports_only_the_standard_library():
             imported.add((node.module or "").split(".")[0])
     studio_modules = {path.stem for path in STUDIO_ROOT.glob("*.py")}
 
-    assert imported <= {"__future__", "subprocess", "sys", "pathlib"}
+    assert imported <= {"__future__", "hashlib", "subprocess", "sys", "pathlib"}
     assert not imported & studio_modules
     assert Path(gate_routes.__file__).resolve() == STUDIO_ROOT / "gate_routes.py"
 
