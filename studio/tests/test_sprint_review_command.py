@@ -97,10 +97,14 @@ def test_each_stop_message_is_the_specs_wording_inside_its_step(step_number, mes
     assert message in collapse_whitespace(sections[step_number])
 
 
-def test_only_a_row_with_exactly_an_empty_list_takes_an_answer():
+def test_only_a_merged_row_matching_the_default_branch_takes_an_answer():
     _, sections = step_sections()
     meeting = collapse_whitespace(sections[4])
-    assert "Only a row whose `units_off_default_branch` is exactly `[]`" in meeting
+    rule = (
+        "Only a row whose `units_off_default_branch` is exactly `[]` and whose spec and results "
+        "file are the same as `<default>` takes an answer."
+    )
+    assert rule in meeting
 
 
 def test_the_meeting_offers_exactly_yes_edit_and_hold():
