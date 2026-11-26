@@ -3,7 +3,7 @@ feature: Packs, domain rules a repository opts into, starting with a game pack's
 slug: pack-mechanism
 ticket: none
 # status: draft → approved (a human approved it) → shipped (built AND verified)
-status: draft
+status: approved
 studio_run: studio/output/tech/run_tech_20261125_030553
 # verification_due: the date the evidence is due (YYYY-MM-DD). Required once this spec is
 # `approved`, and only if it carries a `## Verification` section — no section, no deadline.
