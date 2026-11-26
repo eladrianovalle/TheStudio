@@ -320,8 +320,10 @@ which asserts Fix and See.
    "Agents write zero comments in code", which is already in `ENFORCED`. Judged-rules' Appendix A
    sorted the rest. The pass re-runs `git log --since=2026-11-21 -- CLAUDE.md` on its build day and
    records the result in the appendix.
-6. **After the merge**, on the owner's yes, the memories that moved are deleted, so the rule has
-   one copy and that copy is checked.
+6. **After the merge**, on the owner's yes, a memory that moved is deleted only when its rule now
+   has a copy that does the memory's job: an `ENFORCED` check, or a line in `CLAUDE.md`, which every
+   session loads. A memory whose only Studio copy is a `NOT_YET_ENFORCED` entry stays, because
+   nothing checks that entry and no session reads it; it goes once its rule is enforced.
 
 The comment gate means new `NOT_YET_ENFORCED` entries go in with no section comment, in Appendix A's
 order. The comment above `NOT_YET_ENFORCED_COUNT` ("This number only goes down from here") goes
@@ -412,8 +414,10 @@ in the PR body, which the check itself covers.
   undone.
 - **The privacy check covers everything that goes public** (R5): diff, commit messages and PR
   body, normalized, with a stated source for repository names and a rule for names and paths.
-- **Memories that moved are deleted** on the owner's yes. Two copies, one of which nothing checks,
-  is what §4 forbids.
+- **Only memories whose rule is enforced or in `CLAUDE.md` are deleted**, on the owner's yes. Two
+  copies, one of which nothing checks, is what §4 forbids; but when Studio's copy is only a
+  `NOT_YET_ENFORCED` entry, deleting the memory removes the one copy a session sees and replaces it
+  with nothing.
 
 **How this relates to `specs/enforcement-layer.md`.** That spec's shipped unit 1 is pstack's rule
 table in Studio's form. This spec adds a count, two checks and rows to it, and changes no field.
