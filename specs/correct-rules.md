@@ -158,7 +158,8 @@ else `studio/<file>`.
 > 5. **Update the table in the same commit.** A repeat moves into the enforced list and out of the
 >    not-yet-enforced list or appendix, lowering its count. Delete the prose step the new check
 >    replaces. Drop a row once architecture makes its mistake impossible. One commit per class, on a
->    branch; on `main`, create `correct/<slug>` first.
+>    branch; on the repository's default branch (`main`, `master`, or whatever
+>    `git symbolic-ref --short refs/remotes/origin/HEAD` names), create `correct/<slug>` first.
 > 6. **Exceptions belong to a person.** Never add an exception marker or an expiry date yourself. If
 >    the new check flags a line that has to stay for now, list it in the reply. A person adds
 >    `<the tool's own marker> until=YYYY-MM-DD <reason>`, and merging it is their approval.

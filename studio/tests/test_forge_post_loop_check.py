@@ -20,6 +20,7 @@ RECORD_FIELDS = {
     "pack_check",
     "suites",
     "gate_config",
+    "gate_config_sha256",
     "started_at",
     "checked_at",
     "problems",
@@ -127,6 +128,7 @@ def test_a_launch_writes_the_record_with_its_eleven_fields_into_the_tree_git_dir
         "pack_check": None,
         "suites": {},
         "gate_config": None,
+        "gate_config_sha256": None,
         "started_at": knobs["launched_at"],
         "checked_at": None,
         "problems": [],
@@ -783,6 +785,28 @@ def test_an_edit_to_the_gate_config_is_flagged_the_tests_still_run_and_recheckin
     assert second.returncode == 1
     assert [problem["name"] for problem in json.loads(second.stdout)["problems"]] == ["gate-config-changed"]
     assert path.exists()
+
+
+@pytest.mark.parametrize("edit", ["weakened", "deleted"])
+def test_an_edit_to_an_ignored_gate_config_is_flagged(suited, edit):
+    repo = suited["repo"]
+    (repo / ".gitignore").write_text(".studio/implementation_loop.toml\n")
+    git(repo, "rm", "-q", "--cached", ".studio/implementation_loop.toml")
+    git(repo, "add", ".gitignore")
+    git(repo, "commit", "-q", "-m", "ignore the gate config")
+    launch_suited(suited)
+    config = suited["config"]
+    if edit == "weakened":
+        config.write_text(config.read_text().replace('paths = ["web/", "shared/schema.json"]', 'paths = ["shared/schema.json"]'))
+    else:
+        config.unlink()
+    change_web(repo)
+
+    completed = check(repo)
+
+    assert completed.returncode == 1
+    assert [problem["name"] for problem in json.loads(completed.stdout)["problems"]] == ["gate-config-changed"]
+    assert read_record(repo)["gate_config_sha256"] is not None
 
 
 def test_the_pack_check_still_runs_and_reports_beside_the_routed_suites(suited):
