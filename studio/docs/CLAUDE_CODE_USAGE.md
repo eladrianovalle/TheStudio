@@ -295,8 +295,8 @@ Priority: `--artifact-root` flag > `STUDIO_ARTIFACT_ROOT` env > cwd-based detect
 You don't have to remember to check whether your installed Studio is current, or to go looking for
 work an approved spec planned and nobody built. When you run `studio init` (or `update`), Studio
 installs a small **SessionStart hook** into your project's `.claude/settings.local.json`. At the
-start of each Claude Code session it runs `check-updates`, which has two things it might tell you
-— and says nothing at all when it has neither.
+start of each Claude Code session it runs `check-updates`, which has three things it might tell you
+— and says nothing at all when it has none of them.
 
 **1. An update is available.** A quick, cached check: has the Studio source moved past the commit
 you installed from? If so, you get a single line telling you to run `/studio-update`.
@@ -322,12 +322,18 @@ read from **all** branches, unmerged ones included, so a teammate who hasn't fet
 different count. For the whole list, including work that was built without any spec planning it, run
 `python studio/run_phase.py stats`.
 
+**3. The packs this repository uses.** When `.studio/implementation_loop.toml` declares a pack, the
+brief names the pack's doc by a path you can open from the project root, so an agent reads it before
+building an asset. If the last `check-packs` run found problems, it adds how many and the first one,
+read from the result that run saved; it never runs the asset command itself. A `[packs]` table
+Studio cannot read is reported the same way.
+
 - **Quiet and cheap.** The update half checks the network at most once a day (bounded, best-effort
   `git fetch`, cached in `.studio/update-check.json`) and is near-instant on repeat sessions; the
   unfinished-work half is a single `git log` with a five-second ceiling. It works offline, never
   changes your files, and can never slow down or break a session — if anything goes wrong it just
-  stays silent. The two halves are guarded separately, so a spec it can't parse can't take the
-  update nudge down with it.
+  stays silent. Each part is guarded separately, so a spec or a `[packs]` table it can't parse
+  can't take the update nudge down with it.
 - **Nudges once per update.** After it points out a given update, it stays quiet until either a
   newer update appears or you actually run `/studio-update`. The obligation line is not latched that
   way: it names the same thing every session until somebody discharges it or closes it on purpose.

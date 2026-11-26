@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import sys
 
-from impl_loop import load_loop_config, project_config_root, runtime_knobs, validate_work_dir
+from impl_loop import load_knobs, project_config_root, validate_work_dir
 from stats import build_plan_section, parse_build_plan, parse_frontmatter, UNIT_OPENER
 
 
@@ -109,7 +109,7 @@ def run(args):
     if not re.fullmatch(r"[a-z0-9][a-z0-9_]*", unit["unit_id"]):
         raise ValueError("Expected an alphanumeric snake_case unit id")
     config = project_config_root(cwd) / ".studio/implementation_loop.toml"
-    knobs = runtime_knobs(load_loop_config(config, test_command_override=args.test))
+    knobs = load_knobs(config, test_command_override=args.test)
     # The portable CLI has no predicted paths. Apply tokenized checks after files are known.
     branch = subprocess.check_output(["git", "-C", cwd, "branch", "--show-current"], text=True).strip()
     if not branch:

@@ -1,0 +1,22 @@
+{
+  "name": "game",
+  "doc": "ASSET_PIPELINE.md",
+  "departments": {
+    "art": {
+      "routes": ["code-built", "generated", "hand-authored"],
+      "kinds": {
+        "mesh": ["triangles", "part_gap", "extent"],
+        "animation": ["foot_slide", "loop_seam", "below_floor", "stretch"]
+      },
+      "binary_assets": {
+        "allowed_by_route": "hand-authored",
+        "extensions": [
+          ".png", ".jpg", ".jpeg", ".gif", ".webp", ".psd", ".tga", ".bmp", ".exr",
+          ".hdr", ".dds", ".ktx2", ".fbx", ".obj", ".glb", ".gltf", ".blend", ".dae",
+          ".ttf", ".otf", ".woff", ".woff2", ".wav", ".mp3", ".ogg", ".flac", ".aif",
+          ".aiff", ".m4a"
+        ]
+      }
+    }
+  }
+}

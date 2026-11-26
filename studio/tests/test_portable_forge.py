@@ -379,3 +379,64 @@ def test_claude_editor_failure_preserves_writer_checkpoint(project, claude_only,
     assert state['roles']['writer']['status'] == 'completed'
     assert command(project, 'git', 'log', '-1', '--format=%s').stdout.strip() == 'writer: demo_unit'
     assert (project / 'hello.txt').read_text() == 'demo'
+
+
+def declare_game_pack(project, asset_command, static_checks='[]'):
+    config = project / '.studio/implementation_loop.toml'
+    config.write_text(f'[gate]\ntest_command="true"\nstatic_checks={static_checks}\n'
+                      f'[packs.game.art]\nasset_command="{asset_command}"\nroutes=["code-built"]\n')
+    command(project, 'git', 'commit', '-qam', 'declare the game pack', check=True)
+    return config
+
+
+def test_plan_carries_static_checks_unchanged_without_a_pack(project):
+    config = project / '.studio/implementation_loop.toml'
+    config.write_text('[gate]\ntest_command="true"\nstatic_checks=["make lint"]\n')
+    command(project, 'git', 'commit', '-qam', 'lint', check=True)
+    r = cli(project, 'Build a demo', '--plan')
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout)['static_checks'] == ['make lint']
+
+
+def test_plan_appends_one_quoted_pack_check_when_a_pack_is_declared(project):
+    config = declare_game_pack(project, 'exit 0', '["make lint"]')
+    r = cli(project, 'Build a demo', '--plan')
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout)['static_checks'] == [
+        'make lint',
+        f'"{sys.executable}" "{STUDIO / "run_phase.py"}" check-packs --config "{config.resolve()}"',
+    ]
+
+
+def test_a_bad_packs_table_stops_the_plan_naming_the_config(project):
+    config = project / '.studio/implementation_loop.toml'
+    config.write_text('[gate]\ntest_command="true"\n[packs.game.art]\nroutes=["code-built"]\n')
+    r = cli(project, 'Build a demo', '--plan')
+    assert r.returncode != 0
+    assert str(config.resolve()) in r.stderr and 'Shipped packs: game.' in r.stderr
+
+
+def test_a_failing_pack_check_fails_the_writer_and_leaves_its_change_uncommitted(project, claude_only):
+    declare_game_pack(project, 'exit 3')
+    run = cli(project, '--spec', '.studio/specs/demo.md', '--runtime', 'claude')
+    assert run.returncode != 0
+    state = read_attempt(project, run)
+    assert state['result']['writer']['static_ok'] is False
+    assert state['result']['editorRan'] is False
+    assert state['last_verified_sha'] == state['base_sha']
+    assert command(project, 'git', 'log', '-1', '--format=%s').stdout.strip() == 'declare the game pack'
+    assert command(project, 'git', 'status', '--porcelain', '--', 'hello.txt').stdout == '?? hello.txt\n'
+    assert command(project, 'git', 'diff', '--cached', '--name-only').stdout == ''
+    assert (project / 'hello.txt').read_text() == 'demo'
+    git_dir = Path(command(project, 'git', 'rev-parse', '--absolute-git-dir').stdout.strip())
+    saved = json.loads((git_dir / 'studio/pack-reports/game-art.json').read_text())
+    assert saved['problems'] == ['asset command exited 3: exit 3']
+
+
+def test_a_passing_pack_check_lets_the_writer_commit(project, claude_only):
+    declare_game_pack(project, "echo '{\\\"assets\\\": []}'")
+    run = cli(project, '--spec', '.studio/specs/demo.md', '--runtime', 'claude')
+    assert run.returncode == 0, run.stdout + run.stderr
+    state = read_attempt(project, run)
+    assert state['result']['writer'].get('static_ok') is not False
+    assert command(project, 'git', 'log', '-1', '--format=%s').stdout.strip() == 'writer: demo_unit'

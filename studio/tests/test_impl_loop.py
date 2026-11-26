@@ -40,6 +40,7 @@ from impl_loop import (
     _no_test_command_message,
     detect_stacks,
     explain_unquotable_path,
+    load_knobs,
     load_loop_config,
     resolve_profile,
     runtime_knobs,
@@ -1663,3 +1664,96 @@ def test_a_hand_edited_package_json_offers_no_command_rather_than_crashing(tmp_p
 
     for root in (broken_json, scripts_not_a_table):
         assert resolve_profile(root).test_command is None
+
+
+_PACK_GATE = '[gate]\ntest_command = "make test"\nstatic_checks = ["ruff check {paths}", "npm run lint"]\n'
+_GAME_ART = '\n[packs.game.art]\nasset_command = "node tools/measure.mjs"\nroutes = ["code-built"]\n'
+
+
+def _pack_check_command(config: Path) -> str:
+    run_phase = STUDIO_ROOT / "run_phase.py"
+    return f'"{sys.executable}" "{run_phase}" check-packs --config "{config.resolve()}"'
+
+
+def test_load_knobs_leaves_static_checks_as_written_without_packs(tmp_path):
+    config = tmp_path / "implementation_loop.toml"
+    config.write_text(_PACK_GATE)
+
+    assert load_knobs(config)["static_checks"] == ["ruff check {paths}", "npm run lint"]
+    assert json.loads(_cli(["impl_loop.py", str(config)]))["static_checks"] == [
+        "ruff check {paths}",
+        "npm run lint",
+    ]
+
+
+def test_load_knobs_appends_exactly_one_quoted_pack_check_when_a_pack_is_declared(tmp_path):
+    config = tmp_path / "implementation_loop.toml"
+    config.write_text(_PACK_GATE + _GAME_ART)
+
+    expected = ["ruff check {paths}", "npm run lint", _pack_check_command(config)]
+    assert load_knobs(config)["static_checks"] == expected
+    assert json.loads(_cli(["impl_loop.py", str(config)]))["static_checks"] == expected
+
+
+def test_load_knobs_does_not_change_the_loaded_config_list(tmp_path):
+    config = tmp_path / "implementation_loop.toml"
+    config.write_text(_PACK_GATE + _GAME_ART)
+
+    load_knobs(config)
+
+    assert load_loop_config(config).static_checks == ["ruff check {paths}", "npm run lint"]
+
+
+def test_declaring_a_pack_adds_no_loop_config_field():
+    assert [field.name for field in dataclasses.fields(LoopConfig)] == [
+        "test_command",
+        "static_checks",
+        "require_mutation_check",
+        "mutation_command",
+        "observe_command",
+        "deliver_on_gate_fail",
+        "mandate",
+        "read_scope",
+        "output_budget",
+    ]
+
+
+def test_a_config_path_that_cannot_be_quoted_is_refused_when_a_pack_is_declared(tmp_path):
+    folder = tmp_path / "cost$5"
+    folder.mkdir()
+    config = folder / "implementation_loop.toml"
+    config.write_text(_PACK_GATE + _GAME_ART)
+
+    with pytest.raises(LoopConfigError) as excinfo:
+        load_knobs(config)
+
+    assert "cannot be quoted into static_checks" in str(excinfo.value)
+    assert "expands as a variable" in str(excinfo.value)
+
+
+_BAD_PACK_TABLES = {
+    "unknown pack": '\n[packs.board.art]\nasset_command = "x"\nroutes = ["code-built"]\n',
+    "route outside the pack": '\n[packs.game.art]\nasset_command = "x"\nroutes = ["painted"]\n',
+    "missing asset_command": '\n[packs.game.art]\nroutes = ["code-built"]\n',
+}
+
+
+@pytest.mark.parametrize("branch_arguments", [[], ["--branch", "impl/demo"]], ids=["no-branch", "branch"])
+@pytest.mark.parametrize("table", list(_BAD_PACK_TABLES.values()), ids=list(_BAD_PACK_TABLES))
+def test_impl_loop_exits_1_naming_the_config_and_the_shipped_packs(tmp_path, table, branch_arguments):
+    config = tmp_path / "implementation_loop.toml"
+    config.write_text(_PACK_GATE + table)
+    _make_repo(tmp_path / "repo")
+
+    completed = subprocess.run(
+        [sys.executable, str(STUDIO_ROOT / "impl_loop.py"), str(config), *branch_arguments],
+        cwd=tmp_path / "repo",
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert completed.stdout == ""
+    assert str(config.resolve()) in completed.stderr
+    assert "Shipped packs: game." in completed.stderr
+    assert "Traceback" not in completed.stderr

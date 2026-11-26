@@ -3,7 +3,7 @@ feature: Packs, domain rules a repository opts into, starting with a game pack's
 slug: pack-mechanism
 ticket: none
 # status: draft → approved (a human approved it) → shipped (built AND verified)
-status: draft
+status: approved
 studio_run: studio/output/tech/run_tech_20261125_030553
 # verification_due: the date the evidence is due (YYYY-MM-DD). Required once this spec is
 # `approved`, and only if it carries a `## Verification` section — no section, no deadline.
@@ -183,6 +183,9 @@ untracked file instead of collapsing a new directory to one line. The tree chang
 appears, disappears or changes status, or if a path's fingerprint differs; the message names the
 first such path. A clean tracked file the command edits shows up as a new entry, so only dirty paths
 are ever hashed.
+A dirty submodule is listed as one directory, so its fingerprint is its `HEAD` plus its own snapshot,
+taken the same way. Otherwise a file rewritten or committed inside an already-dirty submodule would
+leave its line in the parent's status unchanged and pass.
 Ignored paths are never listed, so writing under them passes.
 
 Exit **0** when clean (`game.art: 12 assets within budget`, or `game.art: 0 assets`), **1** on any
@@ -249,6 +252,8 @@ unfinished-work block. It reads `[packs]` and the saved results, finds the git d
 - A saved result whose `problems` is not empty, or a malformed `[packs]` table, adds
   `N pack problem(s); first: <msg>.` The count is the saved `problems` list, so a command that
   exited non-zero, changed the tree or left a tracked binary is reported too, not only a bad report.
+- A `.studio/implementation_loop.toml` that is not valid TOML adds `Config problem: <msg>.` instead,
+  whether or not it declares a pack. It names the file, not a pack, since nobody can tell what it declares.
 - Any exception is swallowed. The session always continues, and the update notice and the
   unfinished-work sentence are never lost.
 

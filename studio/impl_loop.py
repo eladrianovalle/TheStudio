@@ -22,6 +22,7 @@ import json
 import os
 import string
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List
@@ -995,6 +996,29 @@ def runtime_knobs(config: LoopConfig) -> dict:
     }
 
 
+def load_knobs(path: Path | None = None, test_command_override: str | None = None) -> dict:
+    import packs
+
+    knobs = runtime_knobs(load_loop_config(path, test_command_override=test_command_override))
+    config_path = _resolve_config_path(path, STUDIO_ROOT).resolve()
+    try:
+        departments = packs.load_declaration(config_path)
+    except packs.PackConfigError as error:
+        raise LoopConfigError(str(error)) from error
+    if not departments:
+        return knobs
+    run_phase = STUDIO_ROOT / "run_phase.py"
+    for quoted_path in (sys.executable, str(run_phase), str(config_path)):
+        refusal = explain_unquotable_path(quoted_path)
+        if refusal is not None:
+            raise LoopConfigError(
+                f"{config_path} declares a pack, but its check cannot be quoted into static_checks.\n{refusal}"
+            )
+    pack_check = f'"{sys.executable}" "{run_phase}" check-packs --config "{config_path}"'
+    knobs["static_checks"] = [*knobs["static_checks"], pack_check]
+    return knobs
+
+
 def _cli(argv: List[str]) -> str:
     """Return the runtime-knobs JSON for the CLI.
 
@@ -1040,7 +1064,7 @@ def _cli(argv: List[str]) -> str:
     args = parser.parse_args(argv[1:])
 
     path = Path(args.config_path) if args.config_path else None
-    knobs = runtime_knobs(load_loop_config(path))
+    knobs = load_knobs(path)
 
     if args.work_dir:
         knobs["work_dir"] = str(validate_work_dir(args.work_dir))
@@ -1056,7 +1080,6 @@ def _cli(argv: List[str]) -> str:
 
 
 if __name__ == "__main__":
-    import sys
     try:
         print(_cli(sys.argv))
     except (WorkDirError, BranchError, LoopConfigError) as e:

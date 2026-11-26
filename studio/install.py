@@ -64,6 +64,7 @@ SOURCE_FILES = [
     "obligations.py",
     "session.py",
     "message_lint.py",
+    "packs.py",
     "studio.manifest.json",
     "validators/__init__.py",
     "validators/document_validator.py",
@@ -83,6 +84,8 @@ SOURCE_FILES = [
 # Glob patterns for additional files
 ROLE_PACK_GLOB = "role_packs/*.json"
 PROMPT_DOC_GLOB = "docs/role_prompts/*.md"
+PACK_JSON_GLOB = "packs/*/pack.json"
+PACK_DOC_GLOB = "packs/*/*.md"
 
 # Slash commands to copy to {target}/.claude/commands/
 # Commands Studio shipped once and no longer does. This list is the only way to spot one
@@ -997,7 +1000,7 @@ def _collect_source_files(studio_dir: Path) -> List[Path]:
             print(f"  WARNING: {f} is listed in SOURCE_FILES but missing from the Studio source tree; left it out.")
 
     # Glob patterns
-    for pattern in [ROLE_PACK_GLOB, PROMPT_DOC_GLOB]:
+    for pattern in [ROLE_PACK_GLOB, PROMPT_DOC_GLOB, PACK_JSON_GLOB, PACK_DOC_GLOB]:
         for path in sorted(studio_dir.glob(pattern)):
             files.append(path.relative_to(studio_dir))
 
