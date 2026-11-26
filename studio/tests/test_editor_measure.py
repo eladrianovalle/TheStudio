@@ -19,12 +19,13 @@ from __future__ import annotations
 import difflib
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -58,6 +59,16 @@ WRITER_IDENTITY = {
     "GIT_COMMITTER_DATE": "1700000500 -0500",
 }
 WRITER_MESSAGE = "writer: greeter\n\nBody line kept as written.\n"
+SOURCE_RULES = "# Rules for this repository\n\nKeep greetings short.\n"
+LAUNCH_FOLDER = "harbor-notes"
+
+
+@pytest.fixture(autouse=True)
+def claude_config(tmp_path, monkeypatch):
+    config = tmp_path / "claude_config"
+    config.mkdir()
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(config))
+    return config
 
 
 def git(directory: Path, *arguments: str, env: dict | None = None) -> str:
@@ -89,6 +100,7 @@ def history(tmp_path_factory):
     git(repo, "config", "user.email", "someone@example.com")
     git(repo, "config", "user.name", "Someone")
     git(repo, "config", "commit.gpgsign", "false")
+    (repo / "CLAUDE.md").write_text(SOURCE_RULES, encoding="utf-8")
     shas = {}
 
     write(repo, "specs/greeter.md", SPEC_TEXT)
@@ -205,6 +217,15 @@ def run_build(history, root, case_dirs, capsys, source_repo=None, whole_suite=f"
     return code, captured.out + captured.err
 
 
+def runner_file(root: Path, token: str) -> Path:
+    return root / LAUNCH_FOLDER / ".claude" / f"{token}.js"
+
+
+def only_manifest(history) -> dict:
+    manifest, = (history["repo"] / "studio/output/editor_measure").glob("*/manifest.json")
+    return json.loads(manifest.read_text())
+
+
 def commit_identity(repo: Path, commit: str) -> str:
     return git(repo, "show", "--no-patch", "--date=raw", "--format=%B%x00%an%x00%ae%x00%ad%x00%cn%x00%ce%x00%cd", commit)
 
@@ -278,7 +299,8 @@ def test_two_builds_of_a_case_give_the_same_head_and_the_second_replaces_the_fir
     tree = checkout_root / "greeter_four"
     builds = history["repo"] / "studio/output/editor_measure"
     first_manifest, = builds.glob("*/manifest.json")
-    first_runner = first_manifest.with_name("measure-runner.js").read_bytes()
+    first_token = json.loads(first_manifest.read_text())["runner_token"]
+    first_runner = runner_file(checkout_root, first_token).read_text().replace(first_token, "")
     first_head = git(tree, "rev-parse", "HEAD")
     (tree / "left_by_hand.txt").write_text("from before\n")
     git(tree, "branch", "left_by_hand")
@@ -288,8 +310,8 @@ def test_two_builds_of_a_case_give_the_same_head_and_the_second_replaces_the_fir
     assert code == 0, output
     manifest, = builds.glob("*/manifest.json")
     assert not first_manifest.exists()
-    assert manifest.with_name("measure-runner.js").read_bytes() == first_runner
     data = json.loads(manifest.read_text())
+    assert runner_file(checkout_root, data["runner_token"]).read_text().replace(data["runner_token"], "") == first_runner
     case, = data["cases"]
     assert data["built_at"] and str(tree) in case["prompt"]
     assert case["head"] == first_head
@@ -502,7 +524,7 @@ def test_a_plant_inside_the_unit_diff_builds(history, checkout_root, case_dirs, 
 
     assert code == 0, output
     assert "# planted" in (checkout_root / "greeter_eleven" / "app.py").read_text()
-    assert sorted(path.name for path in checkout_root.iterdir()) == ["greeter_eleven"]
+    assert sorted(path.name for path in checkout_root.iterdir()) == ["greeter_eleven", LAUNCH_FOLDER]
 
 
 def test_build_refuses_a_plant_whose_probe_already_fails_without_the_patch(history, checkout_root, case_dirs, capsys):
@@ -663,6 +685,7 @@ def dated_history(tmp_path):
     git(repo, "config", "user.email", "someone@example.com")
     git(repo, "config", "user.name", "Someone")
     git(repo, "config", "commit.gpgsign", "false")
+    (repo / "CLAUDE.md").write_text(SOURCE_RULES, encoding="utf-8")
     written = date.today() - timedelta(days=100)
     when = f"{written.isoformat()}T12:00:00 +0000"
 
@@ -715,6 +738,204 @@ def test_build_refuses_a_case_whose_whole_suite_fails_though_its_own_test_comman
     assert code == 1
     assert "refused case greeter_red: the whole suite" in output
     assert "exits 3" in output
+
+
+def files_under(folder: Path) -> list[str]:
+    return sorted(path.relative_to(folder).as_posix() for path in folder.rglob("*") if path.is_file())
+
+
+def test_a_build_leaves_a_launch_folder_holding_only_the_rules_copy_the_settings_and_the_runner(history, checkout_root, case_dirs, capsys):
+    write_case(case_dirs[0], "greeter_one", defect_case(history))
+    stale = checkout_root / LAUNCH_FOLDER / "left_by_an_earlier_run.txt"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("from before\n")
+
+    code, output = run_build(history, checkout_root, case_dirs, capsys)
+
+    assert code == 0, output
+    folder = checkout_root / LAUNCH_FOLDER
+    token = only_manifest(history)["runner_token"]
+    assert files_under(folder) == sorted(["CLAUDE.md", ".claude/settings.json", f".claude/{token}.js"])
+    assert (folder / "CLAUDE.md").read_bytes() == (history["repo"] / "CLAUDE.md").read_bytes()
+    assert json.loads((folder / ".claude/settings.json").read_text()) == {"autoMemoryEnabled": False}
+    first_line = runner_file(checkout_root, token).read_text().splitlines()[0]
+    assert re.search(r"\bname: '([^']*)'", first_line)[1] == token
+    assert not list((history["repo"] / "studio/output").rglob("*.js"))
+
+
+@pytest.mark.parametrize("global_rules", [True, False])
+def test_the_manifest_names_the_launch_folder_its_instruction_files_and_what_it_must_not_touch(global_rules, history, checkout_root, case_dirs, capsys, claude_config):
+    if global_rules:
+        (claude_config / "CLAUDE.md").write_text("# Everywhere\n")
+    write_case(case_dirs[0], "greeter_one", defect_case(history))
+
+    code, output = run_build(history, checkout_root, case_dirs, capsys)
+
+    assert code == 0, output
+    manifest = only_manifest(history)
+    folder = checkout_root / LAUNCH_FOLDER
+    assert manifest["launch_folder"] == str(folder)
+    assert runner_file(checkout_root, manifest["runner_token"]).is_file()
+    assert editor_measure.telltale_word_in(manifest["runner_token"]) is None
+    expected_instructions = [str(claude_config / "CLAUDE.md")] if global_rules else []
+    assert manifest["instruction_files"] == expected_instructions + [str(folder / "CLAUDE.md")]
+    assert str(history["repo"].resolve()) in manifest["forbidden_paths"]
+    assert str(claude_config / "projects") + "/" in manifest["forbidden_paths"]
+    assert re.fullmatch(r"[0-9a-f]{64}", manifest["launch_fingerprint"])
+
+
+def test_forbidden_paths_name_every_worktree_and_the_home_form_of_each(history, checkout_root, case_dirs, capsys, claude_config, monkeypatch):
+    elsewhere = Path(tempfile.mkdtemp(prefix="elsewhere-")).resolve()
+    linked = elsewhere / "linked"
+    git(history["repo"], "worktree", "add", "--quiet", "--detach", str(linked), history["writer"])
+    home = Path(tempfile.gettempdir()).resolve()
+    monkeypatch.setenv("HOME", str(home))
+    config = claude_config.resolve()
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(config))
+    write_case(case_dirs[0], "greeter_one", defect_case(history))
+    try:
+        code, output = run_build(history, checkout_root, case_dirs, capsys)
+    finally:
+        git(history["repo"], "worktree", "remove", "--force", str(linked))
+        shutil.rmtree(elsewhere, ignore_errors=True)
+
+    assert code == 0, output
+    forbidden = only_manifest(history)["forbidden_paths"]
+    source = history["repo"].resolve()
+    projects = config / "projects"
+    expected = [
+        str(source), "~/" + str(source.relative_to(home)),
+        str(linked), "~/" + str(linked.relative_to(home)),
+        str(projects) + "/", "~/" + str(projects.relative_to(home)) + "/",
+    ]
+    for path in expected:
+        assert path in forbidden, (path, forbidden)
+    assert len(forbidden) == len(set(forbidden))
+
+
+def build_fingerprint(history, root, case_dirs, capsys) -> tuple[str, str]:
+    code, output = run_build(history, root, case_dirs, capsys)
+    assert code == 0, output
+    manifest = only_manifest(history)
+    return manifest["launch_fingerprint"], manifest["runner_token"]
+
+
+def test_two_builds_of_the_same_inputs_give_the_same_launch_fingerprint_and_each_input_changes_it(history, checkout_root, case_dirs, capsys, claude_config, monkeypatch):
+    write_case(case_dirs[0], "greeter_one", defect_case(history))
+    rules = history["repo"] / "CLAUDE.md"
+
+    first, first_token = build_fingerprint(history, checkout_root, case_dirs, capsys)
+    again, again_token = build_fingerprint(history, checkout_root, case_dirs, capsys)
+    assert again == first
+    assert again_token != first_token
+
+    rules.write_text(SOURCE_RULES + "One more rule.\n", encoding="utf-8")
+    try:
+        changed_copy, _ = build_fingerprint(history, checkout_root, case_dirs, capsys)
+    finally:
+        rules.write_text(SOURCE_RULES, encoding="utf-8")
+
+    (claude_config / "CLAUDE.md").write_text("# Everywhere\n")
+    added_global, _ = build_fingerprint(history, checkout_root, case_dirs, capsys)
+    (claude_config / "CLAUDE.md").write_text("# Everywhere, changed\n")
+    changed_global, _ = build_fingerprint(history, checkout_root, case_dirs, capsys)
+    (claude_config / "CLAUDE.md").unlink()
+
+    monkeypatch.setattr(editor_measure, "LAUNCH_SETTINGS", {"autoMemoryEnabled": False, "theme": "dark"})
+    changed_settings, _ = build_fingerprint(history, checkout_root, case_dirs, capsys)
+    monkeypatch.undo()
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(claude_config))
+
+    other_root, _ = build_fingerprint(history, checkout_root.parent / "other_trees", case_dirs, capsys)
+
+    fingerprints = [first, changed_copy, added_global, changed_global, changed_settings, other_root]
+    assert len(set(fingerprints)) == len(fingerprints)
+    assert build_fingerprint(history, checkout_root, case_dirs, capsys)[0] == first
+
+
+def test_build_refuses_a_root_inside_a_git_work_tree(history, case_dirs, capsys, tmp_path):
+    enclosing = Path(tempfile.mkdtemp(prefix="enclosing-")).resolve()
+    git(enclosing, "init", "--quiet")
+    root = enclosing / "deeper" / "trees"
+    write_case(case_dirs[0], "greeter_one", defect_case(history))
+    try:
+        code, output = run_build(history, root, case_dirs, capsys)
+    finally:
+        shutil.rmtree(enclosing, ignore_errors=True)
+
+    assert code == 2
+    assert "git work tree" in output and str(enclosing) in output
+
+
+@pytest.mark.parametrize("word", ["experiment", "rubric", "score", "compare", "benchmark", "candidate", "arena"])
+def test_build_refuses_a_root_holding_a_newer_telltale_word(word, history, checkout_root, case_dirs, capsys):
+    write_case(case_dirs[0], "greeter_one", defect_case(history))
+    root = checkout_root / f"my_{word.capitalize()}s"
+
+    code, output = run_build(history, root, case_dirs, capsys)
+
+    assert code == 2
+    assert f"'{word}'" in output
+    assert not root.exists()
+
+
+def test_the_runner_template_holds_no_telltale_word():
+    template = (STUDIO_DIR / "evals" / "forge_editor" / "measure-runner.js").read_text(encoding="utf-8")
+    assert editor_measure.telltale_word_in(template) is None
+
+
+def test_the_last_printed_line_launches_from_the_folder_and_records_from_the_source_checkout(history, checkout_root, case_dirs, capsys):
+    cases, patches = case_dirs
+    write_case(cases, "greeter_one", defect_case(history))
+
+    code = editor_measure.main(
+        ["build", "--root", str(checkout_root)], cases_dir=cases, patches_dir=patches,
+        source_repo=history["repo"], whole_suite=f"{PYTHON} run_checks.py",
+    )
+
+    printed = capsys.readouterr().out
+    assert code == 0, printed
+    manifest = only_manifest(history)
+    folder = manifest["launch_folder"]
+    runner = f"{folder}/.claude/{manifest['runner_token']}.js"
+    steps = [shlex.split(part) for part in printed.splitlines()[-1].split("&&")]
+    assert steps == [
+        ["cd", folder],
+        ["claude", "-p", "--setting-sources", "project,local", "--strict-mcp-config", "--permission-mode", "auto",
+         "--allowedTools", "Workflow", "--",
+         f"Run the Workflow tool with scriptPath {runner} and no args, and wait for it to finish."],
+        ["cd", str(history["repo"].resolve())],
+        ["python", "studio/editor_measure.py", "record"],
+        ["python", "studio/editor_measure.py", "rule"],
+    ]
+
+
+def test_record_accepts_a_run_launched_from_the_built_folder(history, checkout_root, case_dirs, capsys, claude_config):
+    cases, patches = case_dirs
+    write_case(cases, "greeter_two", clean_case(history))
+    code, output = run_build(history, checkout_root, case_dirs, capsys)
+    assert code == 0, output
+    manifest = only_manifest(history)
+    case, = manifest["cases"]
+    workflow = claude_config / "projects" / "launch-session" / "session" / "subagents" / "workflows" / "wf-blind"
+    workflow.mkdir(parents=True)
+    editor = {"criteria_verdicts": [{"criterion": criterion, "verdict": "pass", "evidence": "Ran it"}
+                                    for criterion in case["acceptance_criteria"]],
+              "tests": {"passed": True}, "mvi_verdict": True, "unresolved_concerns": []}
+    journal = [{"type": "started", "agentId": "a1", "label": case["name"]},
+               {"type": "result", "agentId": "a1", "result": editor, "toolsUsed": ["Read", "Bash"]}]
+    started = (datetime.now(timezone.utc) + timedelta(minutes=1)).isoformat()
+    transcript = [{"type": "user", "timestamp": started, "message": {"content": case["prompt"]}},
+                  {"type": "assistant", "message": {"model": f"claude-{manifest['model']}-4"}}]
+    (workflow / "journal.jsonl").write_text("".join(json.dumps(row) + "\n" for row in journal))
+    (workflow / "agent-a1.jsonl").write_text("".join(json.dumps(row) + "\n" for row in transcript))
+
+    code = editor_measure.main(["record"], cases_dir=cases, patches_dir=patches, source_repo=history["repo"])
+
+    assert code == 0, capsys.readouterr().err
+    run, = json.loads((cases.parent / "results.json").read_text())["runs"]
+    assert run["run_id"] == "wf-blind"
+    assert [row["outcome"] for row in run["cases"]] == ["passed"]
 
 
 # --- the command line -------------------------------------------------------

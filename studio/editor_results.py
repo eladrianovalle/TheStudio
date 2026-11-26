@@ -81,7 +81,7 @@ def clear_builds(output):
         shutil.rmtree(manifest.parent)
 
 
-def publish_build(rows, cases, patches, output, knobs):
+def publish_build(rows, cases, patches, output, knobs, launch):
     units = []
     for row in rows:
         unit = {**knobs, "unit_id": row["unit_id"], "title": row["unit_id"].replace("_", " "),
@@ -96,16 +96,18 @@ def publish_build(rows, cases, patches, output, knobs):
     source = (DATASET / "measure-runner.js").read_text(encoding="utf-8")
     stamp = datetime.now(timezone.utc)
     destination = output / stamp.strftime("%Y%m%dT%H%M%S%fZ")
-    manifest = {**fingerprints(cases, patches, knobs), "model": built["model"], "cases": rows}
+    manifest = {**fingerprints(cases, patches, knobs), "model": built["model"], **launch, "cases": rows}
+    runner = Path(launch["launch_folder"]) / ".claude" / f"{launch['runner_token']}.js"
+    runner.write_text(
+        source.replace("name: 'unbuilt'", f"name: '{launch['runner_token']}'")
+        .replace("const BUILT = null", "const BUILT = " + json.dumps(built)),
+        encoding="utf-8")
     with tempfile.TemporaryDirectory(dir=output) as temporary:
         staging = Path(temporary) / "build"
         staging.mkdir()
-        (staging / "measure-runner.js").write_text(
-            source.replace("const BUILT = null", "const BUILT = " + json.dumps(built)), encoding="utf-8")
         manifest["built_at"] = datetime.now(timezone.utc).isoformat()
         write(staging / "manifest.json", manifest)
         staging.rename(destination)
-    print(f"Runner: {destination / 'measure-runner.js'}")
     return destination
 
 

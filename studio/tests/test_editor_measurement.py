@@ -1,4 +1,5 @@
 """Regression gate for the newest recorded measurement of the current editor and cases."""
+import re
 import shutil
 from collections import Counter
 
@@ -6,6 +7,10 @@ import pytest
 
 import editor_results as measurement
 from test_enforced_rules import JUDGED
+
+MEASURE_AGAIN = (
+    "Run `python studio/editor_measure.py build` in a fresh worktree and paste the line it prints."
+)
 
 
 def check_mark(results, linked):
@@ -28,7 +33,7 @@ def check_run(results, current, names, model):
     run = next((r for r in reversed(results["runs"]) if all(r[k] == v for k, v in current.items())), None)
     if run is None:
         moved = [key for key, value in current.items() if value != results["runs"][-1][key]]
-        raise AssertionError(f"{', '.join(moved)} changed. Run /measure-editor")
+        raise AssertionError(f"{', '.join(moved)} changed. {MEASURE_AGAIN}")
     assert model in run["model"], f"Unexpected editor model {run['model']}"
     assert Counter(r["case"] for r in run["cases"]) == Counter(names), "Missing, extra or repeated case"
     for row in run["cases"]:
@@ -55,7 +60,7 @@ def test_tracked_cases_have_a_measurement():
     if results["runs"]:
         fingerprint = measurement.cases_fingerprint(measurement.DATASET / "cases", measurement.DATASET / "patches")
         assert any(r["cases_fingerprint"] == fingerprint for r in results["runs"]), (
-            "cases_fingerprint changed. Run /measure-editor"
+            f"cases_fingerprint changed. {MEASURE_AGAIN}"
         )
 
 
@@ -84,7 +89,7 @@ CURRENT = {"prompt_fingerprint": "p", "cases_fingerprint": "c"}
 @pytest.mark.parametrize("key", list(CURRENT))
 def test_changed_and_restored_fingerprint(key):
     results = sample()
-    with pytest.raises(AssertionError, match=f"{key}.*measure-editor"):
+    with pytest.raises(AssertionError, match=re.escape(f"{key} changed. {MEASURE_AGAIN}")):
         check_run(results, {**CURRENT, key: "different"}, ["oak"], "opus")
     results["runs"].append({**results["runs"][0], key: "different", "cases": []})
     check_run(results, CURRENT, ["oak"], "opus")

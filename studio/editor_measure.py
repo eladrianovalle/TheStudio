@@ -18,9 +18,11 @@ ship to installed repositories (it is not in install.SOURCE_FILES).
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
+import secrets
 import shlex
 import shutil
 import subprocess
@@ -55,6 +57,14 @@ DUE_DATE_LINE = re.compile(r"^(verification_due:[ \t]*)(\d{4})-(\d{2})-(\d{2})",
 # them, in any case and anywhere in the name, is refused.
 TELLTALE_WORDS = (
     "eval", "case", "plant", "defect", "clean", "test", "fixture", "judge", "measure", "probe",
+    "experiment", "rubric", "score", "compare", "benchmark", "candidate", "arena",
+)
+
+LAUNCH_FOLDER_NAME = "harbor-notes"
+LAUNCH_SETTINGS = {"autoMemoryEnabled": False}
+HEADLESS_CLAUDE = (
+    "claude", "-p", "--setting-sources", "project,local", "--strict-mcp-config",
+    "--permission-mode", "auto", "--allowedTools", "Workflow", "--",
 )
 
 REQUIRED_FIELDS = (
@@ -147,6 +157,87 @@ def explain_bad_location(text: str, what: str) -> str | None:
     if unquotable is not None:
         return f"{what} {text!r} cannot be used:\n{unquotable}"
     return None
+
+
+def enclosing_work_tree(root: Path) -> str | None:
+    existing = root
+    while not existing.exists():
+        existing = existing.parent
+    result = subprocess.run(
+        ["git", "-C", str(existing), "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip()
+
+
+def claude_config_dir() -> Path:
+    return Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude"))
+
+
+def worktree_paths(source_repo: Path) -> list[str]:
+    listing = _git(source_repo, "worktree", "list", "--porcelain")
+    return [line[len("worktree "):] for line in listing.splitlines() if line.startswith("worktree ")]
+
+
+def with_home_forms(paths: list[str]) -> list[str]:
+    home = str(Path.home())
+    listed = []
+    for path in paths:
+        forms = [path]
+        if path.startswith(home + "/"):
+            forms.append("~" + path[len(home):])
+        for form in forms:
+            if form not in listed:
+                listed.append(form)
+    return listed
+
+
+def launch_fingerprint(launch_folder: Path, fingerprinted: list[Path]) -> str:
+    digest = hashlib.sha256()
+    digest.update(str(launch_folder).encode() + b"\0")
+    for path in fingerprinted:
+        digest.update(str(path).encode() + b"\0" + path.read_bytes() + b"\0")
+    return digest.hexdigest()
+
+
+def prepare_launch_folder(root: Path, source_repo: Path) -> dict:
+    launch_folder = root / LAUNCH_FOLDER_NAME
+    if launch_folder.exists():
+        shutil.rmtree(launch_folder)
+    (launch_folder / ".claude").mkdir(parents=True)
+
+    rules_copy = launch_folder / "CLAUDE.md"
+    shutil.copyfile(source_repo / "CLAUDE.md", rules_copy)
+    settings_path = launch_folder / ".claude" / "settings.json"
+    settings_path.write_text(json.dumps(LAUNCH_SETTINGS) + "\n", encoding="utf-8")
+
+    config_dir = claude_config_dir()
+    global_rules = config_dir / "CLAUDE.md"
+    global_files = [global_rules] if global_rules.is_file() else []
+    forbidden = [str(source_repo), *worktree_paths(source_repo), str(config_dir / "projects") + "/"]
+    return {
+        "launch_folder": str(launch_folder),
+        "runner_token": secrets.token_hex(8),
+        "instruction_files": [str(path) for path in [*global_files, rules_copy]],
+        "forbidden_paths": with_home_forms(forbidden),
+        "launch_fingerprint": launch_fingerprint(launch_folder, [rules_copy, settings_path, *global_files]),
+    }
+
+
+def launch_line(launch: dict, source_repo: Path) -> str:
+    runner = Path(launch["launch_folder"]) / ".claude" / f"{launch['runner_token']}.js"
+    prompt = f"Run the Workflow tool with scriptPath {runner} and no args, and wait for it to finish."
+    steps = [
+        ["cd", launch["launch_folder"]],
+        [*HEADLESS_CLAUDE, prompt],
+        ["cd", str(source_repo)],
+        ["python", "studio/editor_measure.py", "record"],
+        ["python", "studio/editor_measure.py", "rule"],
+    ]
+    return " && ".join(shlex.join(step) for step in steps)
 
 
 # --- reading a case ---------------------------------------------------------
@@ -634,6 +725,14 @@ def build(root: Path, cases_dir: Path, patches_dir: Path, source_repo: Path, who
     if problem is not None:
         print(f"editor_measure build: {problem}", file=sys.stderr)
         return 2
+    work_tree = enclosing_work_tree(root)
+    if work_tree is not None:
+        print(
+            f"editor_measure build: root {str(root)!r} is inside the git work tree {work_tree}, "
+            "so a session launched there would be shown its branch, status and commits",
+            file=sys.stderr,
+        )
+        return 2
 
     case_paths = sorted(cases_dir.glob("*.json"))
     if not case_paths:
@@ -667,8 +766,14 @@ def build(root: Path, cases_dir: Path, patches_dir: Path, source_repo: Path, who
                      "writer": measurement.read(handoff_path(tree, case["unit_id"]))})
         print(f"built {case_path.stem} at {tree} (head {head})")
 
-    measurement.publish_build(rows, cases_dir, patches_dir, source_repo / "studio/output/editor_measure", measurement.settings())
+    source_checkout = source_repo.resolve()
+    launch = prepare_launch_folder(root, source_checkout)
+    measurement.publish_build(
+        rows, cases_dir, patches_dir, source_repo / "studio/output/editor_measure", measurement.settings(), launch,
+    )
     print(f"editor_measure build: {len(case_paths)} case(s) built and proved under {root}")
+    print("Paste this line to launch the run, record it and list the cases to rule on:")
+    print(launch_line(launch, source_checkout))
     return 0
 
 
@@ -725,7 +830,7 @@ def main(
                 measurement.clear_builds(output)
                 return build(root, cases_dir, patches_dir, source_repo, whole_suite)
             if arguments.command == "record":
-                projects = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude")) / "projects"
+                projects = claude_config_dir() / "projects"
                 measurement.record(output, results, projects, repaired)
             else:
                 measurement.rule(results, arguments.run, arguments.case, arguments.outcome, arguments.note)

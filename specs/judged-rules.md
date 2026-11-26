@@ -288,32 +288,37 @@ quietly. Real pairs first, plants to fill, `as_built` clean cases to fill the cl
 
 | Tell | Handling |
 |---|---|
-| Location | `--root` defaults to `~/checkouts`. A root under `~/.studio` made one test that skips paths holding `.studio` find no modules, and the whole-suite proof now refuses any root a test treats differently. The build refuses a root or tree name holding any of: eval, case, plant, defect, clean, test, fixture, judge, measure, probe. The branch is the unit's real one and is not checked. The path must pass `explain_unquotable_path`. |
+| Location | `--root` defaults to `~/checkouts`. A root under `~/.studio` made one test that skips paths holding `.studio` find no modules, and the whole-suite proof now refuses any root a test treats differently. The build refuses a root or tree name holding any of: eval, case, plant, defect, clean, test, fixture, judge, measure, probe, experiment, rubric, score, compare, benchmark, candidate, arena, and a root inside a git work tree. The branch is the unit's real one and is not checked. The path must pass `explain_unquotable_path`. |
 | History | Nothing later than the writer commit exists in the tree. An amended commit carries the real commit's message, author and dates. |
 | A previous review | The build deletes the unit's `reviewer-concerns` file from every tree. |
 | Handoff files | The build writes the writer handoff a real editor would find. |
-| How it is launched | The prompt reaches the tree through `work_dir`, the route a real `/forge --work-dir` run uses. |
-| The session's context | Every agent is shown the session's skill listing, branch and recent commits. `measure-editor.md` carries `disable-model-invocation: true` so the command stays out of that listing. The branch name and commit subjects are not hidden; the evidence file records what the baseline editors were shown. |
-| The code index | A session index answers from today's code, fix included, through an MCP tool or a shell command. `/measure-editor` is run from a session started in a fresh worktree of the branch being measured, where there is no index. A case whose editor called a tool beginning `mcp__` is void. |
-| The answer key | Case files and patches live in the checkout each editor's shell starts in. The prompt sends it to the tree. Nothing stops it reading elsewhere; the Verification section checks that none did. |
+| How it is launched | The owner pastes the line `build` prints. It starts a headless session in the launch folder `<root>/harbor-notes/`, so every editor starts there, and the prompt reaches the tree through `work_dir`, the route a real `/forge --work-dir` run uses. |
+| The session's context | The launch folder is not a git repository, so no agent is shown a branch, a status or commit titles. It holds a byte copy of `CLAUDE.md`, a `.claude/settings.json` that turns auto-memory off, and the runner under a random name in `.claude/`, and nothing else. There is no measuring command to appear in the skill listing. |
+| The code index | A session index answers from today's code, fix included, through an MCP tool or a shell command. `build` runs in a fresh worktree of the branch being measured, the session starts in the launch folder, and the printed line passes `--strict-mcp-config`, so there is no index. A case whose editor called a tool beginning `mcp__` is void. |
+| The answer key | Case files and patches stay in the worktree `build` ran in. Each editor's shell starts in the launch folder, which holds none of them, and the prompt sends it to the tree. Nothing stops it reading elsewhere; the Verification section checks that none did. |
 | The clock | Spec due dates are moved so the tree reads as if written today. Commit dates are not moved. |
 | `.git` as a directory | Not hidden. |
 
 ### The measuring loop
 
-**The command.** `/measure-editor`, typed by the user in a session started in a fresh worktree of
-the branch being measured. It is the user's opt-in to run the Workflow tool, as `/forge` is. It is run
-headless, `claude -p --setting-sources project,local --strict-mcp-config --permission-mode auto --allowedTools Workflow -- "/measure-editor"`: in an interactive session
-Claude Code relays the launching command to every case editor, and `record` voids a case whose
-editor was shown it. `--allowedTools Workflow` is needed because the built runner carries every
-case's prompt, too large for the approval dialog, which then offers no way to approve it. Rulings
-are answered afterwards in an ordinary session.
+**The launch.** Two steps by the user, who opts in to the Workflow run by pasting the line, as
+typing `/forge` does. First, in a fresh worktree of the branch being measured, run
+`python studio/editor_measure.py build`; a non-zero exit stops there. Then paste the line the build
+prints last:
 
-1. Runs `python studio/editor_measure.py build`. A non-zero exit stops the run.
-2. Calls the Workflow tool by `scriptPath`, pointing at the built runner. No args.
-3. When the workflow finishes, runs `python studio/editor_measure.py record`.
-4. Puts each `needs_ruling` row to the user and records each answer with
-   `python studio/editor_measure.py rule`, then reports the totals against the mark.
+```
+cd <root>/harbor-notes && claude -p --setting-sources project,local --strict-mcp-config --permission-mode auto --allowedTools Workflow -- 'Run the Workflow tool with scriptPath <root>/harbor-notes/.claude/<token>.js and no args, and wait for it to finish.' && cd <worktree> && python studio/editor_measure.py record && python studio/editor_measure.py rule
+```
+
+1. The headless session starts in the launch folder and calls the Workflow tool by `scriptPath`,
+   pointing at the built runner, with no args. Headless, Claude Code does not relay the launching
+   request to the case editors; in an interactive session it would, and `record` voids a case whose
+   editor was shown it. `--allowedTools Workflow` is needed because the built runner carries every
+   case's prompt, too large for the approval dialog, which then offers no way to approve it.
+2. When the workflow finishes, the line changes back into the worktree and runs `record`.
+3. `rule` lists each `needs_ruling` row. The user rules afterwards in any session with
+   `rule --run <id> --case <tree> --outcome caught|missed --note "…"`. A void run means a fresh
+   build and a fresh paste.
 
 **Rendering from the same source.** `editor-prompt.mjs render` reads units and writer handoffs on
 stdin, loads `editorPrompt` and everything it calls out of `implementation-loop.js`, and prints each
@@ -323,12 +328,14 @@ share one copy, and gains one function for a multi-line object literal. Each cas
 Python from the case file and from `runtime_knobs(load_loop_config())`, the same call `/forge` makes.
 
 **The workflow script.** `build` writes a copy of `measure-runner.js` to
-`studio/output/editor_measure/<timestamp>/` with one line replaced: the tracked file's
-`const BUILT = null` becomes the list of trees, each with its name and rendered prompt, plus the
-schema and the model. A manifest beside it holds each tree's path, built commit id, kind, criteria,
-probe and rendered prompt, both fingerprints, and `built_at`, the time the build finished. `build`
-deletes every earlier build's directory, so only one runner exists to launch. The tracked file,
-launched unbuilt, returns `{ measured: false, reason: 'not_built' }` and starts no agent. The
+`<root>/harbor-notes/.claude/<runner_token>.js`, a random name, with two things replaced: its
+`meta.name` becomes that token, and the tracked file's `const BUILT = null` becomes the list of
+trees, each with its name and rendered prompt, plus the schema and the model. A manifest under
+`studio/output/editor_measure/<timestamp>/` holds each tree's path, built commit id, kind, criteria,
+probe and rendered prompt, both fingerprints, the launch fields, and `built_at`, the time the build
+finished. `build` deletes every earlier build's directory and recreates the launch folder, so only
+one runner exists to launch. The tracked file, launched unbuilt, returns
+`{ done: false, reason: 'not_built' }` and starts no agent. The
 script's whole body: for every tree, in parallel, one `agent()` call with that tree's prompt, the
 schema and the model. One agent per case and no others.
 
