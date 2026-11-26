@@ -994,7 +994,7 @@ def test_cli_branch_flag_checks_the_directory_it_was_run_from(tmp_path, monkeypa
     config.write_text(_GATE)
     monkeypatch.chdir(repo)
 
-    knobs = json.loads(_cli(["impl_loop.py", str(config), "--branch", "impl/some_unit"]))
+    knobs = json.loads(_cli(["impl_loop.py", str(config), "--branch", "impl/some_unit", "--unit", "some_unit"]))
 
     assert knobs["branch"] == "impl/some_unit"
 
@@ -1008,7 +1008,7 @@ def test_cli_branch_flag_refuses_before_any_knobs_are_emitted(tmp_path, monkeypa
     monkeypatch.chdir(repo)
 
     with pytest.raises(BranchError, match=BRANCH_DIRTY_TREE):
-        _cli(["impl_loop.py", str(config), "--branch", "impl/some_unit"])
+        _cli(["impl_loop.py", str(config), "--branch", "impl/some_unit", "--unit", "some_unit"])
 
 
 def test_cli_branch_flag_checks_the_work_dir_when_one_is_given(monkeypatch, tmp_path):
@@ -1022,7 +1022,7 @@ def test_cli_branch_flag_checks_the_work_dir_when_one_is_given(monkeypatch, tmp_
     monkeypatch.chdir(elsewhere)
 
     with pytest.raises(BranchError, match=BRANCH_WRONG):
-        _cli(["impl_loop.py", "--work-dir", str(STUDIO_ROOT), "--branch", "no-such-branch-in-studio"])
+        _cli(["impl_loop.py", "--work-dir", str(STUDIO_ROOT), "--branch", "no-such-branch-in-studio", "--unit", "some_unit"])
 
 
 def test_without_the_branch_flag_the_cli_checks_no_branch(tmp_path, monkeypatch):
@@ -1738,7 +1738,7 @@ _BAD_PACK_TABLES = {
 }
 
 
-@pytest.mark.parametrize("branch_arguments", [[], ["--branch", "impl/demo"]], ids=["no-branch", "branch"])
+@pytest.mark.parametrize("branch_arguments", [[], ["--branch", "impl/demo", "--unit", "demo"]], ids=["no-branch", "branch"])
 @pytest.mark.parametrize("table", list(_BAD_PACK_TABLES.values()), ids=list(_BAD_PACK_TABLES))
 def test_impl_loop_exits_1_naming_the_config_and_the_shipped_packs(tmp_path, table, branch_arguments):
     config = tmp_path / "implementation_loop.toml"

@@ -1,4 +1,5 @@
 """Resolve one portable Forge unit before starting its Node orchestration host."""
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -120,6 +121,7 @@ def run(args):
         raise ValueError(f"Invalid or protected branch: {target}")
     plan = {**knobs, **unit, "branch": target, "starting_branch": branch, "work_dir": str(cwd),
             "base_sha": subprocess.check_output(["git", "-C", cwd, "rev-parse", "HEAD"], text=True).strip(),
+            "launched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "roles": {role: {"runtime": getattr(args, f"{role}_runtime") or args.runtime,
                              "model": getattr(args, f"{role}_model")} for role in ("writer", "editor")}}
     if args.plan:

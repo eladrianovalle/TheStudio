@@ -25,7 +25,8 @@ test('native and portable loops agree on recorded handoffs at both gates', async
     [{...writer, stuck: 'fixture', mvi_claimed: false}, null, true, true],
     [writer, null, false, true], [writer, {...editor, tests: {...tests, passed: false}}, true, true],
   ]) {
-    const unit = {unit_id: 'demo', acceptance_criteria: ['Works.'], editor_enabled: enabled, model: 'sonnet'}
+    const unit = {unit_id: 'demo', acceptance_criteria: ['Works.'], editor_enabled: enabled, model: 'sonnet',
+      launched_at: '2026-11-26T00:00:00+00:00'}
     const events = []
     const host = {phase: () => {}, log: () => {}, agent: async (_, opt) => {
       events.push([opt.label, opt.model])
@@ -60,7 +61,7 @@ function fixture() {
   const runGit = (...args) => git(cwd, ...args)
   const sha = runGit('rev-parse', 'HEAD')
   const unit = {unit_id: 'demo', work_dir: cwd, starting_branch: 'feature', branch: 'feature',
-    base_sha: sha, title: 'Works', instructions: 'Build', acceptance_criteria: ['Works.'],
+    base_sha: sha, launched_at: '2026-11-26T00:00:00+00:00', title: 'Works', instructions: 'Build', acceptance_criteria: ['Works.'],
     test_command: 'test "$(cat hello.txt)" = pass', static_checks: [], require_mutation_check: false,
     roles: {writer: {runtime: 'codex', model: null}, editor: {runtime: 'codex', model: null}}}
   return {cwd, git: runGit, unit}

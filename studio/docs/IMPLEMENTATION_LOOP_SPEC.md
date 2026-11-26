@@ -439,6 +439,34 @@ would delete them. This runs with or without `--work-dir`. It checks once, at la
 that is moved while the agents are working is still not caught, which is the case `--work-dir`
 exists for.
 
+**The launch leaves a record, and the loop will not start without it.** `--branch` needs a unit id
+(`--unit`, or a `--spec` whose Build Plan has exactly one unit); without one it is a usage error that
+tells a session running an older `forge.md` to restart. When every other check passes, the launch
+writes `studio-forge.json` into the tree's git directory (`git rev-parse --absolute-git-dir`: `.git/`
+for the main checkout, `.git/worktrees/<name>/` for a linked one), so `git add -A` and
+`git reset --hard` never touch it. It holds nine fields: `unit_id`, `branch`, `tree`, `base_sha`,
+`test_command` (the repository's `[gate] test_command`), `pack_check` (the `check-packs` command added
+to the static checks, or `null` with no pack), `started_at`, `checked_at` (`null` until a check finds
+problems) and `problems`. The launch prints `launched_at` with the knobs, and
+`implementation-loop.js` returns `{ delivered: false, reason: 'not_launched' }` before spawning any
+agent when its args carry none. A launch over a record nobody checked refuses with `unchecked-loop`
+and prints the exact `--check` command for that tree; over a record it cannot read it refuses with
+`unreadable-record`, naming the file; a record that was checked and kept its problems is replaced.
+
+**After the loop, `impl_loop.py --check [--work-dir <tree>]` says whether the unit is clean.**
+`/forge` runs it first in its report step. It reads git and the record, never the agents' handoffs.
+Two git checks run first: `wrong-branch` (the tree is not on the record's branch) and
+`no-writer-commit` (no commit between `base_sha` and `HEAD` has a subject starting
+`writer: <unit_id>`; a `writer(stuck):` commit does not count). Only when both pass does it run the
+recorded test command through the shell from the tree's root, then the recorded pack check when there
+is one, each with its output on stderr; both run even if the first fails, giving `tests-failed` and
+`packs-failed` (whose detail carries the first line `check-packs` printed). A per-unit `--test` never
+reaches the check. It prints one JSON object, `{"clean", "unit_id", "branch", "tests": {"command",
+"exit_code"}, "packs": {"command", "exit_code"} | null, "problems": [{"name", "detail"}]}`. Exit 0:
+clean, record removed. Exit 1: not clean, record stamped with `checked_at` and `problems`, each problem
+printed as a sentence on stderr; checking a stamped record checks again. Exit 2: nothing was checked
+(no record, an unreadable one, not a git tree, bad arguments), and no test ran.
+
 **What it does not do.** It reduces the blast radius of a run pointed at the wrong directory; it
 cannot make that impossible. Every one of these instructions is prompt text an agent may ignore, and
 the validation is one shot at the start while the agents work for an hour. A test can prove the
