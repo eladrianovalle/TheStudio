@@ -17,7 +17,7 @@ def test_renders_pinned_prompt_and_unbuilt_runner_spawns_nothing():
     runner = (measurement.DATASET / "measure-runner.js").read_text().removeprefix("export ")
     harness = "const run = new (Object.getPrototypeOf(async()=>{}).constructor)(" + json.dumps(runner) + "); run().then(v=>console.log(JSON.stringify(v)))"
     output = subprocess.check_output(["node", "-e", harness], text=True)
-    assert json.loads(output) == {"measured": False, "reason": "not_built"}
+    assert json.loads(output) == {"done": False, "reason": "not_built"}
 
 
 def test_fingerprint_tracks_behavior_and_gate_source(tmp_path):

@@ -520,4 +520,4 @@ One Product + Engineering role iteration applied to the first draft:
 
 ## Changing the editor prompt
 
-Edit the prompt by hand on a feature branch and run `/measure-editor` there. Commit the matching measurement with the prompt change. Once measurements exist, the suite requires a matching run before the branch can pass the entry gate.
+Edit the prompt by hand on a feature branch, run `python studio/editor_measure.py build` in a fresh worktree of it, and paste the line the build prints. Commit the matching measurement with the prompt change. Once measurements exist, the suite requires a matching run before the branch can pass the entry gate.
