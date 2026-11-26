@@ -226,10 +226,33 @@ If `--plan`, stop here.
 **Studio path:** use `.studio/source/impl_loop.py` for the command below. If that file does not
 exist but `studio/impl_loop.py` does, use that instead (you are in the Studio source repo).
 
-Read the loop config knobs. Resolution finds this repo's own config at the repo root
-(`.studio/implementation_loop.toml`) automatically, falling back to the shipped default, so no
-path argument is needed. That file is the only thing that says how this repo is gated — a `[gate]`
-key it leaves out is empty, and nothing is detected here:
+**Settle everything that can stop this run before you record the launch.** The launch command below
+leaves a record that refuses the next `/forge` in this tree until someone checks it, so a STOP after
+it strands the tree behind a run that never started. In this order:
+
+1. **Read the knobs without recording anything.** With `--work-dir`, use the JSON Step 3 printed.
+   Without it, run `python .studio/source/impl_loop.py` with no arguments. Resolution finds this
+   repo's own config at the repo root (`.studio/implementation_loop.toml`) automatically, falling
+   back to the shipped default. That file is the only thing that says how this repo is gated: a
+   `[gate]` key it leaves out is empty, and nothing is detected here. If this exits non-zero, STOP
+   and print its message (the first two reasons in the list below).
+2. **If you resolved criteria in Step 1 and `editor_enabled` is `false`, STOP — do not run the
+   loop.** The editor is the only thing that grades criteria, so this pair asks for a graded run and
+   supplies nobody to grade it. Say so plainly, and give the two ways forward: turn the editor
+   mandate on (`[editor] mandate` in `implementation_loop.toml`), or drop `--spec` and accept an
+   ungraded run. The loop also flags this combination if it is reached another way, but a
+   contradiction visible before any agent runs should cost nothing to discover — the same reason a
+   mistyped `--spec` stops in Step 1 instead of quietly downgrading to an ungraded run.
+3. **If this session has no Workflow tool, STOP and say so.** Do not build the unit yourself and play
+   both parts: the editor's value is that it is a separate agent that did not write the code, so a
+   one-agent run reports a review that never happened.
+4. **Resolve the `scriptPath`** you will launch (below, and the Gotchas on a `scriptPath` the
+   Workflow tool refuses). If no verified copy is in scope, STOP here.
+5. **Copy the Studio checker's `code_comments.py`** from beside `impl_loop.py` to a temporary
+   directory outside the worktree, and keep its absolute path for Step 6. This pins the verifier for
+   units that edit Studio itself.
+
+Then record the launch. This is the last command before the Workflow call:
 
 ```bash
 python .studio/source/impl_loop.py --branch "<branch>" --unit "<unit_id>"
@@ -238,10 +261,10 @@ python .studio/source/impl_loop.py --branch "<branch>" --unit "<unit_id>"
 
 Pass the `unit_id` from Step 2, and with `--spec` pass `--spec "<spec file>"` too. If `--work-dir`
 was given, pass it here too (`--work-dir "<work_dir>" --branch "<branch>" --unit "<unit_id>"`), so
-the branch is checked in the work directory. Run this even though Step 3 already printed the knobs:
-it is the check of the tree as it stands now, so it must be the last command before the Workflow
-call. When every check passes it leaves a small record of the launch in the tree's git directory
-(never in the working tree) and prints `launched_at`; Step 6 checks the unit against that record.
+the branch is checked in the work directory. It is the check of the tree as it stands now. When
+every check passes it leaves a small record of the launch in the tree's git directory (never in the
+working tree) and prints `launched_at` and `base_sha`; keep `base_sha` for Step 6, which checks the
+unit against that record.
 
 **If this command exits non-zero, STOP — do not run the loop.** Its message already says what is
 wrong and what to do; print it as-is and let the user fix it. It is one of:
@@ -275,18 +298,6 @@ wrong and what to do; print it as-is and let the user fix it. It is one of:
   remove.
 - **`--branch needs a unit id`** — the command was called without `--unit`. If you passed it, the
   session is running an older copy of this command: tell the user to restart the session.
-
-**If you resolved criteria in Step 1 and `editor_enabled` is `false`, STOP here — do not run the
-loop.** The editor is the only thing that grades criteria, so this pair asks for a graded run and
-supplies nobody to grade it. Say so plainly, and give the two ways forward: turn the editor mandate on
-(`[editor] mandate` in `implementation_loop.toml`), or drop `--spec` and accept an ungraded run. The
-loop also flags this combination if it is reached another way, but a contradiction visible before any
-agent runs should cost nothing to discover — the same reason a mistyped `--spec` stops in Step 1
-instead of quietly downgrading to an ungraded run.
-
-Before dispatch, copy the Studio checker's `code_comments.py` from beside `impl_loop.py`
-to a temporary directory outside the worktree. Keep its absolute path and the preflight
-`base_sha` for Step 6. This pins the verifier for units that edit Studio itself.
 
 Then call the **Workflow** tool **by `scriptPath`** (NOT `name`; see Gotchas), pointing at the
 workflow copy that belongs to the tree being built, and merging the config knobs into the unit args:
@@ -328,10 +339,6 @@ check and the entry gate doesn't require it). So passing all knobs makes
 
 The workflow runs in the background and notifies on completion. Do not re-run it or poll;
 wait for the completion notification.
-
-If this session has no Workflow tool, stop and say so. Do not build the unit yourself and play
-both parts: the editor's value is that it is a separate agent that did not write the code, so a
-one-agent run reports a review that never happened.
 
 #### Gotchas (learned the hard way, do not regress these)
 

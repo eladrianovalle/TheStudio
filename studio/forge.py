@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import sys
 
-from impl_loop import load_knobs, project_config_root, validate_work_dir
+from impl_loop import check_command, load_knobs, project_config_root, validate_work_dir
 from stats import build_plan_section, parse_build_plan, parse_frontmatter, UNIT_OPENER
 
 
@@ -122,6 +122,7 @@ def run(args):
     plan = {**knobs, **unit, "branch": target, "starting_branch": branch, "work_dir": str(cwd),
             "base_sha": subprocess.check_output(["git", "-C", cwd, "rev-parse", "HEAD"], text=True).strip(),
             "launched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "check_command": check_command(cwd),
             "roles": {role: {"runtime": getattr(args, f"{role}_runtime") or args.runtime,
                              "model": getattr(args, f"{role}_model")} for role in ("writer", "editor")}}
     if args.plan:

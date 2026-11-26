@@ -456,8 +456,9 @@ A launch holds an exclusive lock on `studio-forge.lock` beside the record from r
 writing the new one, so two launches at once cannot both pass: the second refuses with
 `launch-in-progress` instead of overwriting the first run's record. The lock is the portable host's:
 holding it means creating the file exclusively, and releasing it means removing the file, so a
-native launch or check refuses while a portable run owns the tree and leaves nothing behind that
-would make the portable host refuse later. A process killed while holding it leaves the file, and
+native launch or check refuses while a portable run owns the tree. The portable host in turn reads
+the record under that lock before it touches anything, and refuses with `unchecked-loop` (printing
+the `--check` command) while a native run there was never checked, or with `unreadable-record`. A process killed while holding it leaves the file, and
 the refusal names it to remove.
 
 **After the loop, `impl_loop.py --check [--work-dir <tree>]` says whether the unit is clean.**

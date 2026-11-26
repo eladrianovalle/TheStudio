@@ -91,9 +91,11 @@ must leave the working tree unchanged.
 
 Who decides the verdict:
 
-> Studio code runs `check-packs` only on the portable host, and only on the writer's change. On the
-> native workflow the verdict is the writer's own report, and a missing report passes. On both
-> paths, changes the editor makes are not re-checked.
+> Studio code runs `check-packs` only on the portable host, and only on the writer's change, while the
+> loop runs. On the native workflow the loop's verdict is the writer's own report, and a missing report
+> passes. After a native run, `/forge`'s report step runs `impl_loop.py --check`, which runs the pack
+> check itself on the final tree, editor changes included, and reports `packs-failed` when it fails.
+> On the portable host, changes the editor makes are not re-checked.
 
 ## The look pass
 

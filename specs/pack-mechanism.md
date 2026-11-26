@@ -226,9 +226,11 @@ config file and the shipped packs, before any agent starts.
 
 **Who decides the verdict.** State this limit word for word in `ASSET_PIPELINE.md`:
 
-> Studio code runs `check-packs` only on the portable host, and only on the writer's change. On the
-> native workflow the verdict is the writer's own report, and a missing report passes. On both
-> paths, changes the editor makes are not re-checked.
+> Studio code runs `check-packs` only on the portable host, and only on the writer's change, while the
+> loop runs. On the native workflow the loop's verdict is the writer's own report, and a missing report
+> passes. After a native run, `/forge`'s report step runs `impl_loop.py --check`, which runs the pack
+> check itself on the final tree, editor changes included, and reports `packs-failed` when it fails.
+> On the portable host, changes the editor makes are not re-checked.
 
 On the portable host (`run_phase.py forge`), the host runs every static check without a `{paths}`
 token itself and leaves the writer's change uncommitted when one fails. The writer prompt also names

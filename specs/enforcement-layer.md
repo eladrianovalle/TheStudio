@@ -290,6 +290,7 @@ needs it before relaunching, and a loop's own agents have no reason to run the l
 | Guard: push, `gh pr create` of the record's branch | nothing | deny, without the check command | deny, printing the check command | ask | ask, naming the file |
 | `--check` | exit 2, "nothing to check" | checks | checks | checks again | exit 2, names the file |
 | Launch | writes one | refuses `unchecked-loop` | refuses `unchecked-loop` | replaces it | refuses `unreadable-record` |
+| Portable host (`forge --runtime`), under the same lock | runs | refuses `unchecked-loop` | refuses `unchecked-loop` | runs, leaving it | refuses `unreadable-record` |
 
 ### The launch and the post-loop check
 

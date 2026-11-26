@@ -127,6 +127,7 @@ export async function forge(unit, runtimes = adapters) {
     roles: {writer: execution(unit.roles.writer), editor: execution(unit.roles.editor)}}
   const gitDir = git('rev-parse', '--absolute-git-dir').trim()
   const lock = join(gitDir, 'studio-forge.lock')
+  const loopRecord = join(gitDir, 'studio-forge.json')
   let fd
   try { fd = openSync(lock, 'wx') }
   catch (err) {
@@ -231,7 +232,29 @@ export async function forge(unit, runtimes = adapters) {
     checkpoint = next
     validateChanges([])
   }
+  function refuseUncheckedLoop() {
+    if (!existsSync(loopRecord)) return
+    let record
+    try { record = JSON.parse(readFileSync(loopRecord, 'utf8')) }
+    catch { record = null }
+    const isObject = record !== null && typeof record === 'object' && !Array.isArray(record)
+    const textFields = ['unit_id', 'branch', 'tree', 'base_sha', 'test_command', 'started_at']
+    const optionalTextFields = ['pack_check', 'checked_at']
+    const readable = isObject &&
+      textFields.every(name => typeof record[name] === 'string') &&
+      optionalTextFields.every(name => name in record && (record[name] === null || typeof record[name] === 'string')) &&
+      Array.isArray(record.problems)
+    if (!readable) {
+      throw Error('unreadable-record: ' + loopRecord + ' is there but cannot be read as a /forge loop record. ' +
+        'A /forge run may still be holding this tree, so nothing was launched. Once no /forge run is using it, remove it and run Forge again.')
+    }
+    if (record.checked_at === null) {
+      throw Error('unchecked-loop: the /forge run of ' + record.unit_id + ' on ' + record.branch + ', started ' +
+        record.started_at + ', was never checked. Check it before launching another:\n\n    ' + unit.check_command)
+    }
+  }
   try {
+    refuseUncheckedLoop()
     ensureLocation(unit.starting_branch)
     if (status().length) throw Error('dirty-tree: commit or stash existing changes before running Forge')
     if (unit.starting_branch !== unit.branch) {
