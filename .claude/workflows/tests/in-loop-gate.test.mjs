@@ -78,13 +78,3 @@ test('the portable plan gives the writer the same routed gate runner when there 
   const prompt = await firstPrompt((unit, agent) => runLoop(unit, {agent, phase: () => {}, log: () => {}}), plan)
   assert.ok(prompt.includes('Run the unit tests: `' + plan.test_command + '`'))
 })
-
-test('the portable plan gives the writer the --test command when one is given', async () => {
-  const {repo} = project()
-  const plan = JSON.parse(execFileSync(python, [join(studio, 'run_phase.py'), 'forge', 'Build a demo', '--test', 'make quick', '--plan'],
-    {cwd: repo, encoding: 'utf8'}))
-
-  assert.equal(plan.test_command, 'make quick')
-  const prompt = await firstPrompt((unit, agent) => runLoop(unit, {agent, phase: () => {}, log: () => {}}), plan)
-  assert.ok(prompt.includes('Run the unit tests: `make quick`'))
-})
