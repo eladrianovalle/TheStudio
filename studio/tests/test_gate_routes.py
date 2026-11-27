@@ -442,7 +442,7 @@ def configured(repo):
 
 @pytest.mark.parametrize(
     "change",
-    ["web only", "web red", "unclaimed", "nothing", "config edit"],
+    ["web only", "web red", "unclaimed", "nothing", "config edit", "web deleted", "web renamed"],
 )
 def test_the_config_command_line_prints_and_exits_exactly_as_the_gate_command_line(repo, configured, change):
     base = git(repo, "rev-parse", "HEAD")
@@ -459,6 +459,10 @@ def test_the_config_command_line_prints_and_exits_exactly_as_the_gate_command_li
         (repo / "notes.txt").write_text("new\n")
     elif change == "config edit":
         configured.write_text(CONFIG.replace("[gate]\n", "[gate]\nstatic_checks = []\n", 1))
+    elif change == "web deleted":
+        git(repo, "rm", "-q", "-r", "web")
+    elif change == "web renamed":
+        git(repo, "mv", "web", "client")
     gate = gate_input(suites=suites, gate_config=".studio/implementation_loop.toml")
 
     from_config = config_command_line(repo, configured, base)
@@ -498,10 +502,10 @@ def test_the_config_command_line_routes_a_config_outside_any_repository_with_no_
         "[gate]\ntest_command = 5\n",
         '[gate]\ntest_command = "true"\nsuites = "web"\n',
         '[gate]\ntest_command = "true"\n[gate.suites.web]\ncommand = "echo web-ran"\n',
-        '[gate]\ntest_command = "true"\n[gate.suites.web]\ncommand = "echo web-ran"\npaths = ["wbe/"]\n',
+        '[gate]\ntest_command = "true"\n[gate.suites.web]\ncommand = "echo web-ran"\npaths = ["web/*"]\n',
     ],
     ids=["missing", "bad toml", "gate not a table", "no test_command", "blank test_command",
-         "test_command not text", "suites not a table", "suite without paths", "path that does not exist"],
+         "test_command not text", "suites not a table", "suite without paths", "path with a glob"],
 )
 def test_a_bad_config_exits_2_without_running_anything(repo, text):
     config = repo / "gate.toml"

@@ -240,12 +240,10 @@ def _read_config(config_path: Path) -> dict:
     repository_root = _top_level(config_path.parent)
     if repository_root is None:
         gate_config = None
-        suite_root = Path.cwd()
     else:
         gate_config = config_path.relative_to(repository_root).as_posix()
-        suite_root = repository_root
     try:
-        suites = check_suites(gate.get("suites", {}), suite_root, config_path)
+        suites = check_suites(gate.get("suites", {}), None, config_path)
     except SuiteError as error:
         raise RoutesError(str(error)) from error
     return {
