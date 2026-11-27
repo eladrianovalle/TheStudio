@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 from gate_routes import file_digest
-from impl_loop import check_command, load_knobs, project_config_root, validate_work_dir
+from impl_loop import check_command, gate_command, load_knobs, project_config_root, validate_work_dir
 from stats import build_plan_section, parse_build_plan, parse_frontmatter, UNIT_OPENER
 
 
@@ -123,9 +123,10 @@ def run(args):
     if target in ("main", "master") or subprocess.run(
             ["git", "check-ref-format", "--branch", target], capture_output=True).returncode:
         raise ValueError(f"Invalid or protected branch: {target}")
-    plan = {**knobs, **unit, "test_command": args.test or knobs["test_command"], "gate": gate,
+    base_sha = subprocess.check_output(["git", "-C", cwd, "rev-parse", "HEAD"], text=True).strip()
+    plan = {**knobs, **unit, "test_command": args.test or gate_command(config.resolve(), base_sha), "gate": gate,
             "branch": target, "starting_branch": branch, "work_dir": str(cwd),
-            "base_sha": subprocess.check_output(["git", "-C", cwd, "rev-parse", "HEAD"], text=True).strip(),
+            "base_sha": base_sha,
             "launched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "check_command": check_command(cwd),
             "roles": {role: {"runtime": getattr(args, f"{role}_runtime") or args.runtime,

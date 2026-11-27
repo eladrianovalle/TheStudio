@@ -42,7 +42,8 @@ For calls without those selectors, continue with the native Claude Workflow belo
   spawns. Without it, the agents work wherever their shell starts, as they always have. The flag
   reduces the blast radius of a run pointed at the wrong directory rather than ruling that out:
   every git command the loop renders is prompt text an agent may ignore.
-- Optional `--test "<cmd>"`: override the inferred test command.
+- Optional `--test "<cmd>"`: the command the writer and editor run in place of the routed gate. It
+  shapes only what the agents run: the post-loop check never sees it.
 - Optional `--plan`: echo the parsed plan and STOP (dry run); do not run the loop.
 
 ## Instructions
@@ -123,12 +124,10 @@ From `$ARGUMENTS`, construct the workflow `args`:
 - `acceptance_criteria`: the criteria resolved in Step 1, each string **verbatim** from the spec, in
   the spec's order. Omit it (or pass `[]`) when there was no `--spec` — the editor then judges against
   the title, as it always did.
-- `test_command`: infer from the repo's stack unless `--test` is given. Detect from marker files:
-  - Python (`pyproject.toml`/`pytest`): `python -m pytest <path> -q` (in this repo: `cd studio && python -m pytest tests/<file> -q`).
-  - Node (`package.json`): `npm test` or the project's test script.
-  - Rust (`Cargo.toml`): `cargo test`.
-  - Unity / other: ask if you cannot infer a runnable command.
-  - If you cannot infer one, fall back to the config knob `test_command` from the knobs JSON (Step 5).
+- `test_command`: `--test` if given, which shapes only what the agents run. Otherwise the
+  `gate_command` the Step 5 launch prints: the routed gate runner, which runs every suite the unit's
+  changes fall under plus the default, the same gate `--check` runs afterwards. Do not work one out
+  from the repo's files.
 - `static_checks`: take the list from the knobs JSON (Step 5) — it is what this repo's own config
   file says to run, so do not invent a linter here. Before passing it on, replace every `{paths}` token with the paths
   this unit is expected to touch, space-separated and each double-quoted
@@ -200,7 +199,7 @@ Print a short block, then proceed (unless `--plan`):
   title:    <MVI outcome>
   branch:   <branch>
   work dir: <resolved work_dir>   (omit this line when no --work-dir was given)
-  tests:    <test_command>
+  tests:    <--test command>   (without --test: "routed gate, from the launch's gate_command")
   builds:   <1-line of what files/behavior>
   spec:     specs/<slug>.md (status: approved) — unit <unit_id>
   criteria:
@@ -259,15 +258,16 @@ Then record the launch. This is the last command before the Workflow call:
 
 ```bash
 python .studio/source/impl_loop.py --branch "<branch>" --unit "<unit_id>"
-# prints knobs JSON, e.g. {"editor_enabled": true, ..., "branch": "<branch>", "base_sha": "...", "launched_at": "2026-11-26T12:00:00+00:00"}
+# prints knobs JSON, e.g. {"editor_enabled": true, ..., "branch": "<branch>", "base_sha": "...", "gate_command": "...", "launched_at": "2026-11-26T12:00:00+00:00"}
 ```
 
 Pass the `unit_id` from Step 2, and with `--spec` pass `--spec "<spec file>"` too. If `--work-dir`
 was given, pass it here too (`--work-dir "<work_dir>" --branch "<branch>" --unit "<unit_id>"`), so
 the branch is checked in the work directory. It is the check of the tree as it stands now. When
 every check passes it leaves a small record of the launch in the tree's git directory (never in the
-working tree) and prints `launched_at` and `base_sha`; keep `base_sha` for Step 6, which checks the
-unit against that record.
+working tree) and prints `launched_at`, `base_sha` and `gate_command`; keep `base_sha` for Step 6, which
+checks the unit against that record. `gate_command` is the routed gate runner for this config and
+`base_sha`; without `--test` it is the `test_command` you pass the workflow.
 
 **If this command exits non-zero, STOP — do not run the loop.** Its message already says what is
 wrong and what to do; print it as-is and let the user fix it. It is one of:
@@ -318,7 +318,7 @@ Workflow({ scriptPath: "<work_dir or repo>/.claude/workflows/implementation-loop
   unit_id, title, instructions,
   acceptance_criteria,     // verbatim from the spec (Step 1); omit or [] without --spec
   work_dir,                // the resolved path from Step 3; omit entirely without --work-dir
-  test_command,            // per-unit inferred; if none, use the knob test_command
+  test_command,            // --test if given; otherwise gate_command from impl_loop.py --branch
   static_checks,           // the knob list with {paths} substituted (Step 2)
   editor_enabled, read_scope, output_budget,           // from impl_loop.py
   require_mutation_check, mutation_command,            // from impl_loop.py

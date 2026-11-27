@@ -999,6 +999,46 @@ def test_cli_branch_flag_checks_the_directory_it_was_run_from(tmp_path, monkeypa
     assert knobs["branch"] == "impl/some_unit"
 
 
+def test_cli_branch_flag_prints_the_routed_gate_runner_for_its_config_and_base(tmp_path, monkeypatch):
+    repo = _repo_on_branch(tmp_path / "repo", "impl/some_unit")
+    config = tmp_path / "implementation_loop.toml"
+    config.write_text('[gate]\ntest_command = "echo default-ran"\n')
+    monkeypatch.chdir(repo)
+
+    knobs = json.loads(_cli(["impl_loop.py", str(config), "--branch", "impl/some_unit", "--unit", "some_unit"]))
+
+    runner = STUDIO_ROOT / "gate_routes.py"
+    assert knobs["gate_command"] == (
+        f'"{sys.executable}" "{runner}" --config "{config.resolve()}" --base {knobs["base_sha"]}'
+    )
+    ran = subprocess.run(knobs["gate_command"], shell=True, cwd=repo, capture_output=True, text=True)
+    assert ran.returncode == 0, ran.stderr
+    assert json.loads(ran.stdout)["runs"] == [{"suite": None, "command": "echo default-ran", "exit_code": 0}]
+
+
+def test_without_the_branch_flag_there_is_no_base_and_no_gate_runner(tmp_path):
+    config = tmp_path / "implementation_loop.toml"
+    config.write_text(_GATE)
+
+    assert "gate_command" not in json.loads(_cli(["impl_loop.py", str(config)]))
+
+
+def test_cli_branch_flag_refuses_a_config_path_its_gate_runner_cannot_quote(tmp_path, monkeypatch):
+    repo = _repo_on_branch(tmp_path / "repo", "impl/some_unit")
+    folder = tmp_path / "cost$5"
+    folder.mkdir()
+    config = folder / "implementation_loop.toml"
+    config.write_text(_GATE)
+    monkeypatch.chdir(repo)
+
+    with pytest.raises(LoopConfigError) as refused:
+        _cli(["impl_loop.py", str(config), "--branch", "impl/some_unit", "--unit", "some_unit"])
+
+    assert "cannot be quoted into the agents' test command" in str(refused.value)
+    assert "expands as a variable" in str(refused.value)
+    assert not (repo / ".git" / "studio-forge.json").exists()
+
+
 def test_cli_branch_flag_refuses_before_any_knobs_are_emitted(tmp_path, monkeypatch):
     """A refused branch stops the run: the CLI raises instead of printing knobs."""
     repo = _repo_on_branch(tmp_path / "repo", "impl/some_unit")
