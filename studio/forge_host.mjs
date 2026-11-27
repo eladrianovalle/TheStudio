@@ -10,6 +10,7 @@ import { runClaude } from './forge_claude.mjs'
 
 const adapters = {codex: runCodex, claude: runClaude}
 const commentChecker = readFileSync(new URL('./code_comments.py', import.meta.url))
+const gateRoutes = readFileSync(new URL('./gate_routes.py', import.meta.url))
 
 function executable(name) {
   return (process.env.PATH || '').split(delimiter).some(dir => {
@@ -124,6 +125,7 @@ export async function forge(unit, runtimes = adapters) {
   const head = () => git('rev-parse', 'HEAD').trim()
   const branch = () => git('branch', '--show-current').trim()
   const state = {attempt: randomUUID(), branch: unit.branch, base_sha: null, last_verified_sha: null,
+    gate_config_changed: false,
     roles: {writer: execution(unit.roles.writer), editor: execution(unit.roles.editor)}}
   const gitDir = git('rev-parse', '--absolute-git-dir').trim()
   const lock = join(gitDir, 'studio-forge.lock')
@@ -174,6 +176,28 @@ export async function forge(unit, runtimes = adapters) {
     const r = spawnSync(command, {cwd, shell: true, stdio: ['ignore', 2, 2]})
     return {command, passed: r.status === 0, exit_code: r.status ?? 1}
   }
+  function verdict() {
+    const temp = mkdtempSync(join(tmpdir(), 'studio-gate-'))
+    try {
+      const runner = join(temp, 'gate_routes.py')
+      writeFileSync(runner, gateRoutes)
+      const r = spawnSync(process.env.STUDIO_FORGE_PYTHON || 'python3', [runner, '--gate', '-', '--base', unit.base_sha],
+        {cwd, input: JSON.stringify(unit.gate), encoding: 'utf8', stdio: ['pipe', 'pipe', 2], maxBuffer: 32 * 1024 * 1024})
+      let report = null
+      try { report = JSON.parse(r.stdout) } catch { report = null }
+      const readable = report !== null && typeof report === 'object' && Array.isArray(report.runs) &&
+        typeof report.config_changed === 'boolean'
+      if (![0, 1].includes(r.status) || !readable) throw Error('Gate routing failed; preserving checkout')
+      if (report.config_changed) state.gate_config_changed = true
+      return {command: report.runs.map(run => run.command).join('; '), passed: r.status === 0,
+        exit_code: r.status, runs: report.runs}
+    } finally {
+      rmSync(temp, {recursive: true, force: true})
+    }
+  }
+  function summary({command, passed, exit_code}) {
+    return {command, passed, exit_code}
+  }
   function recover(changes) {
     const entries = validateChanges(changes)
     for (const entry of entries) {
@@ -182,10 +206,10 @@ export async function forge(unit, runtimes = adapters) {
       else git('restore', '--source', checkpoint, '--worktree', '--', path)
     }
     validateChanges([])
-    const restored = test(unit.test_command)
+    const restored = verdict()
     if (!restored.passed) throw Error('Restored writer checkpoint failed its test')
     validateChanges([])
-    return restored
+    return summary(restored)
   }
   function checkComments(changes) {
     const paths = changes.map(change => change.path)
@@ -322,10 +346,10 @@ export async function forge(unit, runtimes = adapters) {
         if (stage === 'editor') recover(reply.changes)
         throw err
       }
-      const verified = test(unit.test_command)
+      const verified = verdict()
       validateChanges(reply.changes)
       const reportedPass = handoff.tests.passed && handoff.tests.exit_code === 0
-      handoff.tests = {...verified, passed: verified.passed && reportedPass}
+      handoff.tests = {...summary(verified), passed: verified.passed && reportedPass}
       record.host_test = verified
       if (stage === 'writer') {
         if (handoff.stuck) handoff.mvi_claimed = false
@@ -388,7 +412,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     const state = await forge(JSON.parse(readFileSync(0, 'utf8')))
     console.log(JSON.stringify(state, null, 2))
-    if (state.error || !state.result?.delivered || state.result.flagged) process.exitCode = 1
+    if (state.error || !state.result?.delivered || state.result.flagged || state.gate_config_changed) process.exitCode = 1
   } catch (err) {
     console.error(err.message)
     process.exitCode = 1

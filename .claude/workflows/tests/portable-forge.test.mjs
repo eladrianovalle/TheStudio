@@ -63,6 +63,7 @@ function fixture() {
   const unit = {unit_id: 'demo', work_dir: cwd, starting_branch: 'feature', branch: 'feature',
     base_sha: sha, launched_at: '2026-11-26T00:00:00+00:00', title: 'Works', instructions: 'Build', acceptance_criteria: ['Works.'],
     test_command: 'test "$(cat hello.txt)" = pass', static_checks: [], require_mutation_check: false,
+    gate: {test_command: 'test "$(cat hello.txt)" = pass', suites: {}, gate_config: null},
     roles: {writer: {runtime: 'codex', model: null}, editor: {runtime: 'codex', model: null}}}
   return {cwd, git: runGit, unit}
 }
@@ -245,6 +246,7 @@ for (const offender of ['writer', 'editor']) {
   test('added ' + offender + ' comment blocks a green Forge run', async () => {
     const {cwd, git, unit} = fixture()
     unit.test_command = 'true'
+    unit.gate.test_command = 'true'
     const state = await forge(unit, {codex: async ({execution}) => {
       Object.assign(execution, {actual_runtime: 'codex', completed: true})
       const role = existsSync(join(cwd, 'app.py')) ? 'editor' : 'writer'
@@ -275,3 +277,61 @@ test('a Claude role may run the observe command with the arguments its prompt as
   const plain = claudeCommands({...unit, observe_command: ''}, 'editor', {base_sha: 'a', writer_sha: 'b'})
   assert.deepEqual(plain.filter(command => command.endsWith(' *') && !command.startsWith('git ')), [])
 })
+
+test('the writer verdict, the editor verdict and the recovery all run the routed gate', async () => {
+  const {cwd, git, unit} = fixture()
+  const check = 'test "$(cat hello.txt)" = pass'
+  unit.test_command = 'false'
+  unit.gate = {test_command: 'true', suites: {hello: {command: check, paths: ['hello.txt']}}, gate_config: null}
+  let count = 0
+  const state = await forge(unit, {codex: async ({execution}) => {
+    count++
+    Object.assign(execution, {actual_runtime: 'codex', completed: true})
+    writeFileSync(join(cwd, 'hello.txt'), count === 1 ? 'pass' : 'broken')
+    const changes = [{path: 'hello.txt', blob: git('hash-object', 'hello.txt')}]
+    if (count === 1) return {changes, handoff: {...writer, base_sha: unit.base_sha, writer_sha: unit.base_sha}}
+    return {changes, handoff: {...editor, files_touched: ['hello.txt']}}
+  }})
+  assert.equal(state.error, undefined)
+  assert.deepEqual(state.roles.writer.host_test,
+    {command: check, passed: true, exit_code: 0, runs: [{suite: 'hello', command: check, exit_code: 0}]})
+  assert.deepEqual(state.roles.editor.host_test.runs, [{suite: 'hello', command: check, exit_code: 1}])
+  assert.deepEqual(state.result.writer.tests, {command: check, passed: true, exit_code: 0})
+  assert.deepEqual(state.result.editor.reverted_edit_tests, {command: check, passed: false, exit_code: 1})
+  assert.deepEqual(state.result.editor.tests, {command: check, passed: true, exit_code: 0})
+  assert.equal(state.result.editor.reverted, true)
+  assert.equal(readFileSync(join(cwd, 'hello.txt'), 'utf8'), 'pass')
+  assert.equal(state.gate_config_changed, false)
+})
+
+const runnerStubs = {
+  'runner prints no JSON': 'echo routed',
+  'runner exits 2 after printing a report': 'echo \'{"runs": [], "unclaimed": [], "config_changed": false}\'; exit 2',
+}
+
+for (const failure of Object.keys(runnerStubs)) {
+  test(failure + ' throws and preserves the checkout', async () => {
+    const {cwd, git, unit} = fixture()
+    const originalPython = process.env.STUDIO_FORGE_PYTHON
+    const bin = mkdtempSync(join(tmpdir(), 'forge-python-'))
+    writeFileSync(join(bin, 'python'), '#!/bin/sh\n' + runnerStubs[failure] + '\n', {mode: 0o755})
+    process.env.STUDIO_FORGE_PYTHON = join(bin, 'python')
+    try {
+      const state = await forge(unit, {codex: async ({execution}) => {
+        Object.assign(execution, {actual_runtime: 'codex', completed: true})
+        writeFileSync(join(cwd, 'hello.txt'), 'pass')
+        return {changes: [{path: 'hello.txt', blob: git('hash-object', 'hello.txt')}],
+          handoff: {...writer, base_sha: unit.base_sha, writer_sha: unit.base_sha}}
+      }})
+      assert.equal(state.failed_stage, 'writer')
+      assert.equal(state.error, 'Gate routing failed; preserving checkout')
+      assert.equal(state.roles.editor.status, 'skipped')
+      assert.equal(git('rev-parse', 'HEAD'), unit.base_sha)
+      assert.equal(git('status', '--porcelain', '--', 'hello.txt'), '?? hello.txt')
+      assert.equal(readFileSync(join(cwd, 'hello.txt'), 'utf8'), 'pass')
+    } finally {
+      if (originalPython === undefined) delete process.env.STUDIO_FORGE_PYTHON
+      else process.env.STUDIO_FORGE_PYTHON = originalPython
+    }
+  })
+}

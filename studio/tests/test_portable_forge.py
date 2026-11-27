@@ -95,11 +95,62 @@ def test_a_slug_found_in_both_specs_folders_is_refused(project, spelling):
     assert '.studio/specs/demo.md' in r.stderr and ' specs/demo.md' in r.stderr
 
 
-def test_the_test_override_supplies_a_test_command_the_config_leaves_out(project):
-    (project / '.studio/implementation_loop.toml').write_text('[gate]\nrequire_mutation_check = false\n')
-    r = cli(project, '--spec', 'demo', '--test', 'true', '--plan')
+def config_digest(project):
+    import hashlib
+    return hashlib.sha256((project / '.studio/implementation_loop.toml').read_bytes()).hexdigest()
+
+
+@pytest.mark.parametrize('configured', ['', 'test_command = ""\n', 'test_command = "  "\n'])
+def test_the_test_fallback_supplies_a_test_command_the_config_leaves_blank(project, configured):
+    (project / '.studio/implementation_loop.toml').write_text(f'[gate]\n{configured}require_mutation_check = false\n')
+    r = cli(project, '--spec', 'demo', '--test', 'make quick', '--plan')
     assert r.returncode == 0, r.stderr
-    assert json.loads(r.stdout)['test_command'] == 'true'
+    plan = json.loads(r.stdout)
+    assert plan['test_command'] == 'make quick'
+    assert plan['gate'] == {'test_command': 'make quick', 'suites': {},
+                            'gate_config': '.studio/implementation_loop.toml',
+                            'gate_config_sha256': config_digest(project)}
+
+
+def test_the_configured_test_command_freezes_into_the_gate_and_test_only_shapes_the_in_loop_run(project):
+    declare_web_suite(project, 'npm --prefix web run check')
+    r = cli(project, '--spec', 'demo', '--test', 'make quick', '--plan')
+    assert r.returncode == 0, r.stderr
+    plan = json.loads(r.stdout)
+    assert plan['test_command'] == 'make quick'
+    assert plan['gate'] == {
+        'test_command': 'true',
+        'suites': {'web': {'command': 'npm --prefix web run check', 'paths': ['web/']}},
+        'gate_config': '.studio/implementation_loop.toml',
+        'gate_config_sha256': config_digest(project),
+    }
+
+
+def test_without_test_the_plan_runs_the_configured_command_in_loop(project):
+    r = cli(project, '--spec', 'demo', '--plan')
+    assert r.returncode == 0, r.stderr
+    plan = json.loads(r.stdout)
+    assert plan['test_command'] == plan['gate']['test_command'] == 'true'
+
+
+def test_the_loader_only_falls_back_when_the_config_names_no_test_command(tmp_path):
+    from impl_loop import load_loop_config
+    configured = tmp_path / 'configured.toml'
+    configured.write_text('[gate]\ntest_command = "pytest -q"\nrequire_mutation_check = false\n')
+    blank = tmp_path / 'blank.toml'
+    blank.write_text('[gate]\nrequire_mutation_check = false\n')
+    assert load_loop_config(configured, test_command_fallback='true').test_command == 'pytest -q'
+    assert load_loop_config(blank, test_command_fallback='true').test_command == 'true'
+
+
+def declare_web_suite(project, web_command):
+    (project / 'web').mkdir(exist_ok=True)
+    (project / 'web/page.txt').write_text('app\n')
+    (project / '.studio/implementation_loop.toml').write_text(
+        f'[gate]\ntest_command = "true"\nrequire_mutation_check = false\n'
+        f'[gate.suites.web]\ncommand = "{web_command}"\npaths = ["web/"]\n')
+    command(project, 'git', 'add', '.', check=True)
+    command(project, 'git', 'commit', '-qm', 'declare the web suite', check=True)
 
 
 @pytest.mark.parametrize(('spec', 'expected'), [(None, 'missing file'), ('', 'no Build Plan'),
@@ -280,6 +331,19 @@ if stage == "writer":
         pathlib.Path("Player.cs.meta").write_text("fileFormatVersion: 2\nguid: 0123456789abcdef0123456789abcdef\n")
         pathlib.Path("sound.wav").write_bytes(b"RIFF$\0\0\0WAVEfmt \x10\0\0\0\x01\0\x01\0D\xac\0\0")
         changes += [{"path": p, "blob": git("hash-object", "--", p)} for p in ("Player.cs.meta", "sound.wav")]
+    edited = []
+    if mode in {"web", "tamper"}:
+        pathlib.Path("web/page.txt").write_text("broken")
+        edited.append("web/page.txt")
+    if mode == "tamper":
+        pathlib.Path(".studio/source/gate_routes.py").write_text(
+            'print(\'{"runs": [], "unclaimed": [], "config_changed": false}\')\n')
+        edited.append(".studio/source/gate_routes.py")
+    if mode == "config":
+        config = pathlib.Path(".studio/implementation_loop.toml")
+        config.write_text(config.read_text() + "static_checks = []\n")
+        edited.append(".studio/implementation_loop.toml")
+    changes += [{"path": p, "blob": git("hash-object", "--", p)} for p in edited]
     sha = git("rev-parse", "HEAD")
     handoff.update(base_sha=sha, writer_sha=sha, files_touched=[c["path"] for c in changes], mvi_claimed=True,
                    mutation_check={"performed": False, "reason": "not_configured"})
@@ -474,3 +538,53 @@ def test_a_passing_pack_check_lets_the_writer_commit(project, claude_only):
     state = read_attempt(project, run)
     assert state['result']['writer'].get('static_ok') is not False
     assert command(project, 'git', 'log', '-1', '--format=%s').stdout.strip() == 'writer: demo_unit'
+
+
+WEB_RUNS = [{'suite': 'web', 'command': 'exit 7', 'exit_code': 7}, {'suite': None, 'command': 'true', 'exit_code': 0}]
+
+
+def test_a_writer_change_under_a_red_web_suite_is_not_committed(project, claude_only, monkeypatch):
+    declare_web_suite(project, 'exit 7')
+    monkeypatch.setenv('CLAUDE_FORGE_FIXTURE_MODE', 'web')
+    run = cli(project, '--spec', '.studio/specs/demo.md', '--runtime', 'claude')
+    assert run.returncode != 0
+    state = read_attempt(project, run)
+    assert state['roles']['writer']['host_test'] == {
+        'command': 'exit 7; true', 'passed': False, 'exit_code': 1, 'runs': WEB_RUNS}
+    assert 'error' not in state
+    assert state['result']['writer']['tests'] == {'command': 'exit 7; true', 'passed': False, 'exit_code': 1}
+    assert state['last_verified_sha'] == state['base_sha']
+    assert command(project, 'git', 'log', '-1', '--format=%s').stdout.strip() == 'declare the web suite'
+    assert command(project, 'git', 'status', '--porcelain', '--', 'web', 'hello.txt').stdout == (
+        ' M web/page.txt\n?? hello.txt\n')
+
+
+def test_the_verdict_runs_the_copy_the_host_loaded_before_the_writer_changed_it(project, claude_only, monkeypatch):
+    entry = install_source(project)
+    declare_web_suite(project, 'exit 7')
+    monkeypatch.setenv('CLAUDE_FORGE_FIXTURE_MODE', 'tamper')
+    run = cli(project, '--spec', '.studio/specs/demo.md', '--runtime', 'claude', entry=entry)
+    assert run.returncode != 0
+    state = read_attempt(project, run)
+    assert '"runs": []' in (project / '.studio/source/gate_routes.py').read_text()
+    assert state['roles']['writer']['host_test']['runs'] == WEB_RUNS
+    assert state['roles']['writer']['host_test']['passed'] is False
+    assert state['last_verified_sha'] == state['base_sha']
+
+
+def test_a_writer_change_to_the_gate_config_is_flagged_kept_and_fails_the_host(project, claude_only, monkeypatch):
+    monkeypatch.setenv('CLAUDE_FORGE_FIXTURE_MODE', 'config')
+    run = cli(project, '--spec', '.studio/specs/demo.md', '--runtime', 'claude')
+    assert run.returncode == 1, run.stdout + run.stderr
+    state = read_attempt(project, run)
+    assert state['gate_config_changed'] is True
+    assert 'error' not in state
+    assert state['result']['delivered'] is True
+    assert command(project, 'git', 'log', '-1', '--format=%s').stdout.strip() == 'writer: demo_unit'
+    assert 'static_checks = []' in command(project, 'git', 'show', 'HEAD:.studio/implementation_loop.toml').stdout
+
+
+def test_an_unchanged_gate_config_leaves_the_flag_down(project, claude_only):
+    run = cli(project, '--spec', '.studio/specs/demo.md', '--runtime', 'claude')
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert read_attempt(project, run)['gate_config_changed'] is False

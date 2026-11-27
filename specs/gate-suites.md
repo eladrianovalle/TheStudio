@@ -141,7 +141,8 @@ through `install.SOURCE_FILES`.
   shell from the tree's root, with its output on stderr. Every route runs, even after an earlier one
   fails.
 - **Command line:** `gate_routes.py --base <sha> (--gate - | --config <toml>)`.
-  - `--gate -` reads `{test_command, suites, gate_config}` as JSON on stdin.
+  - `--gate -` reads `{test_command, suites, gate_config}` as JSON on stdin, plus an optional
+    `gate_config_sha256` that makes an edit to an ignored config count as `config_changed` too.
   - `--config` reads `[gate] test_command`, `[gate.suites]` and the file's own path.
   - Either way it prints `{"runs": [...], "unclaimed": [...], "config_changed": bool}` on stdout and
     exits 0 when every run passes, 1 when any run fails, and 2 on bad input or a failed git call. A
@@ -168,7 +169,7 @@ the native launch never passes one. `_read_record` treats both new fields as opt
 present it is shape-checked (`check_suites` minus the filesystem row), and if missing it gets its
 default. A malformed `suites` makes the record `unreadable-record`.
 
-**The portable plan** (`forge.py`) gains `gate: {test_command, suites, gate_config}`, frozen when the
+**The portable plan** (`forge.py`) gains `gate: {test_command, suites, gate_config, gate_config_sha256}`, frozen when the
 plan is built. The host's verdict reads only `gate`. The top-level `test_command` becomes the in-loop
 command and nothing else.
 

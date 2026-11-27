@@ -517,9 +517,23 @@ suite makes every `impl_loop.py` call exit 1 with a `bad-suite:` message naming 
 Suites are frozen into the launch record, so a unit that edits the config cannot change what checks
 it; `--check` flags the edit instead. Two limits: an older Studio install ignores `[gate.suites]` and
 runs only `test_command`, and a config outside any repository cannot raise `gate-config-changed`. An
-ignored config is covered: the launch records its hash and `--check` compares it. For now only the
-native `--check` routes; the portable host's verdict and the writer's and editor's own runs still use
-one test command (design: `specs/gate-suites.md`).
+ignored config is covered: the launch records its hash and `--check` compares it. The writer's and
+editor's own runs still use one test command (design: `specs/gate-suites.md`).
+
+**The portable host routes its verdict the same way.** `forge --plan` freezes `gate: {test_command,
+suites, gate_config, gate_config_sha256}` when it builds the plan, the last being the hash of the tree's
+config, so an edit to an ignored config is flagged here too. `gate.test_command` is the configured command; `--test`
+fills it in only when the config names none, and otherwise only sets the top-level `test_command` the
+agents run. `forge_host.mjs` reads `gate_routes.py` into memory when it loads, before any agent starts,
+and every verdict (the writer's, the editor's and the recovery test after a reverted edit) writes that
+copy to a temporary directory and runs `gate_routes.py --gate - --base <base_sha>` with `plan.gate` on
+stdin, so a writer that edits `gate_routes.py` or the config cannot change what judges it. The runner
+prints `{"runs", "unclaimed", "config_changed"}` on stdout, with command output on stderr, and exits 0
+when every run passes, 1 when any fails and 2 on bad input or a failed git call. Each role's
+`host_test` keeps every run; `handoff.tests` stays `{command, passed, exit_code}`, its command the
+routed commands joined by `; `. An exit 2 or output that is not JSON stops the run with `Gate routing
+failed; preserving checkout`. When the unit changed the gate config, the attempt record carries
+`gate_config_changed: true`, the commits stay, and the host exits 1 so the report leads with it.
 
 **What it does not do.** It reduces the blast radius of a run pointed at the wrong directory; it
 cannot make that impossible. Every one of these instructions is prompt text an agent may ignore, and

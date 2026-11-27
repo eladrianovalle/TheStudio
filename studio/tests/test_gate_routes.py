@@ -1,5 +1,7 @@
 import ast
+import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -287,7 +289,7 @@ def test_gate_routes_imports_only_the_standard_library():
             imported.add((node.module or "").split(".")[0])
     studio_modules = {path.stem for path in STUDIO_ROOT.glob("*.py")}
 
-    assert imported <= {"__future__", "hashlib", "subprocess", "sys", "pathlib"}
+    assert imported <= {"__future__", "argparse", "hashlib", "json", "subprocess", "sys", "pathlib"}
     assert not imported & studio_modules
     assert Path(gate_routes.__file__).resolve() == STUDIO_ROOT / "gate_routes.py"
 
@@ -296,3 +298,119 @@ def test_gate_routes_ships_to_installed_repositories():
     import install
 
     assert "gate_routes.py" in install.SOURCE_FILES
+
+
+def gate_command_line(repo: Path, gate: object, base: str) -> subprocess.CompletedProcess:
+    stdin = gate if isinstance(gate, str) else json.dumps(gate)
+    return subprocess.run(
+        [sys.executable, str(STUDIO_ROOT / "gate_routes.py"), "--gate", "-", "--base", base],
+        cwd=str(repo), input=stdin, capture_output=True, text=True,
+    )
+
+
+def gate_input(**overrides) -> dict:
+    gate = {
+        "test_command": "echo default-ran",
+        "suites": {"web": suite("echo web-ran", "web/"), "unity": suite("echo unity-ran", "unity/")},
+        "gate_config": ".studio/implementation_loop.toml",
+    }
+    return {**gate, **overrides}
+
+
+@pytest.mark.parametrize("edit", ["weakened", "deleted", "untouched"])
+def test_the_command_line_flags_an_edit_to_an_ignored_gate_config_against_its_launch_digest(repo, edit):
+    import hashlib
+
+    config = repo / "local-gate.toml"
+    config.write_text("[gate]\ntest_command = \"true\"\n")
+    (repo / ".gitignore").write_text("local-gate.toml\n")
+    git(repo, "add", ".gitignore")
+    git(repo, "commit", "-q", "-m", "ignore the local gate")
+    base = git(repo, "rev-parse", "HEAD")
+    digest = hashlib.sha256(config.read_bytes()).hexdigest()
+    if edit == "weakened":
+        config.write_text("[gate]\ntest_command = \"true\"\n[gate.suites.web]\n")
+    elif edit == "deleted":
+        config.unlink()
+
+    completed = gate_command_line(repo, gate_input(gate_config="local-gate.toml", gate_config_sha256=digest), base)
+
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(completed.stdout)["config_changed"] is (edit != "untouched")
+
+
+def test_the_command_line_runs_the_routed_suites_and_prints_the_runs_on_stdout(repo):
+    base = git(repo, "rev-parse", "HEAD")
+    (repo / "web" / "app.js").write_text("changed\n")
+    (repo / "notes.txt").write_text("new\n")
+
+    completed = gate_command_line(repo, gate_input(), base)
+
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(completed.stdout) == {
+        "runs": [
+            {"suite": "web", "command": "echo web-ran", "exit_code": 0},
+            {"suite": None, "command": "echo default-ran", "exit_code": 0},
+        ],
+        "unclaimed": ["notes.txt"],
+        "config_changed": False,
+    }
+    assert completed.stderr.split() == ["web-ran", "default-ran"]
+
+
+def test_the_command_line_exits_1_when_any_run_fails_and_still_runs_the_rest(repo):
+    base = git(repo, "rev-parse", "HEAD")
+    (repo / "web" / "app.js").write_text("changed\n")
+    (repo / "unity" / "Game.cs").write_text("changed\n")
+    gate = gate_input(suites={"web": suite("exit 4", "web/"), "unity": suite("echo unity-ran", "unity/")})
+
+    completed = gate_command_line(repo, gate, base)
+
+    assert completed.returncode == 1
+    assert json.loads(completed.stdout)["runs"] == [
+        {"suite": "web", "command": "exit 4", "exit_code": 4},
+        {"suite": "unity", "command": "echo unity-ran", "exit_code": 0},
+    ]
+
+
+def test_the_command_line_reports_a_config_edit_without_changing_the_exit_code(repo):
+    base = git(repo, "rev-parse", "HEAD")
+    (repo / "README.md").write_text("edited\n")
+
+    completed = gate_command_line(repo, gate_input(gate_config="README.md"), base)
+
+    assert completed.returncode == 0, completed.stderr
+    report = json.loads(completed.stdout)
+    assert report["config_changed"] is True
+    assert report["runs"] == [{"suite": None, "command": "echo default-ran", "exit_code": 0}]
+
+
+@pytest.mark.parametrize(
+    "gate",
+    [
+        "not json",
+        json.dumps(["test_command"]),
+        json.dumps({"test_command": "true", "suites": {}}),
+        json.dumps({"test_command": "true", "suites": {}, "gate_config": None, "extra": 1}),
+        json.dumps({"test_command": " ", "suites": {}, "gate_config": None}),
+        json.dumps({"test_command": "true", "suites": {"web": {"command": "x"}}, "gate_config": None}),
+        json.dumps({"test_command": "true", "suites": {}, "gate_config": 5}),
+    ],
+)
+def test_the_command_line_exits_2_on_bad_input_without_running_anything(repo, gate):
+    base = git(repo, "rev-parse", "HEAD")
+
+    completed = gate_command_line(repo, gate, base)
+
+    assert completed.returncode == 2
+    assert completed.stdout == ""
+    assert completed.stderr.startswith("gate_routes: ")
+
+
+def test_the_command_line_exits_2_when_git_fails(repo):
+    completed = gate_command_line(repo, gate_input(), "0" * 40)
+
+    assert completed.returncode == 2
+    assert completed.stdout == ""
+    assert "failed" in completed.stderr
+    assert "default-ran" not in completed.stderr

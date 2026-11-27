@@ -22,6 +22,9 @@ If the invocation supplies any of `--runtime`, `--writer-runtime`, `--editor-run
 `--writer-model` or `--editor-model`, run `python .studio/source/run_phase.py forge`
 with the supplied arguments (use `python studio/run_phase.py forge` in Studio's source checkout).
 Pass each argument literally, including `--plan`. Report the command's result and stop there.
+When the printed state has `gate_config_changed: true`, lead the report with it: the unit edited the
+gate config, so the next launch on this branch would be judged by a config it wrote, and a person
+should read that change before trusting the run. The commits stay and the command exits 1.
 For calls without those selectors, continue with the native Claude Workflow below.
 
 ## Arguments
