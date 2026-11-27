@@ -126,11 +126,17 @@ def test_the_configured_test_command_freezes_into_the_gate_and_test_only_shapes_
     }
 
 
-def test_without_test_the_plan_runs_the_configured_command_in_loop(project):
+def test_without_test_the_plan_runs_the_routed_gate_runner_in_loop(project):
     r = cli(project, '--spec', 'demo', '--plan')
     assert r.returncode == 0, r.stderr
     plan = json.loads(r.stdout)
-    assert plan['test_command'] == plan['gate']['test_command'] == 'true'
+    config = (project / '.studio/implementation_loop.toml').resolve()
+    assert plan['test_command'] == (
+        f'"{sys.executable}" "{STUDIO / "gate_routes.py"}" --config "{config}" --base {plan["base_sha"]}')
+    assert plan['gate']['test_command'] == 'true'
+    ran = subprocess.run(plan['test_command'], shell=True, cwd=project, capture_output=True, text=True)
+    assert ran.returncode == 0, ran.stderr
+    assert json.loads(ran.stdout)['runs'] == [{'suite': None, 'command': 'true', 'exit_code': 0}]
 
 
 def test_the_loader_only_falls_back_when_the_config_names_no_test_command(tmp_path):
@@ -305,7 +311,8 @@ def assistant(model, **fields):
     }, **fields)
 
 mode = os.environ.get("CLAUDE_FORGE_FIXTURE_MODE")
-assert "Bash(true)" in args or mode == "breaks"
+assert any(re.fullmatch(r'Bash\("[^"]+" "[^"]+/gate_routes\.py" --config "[^"]+/\.studio/implementation_loop\.toml"'
+                        r' --base [0-9a-f]{40}\)', a) for a in args)
 if stage == "editor" and mode == "denied":
     assistant("<synthetic>", error="authentication_failed")
     send("result", subtype="error", is_error=True, result=secret)

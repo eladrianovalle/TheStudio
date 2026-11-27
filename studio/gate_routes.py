@@ -7,6 +7,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
+
 RUN_RECORD_PREFIXES = (".studio/output/impl_loop/", "reviewer-concerns/")
 SUITE_KEYS = ("command", "paths")
 GLOB_CHARACTERS = ("*", "?", "[")
@@ -209,17 +214,64 @@ def _read_gate(text: str) -> dict:
     }
 
 
+def _top_level(directory: Path) -> Path | None:
+    completed = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"], cwd=str(directory), capture_output=True, text=True,
+    )
+    if completed.returncode != 0:
+        return None
+    return Path(completed.stdout.strip()).resolve()
+
+
+def _read_config(config_path: Path) -> dict:
+    try:
+        with open(config_path, "rb") as handle:
+            data = tomllib.load(handle)
+    except OSError as error:
+        raise RoutesError(f"cannot read the --config file {config_path}: {error}") from error
+    except tomllib.TOMLDecodeError as error:
+        raise RoutesError(f"the --config file {config_path} is not valid TOML: {error}") from error
+    gate = data.get("gate", {})
+    if not isinstance(gate, dict):
+        raise RoutesError(f"[gate] in {config_path} is not a table")
+    test_command = gate.get("test_command")
+    if not isinstance(test_command, str) or not test_command.strip():
+        raise RoutesError(f"[gate] test_command in {config_path} is missing, blank or not text")
+    repository_root = _top_level(config_path.parent)
+    if repository_root is None:
+        gate_config = None
+        suite_root = Path.cwd()
+    else:
+        gate_config = config_path.relative_to(repository_root).as_posix()
+        suite_root = repository_root
+    try:
+        suites = check_suites(gate.get("suites", {}), suite_root, config_path)
+    except SuiteError as error:
+        raise RoutesError(str(error)) from error
+    return {
+        "test_command": test_command,
+        "suites": suites,
+        "gate_config": gate_config,
+        "gate_config_sha256": None,
+    }
+
+
 def main(arguments: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="gate_routes.py",
         description="Run the gate suites that cover the files changed since a base commit.",
     )
     parser.add_argument("--base", required=True, help="the commit the unit started from")
-    parser.add_argument("--gate", required=True, choices=["-"], help="read the gate as JSON on stdin")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--gate", choices=["-"], help="read the gate as JSON on stdin")
+    source.add_argument("--config", help="read the gate from this loop config TOML")
     options = parser.parse_args(arguments)
     root = Path.cwd()
     try:
-        gate = _read_gate(sys.stdin.read())
+        if options.config is not None:
+            gate = _read_config(Path(options.config).resolve())
+        else:
+            gate = _read_gate(sys.stdin.read())
         changed = changed_files(root, options.base)
         edited = config_changed(root, options.base, gate["gate_config"], gate["gate_config_sha256"])
     except RoutesError as error:

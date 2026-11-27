@@ -1025,6 +1025,17 @@ def pack_check_command(path: Path | None = None) -> str | None:
     return f'"{sys.executable}" "{run_phase}" check-packs --config "{config_path}"'
 
 
+def gate_command(config_path: Path, base_sha: str) -> str:
+    runner = STUDIO_ROOT / "gate_routes.py"
+    for quoted_path in (sys.executable, str(runner), str(config_path)):
+        refusal = explain_unquotable_path(quoted_path)
+        if refusal is not None:
+            raise LoopConfigError(
+                f"{config_path} gates this unit, but its runner cannot be quoted into the agents' test command.\n{refusal}"
+            )
+    return f'"{sys.executable}" "{runner}" --config "{config_path}" --base {base_sha}'
+
+
 def _gate_suites(config_path: Path) -> tuple[dict, str | None]:
     with open(config_path, "rb") as handle:
         gate = tomllib.load(handle).get("gate", {})
@@ -1449,6 +1460,7 @@ def _launch(args: argparse.Namespace) -> str:
         knobs["base_sha"] = subprocess.check_output(
             ["git", "-C", tree_being_built, "rev-parse", "HEAD"], text=True,
         ).strip()
+        knobs["gate_command"] = gate_command(_resolve_config_path(path, STUDIO_ROOT).resolve(), knobs["base_sha"])
         knobs["launched_at"] = open_loop_record(
             tree_being_built,
             unit_id=args.unit_id,

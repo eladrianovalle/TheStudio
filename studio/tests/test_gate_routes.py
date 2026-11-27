@@ -289,7 +289,7 @@ def test_gate_routes_imports_only_the_standard_library():
             imported.add((node.module or "").split(".")[0])
     studio_modules = {path.stem for path in STUDIO_ROOT.glob("*.py")}
 
-    assert imported <= {"__future__", "argparse", "hashlib", "json", "subprocess", "sys", "pathlib"}
+    assert imported <= {"__future__", "argparse", "hashlib", "json", "subprocess", "sys", "pathlib", "tomllib", "tomli"}
     assert not imported & studio_modules
     assert Path(gate_routes.__file__).resolve() == STUDIO_ROOT / "gate_routes.py"
 
@@ -414,3 +414,116 @@ def test_the_command_line_exits_2_when_git_fails(repo):
     assert completed.stdout == ""
     assert "failed" in completed.stderr
     assert "default-ran" not in completed.stderr
+
+
+CONFIG = (
+    '[gate]\ntest_command = "echo default-ran"\n'
+    '[gate.suites.web]\ncommand = "echo web-ran"\npaths = ["web/"]\n'
+    '[gate.suites.unity]\ncommand = "echo unity-ran"\npaths = ["unity/"]\n'
+)
+
+
+def config_command_line(repo: Path, config: Path, base: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, str(STUDIO_ROOT / "gate_routes.py"), "--config", str(config), "--base", base],
+        cwd=str(repo), capture_output=True, text=True,
+    )
+
+
+@pytest.fixture
+def configured(repo):
+    config = repo / ".studio" / "implementation_loop.toml"
+    config.parent.mkdir()
+    config.write_text(CONFIG)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "gate config")
+    return config
+
+
+@pytest.mark.parametrize(
+    "change",
+    ["web only", "web red", "unclaimed", "nothing", "config edit"],
+)
+def test_the_config_command_line_prints_and_exits_exactly_as_the_gate_command_line(repo, configured, change):
+    base = git(repo, "rev-parse", "HEAD")
+    suites = {"web": suite("echo web-ran", "web/"), "unity": suite("echo unity-ran", "unity/")}
+    if change == "web only":
+        (repo / "web" / "app.js").write_text("changed\n")
+    elif change == "web red":
+        configured.write_text(CONFIG.replace('"echo web-ran"', '"exit 4"'))
+        git(repo, "commit", "-q", "-am", "red web suite")
+        base = git(repo, "rev-parse", "HEAD")
+        suites["web"] = suite("exit 4", "web/")
+        (repo / "web" / "app.js").write_text("changed\n")
+    elif change == "unclaimed":
+        (repo / "notes.txt").write_text("new\n")
+    elif change == "config edit":
+        configured.write_text(CONFIG.replace("[gate]\n", "[gate]\nstatic_checks = []\n", 1))
+    gate = gate_input(suites=suites, gate_config=".studio/implementation_loop.toml")
+
+    from_config = config_command_line(repo, configured, base)
+    from_gate = gate_command_line(repo, gate, base)
+
+    assert from_config.returncode == from_gate.returncode
+    assert from_config.stdout == from_gate.stdout
+    assert from_config.stderr == from_gate.stderr
+    assert json.loads(from_config.stdout)["config_changed"] is (change == "config edit")
+    assert from_config.returncode == (1 if change == "web red" else 0)
+
+
+def test_the_config_command_line_routes_a_config_outside_any_repository_with_no_config_flag(repo, tmp_path):
+    outside = tmp_path / "outside" / "gate.toml"
+    outside.parent.mkdir()
+    outside.write_text('[gate]\ntest_command = "echo default-ran"\n')
+    base = git(repo, "rev-parse", "HEAD")
+
+    completed = config_command_line(repo, outside, base)
+
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(completed.stdout) == {
+        "runs": [{"suite": None, "command": "echo default-ran", "exit_code": 0}],
+        "unclaimed": [],
+        "config_changed": False,
+    }
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        None,
+        "not = [valid toml",
+        "gate = 5\n",
+        "[gate]\nstatic_checks = []\n",
+        '[gate]\ntest_command = "  "\n',
+        "[gate]\ntest_command = 5\n",
+        '[gate]\ntest_command = "true"\nsuites = "web"\n',
+        '[gate]\ntest_command = "true"\n[gate.suites.web]\ncommand = "echo web-ran"\n',
+        '[gate]\ntest_command = "true"\n[gate.suites.web]\ncommand = "echo web-ran"\npaths = ["wbe/"]\n',
+    ],
+    ids=["missing", "bad toml", "gate not a table", "no test_command", "blank test_command",
+         "test_command not text", "suites not a table", "suite without paths", "path that does not exist"],
+)
+def test_a_bad_config_exits_2_without_running_anything(repo, text):
+    config = repo / "gate.toml"
+    if text is not None:
+        config.write_text(text)
+    base = git(repo, "rev-parse", "HEAD")
+
+    completed = config_command_line(repo, config, base)
+
+    assert completed.returncode == 2
+    assert completed.stdout == ""
+    assert completed.stderr.startswith("gate_routes: ")
+    assert str(config) in completed.stderr
+
+
+def test_the_command_line_takes_the_gate_from_stdin_or_a_config_but_not_both(repo, configured):
+    base = git(repo, "rev-parse", "HEAD")
+
+    completed = subprocess.run(
+        [sys.executable, str(STUDIO_ROOT / "gate_routes.py"), "--gate", "-", "--config", str(configured), "--base", base],
+        cwd=str(repo), input=json.dumps(gate_input()), capture_output=True, text=True,
+    )
+
+    assert completed.returncode == 2
+    assert completed.stdout == ""

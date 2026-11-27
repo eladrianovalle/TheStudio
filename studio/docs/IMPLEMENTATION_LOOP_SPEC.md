@@ -517,14 +517,21 @@ suite makes every `impl_loop.py` call exit 1 with a `bad-suite:` message naming 
 Suites are frozen into the launch record, so a unit that edits the config cannot change what checks
 it; `--check` flags the edit instead. Two limits: an older Studio install ignores `[gate.suites]` and
 runs only `test_command`, and a config outside any repository cannot raise `gate-config-changed`. An
-ignored config is covered: the launch records its hash and `--check` compares it. The writer's and
-editor's own runs still use one test command (design: `specs/gate-suites.md`).
+ignored config is covered: the launch records its hash and `--check` compares it. Without `--test`,
+the writer and editor run the same routed gate: `--branch` prints `gate_command`, `"<python>"
+"<studio>/gate_routes.py" --config "<config>" --base <base_sha>`, quoted like the pack check and
+refused when a path cannot be quoted, and `/forge` passes it as their `test_command`. `--config` reads
+`[gate] test_command` and `[gate.suites]` from the live file and prints and exits as `--gate -` does,
+so a writer that edits the config changes only its own advisory run; the frozen verdict and
+`gate-config-changed` catch the edit. `--test X` replaces it in the agents' runs only (design:
+`specs/gate-suites.md`).
 
 **The portable host routes its verdict the same way.** `forge --plan` freezes `gate: {test_command,
 suites, gate_config, gate_config_sha256}` when it builds the plan, the last being the hash of the tree's
 config, so an edit to an ignored config is flagged here too. `gate.test_command` is the configured command; `--test`
 fills it in only when the config names none, and otherwise only sets the top-level `test_command` the
-agents run. `forge_host.mjs` reads `gate_routes.py` into memory when it loads, before any agent starts,
+agents run. Without `--test`, that top-level `test_command` is the same `gate_routes.py --config` runner
+the native launch prints, and the Claude role's allowed commands include it. `forge_host.mjs` reads `gate_routes.py` into memory when it loads, before any agent starts,
 and every verdict (the writer's, the editor's and the recovery test after a reverted edit) writes that
 copy to a temporary directory and runs `gate_routes.py --gate - --base <base_sha>` with `plan.gate` on
 stdin, so a writer that edits `gate_routes.py` or the config cannot change what judges it. The runner
